@@ -34,8 +34,10 @@ That is thirteen functions, about 1,000 lines of fdlibm code in all; `pow` is th
 row order decides which comes first; `exp` is the likely first port, since `pow`, `sinh` and
 `cosh` build on it.
 
-`sin`, `cos`, `tan`, `tanh` and `cbrt` are fdlibm on aarch64 but Intel LIBM stubs on x86, so a
-port matches the JVM only on Arm. They are a later, optional set; their large-argument reduction
+`tan`, `tanh` and `cbrt` are fdlibm on aarch64 but Intel LIBM stubs on x86, so a port of them
+matches the JVM only on Arm. `sin` and `cos` are HotSpot's own stubs on both architectures, so
+`Math.sin` and `Math.cos` are not fdlibm anywhere; a port of them matches `StrictMath` only. These
+five are a later, optional set; the large-argument reduction of the trigonometric ones
 (`__ieee754_rem_pio2`, `__kernel_rem_pio2`) stays a per-lane `StrictMath` call.
 
 ## 4. Testing
