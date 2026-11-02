@@ -187,6 +187,57 @@ class Log1pTest {
     }
   }
 
+  /**
+   * One vector for every subset of a vector's lanes, the subset's lanes rare and the others
+   * common, the subsets as {@link ExpTest#rareLaneSubsets} lists them (every subset up to 16
+   * lanes, sampled above): exactly one rare lane at each position, every lane rare, and every mix
+   * between. The finish arm walks the rare mask's set bits, so a lane it skipped or visited twice
+   * shows here, and the guarded arm's one test sees every mix. The rare inputs cycle through each
+   * of s_log1p.c's rare paths: NaNs of both signs, the infinities, -1, below -1, {@code |x| <
+   * 2^-54}, {@code 2^-54 <= |x| < 2^-29}, and {@code 1+x} a power of two ({@code hu == 0}). The
+   * common lanes have {@code 1+x} in [0.8, 6.4], never within 2^-20 of a power of two.
+   */
+  static double[] everySubsetOfLanesRare(int lanes) {
+    double[] rare = {
+      Double.NaN, Double.longBitsToDouble(0xfff8_0000_0000_0001L), -1.0, -2.0,
+      Double.POSITIVE_INFINITY, Double.NEGATIVE_INFINITY, 0x1p-60, -0x1p-40, 1.0, 3.0, -0.5
+    };
+    long[] subsets = ExpTest.rareLaneSubsets(lanes);
+    double[] xs = new double[subsets.length * lanes];
+    int next = 0;
+    for (int s = 0; s < subsets.length; s++) {
+      for (int lane = 0; lane < lanes; lane++) {
+        boolean isRare = (subsets[s] >>> lane & 1L) != 0;
+        xs[s * lanes + lane] = isRare ? rare[next++ % rare.length] : 0.37 * lane - 0.2;
+      }
+    }
+    return xs;
+  }
+
+  @ParameterizedTest
+  @EnumSource(VectorWidth.class)
+  void everySubsetOfLanesRare(VectorWidth width) {
+    assertEverySubsetOfLanesRare(width.species());
+  }
+
+  /** {@link #everySubsetOfLanesRare(VectorWidth)} at SPECIES_MAX, which VectorWidth skips. */
+  @Test
+  void everySubsetOfLanesRareAtMaxSpecies() {
+    assertEverySubsetOfLanesRare(DoubleVector.SPECIES_MAX);
+  }
+
+  /** Every arm, unmasked and masked, on {@link #everySubsetOfLanesRare(int)}. */
+  private static void assertEverySubsetOfLanesRare(VectorSpecies<Double> species) {
+    double[] xs = everySubsetOfLanesRare(species.length());
+    assertLog1p(species, xs);
+    long seed = 1400L;
+    for (Map.Entry<String, BiFunction<DoubleVector, VectorMask<Double>, DoubleVector>> arm :
+        ARMS.entrySet()) {
+      Oracle.assertUnaryMasked(
+          arm.getKey(), species, arm.getValue(), StrictMath::log1p, xs, seed++);
+    }
+  }
+
   @Test
   void maskedFormRejectsANullMask() {
     DoubleVector x = DoubleVector.zero(DoubleVector.SPECIES_128);

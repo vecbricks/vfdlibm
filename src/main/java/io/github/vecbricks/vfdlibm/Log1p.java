@@ -56,9 +56,10 @@ import jdk.incubator.vector.VectorSpecies;
  *   <li>{@link #log1pBlended} computes them in every lane and blends them, with no branch.
  *   <li>{@link #log1pGuarded} computes and blends them the same way, but only for a vector that
  *       holds a rare lane, behind one {@code anyTrue}; it never allocates.
- *   <li>{@link #log1pFinish} finishes the rare lanes with {@code StrictMath.log1p}, one lane at a
- *       time through {@code toArray} and {@code fromArray}, behind one {@code anyTrue}, as {@code
- *       Exp} does; a vector that holds a rare lane allocates two arrays.
+ *   <li>{@link #log1pFinish} finishes the rare lanes with {@code StrictMath.log1p}, behind one
+ *       {@code anyTrue}, as {@code Exp} and {@code Log} do: it walks the set bits of the rare mask
+ *       ({@code toLong}), reads each lane with {@code lane} and writes it back with {@code
+ *       withLane}, all in this body, with no array and no call that takes a vector.
  * </ul>
  *
  * <p>All three are exact. {@link #log1p}, which {@code VFdlibm.log1p} calls, is the guarded arm,
@@ -168,9 +169,9 @@ final class Log1p {
   }
 
   /**
-   * log1p with the rare lanes finished per lane by {@code StrictMath.log1p}, through {@code
-   * toArray} and {@code fromArray}, Exp's way. {@code live} is as for {@link #log1p(DoubleVector,
-   * VectorMask)}.
+   * log1p with the rare lanes finished per lane by {@code StrictMath.log1p}, read and written in
+   * the vector with {@code lane} and {@code withLane}, Exp's way. {@code live} is as for {@link
+   * #log1p(DoubleVector, VectorMask)}.
    */
   static DoubleVector log1pFinish(DoubleVector x, VectorMask<Double> live) {
     return log1p(x, live, FINISH);
@@ -291,21 +292,20 @@ final class Log1p {
       result = x.blend(result, live);
     }
     if (mode == FINISH && rare.anyTrue()) {
-      result = finishPerLane(x, result, rare);
-    }
-    return result;
-  }
-
-  /** The lanes of {@code rare} replaced by {@code StrictMath.log1p} of their input. */
-  private static DoubleVector finishPerLane(
-      DoubleVector x, DoubleVector result, VectorMask<Double> rare) {
-    double[] xs = x.toArray();
-    double[] rs = result.toArray();
-    for (int lane = 0; lane < xs.length; lane++) {
-      if (rare.laneIsSet(lane)) {
-        rs[lane] = StrictMath.log1p(xs[lane]);
+      // The per-lane finish is written out here, with no call into vfdlibm, as Exp's and Log's
+      // are: a vfdlibm call this late in the body is refused (NodeCountInliningCutoff), and a
+      // refused call takes x, result and rare as heap objects, boxed on every vector. It visits
+      // only the set lanes of rare, through its bits, and moves no lane through an array: lane
+      // and withLane are lane extract and insert, which C2 intrinsifies at a variable lane index
+      // for the fixed shapes. rare is already and-ed with live, so an inactive lane is never
+      // rewritten.
+      long rareLanes = rare.toLong();
+      while (rareLanes != 0) {
+        int lane = Long.numberOfTrailingZeros(rareLanes);
+        rareLanes &= rareLanes - 1;
+        result = result.withLane(lane, StrictMath.log1p(x.lane(lane)));
       }
     }
-    return DoubleVector.fromArray(x.species(), rs, 0);
+    return result;
   }
 }
