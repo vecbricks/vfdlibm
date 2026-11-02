@@ -39,6 +39,41 @@ vfdlibm ports fdlibm's double functions to the Java Vector API, each lane bit-id
   `mvn -B -Pjmh test-compile exec:exec`, passing JMH options as `-Djmh.args="..."`, e.g.
   `-Djmh.args="StrictMathExp -p lanes=4"`.
 
+## Lessons
+
+`SKILLS.md` holds what earlier ports learned about JMH, C2 and the Vector API: how to tell a
+boxed body from a vector one, which conversions and masks lower at which width, and where
+headline numbers come from. Read it before writing or benchmarking a port, and add to it what a
+port teaches.
+
+## Measurements, not adjectives
+
+- Any performance claim, in a comment, a document or a pull request, traces to a committed
+  results file under `bench/results/`. "Faster" with no file behind it is not written.
+- A results file opens with its provenance: what was run and why, the commit, JDK, CPU, vector
+  flags, kernel, load average at start and end, the JMH options and the command, then each row's
+  minimum, average and maximum and JMH's summary table with `gc.alloc.rate.norm`. The existing
+  files are the template. A file from the laptop says it is not a headline.
+- The method is fixed: `-f 2 -wi 3 -w 2s -i 5 -r 2s -prof gc`, the body inlined with
+  `-XX:CompileCommand=inline,io.github.vecbricks.vfdlibm.*::*`, on an otherwise idle machine.
+  The arms of a comparison run in one JMH run. A claim resting on a ratio under about 1.3x is
+  re-run and compared by minimums before it is written down, and the file keeps both runs.
+- Headline numbers come from the EPYC 7763 run of `.github/workflows/benchmark.yml`, dispatched
+  with `bench/dispatch-epyc.sh`; never relax its CPU check.
+- When a change moves committed numbers, measure again and commit the new file, then requote
+  every document from it, rather than patching quoted figures one by one.
+
+## Papers are transcribed, not paraphrased from memory
+
+`papers/` holds mechanical transcriptions of the third-party papers this work reads closely, so
+a port or a pull request can cite a section, a constant or a measurement with the argument at
+hand. They carry their own authors and licence and are not vfdlibm's documentation: nothing in
+`papers/` is under this project's Apache licence, compiled or shipped. And they are lossy, since
+a PDF's typography carries part of every formula, so **when a constant, an exponent or an
+inequality decides something, read the PDF, not the transcription**. Each file opens with what
+its conversion lost. See `papers/README.md` before adding one. Notes on other vector math
+libraries go in `readings/`, with each source's licence named; never notes on GPL or LGPL code.
+
 ## Changes
 
 Changes go through pull requests on branches, never straight to `main`. Each function comes in its
