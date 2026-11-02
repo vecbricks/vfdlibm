@@ -14,27 +14,55 @@
 #
 #   bench/dispatch-epyc.sh <ref> [benchmark regex] [extra JVM options]
 #
+# Each dispatch carries a tag of its own as the run-tag input, which benchmark.yml puts in the
+# run's name, and the script follows the run of that name; so two dispatchers on one branch, or
+# a clock that differs from GitHub's, cannot make it follow the wrong run. The <ref> must have
+# the run-tag input; on an older one the dispatch fails and the script says so. A gh call that
+# fails is tried five times, a minute apart, and every wait is bounded. Exit status: 0 on
+# success, 1 when the run failed other than on the CPU check, 2 when GitHub could not be asked.
+#
 # Then fetch the results: gh run download <run id> -R vecbricks/vfdlibm -n bench-results
 
 R=vecbricks/vfdlibm; B=${1:?usage: bench/dispatch-epyc.sh <ref> [benchmark regex] [jvm args]}
 N=${2:-ExpBenchmark}; X=${3:-}
 t() { date +%H:%M; }
+# Runs a gh command up to five times, a minute apart, until it succeeds.
+try() {
+  local i; for i in 1 2 3 4 5; do
+    "$@" && return 0
+    echo "$(t) gh failed, try $i of 5: $*" >&2; [ $i -lt 5 ] && sleep 60
+  done; return 1; }
 bench() {
-  while :; do since=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-    gh workflow run benchmark.yml -R $R --ref $B -f benchmarks="$N" -f jvm-args="$X"
-    m=""; until [ -n "$m" ]; do sleep 20
-      m=$(gh run list -R $R --workflow benchmark.yml --branch $B -L 5 \
-        --json databaseId,createdAt \
-        --jq ".[]|select(.createdAt >= \"$since\")|.databaseId" | head -1); done
-    echo "$(t) dispatched $B $N benchmark $m"
-    until [ "$(gh api repos/$R/actions/runs/$m --jq .status)" = completed ]; do sleep 120; done
-    c=$(gh api repos/$R/actions/runs/$m --jq .conclusion); echo "$(t) $B $N benchmark $m: $c"
+  while :; do tag="dispatch-$(date -u +%Y%m%dT%H%M%SZ)-$$-$RANDOM"
+    if ! try gh workflow run benchmark.yml -R $R --ref "$B" -f benchmarks="$N" \
+        -f jvm-args="$X" -f run-tag="$tag"; then
+      echo "$(t) could not dispatch benchmark.yml on $B, stopping"; return 2; fi
+    # The run appears within seconds as a rule; ten minutes without it is an error.
+    m=""; for _ in $(seq 30); do sleep 20
+      m=$(gh run list -R $R --workflow benchmark.yml --event workflow_dispatch -L 50 \
+        --json databaseId,displayTitle \
+        --jq ".[]|select(.displayTitle == \"Benchmark $tag\")|.databaseId" | head -1)
+      [ -n "$m" ] && break; done
+    if [ -z "$m" ]; then
+      echo "$(t) no run named \"Benchmark $tag\" after ten minutes, stopping"; return 2; fi
+    echo "$(t) dispatched $B $N benchmark $m ($tag)"
+    # A job runs for six hours at most; seven hours covers the queue too.
+    s=""; for _ in $(seq 210); do
+      s=$(try gh api repos/$R/actions/runs/$m --jq .status) || s=""
+      [ "$s" = completed ] && break; sleep 120; done
+    if [ "$s" != completed ]; then
+      echo "$(t) run $m not completed after seven hours (status '$s'), stopping"; return 2; fi
+    if ! c=$(try gh api repos/$R/actions/runs/$m --jq .conclusion); then
+      echo "$(t) could not read run $m's conclusion, stopping"; return 2; fi
+    echo "$(t) $B $N benchmark $m: $c"
     [ "$c" = success ] && return 0
     # The failed step's name comes from the jobs API: a failed log can label every line
-    # "UNKNOWN STEP", which made a log grep miss a CPU-check failure and stop.
-    if gh api "repos/$R/actions/runs/$m/jobs" \
-        --jq '.jobs[].steps[]|select(.conclusion=="failure")|.name' 2>/dev/null \
-        | grep -q '^Probe the machine'; then
+    # "UNKNOWN STEP", which made a log grep miss a CPU-check failure and stop. An API error is
+    # tried again, not read as a failure elsewhere.
+    if ! failed=$(try gh api "repos/$R/actions/runs/$m/jobs" \
+        --jq '.jobs[].steps[]|select(.conclusion=="failure")|.name'); then
+      echo "$(t) could not read run $m's jobs, stopping"; return 2; fi
+    if grep -q '^Probe the machine' <<<"$failed"; then
       echo "$(t) $N: CPU check failed, retry in an hour"; sleep 3600
     else return 1; fi
   done; }
