@@ -13,12 +13,14 @@ package io.github.vecbricks.vfdlibm;
  * catch a known fault planted in the code it tests (a dropped correction term, a constant off by
  * one ulp, a branch threshold moved).
  *
- * <p>A port asks {@link #is} at the point it would go wrong, for example {@code
- * Faults.is("exp.dropCorrection")}; fault names are {@code <function>.<what>}. The planted fault
- * is read once, when this class loads, from the system property {@code vfdlibm.fault}, and is null
- * when the property is unset. It is a {@code static final}, so the JIT treats it as a constant:
- * with no fault planted every {@code is} call folds to {@code false} and the faulty branch is
- * compiled away.
+ * <p>A port reads each of its faults once, through {@link #is}, into a {@code static final}
+ * constant of its own class, for example {@code static final boolean DROPPING_CORRECTION =
+ * Faults.is("exp.dropCorrection")}, and tests that constant at the point it would go wrong; fault
+ * names are {@code <function>.<what>}. The vector body then holds no call, which C2 could refuse
+ * to inline and so box the vectors. The planted fault is read once, when this class loads, from
+ * the system property {@code vfdlibm.fault}, and is null when the property is unset. The port's
+ * constant is a {@code static final} too, so the JIT treats it as a constant: with no fault planted
+ * it is {@code false} and the faulty branch is compiled away.
  *
  * <p>Because the value is fixed for the life of the JVM, a planted fault is tested in a JVM of its
  * own: {@code pom.xml} runs the normal suite once with no fault, then one forked surefire execution
@@ -31,7 +33,7 @@ final class Faults {
 
   private Faults() {}
 
-  /** Whether the fault {@code name} is planted in this JVM. Ports call this. */
+  /** Whether the fault {@code name} is planted in this JVM. Ports call this once per fault. */
   static boolean is(String name) {
     return PLANTED != null && PLANTED.equals(name);
   }
