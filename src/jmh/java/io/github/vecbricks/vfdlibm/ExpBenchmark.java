@@ -27,8 +27,8 @@ import org.openjdk.jmh.annotations.Warmup;
 /**
  * exp over an array of 1024 doubles: the scalar {@code StrictMath.exp} loop, {@link VFdlibm#exp}
  * (rare lanes finished per lane) and the all-blended arm {@link Exp#expBlended}, each vector form
- * at 128, 256 and 512 bits. On a host without 512-bit vectors the 512-bit benchmarks run in
- * software and measure nothing useful.
+ * at 128, 256 and 512 bits and at the host's preferred species. On a host without 512-bit vectors
+ * the 512-bit benchmarks run in software and measure nothing useful.
  *
  * <p>{@code inputs} picks the data: {@code common} draws from {@code [-20, 20]}, where no lane
  * takes a rare path; {@code mixed} replaces one input in 16 with a rare one (a NaN, an overflow,
@@ -37,6 +37,10 @@ import org.openjdk.jmh.annotations.Warmup;
  * <p>The vector forms are larger than C2 inlines by default ({@code FreqInlineSize}), so a call
  * from the loop may pass boxed vectors. Varka emits the sequence inline instead; to measure that,
  * add {@code -jvmArgsAppend -XX:CompileCommand=inline,io.github.vecbricks.vfdlibm.*::*}.
+ *
+ * <p>{@code bench/alloc-check.py} runs the vector benchmarks named {@code *256} and
+ * {@code *Preferred} on {@code common} inputs and fails if any allocates, which means the body
+ * boxed. A new arm named that way is checked with no further change.
  */
 @State(Scope.Thread)
 @BenchmarkMode(Mode.AverageTime)
@@ -50,6 +54,7 @@ public class ExpBenchmark {
   private static final VectorSpecies<Double> S128 = DoubleVector.SPECIES_128;
   private static final VectorSpecies<Double> S256 = DoubleVector.SPECIES_256;
   private static final VectorSpecies<Double> S512 = DoubleVector.SPECIES_512;
+  private static final VectorSpecies<Double> SP = DoubleVector.SPECIES_PREFERRED;
 
   @Param({"common", "mixed"})
   public String inputs;
@@ -104,6 +109,14 @@ public class ExpBenchmark {
   }
 
   @Benchmark
+  public double[] finishPreferred() {
+    for (int i = 0; i < N; i += SP.length()) {
+      VFdlibm.exp(DoubleVector.fromArray(SP, in, i)).intoArray(out, i);
+    }
+    return out;
+  }
+
+  @Benchmark
   public double[] blended128() {
     for (int i = 0; i < N; i += S128.length()) {
       Exp.expBlended(DoubleVector.fromArray(S128, in, i), null).intoArray(out, i);
@@ -123,6 +136,14 @@ public class ExpBenchmark {
   public double[] blended512() {
     for (int i = 0; i < N; i += S512.length()) {
       Exp.expBlended(DoubleVector.fromArray(S512, in, i), null).intoArray(out, i);
+    }
+    return out;
+  }
+
+  @Benchmark
+  public double[] blendedPreferred() {
+    for (int i = 0; i < N; i += SP.length()) {
+      Exp.expBlended(DoubleVector.fromArray(SP, in, i), null).intoArray(out, i);
     }
     return out;
   }
