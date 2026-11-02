@@ -15,6 +15,11 @@ way.
 | `java.smt2` | the prelude: Java's integer operators and doubles over integers | hand |
 | `java_check.smt2` | the prelude against the JVM's results | `ProofFiles` |
 | `sign_symmetry.smt2` | round to nearest commutes with negation; exp's two quotients | hand |
+| `exp_zero_reduction.smt2` | exp's L1: k == 0's IEEE hinges, but +0 * v | `ExpProofFiles` |
+| `exp_near_band.smt2` | exp's L2: the far form's k, hi, lo on the near band | `ExpProofFiles` |
+| `exp_highword_compare.smt2` | exp's L3: high-word compares on 64 bits | `ExpProofFiles` |
+| `exp_tiny_counterexample.smt2` | exp's L4: the tiny lanes' fold refuted | `ExpProofFiles` |
+| `exp_half_sign.smt2` | exp's L5: halF[xsb] from the sign bit | `ExpProofFiles` |
 
 - `java.smt2`: Java's `int` and `long` operators over SMT-LIB's integers, each as the JLS
   defines it, and doubles as `S * M * 2^E`, with round to nearest stated on the number line for
@@ -29,6 +34,27 @@ way.
   to. So for a finite `a`, exp's `a / (c - 2.0)` has the bits of `-(a / (2.0 - c))`, unless the
   quotient rounds to zero, where IEEE 754's sign rule gives the same (stated, not checked). The
   file's header says exactly what is proven and what is not.
+- `exp_*.smt2`: exp's lemmas in `PROOFS.md`, one file each, with the constants (`invln2`,
+  `ln2HI`, `ln2LO`, `P1..P5`, `HALF_BITS`, the high words, `K_MIN_NORMAL`) rendered from `Exp`
+  and `Lanes` by `ExpProofFiles`. Each header, and the lemma's **Encoding** paragraph in
+  `PROOFS.md`, says which steps are machine-checked and which stay informal. Every lemma leaves
+  the code's text informal (that the port calls what the file encodes), and besides it:
+  - L1: the bounds on the polynomial (H2, H3), and with them `q`'s binades and step 2's
+    hypothesis; the zero product `fl(+0 * v) = +0` (R3, IEEE 754 6.3), since zero is not in the
+    prelude; that a value rounds to no double in a binade further off than the next (the
+    arithmetic of rationals); the casts of `+0.0` and the blend, as the code's text. Its other IEEE
+    hinges are checked.
+  - L2: the binades further off than the next, by the arithmetic of rationals; the JLS facts
+    that `D2I` truncates toward zero and that `I2D` of `+-1` is exact.
+  - L3: that the C's unsigned compares of `hx` with its int-literal words are the integer
+    compares, both lying in `[0, 2^31)` (argued in the header); that `__HI(x)` is the high int
+    of the raw bits, the prelude's reading of fdlibm's macro.
+  - L4: that `StrictMath.exp` is `one + x` at the witness (`ProofsTest`'s, the oracle being in
+    no solver); the binades further off than the next, by the arithmetic of rationals.
+  - L5: nothing more.
+
+  `exp_highword_compare.smt2` and `exp_tiny_counterexample.smt2` are `QF_NIA`; the other three
+  are `ALL`, each header saying why.
 
 ## Running them
 
@@ -60,9 +86,14 @@ under it. Every check is an `(echo "<what it shows>: expect sat|unsat")` followe
 since the runner matches it whole. An `unsat` check is a proof: the negation of the claim has no
 model. A `sat` check shows the statement is not vacuous: the domain admits its boundary inputs
 and every binade the proof names is reached, and the claim with a constant changed by one is
-refuted. The script holds every verdict to the expectation before it, and fails on `unknown`, on
-a check past its time limit, and on any other output, since Z3 goes on answering after an error,
-and an assertion it dropped can turn a refutation into `sat`.
+refuted, where the claim is tight to that constant. Where it holds for a range of values the
+constant is not refuted, and the header says so and names what pins it: exp's `invln2` (L1's
+section C, L2), whose margins are millions of its ulps, and `P1..P5` (L1's section D, L4), whose
+evaluated chains use whatever `Exp` holds. `ExpTest.constantsAreTheSourcesBits` pins those to the
+source's hex, and `ProofFilesTest` the files to their rendering. The script holds every verdict
+to the expectation before it, and fails on `unknown`, on a check past its time limit, and on any
+other output, since Z3 goes on answering after an error, and an assertion it dropped can turn a
+refutation into `sat`.
 
 A refutation is worth writing against the part of the definition a claim rests on, not only
 against a constant: `sign_symmetry.smt2` also shows its claim false under a rounding that drops
@@ -111,7 +142,9 @@ Zero is not in the prelude: a proof whose value can round to zero states its own
    the code are rendered from it: a method in `ProofFiles`, and the file in its `render()`; a
    proof whose constants are fdlibm's, fixed in the C, may be written by hand.
 2. The claim as `unsat` checks, and `sat` checks that its domain admits its boundary inputs, that
-   each binade it names is reached, and that a constant changed by one is refuted.
+   each binade it names is reached, and that a constant changed by one is refuted. A constant the
+   claim holds for a range of (exp's `invln2`, `P1..P5`) cannot be refuted so: the header says
+   which constants those are and why, and a test pins each to its source.
 3. A definition it needs that the prelude lacks goes in `java.smt2`, with a check in
    `ProofFiles.javaCheck()` that pins it to the JVM's results at both signs and at the edges,
    each double's neighbours refused. A wrong definition with the right name would let a proof
@@ -129,8 +162,15 @@ Zero is not in the prelude: a proof whose value can round to zero states its own
 6. A planted fault shows a check can fail: change a definition in a copy of `java.smt2` (a half
    step dropped, a midpoint moved) and see the proof's checks come back with the wrong verdict.
 
-`ProofFiles` writes the rendered files and `ProofFilesTest` fails when a committed one differs
-from its rendering; `mvn -q test -Dtest=ProofFilesTest -Dvfdlibm.proofs.regen=true` rewrites them.
+`ProofFiles` writes the rendered files (exp's through `ExpProofFiles`) and `ProofFilesTest` fails
+when a committed one differs from its rendering; `mvn -q test -Dtest=ProofFilesTest
+-Dvfdlibm.proofs.regen=true` rewrites them.
+
+A claim about one input, such as a counter-example, is evaluated rather than solved:
+`ExpProofFiles`' chain renders, for each operation of a formula, a check that the exact result
+on the two doubles Java computed before it rounds to the double Java computed and to no other
+double in its binade or the ones next to it. Every check is ground and linear, and no
+intermediate double is taken on trust.
 
 ## The solvers
 

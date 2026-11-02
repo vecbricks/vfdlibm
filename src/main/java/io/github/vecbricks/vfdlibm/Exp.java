@@ -123,7 +123,7 @@ final class Exp {
       Faults.is(THRESHOLD_MOVED) ? K_MIN_NORMAL - 1 : K_MIN_NORMAL;
 
   /** The raw bits of 0.5, halF[0]; halF[1] is the same with the sign bit set. */
-  private static final long HALF_BITS = 0x3fe00000_00000000L;
+  static final long HALF_BITS = 0x3fe00000_00000000L;
 
   // The arms of the shared body; each call site passes a constant, and the others fold away.
   private static final int FINISH = 0;

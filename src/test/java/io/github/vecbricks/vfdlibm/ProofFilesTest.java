@@ -23,8 +23,9 @@ import org.junit.jupiter.api.Test;
 
 /**
  * The rendered files under {@code proofs/} are what {@link ProofFiles} renders: the prelude's
- * checks from the JVM's own results. A definition or an operand set that moves without its file
- * fails here, rather than leaving a committed check that no longer says what the code says. The
+ * checks from the JVM's own results, and exp's proofs from its constants. A definition, an
+ * operand set or a constant that moves without its file fails here, rather than leaving a
+ * committed check that no longer says what the code says. The
  * proofs themselves run under {@code dev/prove.sh}, which needs no JVM.
  *
  * <p>{@code -Dvfdlibm.proofs.regen=true} rewrites the files instead, e.g. {@code mvn -q test
