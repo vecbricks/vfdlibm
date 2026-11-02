@@ -346,7 +346,7 @@ class ProofsTest {
   }
 
   /**
-   * L6 (H8): dk is +0 on the k == 0 lanes, by I2D of 0 and by the exact conversion of L8 alike,
+   * L6 (H8): dk is +0 on the k == 0 lanes, by I2D of 0 and by the exact conversion of L7 alike,
    * and +0 times ln2_hi or ln2_lo is +0. Had dk been -0, both products would be -0, and the f ==
    * 0 lane's {@code dk*ln2_hi+dk*ln2_lo} would be -0, not the C's zero.
    */
@@ -440,5 +440,119 @@ class ProofsTest {
     double shr = -0.0;
     // H10 false: hfsq = -0 with s*(hfsq+R) = -0 makes shr + (+0) a different operand.
     assertNotEquals(bits(hfsq - shr), bits(hfsq - (shr + 0.0)));
+  }
+
+  // L7: dk without L2D.
+
+  /** L7's conversion, as Log computes it. */
+  private static double exactDk(long k) {
+    return Double.longBitsToDouble(k + Log.DK_MAGIC_BITS) - Log.DK_MAGIC;
+  }
+
+  /**
+   * L7: fromBits(k + DK_MAGIC_BITS) - DK_MAGIC has the bits of Java's (double)k, I2D's and the
+   * C's cast, for every k log can reach, [-1077, 3073], and at the domain's ends and sampled
+   * longs in [-2^51, 2^51); +0.0 at k = 0. Just outside the domain, at 2^51 + 1 and -2^51 - 1,
+   * and with the constant's bits one more, it is not k: the hinges, refuted.
+   */
+  @Test
+  void l7ExactConversionIsI2D() {
+    assertEquals(bits(Log.DK_MAGIC), Log.DK_MAGIC_BITS);
+    assertEquals(0L, bits(exactDk(0)));
+    for (long k = -1077; k <= 3073; k++) {
+      assertEquals(bits((double) k), bits(exactDk(k)), Long.toString(k));
+    }
+    SplittableRandom random = new SplittableRandom(820L);
+    long top = 1L << 51;
+    for (int n = 0; n < 1 << 16; n++) {
+      long k = random.nextLong(-top, top);
+      assertEquals(bits((double) k), bits(exactDk(k)), Long.toString(k));
+    }
+    for (long k : new long[] {-top, -top + 1, top - 1, top}) {
+      assertEquals(bits((double) k), bits(exactDk(k)), Long.toString(k));
+    }
+    assertNotEquals(bits((double) (top + 1)), bits(exactDk(top + 1)));
+    assertNotEquals(bits((double) (-top - 1)), bits(exactDk(-top - 1)));
+    assertNotEquals(0L,
+        bits(Double.longBitsToDouble(Log.DK_MAGIC_BITS + 1) - Log.DK_MAGIC));
+  }
+
+  // L8: the C's int words in long lanes.
+
+  /**
+   * L8: for every bit pattern with the sign clear, the long-lane words Log computes are the C's
+   * int words, widened, and kBits is the C's k plus DK_MAGIC_BITS (with the subnormal's -54
+   * too); for every pattern, either sign, k lies in [-1077, 3073]. A negative pattern's high word
+   * is not the C's: the sign hypothesis, refuted.
+   */
+  @Test
+  void l8LongWordsAreTheCsInts() {
+    double[] xs = Inputs.concat(Inputs.specials(), Inputs.sampled(821L, 1 << 16),
+        logKZeroDomain(), Inputs.uniform(822L, 1 << 12, 0.0, Double.MIN_NORMAL));
+    for (double x : xs) {
+      for (double v : new double[] {x, x * Log.TWO54}) {
+        long b = bits(v);
+        String at = Oracle.hex(v);
+        long hx = b >>> 32;
+        long hxm = hx & 0x000fffff;
+        long i = (hxm + Log.SQRT2_SPLIT) & 0x100000;
+        long newhi = hxm | (i ^ 0x3ff00000);
+        long kBits = ((hx >>> 20) + (Log.DK_MAGIC_BITS - 1023)) + (i >>> 20);
+        long k = kBits - Log.DK_MAGIC_BITS;
+        assertTrue(k >= -1023 && k <= 3073, at);
+        assertTrue(k - 54 >= -1077, at);
+        int chx = (int) (b >> 32);
+        if (b < 0) {
+          assertNotEquals((long) chx, hx, at);
+          continue;
+        }
+        int chxm = chx & 0x000fffff;
+        int ci = (chxm + Log.SQRT2_SPLIT) & 0x100000;
+        assertEquals((long) chx, hx, at);
+        assertEquals((long) chxm, hxm, at);
+        assertEquals((long) ci, i, at);
+        assertEquals((long) (chxm | (ci ^ 0x3ff00000)), newhi, at);
+        assertEquals((long) (((chx >> 20) - 1023) + (ci >> 20)), k, at);
+        assertEquals(((0x000fffff & (2 + chxm)) < 3), ((hxm + 2) & 0x000fffff) < 3, at);
+        assertEquals(((chxm - Log.HX_BAND_LO) | (Log.HX_BAND_HI - chxm)) > 0,
+            ((hxm - Log.HX_BAND_LO) | (Log.HX_BAND_HI - hxm)) > 0, at);
+      }
+    }
+  }
+
+  // L9: the common and subnormal lanes by one biased compare.
+
+  /** L9's compare, as Log writes it. */
+  private static boolean biased(long b, long lo, long hi) {
+    return b + (Long.MIN_VALUE - lo) < Long.MIN_VALUE + (hi - lo);
+  }
+
+  /**
+   * L9: the biased compare is the C's tests for the common lanes and the subnormals, on the
+   * specials, sampled patterns and both sides of each bound; without the bias a negative
+   * pattern would pass as common (the hinge, refuted).
+   */
+  @Test
+  void l9RangeComparesAreTheCs() {
+    double[] xs = Inputs.concat(Inputs.specials(), Inputs.sampled(823L, 1 << 16));
+    long[] edges = {0, 1, -1, Long.MIN_VALUE, Long.MAX_VALUE, Log.COMMON_LO - 1, Log.COMMON_LO,
+        Log.COMMON_HI - 1, Log.COMMON_HI, Log.COMMON_HI + 1, Long.MIN_VALUE + Log.COMMON_LO};
+    long[] all = new long[xs.length + edges.length];
+    for (int n = 0; n < xs.length; n++) {
+      all[n] = bits(xs[n]);
+    }
+    System.arraycopy(edges, 0, all, xs.length, edges.length);
+    for (long b : all) {
+      int hx = (int) (b >> 32);
+      int lx = (int) b;
+      String at = Long.toHexString(b);
+      boolean common = !(hx < Log.HX_MIN_NORMAL) && !(hx >= Log.HX_NON_FINITE);
+      boolean sub = hx < Log.HX_MIN_NORMAL && ((hx & 0x7fffffff) | lx) != 0 && !(hx < 0);
+      assertEquals(common, biased(b, Log.COMMON_LO, Log.COMMON_HI), at);
+      assertEquals(sub, biased(b, 1, Log.COMMON_LO), at);
+    }
+    long negative = Double.doubleToRawLongBits(-1.0);
+    assertTrue(negative - Log.COMMON_LO < Log.COMMON_HI - Log.COMMON_LO);
+    assertFalse(biased(negative, Log.COMMON_LO, Log.COMMON_HI));
   }
 }

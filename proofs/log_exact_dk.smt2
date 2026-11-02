@@ -6,7 +6,7 @@
 ; permissions and limitations under the License.
 ;
 ; log's dk = (double)k without L2D: an add to the bits and an exact subtraction
-; (PROOFS.md, L8).
+; (PROOFS.md, L7).
 ;
 ; e_log.c (reference/fdlibm-5.3) converts its int k to double, dk = (double)k (lines
 ; 115, 118 and 122). The port (Log) holds k in a long lane, and C2 lowers no L2D on AVX2,
@@ -16,15 +16,16 @@
 ; +0.
 ;
 ; What is proven: DK_MAGIC's bits are DK_MAGIC (S = 1, binade 2^52,
-; M = 6755399441055744, ulp 1); for every k in the domain, k + DK_MAGIC_BITS (jlong.add, so a wrap would show) has S = 1,
-; E = 0 and M = 6755399441055744 + k, the double 0x1.8p52 + k; so the exact difference less DK_MAGIC
-; is the integer k; and for k in each binade 2^0 to 2^51, either sign, k rounds to the
-; double S * |k| * 2^(52 - j) * 2^(j - 52) whose value is k, and to no other double in
-; that binade or the next ones. The domain is tight: at k = 2^51 the bits carry into
-; the exponent and k = 2^51 + 1 gives 2^51 + 2; and DK_MAGIC_BITS + 1 gives k + 1.
+; M = 6755399441055744, ulp 1); for every k in the domain, k + DK_MAGIC_BITS (jlong.add,
+; so a wrap would show) has S = 1, E = 0 and M = 6755399441055744 + k, the double
+; 0x1.8p52 + k; so the exact difference less DK_MAGIC is the integer k; and for k in
+; each binade 2^0 to 2^51, either sign, k rounds to the double S * |k| * 2^(52 - j) *
+; 2^(j - 52) whose value is k, and to no other double in that binade or the next ones.
+; The domain is tight: at k = 2^51 the bits carry into the exponent and k = 2^51 + 1
+; gives 2^51 + 2; and DK_MAGIC_BITS + 1 gives k + 1.
 ;
 ; What is not: that the double named is Java's (double)k, which JLS 5.1.2 makes exact for
-; |k| <= 2^53 (ProofsTest.l8ExactConversionIsI2D compares the bits); that for k = 0 the
+; |k| <= 2^53 (ProofsTest.l7ExactConversionIsI2D compares the bits); that for k = 0 the
 ; exact zero difference x - x is +0 (IEEE 754 6.3, pinned in log_zero_dk.smt2's section
 ; A only for like-signed zeros, here stated); that a value rounds to no double in a binade
 ; further off than the next one (the arithmetic of rationals); that log's k lies in the

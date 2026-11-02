@@ -33,8 +33,10 @@
 ;     B - (+0) = B and +0 - v = -v for every such B and v.
 ;   - Section C: xn, whose high word is hx|(i^0x3ff00000) for hx < 2^20 and i either 0 or
 ;     0x100000 (lines 109-111), has sign 1 and binade 2^-1 or 2^0, for every low word: so
-;     xn is in [0.5, 2), and xn = 1 exactly at one pattern. ln2_hi and ln2_lo are positive
-;     and finite.
+;     xn is in [0.5, 2), and xn = 1 exactly at one pattern. Its bits are built over
+;     SMT-LIB's bit-vectors, Java's | and ^ on ints being bvor and bvxor (JLS 15.22.1),
+;     then read as a double over java.smt2's integers. ln2_hi and ln2_lo are positive and
+;     finite.
 ;
 ; What is not machine-checked:
 ;   - That f = xn - 1.0 is exact (Sterbenz's lemma, R6) and zero only at xn = 1, where it
@@ -48,7 +50,7 @@
 ;     values are normal: zero is not in the prelude.
 ;   - That a value rounds to no double in a binade further off than the next one: the
 ;     arithmetic of rationals, as in sign_symmetry.smt2.
-;   - That D2I is not used and I2D of 0, or L8's conversion, gives +0.0 (JLS 5.1.2,
+;   - That D2I is not used and I2D of 0, or L7's conversion, gives +0.0 (JLS 5.1.2,
 ;     log_exact_dk.smt2), and that the port computes these forms: the code's text.
 ;
 ; Constants: ln2_hi and ln2_lo are rendered from Log; no claim here is tight to their
@@ -1662,56 +1664,45 @@
 (check-sat)
 (pop 1)
 
-; Java's &, | and ^ on longs and ints: bit-vector operators on the two's-complement pattern,
-; read back signed. Pinned to the JVM below.
-(define-fun long.of ((r (_ BitVec 64))) Int
-  (- (bv2nat r) (ite (bvslt r #x0000000000000000) 18446744073709551616 0)))
-(define-fun int.of ((r (_ BitVec 32))) Int
-  (- (bv2nat r) (ite (bvslt r #x00000000) 4294967296 0)))
-(define-fun jlong.and ((a Int) (b Int)) Int
-  (long.of (bvand ((_ int2bv 64) a) ((_ int2bv 64) b))))
-(define-fun jlong.or ((a Int) (b Int)) Int
-  (long.of (bvor ((_ int2bv 64) a) ((_ int2bv 64) b))))
-(define-fun jlong.xor ((a Int) (b Int)) Int
-  (long.of (bvxor ((_ int2bv 64) a) ((_ int2bv 64) b))))
-(define-fun jint.and ((a Int) (b Int)) Int
-  (int.of (bvand ((_ int2bv 32) a) ((_ int2bv 32) b))))
-(define-fun jint.or ((a Int) (b Int)) Int
-  (int.of (bvor ((_ int2bv 32) a) ((_ int2bv 32) b))))
-(define-fun jint.xor ((a Int) (b Int)) Int
-  (int.of (bvxor ((_ int2bv 32) a) ((_ int2bv 32) b))))
+; Section C: xn's bits, over bit-vectors, for every 20-bit hx, either i and every low
+; word lo: the top 12 bits (sign and biased exponent) are 0x3fe or 0x3ff, and xn is 1.0
+; only for hx = 0, lo = 0 and i = 0. Then, over java.smt2's integers, every long in
+; [0x3fe00000_00000000, 0x40000000_00000000) is a double of sign 1 and binade 2^-1 or 2^0.
+(define-fun xn.bits ((hx (_ BitVec 32)) (i (_ BitVec 32)) (lo (_ BitVec 32)))
+  (_ BitVec 64) (concat (bvor hx (bvxor i #x3ff00000)) lo))
 
-; Section C: xn's bits, for every 20-bit hx, either i and every low word lo: sign 1, and
-; binade 2^-1 (E = -53) or 2^0 (E = -52); xn = 1 (M = 2^52, E = -52) only for hx = 0 and
-; lo = 0 with i = 0x100000, the lanes 1.0 itself reduces to.
-(define-fun xn.bits ((hx Int) (i Int) (lo Int)) Int
-  (jlong.or (jlong.shl (i2l (jint.or hx (jint.xor i 1072693248))) 32) lo))
-
-(echo "xn has sign 1 and binade 2^-1 or 2^0: it lies in [0.5, 2): expect unsat")
+(echo "xn's sign and biased exponent are 0x3fe or 0x3ff: expect unsat")
 (push 1)
-(declare-const hx Int) (declare-const i Int) (declare-const lo Int)
-(assert (and (<= 0 hx) (< hx 1048576) (or (= i 0) (= i 1048576)) (<= 0 lo) (< lo 4294967296)))
-(assert (not (and (= (jdouble.fromBits.S (xn.bits hx i lo)) 1)
-  (or (= (jdouble.fromBits.E (xn.bits hx i lo)) (- 53)) (= (jdouble.fromBits.E (xn.bits hx i lo)) (-
-    52))))))
+(declare-const hx (_ BitVec 32)) (declare-const i (_ BitVec 32)) (declare-const lo (_ BitVec 32))
+(assert (and (bvult hx #x00100000) (or (= i #x00000000) (= i #x00100000))))
+(assert (not (or (= ((_ extract 63 52) (xn.bits hx i lo)) #x3fe) (= ((_ extract 63 52) (xn.bits hx i
+  lo)) #x3ff))))
 (check-sat)
 (pop 1)
 
-(echo "xn = 1 only at hx = 0, lo = 0, i = 0x100000: expect unsat")
+(echo "xn = 1 only at hx = 0, lo = 0, i = 0: expect unsat")
 (push 1)
-(declare-const hx Int) (declare-const i Int) (declare-const lo Int)
-(assert (and (<= 0 hx) (< hx 1048576) (or (= i 0) (= i 1048576)) (<= 0 lo) (< lo 4294967296)))
-(assert (= (jdouble.fromBits.M (xn.bits hx i lo)) 4503599627370496))
-(assert (= (jdouble.fromBits.E (xn.bits hx i lo)) (- 52)))
-(assert (not (and (= hx 0) (= lo 0) (= i 1048576))))
+(declare-const hx (_ BitVec 32)) (declare-const i (_ BitVec 32)) (declare-const lo (_ BitVec 32))
+(assert (and (bvult hx #x00100000) (or (= i #x00000000) (= i #x00100000))))
+(assert (= (xn.bits hx i lo) #x3ff0000000000000))
+(assert (not (and (= hx #x00000000) (= lo #x00000000) (= i #x00000000))))
 (check-sat)
 (pop 1)
 
 (echo "not vacuous: some xn is 1: expect sat")
 (push 1)
-(declare-const hx Int) (declare-const i Int) (declare-const lo Int)
-(assert (and (<= 0 hx) (< hx 1048576) (or (= i 0) (= i 1048576)) (<= 0 lo) (< lo 4294967296)))
-(assert (= (xn.bits hx i lo) 4607182418800017408))
+(declare-const hx (_ BitVec 32)) (declare-const i (_ BitVec 32)) (declare-const lo (_ BitVec 32))
+(assert (and (bvult hx #x00100000) (or (= i #x00000000) (= i #x00100000))))
+(assert (= (xn.bits hx i lo) #x3ff0000000000000))
+(check-sat)
+(pop 1)
+
+(echo "those bits are doubles of sign 1 in binade 2^-1 or 2^0: expect unsat")
+(push 1)
+(declare-const b Int)
+(assert (and (<= 4602678819172646912 b) (< b 4611686018427387904)))
+(assert (not (and (= (jdouble.fromBits.S b) 1)
+  (or (= (jdouble.fromBits.E b) (- 53)) (= (jdouble.fromBits.E b) (- 52))))))
 (check-sat)
 (pop 1)
 

@@ -2,15 +2,21 @@
 
 What C2 emits for a port's hot loop, counted, so a change to a body's shape can be checked in
 instructions before it is timed. `AsmDriver.java` warms `VFdlibm.exp`'s and `VFdlibm.log`'s
-loops on common data (exp draws from `[-20, 20]`, as `ExpBenchmark`'s common inputs do) until C2
-compiles them; `dump.sh` prints `AsmDriver::loopExp` with the body inlined and no tiered
-compilation, and `census.py` counts the loop's hot path. Two modes: `avx512`, 512 bits on the
+loops on common data (exp draws from `[-20, 20]`, as `ExpBenchmark`'s common inputs do, and log
+from `[1, 2) * 2^[-30, 30]`) until C2 compiles them; `dump.sh` prints `AsmDriver::loopExp` or
+`AsmDriver::loopLog` with the body inlined and no tiered compilation, and `census.py` counts the
+loop's hot path. Two modes: `avx512`, 512 bits on the
 host's own flags (native AVX-512 on an AVX-512 host), and `avx2`, 256 bits as an AVX2 host such
 as the EPYC 7763 compiles it (`-XX:UseAVX=2 -XX:MaxVectorSize=32`).
 
     mvn -B -q compile
     bench/asm/dump.sh avx512 target/classes target/asm ~/hsdis
     bench/asm/dump.sh avx2 target/classes target/asm ~/hsdis
+    bench/asm/dump.sh avx512 target/classes target/asm ~/hsdis log
+    bench/asm/dump.sh avx2 target/classes target/asm ~/hsdis log
+
+The fifth argument names the function, `exp` (the default) or `log`; log's files are
+`asm-log-<mode>.txt` and `census-log-<mode>.txt`.
 
 The disassembler is `hsdis-amd64.so`, built from OpenJDK's `src/utils/hsdis` with binutils, in
 the directory given as the third argument (the default is `~/hsdis`). Without it HotSpot prints
@@ -77,3 +83,53 @@ gone. Each high-word compare is one `vpcmpgtq` (two of them were a double compar
 vector and an xor). At both widths the two blends left are the reduced-lane zeroing of `k`'s
 argument and the tiny lanes' `one + x`, and the `D2I` fix-up's entry check (a compare, a test and
 a branch) is still in the hot path.
+
+## log, 3 Nov 2026
+
+The same laptop and JDK. Before: `main` at 44c899e. After: branch `log-proven-folds`, the folds
+of `PROOFS.md` (log, L6 to L9), merged with `port-log10`'s `Log` (the arms as an `int`, the
+high word written back in the body). In log's loop the per-lane finish is out of line and no
+`D2I` fix-up exists, so the loop and the hot path are the same instructions.
+
+### AVX-512, 512 bits, the host's own flags (8 doubles per iteration)
+
+| | before | after |
+| :--- | ---: | ---: |
+| hot path instructions | 99 | 88 |
+| `vdivpd` | 1 | 1 |
+| blends (`vpblendmq`) | 7 | 3 |
+| constant broadcasts | 7 | 9 |
+| stack accesses (spills) | 1 | 0 |
+| integer compares (`vpcmp*`) | 3 | 3 |
+| double compares (`vcmp*pd`) | 3 | 1 |
+| mask-register operations (`k*`) | 6 | 4 |
+| conversions (`vpmovqd`, `vpmovsxdq`, `vcvtdq2pd`) | 3 | 0 |
+
+The `k == 0` fold (L6) alone, int lanes kept, read 89 with 6 broadcasts: four blends and the
+`k == 0` compare gone. Moving the words to long lanes (L7, L8) was a tie by count at 512 bits:
+89 again, but with 9 broadcasts, so 80 other instructions against 83. The three conversions go
+(`L2I`, `I2L`, `I2D`) and the add of `0x1.8p52`'s bits joins the `vsubpd`, while the two new
+constants are among those C2 reloads from memory as broadcasts inside the loop rather than
+keeping in registers. The biased
+compares (L9) took one more: 88. So on AVX-512 the long-lane form is kept for having fewer
+operations at an equal count, three fewer non-load instructions; whether broadcasts that are
+loads cost more than the conversions they replace is for the hosts' paired run to say.
+
+### AVX2, 256 bits, `-XX:UseAVX=2 -XX:MaxVectorSize=32` (4 doubles per iteration)
+
+| | before | after |
+| :--- | ---: | ---: |
+| hot path instructions | 131 | 110 |
+| `vdivpd` | 1 | 1 |
+| blends (`vblendvps`) | 7 | 3 |
+| constant broadcasts | 27 | 28 |
+| stack accesses (spills) | 5 | 1 |
+| integer compares (`vpcmp*`) | 4 | 4 |
+| double compares (`vcmp*pd`) | 3 | 1 |
+| conversions and permutes (`vpmov*`, `vcvt*`, `vperm*`) | 7 | 0 |
+
+The fold alone read 116. The long lanes first read 123: AVX2 has no 64-bit arithmetic shift,
+and C2 emulates each `ASHR` on a long in three instructions. Writing the C's `>>` as `>>>`,
+equal on the non-negative `hx` and `i` (L8), and adding `0x1.8p52`'s bits and the C's `-1023`
+as one constant gave 112, and the biased compares 110. The three blends left are the band, the
+`|f| < 2^-20` lanes and the `f == 0` lanes; the one double compare left is `f == 0`'s.

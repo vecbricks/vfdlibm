@@ -19,10 +19,9 @@ import static io.github.vecbricks.vfdlibm.ProofFiles.lit;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.function.LongBinaryOperator;
 
 /**
- * The proofs of log's lemmas ({@code PROOFS.md}, log, L6 to L10), rendered with the constants
+ * The proofs of log's lemmas ({@code PROOFS.md}, log, L6 to L9), rendered with the constants
  * {@link Log} holds, so a constant that moves without its proof fails {@link ProofFilesTest}.
  * Each method renders one file under {@code proofs/}; {@link ProofFiles#render} lists them.
  */
@@ -88,8 +87,10 @@ final class LogProofFiles {
         ;     B - (+0) = B and +0 - v = -v for every such B and v.
         ;   - Section C: xn, whose high word is hx|(i^0x3ff00000) for hx < 2^20 and i either 0 or
         ;     0x100000 (lines 109-111), has sign 1 and binade 2^-1 or 2^0, for every low word: so
-        ;     xn is in [0.5, 2), and xn = 1 exactly at one pattern. ln2_hi and ln2_lo are positive
-        ;     and finite.
+        ;     xn is in [0.5, 2), and xn = 1 exactly at one pattern. Its bits are built over
+        ;     SMT-LIB's bit-vectors, Java's | and ^ on ints being bvor and bvxor (JLS 15.22.1),
+        ;     then read as a double over java.smt2's integers. ln2_hi and ln2_lo are positive and
+        ;     finite.
         ;
         ; What is not machine-checked:
         ;   - That f = xn - 1.0 is exact (Sterbenz's lemma, R6) and zero only at xn = 1, where it
@@ -103,7 +104,7 @@ final class LogProofFiles {
         ;     values are normal: zero is not in the prelude.
         ;   - That a value rounds to no double in a binade further off than the next one: the
         ;     arithmetic of rationals, as in sign_symmetry.smt2.
-        ;   - That D2I is not used and I2D of 0, or L8's conversion, gives +0.0 (JLS 5.1.2,
+        ;   - That D2I is not used and I2D of 0, or L7's conversion, gives +0.0 (JLS 5.1.2,
         ;     log_exact_dk.smt2), and that the port computes these forms: the code's text.
         ;
         ; Constants: ln2_hi and ln2_lo are rendered from Log; no claim here is tight to their
@@ -206,33 +207,33 @@ final class LogProofFiles {
         "(assert " + near("(- M 1)", pow2(53), "1", "M2", -1) + ")",
         "(assert (not (= M2 M)))"));
 
-    out.append(BITWISE);
     out.append("""
 
-        ; Section C: xn's bits, for every 20-bit hx, either i and every low word lo: sign 1, and
-        ; binade 2^-1 (E = -53) or 2^0 (E = -52); xn = 1 (M = 2^52, E = -52) only for hx = 0 and
-        ; lo = 0 with i = 0x100000, the lanes 1.0 itself reduces to.
-        (define-fun xn.bits ((hx Int) (i Int) (lo Int)) Int
-          (jlong.or (jlong.shl (i2l (jint.or hx (jint.xor i 1072693248))) 32) lo))
+        ; Section C: xn's bits, over bit-vectors, for every 20-bit hx, either i and every low
+        ; word lo: the top 12 bits (sign and biased exponent) are 0x3fe or 0x3ff, and xn is 1.0
+        ; only for hx = 0, lo = 0 and i = 0. Then, over java.smt2's integers, every long in
+        ; [0x3fe00000_00000000, 0x40000000_00000000) is a double of sign 1 and binade 2^-1 or 2^0.
+        (define-fun xn.bits ((hx (_ BitVec 32)) (i (_ BitVec 32)) (lo (_ BitVec 32)))
+          (_ BitVec 64) (concat (bvor hx (bvxor i #x3ff00000)) lo))
         """);
-    String dom = "(and (<= 0 hx) (< hx 1048576) (or (= i 0) (= i 1048576)) (<= 0 lo)"
-        + " (< lo 4294967296))";
-    check(out, "xn has sign 1 and binade 2^-1 or 2^0: it lies in [0.5, 2)", "unsat", body(
-        "(declare-const hx Int) (declare-const i Int) (declare-const lo Int)",
+    String dom = "(and (bvult hx #x00100000) (or (= i #x00000000) (= i #x00100000)))";
+    String vars = "(declare-const hx (_ BitVec 32)) (declare-const i (_ BitVec 32))"
+        + " (declare-const lo (_ BitVec 32))";
+    check(out, "xn's sign and biased exponent are 0x3fe or 0x3ff", "unsat", body(vars,
         "(assert " + dom + ")",
-        "(assert (not (and (= (jdouble.fromBits.S (xn.bits hx i lo)) 1)",
-        "  (or (= (jdouble.fromBits.E (xn.bits hx i lo)) (- 53))"
-            + " (= (jdouble.fromBits.E (xn.bits hx i lo)) (- 52))))))"));
-    check(out, "xn = 1 only at hx = 0, lo = 0, i = 0x100000", "unsat", body(
-        "(declare-const hx Int) (declare-const i Int) (declare-const lo Int)",
-        "(assert " + dom + ")",
-        "(assert (= (jdouble.fromBits.M (xn.bits hx i lo)) " + P52 + "))",
-        "(assert (= (jdouble.fromBits.E (xn.bits hx i lo)) (- 52)))",
-        "(assert (not (and (= hx 0) (= lo 0) (= i 1048576))))"));
-    check(out, "not vacuous: some xn is 1", "sat", body(
-        "(declare-const hx Int) (declare-const i Int) (declare-const lo Int)",
-        "(assert " + dom + ")",
-        "(assert (= (xn.bits hx i lo) " + lit(Double.doubleToRawLongBits(1.0)) + "))"));
+        "(assert (not (or (= ((_ extract 63 52) (xn.bits hx i lo)) #x3fe)"
+            + " (= ((_ extract 63 52) (xn.bits hx i lo)) #x3ff))))"));
+    check(out, "xn = 1 only at hx = 0, lo = 0, i = 0", "unsat", body(vars,
+        "(assert " + dom + ")", "(assert (= (xn.bits hx i lo) #x3ff0000000000000))",
+        "(assert (not (and (= hx #x00000000) (= lo #x00000000) (= i #x00000000))))"));
+    check(out, "not vacuous: some xn is 1", "sat", body(vars, "(assert " + dom + ")",
+        "(assert (= (xn.bits hx i lo) #x3ff0000000000000))"));
+    check(out, "those bits are doubles of sign 1 in binade 2^-1 or 2^0",
+        "unsat", body("(declare-const b Int)",
+            "(assert (and (<= " + lit(0x3fe0000000000000L) + " b) (< b "
+                + lit(0x4000000000000000L) + ")))",
+            "(assert (not (and (= (jdouble.fromBits.S b) 1)",
+            "  (or (= (jdouble.fromBits.E b) (- 53)) (= (jdouble.fromBits.E b) (- 52))))))"));
     long hiBits = Double.doubleToRawLongBits(Log.LN2_HI);
     long loBits = Double.doubleToRawLongBits(Log.LN2_LO);
     check(out, "ln2_hi and ln2_lo are positive and finite, as the zero product needs", "unsat",
@@ -244,73 +245,10 @@ final class LogProofFiles {
   }
 
   // ---------------------------------------------------------------------------------------------
-  // Java's &, | and ^ on ints and longs, over bit-vectors
+  // log_exact_dk.smt2: L7
 
   /**
-   * {@code &}, {@code |} and {@code ^} on ints and longs, which java.smt2 lacks: SMT-LIB's
-   * bit-vector operators on the two's-complement pattern ({@code int2bv}), read back as a signed
-   * value, as exp_half_sign.smt2 does. {@link #bitwiseCheck} pins them to the JVM in each file.
-   */
-  private static final String BITWISE = """
-
-      ; Java's &, | and ^ on longs and ints: bit-vector operators on the two's-complement pattern,
-      ; read back signed. Pinned to the JVM below.
-      (define-fun long.of ((r (_ BitVec 64))) Int
-        (- (bv2nat r) (ite (bvslt r #x0000000000000000) 18446744073709551616 0)))
-      (define-fun int.of ((r (_ BitVec 32))) Int
-        (- (bv2nat r) (ite (bvslt r #x00000000) 4294967296 0)))
-      (define-fun jlong.and ((a Int) (b Int)) Int
-        (long.of (bvand ((_ int2bv 64) a) ((_ int2bv 64) b))))
-      (define-fun jlong.or ((a Int) (b Int)) Int
-        (long.of (bvor ((_ int2bv 64) a) ((_ int2bv 64) b))))
-      (define-fun jlong.xor ((a Int) (b Int)) Int
-        (long.of (bvxor ((_ int2bv 64) a) ((_ int2bv 64) b))))
-      (define-fun jint.and ((a Int) (b Int)) Int
-        (int.of (bvand ((_ int2bv 32) a) ((_ int2bv 32) b))))
-      (define-fun jint.or ((a Int) (b Int)) Int
-        (int.of (bvor ((_ int2bv 32) a) ((_ int2bv 32) b))))
-      (define-fun jint.xor ((a Int) (b Int)) Int
-        (int.of (bvxor ((_ int2bv 32) a) ((_ int2bv 32) b))))
-      """;
-
-  private static final long[] BIT_LONGS = {Long.MIN_VALUE, -(1L << 32) - 5, -1048576, -1, 0, 1,
-      0x6147a, 0x3ff00000, Long.MAX_VALUE};
-  private static final int[] BIT_INTS = {Integer.MIN_VALUE, -1048576, -7, -1, 0, 1, 0x6147a,
-      0x3ff00000, Integer.MAX_VALUE};
-  /** The right operands: the masks and words log uses, and the extremes. */
-  private static final long[] BIT_RIGHTS = {0x100000, 0x3ff00000, -1048576, -1, Integer.MIN_VALUE};
-
-  /** One check that each of {@link #BITWISE}'s six operators is Java's on boundary operands. */
-  private static void bitwiseCheck(StringBuilder out) {
-    var eqs = new ArrayList<String>();
-    for (String[] op : new String[][] {{"and", "&"}, {"or", "|"}, {"xor", "^"}}) {
-      LongBinaryOperator f = switch (op[1]) {
-        case "&" -> (a, b) -> a & b;
-        case "|" -> (a, b) -> a | b;
-        default -> (a, b) -> a ^ b;
-      };
-      for (long a : BIT_LONGS) {
-        for (long b : BIT_RIGHTS) {
-          eqs.add("(= (jlong." + op[0] + " " + lit(a) + " " + lit(b) + ") "
-              + lit(f.applyAsLong(a, b)) + ")");
-        }
-      }
-      for (int a : BIT_INTS) {
-        for (long rb : BIT_RIGHTS) {
-          int b = (int) rb;
-          eqs.add("(= (jint." + op[0] + " " + lit(a) + " " + lit(b) + ") "
-              + lit((int) f.applyAsLong(a, b)) + ")");
-        }
-      }
-    }
-    equations(out, "jlong and jint &, |, ^ are Java's", eqs);
-  }
-
-  // ---------------------------------------------------------------------------------------------
-  // log_exact_dk.smt2: L8
-
-  /**
-   * {@code log_exact_dk.smt2}, lemma L8: {@code fromBits(k + DK_MAGIC_BITS) - DK_MAGIC} is the
+   * {@code log_exact_dk.smt2}, lemma L7: {@code fromBits(k + DK_MAGIC_BITS) - DK_MAGIC} is the
    * double k, exactly, for every long k in [-2^51, 2^51).
    */
   static String exactDk() {
@@ -320,7 +258,7 @@ final class LogProofFiles {
     var out = new StringBuilder(ProofFiles.LICENSE);
     out.append(("""
         ; log's dk = (double)k without L2D: an add to the bits and an exact subtraction
-        ; (PROOFS.md, L8).
+        ; (PROOFS.md, L7).
         ;
         ; e_log.c (reference/fdlibm-5.3) converts its int k to double, dk = (double)k (lines
         ; 115, 118 and 122). The port (Log) holds k in a long lane, and C2 lowers no L2D on AVX2,
@@ -334,11 +272,12 @@ final class LogProofFiles {
         ; so a wrap would show) has S = 1, E = 0 and M = %d + k, the double
         ; 0x1.8p52 + k; so the exact difference less DK_MAGIC is the integer k; and for k in
         ; each binade 2^0 to 2^51, either sign, k rounds to the double S * |k| * 2^(52 - j) *
-        ; 2^(j - 52) whose value is k, and to no other double in that binade or the next ones. The domain is tight: at k = 2^51 the bits carry into
-        ; the exponent and k = 2^51 + 1 gives 2^51 + 2; and DK_MAGIC_BITS + 1 gives k + 1.
+        ; 2^(j - 52) whose value is k, and to no other double in that binade or the next ones.
+        ; The domain is tight: at k = 2^51 the bits carry into the exponent and k = 2^51 + 1
+        ; gives 2^51 + 2; and DK_MAGIC_BITS + 1 gives k + 1.
         ;
         ; What is not: that the double named is Java's (double)k, which JLS 5.1.2 makes exact for
-        ; |k| <= 2^53 (ProofsTest.l8ExactConversionIsI2D compares the bits); that for k = 0 the
+        ; |k| <= 2^53 (ProofsTest.l7ExactConversionIsI2D compares the bits); that for k = 0 the
         ; exact zero difference x - x is +0 (IEEE 754 6.3, pinned in log_zero_dk.smt2's section
         ; A only for like-signed zeros, here stated); that a value rounds to no double in a binade
         ; further off than the next one (the arithmetic of rationals); that log's k lies in the
@@ -397,16 +336,85 @@ final class LogProofFiles {
   }
 
   // ---------------------------------------------------------------------------------------------
-  // log_long_words.smt2: L9
+  // Bit-vectors for L8 and L9
+
+  /** A 64-bit bit-vector literal. */
+  private static String bv(long v) {
+    return String.format("#x%016x", v);
+  }
+
+  /** A 32-bit bit-vector literal. */
+  private static String bv(int v) {
+    return String.format("#x%08x", v);
+  }
+
+  /** Lines of a file's header on Java over bit-vectors, shared by L8's and L9's. */
+  private static final String JAVA_AS_BV = """
+      ; Java's int and long arithmetic is two's complement modulo 2^32 and 2^64 (JLS 4.2.2), so
+      ; each operator here is its SMT-LIB bit-vector counterpart: + - as bvadd, bvsub; & | ^ as
+      ; bvand, bvor, bvxor (JLS 15.22.1); << >> >>> by a constant count as bvshl, bvashr,
+      ; bvlshr (JLS 15.19); a signed compare as bvslt and its kin; (int) of a long as the low 32
+      ; bits, extract; (long) of an int as sign_extend (JLS 5.1.3, 5.1.2). The definitions are
+      ; pinned to the JVM: a ground check per sampled bit pattern compares each C and port
+      ; definition with the value Java computed while rendering. Java's integers are used here
+      ; rather than java.smt2's: mixing the two through int2bv left both solvers at unknown for
+      ; a minute, where over bit-vectors alone they decide each check at once.
+      """;
+
+  /** Sampled bit patterns for the ground checks: the specials and the words log branches at. */
+  private static long[] samples() {
+    var xs = new ArrayList<Long>();
+    for (double d : new double[] {0.0, -0.0, Double.MIN_VALUE, Double.MIN_NORMAL, 0.5, 1.0,
+        Math.sqrt(2), Math.sqrt(2) / 2, 3.0, 1e300, Double.MAX_VALUE, Double.POSITIVE_INFINITY,
+        Double.NaN, -1.0, Double.NEGATIVE_INFINITY}) {
+      xs.add(Double.doubleToRawLongBits(d));
+    }
+    for (int h : new int[] {0x3ff6147a, 0x3ff61479, 0x3fe6b851, 0x3fe6b852, 0x3fe6a09c,
+        0x3ff6a09b, 0x3feffffe, 0x3ff00001, 0x000fffff, 0x7fefffff, 0x80100000, 0xfff80000}) {
+      xs.add(((long) h << 32) | 0x12345678L);
+    }
+    xs.add(0x0010000000000000L - 1);
+    xs.add(0x7ff0000000000000L - 1);
+    xs.add(Long.MIN_VALUE);
+    xs.add(-1L);
+    return xs.stream().mapToLong(Long::longValue).toArray();
+  }
+
+  // ---------------------------------------------------------------------------------------------
+  // log_long_words.smt2: L8
+
+  /** The C's words for one bit pattern, as Java ints: {hx, hxm, i, newhi, k, kSub, small, band}. */
+  private static int[] cWords(long b) {
+    int hx = (int) (b >> 32);
+    int hxm = hx & 0x000fffff;
+    int i = (hxm + Log.SQRT2_SPLIT) & 0x100000;
+    int newhi = hxm | (i ^ 0x3ff00000);
+    int k = ((hx >> 20) - 1023) + (i >> 20);
+    int kSub = (-54 + ((hx >> 20) - 1023)) + (i >> 20);
+    int small = ((0x000fffff & (2 + hxm)) < 3) ? 1 : 0;
+    int band = (((hxm - Log.HX_BAND_LO) | (Log.HX_BAND_HI - hxm)) > 0) ? 1 : 0;
+    return new int[] {hx, hxm, i, newhi, k, kSub, small, band};
+  }
+
+  /** The port's words for one bit pattern, as Log computes them: {hx, hxm, i, newhi, kBits}. */
+  private static long[] portWords(long b) {
+    long hx = b >>> 32;
+    long hxm = hx & 0x000fffff;
+    long i = (hxm + Log.SQRT2_SPLIT) & 0x100000;
+    long newhi = hxm | (i ^ 0x3ff00000);
+    long kBits = ((hx >>> 20) + (Log.DK_MAGIC_BITS - 1023)) + (i >>> 20);
+    return new long[] {hx, hxm, i, newhi, kBits};
+  }
 
   /**
-   * {@code log_long_words.smt2}, lemma L9: the port's long-lane words are the C's int words on
+   * {@code log_long_words.smt2}, lemma L8: the port's long-lane words are the C's int words on
    * every lane with the sign bit clear, and its k lies in [-1077, 3073] on every lane.
    */
   static String longWords() {
+    long magic = Log.DK_MAGIC_BITS;
     var out = new StringBuilder(ProofFiles.LICENSE);
     out.append(("""
-        ; log's int words in long lanes (PROOFS.md, L9).
+        ; log's int words in long lanes (PROOFS.md, L8).
         ;
         ; e_log.c (reference/fdlibm-5.3) reads hx = __HI(x) as a signed int and computes, lines
         ; 104-131: k = (hx>>20)-1023 (less 54 first for a subnormal), hx &= 0x000fffff,
@@ -416,179 +424,219 @@ final class LogProofFiles {
         ; [- 54] + (I >>> 20), and the rest as the C writes it, on longs. The words are rendered
         ; from Log.
         ;
-        ; What is proven, each Java operator as java.smt2 defines it, and &, |, ^ over bit-vectors
-        ; (pinned to the JVM here):
+        """).formatted(Log.SQRT2_SPLIT, Log.HX_BAND_LO, Log.HX_BAND_HI));
+    out.append(JAVA_AS_BV);
+    out.append("""
+        ;
+        ; What is proven:
         ;   - for every long bits with the sign bit clear (every lane whose result is kept: a
-        ;     positive x, and the scaled subnormal), HX is the C's hx widened, the masked word,
-        ;     i and the new high word are the C's widened, kBits is the C's k widened plus
-        ;     DK_MAGIC_BITS, with and without the subnormal's -54, and the two tests agree;
+        ;     positive x, and the scaled subnormal), HX is the C's hx widened; the masked word,
+        ;     i and the new high word are the C's widened; kBits is the C's k widened plus
+        ;     DK_MAGIC_BITS, with and without the subnormal's -54; and the two tests agree. So the
+        ;     C's int arithmetic, which these checks take modulo 2^32 as Java does, has no
+        ;     overflow on these lanes to differ on: the long values, taken modulo 2^64, are equal.
         ;   - for every long bits, either sign, kBits - DK_MAGIC_BITS lies in [-1077, 3073], inside
         ;     log_exact_dk.smt2's domain, so dk is exact on every lane, kept or not.
-        ; The C's int arithmetic is java.smt2's, which wraps; the checks above show the long
-        ; values equal to the wrapped ones, and every one lies far inside 32 bits, so the C's
-        ; signed arithmetic has no overflow to differ on.
         ;
         ; What is not: that __HI(x) is the high int of the raw bits (the prelude's reading of the
-        ; macro), that Lanes.withHi writes the low 32 bits of the new high word as the C's __HI
-        ; assignment does, and that the port computes this: the code's text.
+        ; macro), that the port writes the new high word's low 32 bits back as the C's __HI
+        ; assignment does, and that it computes this: the code's text.
         ;
         ; The sat checks refute the sign hypothesis (a negative bits gives HX >= 2^31, not the C's
         ; negative hx), and SQRT2_SPLIT, HX_BAND_LO and HX_BAND_HI changed by one.
         ;
-        ; The logic is ALL: the file mixes bit-vectors with java.smt2's integers.
-        """).formatted(Log.SQRT2_SPLIT, Log.HX_BAND_LO, Log.HX_BAND_HI));
+        ; The logic is ALL: dev/prove.sh inserts java.smt2's integer prelude, unused here.
+        """);
     out.append(ProofFiles.rendered("ALL"));
-    out.append(BITWISE);
-    bitwiseCheck(out);
-    long magic = Log.DK_MAGIC_BITS;
     out.append(("""
 
         ; The C, on the signed int hx = __HI(x), and the port, on the long bits.
-        (define-fun c.hx ((b Int)) Int (l2i (jlong.shr b 32)))
-        (define-fun c.hxm ((b Int)) Int (jint.and.low (c.hx b) 1048576))
-        (define-fun c.i ((b Int) (split Int)) Int
-          (jint.and (jint.add (c.hxm b) split) 1048576))
-        (define-fun c.newhi ((b Int)) Int
-          (jint.or (c.hxm b) (jint.xor (c.i b %1$d) 1072693248)))
-        (define-fun c.k ((b Int) (k0 Int)) Int
-          (jint.add (jint.add k0 (jint.sub (jint.shr (c.hx b) 20) 1023))
-                    (jint.shr (c.i b %1$d) 20)))
-        (define-fun c.small ((b Int)) Bool (< (jint.and.low (jint.add 2 (c.hxm b)) 1048576) 3))
-        (define-fun c.band ((b Int) (lo Int) (hi Int)) Bool
-          (> (jint.or (jint.sub (c.hxm b) lo) (jint.sub hi (c.hxm b))) 0))
-        (define-fun p.hx ((b Int)) Int (jlong.ushr b 32))
-        (define-fun p.hxm ((b Int)) Int (jlong.and.low (p.hx b) 1048576))
-        (define-fun p.i ((b Int) (split Int)) Int
-          (jlong.and (jlong.add (p.hxm b) split) 1048576))
-        (define-fun p.newhi ((b Int)) Int
-          (jlong.or (p.hxm b) (jlong.xor (p.i b %1$d) 1072693248)))
-        (define-fun p.kbits ((b Int) (k0 Int)) Int
-          (jlong.add (jlong.add (jlong.add (jlong.ushr (p.hx b) 20) %2$s) k0)
-                     (jlong.ushr (p.i b %1$d) 20)))
-        (define-fun p.small ((b Int)) Bool (< (jlong.and.low (jlong.add (p.hxm b) 2) 1048576) 3))
-        (define-fun p.band ((b Int) (lo Int) (hi Int)) Bool
-          (> (jlong.or (jlong.sub (p.hxm b) lo) (jlong.sub hi (p.hxm b))) 0))
-        """).formatted(Log.SQRT2_SPLIT, lit(magic - 1023)));
-    String pos = "(assert (and (jlong.in b) (<= 0 b)))";
+        (define-fun c.hx ((b (_ BitVec 64))) (_ BitVec 32) ((_ extract 63 32) b))
+        (define-fun c.hxm ((b (_ BitVec 64))) (_ BitVec 32) (bvand (c.hx b) #x000fffff))
+        (define-fun c.i ((b (_ BitVec 64)) (split (_ BitVec 32))) (_ BitVec 32)
+          (bvand (bvadd (c.hxm b) split) #x00100000))
+        (define-fun c.newhi ((b (_ BitVec 64))) (_ BitVec 32)
+          (bvor (c.hxm b) (bvxor (c.i b %1$s) #x3ff00000)))
+        (define-fun c.k ((b (_ BitVec 64)) (k0 (_ BitVec 32))) (_ BitVec 32)
+          (bvadd (bvadd k0 (bvsub (bvashr (c.hx b) #x00000014) #x000003ff))
+                 (bvashr (c.i b %1$s) #x00000014)))
+        (define-fun c.small ((b (_ BitVec 64))) Bool
+          (bvslt (bvand #x000fffff (bvadd #x00000002 (c.hxm b))) #x00000003))
+        (define-fun c.band ((b (_ BitVec 64)) (lo (_ BitVec 32)) (hi (_ BitVec 32))) Bool
+          (bvsgt (bvor (bvsub (c.hxm b) lo) (bvsub hi (c.hxm b))) #x00000000))
+        (define-fun widen ((v (_ BitVec 32))) (_ BitVec 64) ((_ sign_extend 32) v))
+        (define-fun p.hx ((b (_ BitVec 64))) (_ BitVec 64) (bvlshr b #x0000000000000020))
+        (define-fun p.hxm ((b (_ BitVec 64))) (_ BitVec 64) (bvand (p.hx b) #x00000000000fffff))
+        (define-fun p.i ((b (_ BitVec 64)) (split (_ BitVec 64))) (_ BitVec 64)
+          (bvand (bvadd (p.hxm b) split) #x0000000000100000))
+        (define-fun p.newhi ((b (_ BitVec 64))) (_ BitVec 64)
+          (bvor (p.hxm b) (bvxor (p.i b %2$s) #x000000003ff00000)))
+        (define-fun p.kbits ((b (_ BitVec 64)) (k0 (_ BitVec 64))) (_ BitVec 64)
+          (bvadd (bvadd (bvadd (bvlshr (p.hx b) #x0000000000000014) %3$s) k0)
+                 (bvlshr (p.i b %2$s) #x0000000000000014)))
+        (define-fun p.small ((b (_ BitVec 64))) Bool
+          (bvslt (bvand (bvadd (p.hxm b) #x0000000000000002) #x00000000000fffff)
+                 #x0000000000000003))
+        (define-fun p.band ((b (_ BitVec 64)) (lo (_ BitVec 64)) (hi (_ BitVec 64))) Bool
+          (bvsgt (bvor (bvsub (p.hxm b) lo) (bvsub hi (p.hxm b))) #x0000000000000000))
+        """).formatted(bv(Log.SQRT2_SPLIT), bv((long) Log.SQRT2_SPLIT), bv(magic - 1023)));
+    String lo32 = bv(Log.HX_BAND_LO);
+    String hi32 = bv(Log.HX_BAND_HI);
+    String lo64 = bv((long) Log.HX_BAND_LO);
+    String hi64 = bv((long) Log.HX_BAND_HI);
+    String split32 = bv(Log.SQRT2_SPLIT);
+    String split64 = bv((long) Log.SQRT2_SPLIT);
+    var pins = new ArrayList<String>();
+    for (long b : samples()) {
+      int[] c = cWords(b);
+      long[] p = portWords(b);
+      String x = bv(b);
+      pins.add("(= (c.hx " + x + ") " + bv(c[0]) + ") (= (c.hxm " + x + ") " + bv(c[1]) + ")");
+      pins.add("(= (c.i " + x + " " + split32 + ") " + bv(c[2]) + ") (= (c.newhi " + x + ") "
+          + bv(c[3]) + ")");
+      pins.add("(= (c.k " + x + " #x00000000) " + bv(c[4]) + ") (= (c.k " + x + " #xffffffca) "
+          + bv(c[5]) + ")");
+      pins.add("(= (c.small " + x + ") " + bool(c[6] == 1) + ") (= (c.band " + x + " " + lo32
+          + " " + hi32 + ") " + bool(c[7] == 1) + ")");
+      pins.add("(= (p.hx " + x + ") " + bv(p[0]) + ") (= (p.hxm " + x + ") " + bv(p[1]) + ")");
+      pins.add("(= (p.i " + x + " " + split64 + ") " + bv(p[2]) + ") (= (p.newhi " + x + ") "
+          + bv(p[3]) + ")");
+      pins.add("(= (p.kbits " + x + " #x0000000000000000) " + bv(p[4]) + ")");
+    }
+    equations(out, "the C's and the port's words are Java's at sampled bits", pins);
+    String pos = "(assert (bvsge b #x0000000000000000))";
+    String b64 = "(declare-const b (_ BitVec 64))";
     check(out, "bits >= 0: HX, the masked word, i and the new high word are the C's", "unsat",
-        body("(declare-const b Int)", pos,
-            "(assert (not (and (= (p.hx b) (i2l (c.hx b))) (= (p.hxm b) (i2l (c.hxm b)))",
-            "  (= (p.i b " + Log.SQRT2_SPLIT + ") (i2l (c.i b " + Log.SQRT2_SPLIT + ")))",
-            "  (= (p.newhi b) (i2l (c.newhi b))))))"));
+        body(b64, pos,
+            "(assert (not (and (= (p.hx b) (widen (c.hx b))) (= (p.hxm b) (widen (c.hxm b)))",
+            "  (= (p.i b " + split64 + ") (widen (c.i b " + split32 + ")))",
+            "  (= (p.newhi b) (widen (c.newhi b))))))"));
     for (int k0 : new int[] {0, -54}) {
       check(out, "bits >= 0: kBits is the C's k" + (k0 == 0 ? "" : ", -54 first,")
-          + " plus DK_MAGIC_BITS", "unsat", body("(declare-const b Int)", pos,
-              "(assert (not (= (p.kbits b " + lit(k0) + ") (jlong.add (i2l (c.k b " + lit(k0)
-                  + ")) " + lit(magic) + "))))"));
+          + " plus DK_MAGIC_BITS", "unsat", body(b64, pos,
+              "(assert (not (= (p.kbits b " + bv((long) k0) + ") (bvadd (widen (c.k b " + bv(k0)
+                  + ")) " + bv(magic) + "))))"));
     }
     check(out, "bits >= 0: the |f| < 2^-20 test and the band test are the C's", "unsat", body(
-        "(declare-const b Int)", pos,
-        "(assert (not (and (= (p.small b) (c.small b))",
-        "  (= (p.band b " + Log.HX_BAND_LO + " " + Log.HX_BAND_HI + ") (c.band b " + Log.HX_BAND_LO
-            + " " + Log.HX_BAND_HI + ")))))"));
+        b64, pos, "(assert (not (and (= (p.small b) (c.small b))",
+        "  (= (p.band b " + lo64 + " " + hi64 + ") (c.band b " + lo32 + " " + hi32 + ")))))"));
     for (int k0 : new int[] {0, -54}) {
       check(out, "every long: kBits - DK_MAGIC_BITS is in [-1077, 3073]" + (k0 == 0 ? ""
-          : ", with the -54"), "unsat", body("(declare-const b Int)", "(assert (jlong.in b))",
-              "(define-fun k () Int (- (p.kbits b " + lit(k0) + ") " + lit(magic) + "))",
-              "(assert (not (and (<= (- 1077) k) (<= k 3073))))"));
+          : ", with the -54"), "unsat", body(b64,
+              "(define-fun k () (_ BitVec 64) (bvsub (p.kbits b " + bv((long) k0) + ") "
+                  + bv(magic) + "))",
+              "(assert (not (and (bvsle " + bv(-1077L) + " k) (bvsle k " + bv(3073L) + "))))"));
     }
     out.append("""
 
         ; The sign hypothesis is needed, and each word is tight.
         """);
-    check(out, "refuted: for a negative bits HX is not the C's hx", "sat", body(
-        "(declare-const b Int)", "(assert (and (jlong.in b) (< b 0)))",
-        "(assert (not (= (p.hx b) (i2l (c.hx b)))))"));
+    check(out, "refuted: for a negative bits HX is not the C's hx", "sat", body(b64,
+        "(assert (bvslt b #x0000000000000000))",
+        "(assert (not (= (p.hx b) (widen (c.hx b)))))"));
     check(out, "refuted: SQRT2_SPLIT + 1 = 0x" + Integer.toHexString(Log.SQRT2_SPLIT + 1)
-        + " changes i", "sat", body("(declare-const b Int)", pos,
-            "(assert (not (= (p.i b " + (Log.SQRT2_SPLIT + 1) + ") (i2l (c.i b "
-                + Log.SQRT2_SPLIT + ")))))"));
-    check(out, "refuted: HX_BAND_LO - 1 changes the band test", "sat", body(
-        "(declare-const b Int)", pos,
-        "(assert (not (= (p.band b " + (Log.HX_BAND_LO - 1) + " " + Log.HX_BAND_HI + ") (c.band b "
-            + Log.HX_BAND_LO + " " + Log.HX_BAND_HI + "))))"));
-    check(out, "refuted: HX_BAND_HI + 1 changes the band test", "sat", body(
-        "(declare-const b Int)", pos,
-        "(assert (not (= (p.band b " + Log.HX_BAND_LO + " " + (Log.HX_BAND_HI + 1) + ") (c.band b "
-            + Log.HX_BAND_LO + " " + Log.HX_BAND_HI + "))))"));
+        + " changes i", "sat", body(b64, pos,
+            "(assert (not (= (p.i b " + bv((long) Log.SQRT2_SPLIT + 1) + ") (widen (c.i b "
+                + split32 + ")))))"));
+    check(out, "refuted: HX_BAND_LO - 1 changes the band test", "sat", body(b64, pos,
+        "(assert (not (= (p.band b " + bv((long) Log.HX_BAND_LO - 1) + " " + hi64 + ") (c.band b "
+            + lo32 + " " + hi32 + "))))"));
+    check(out, "refuted: HX_BAND_HI + 1 changes the band test", "sat", body(b64, pos,
+        "(assert (not (= (p.band b " + lo64 + " " + bv((long) Log.HX_BAND_HI + 1) + ") (c.band b "
+            + lo32 + " " + hi32 + "))))"));
     return out.toString();
   }
 
   // ---------------------------------------------------------------------------------------------
-  // log_range_compare.smt2: L10
+  // log_range_compare.smt2: L9
+
+  /** The port's biased compare, lo <= bits < hi, as Log writes it. */
+  private static boolean biased(long b, long lo, long hi) {
+    return b + (Long.MIN_VALUE - lo) < Long.MIN_VALUE + (hi - lo);
+  }
 
   /**
-   * {@code log_range_compare.smt2}, lemma L10: {@code Log.inRange}'s one biased signed compare
-   * is the C's high-word tests for the common lanes and for the blended arm's subnormals.
+   * {@code log_range_compare.smt2}, lemma L9: Log's one biased signed compare of the bits is
+   * the C's high-word tests for the common lanes and for the blended arm's subnormals.
    */
   static String rangeCompare() {
     long lo = Log.COMMON_LO;
     long hi = Log.COMMON_HI;
     var out = new StringBuilder(ProofFiles.LICENSE);
     out.append(("""
-        ; log's common and subnormal lanes by one compare of the bits (PROOFS.md, L10).
+        ; log's common and subnormal lanes by one compare of the bits (PROOFS.md, L9).
         ;
         ; e_log.c (reference/fdlibm-5.3) tests the signed int hx = __HI(x): hx < 0x%08x
         ; (line 100) and hx >= 0x%08x (line 107) leave the common lanes, and on the first branch
         ; ((hx&0x7fffffff)|lx) == 0 (line 101) and hx < 0 (line 103) leave the subnormals. The port
-        ; (Log.inRange) tests lo <= bits < hi on the raw bits as bits + (Long.MIN_VALUE - lo) <
+        ; (Log's body) tests lo <= bits < hi on the raw bits as bits + (Long.MIN_VALUE - lo) <
         ; Long.MIN_VALUE + (hi - lo), signed, with [lo, hi) = [COMMON_LO, COMMON_HI) =
         ; [%s, %s) for the common lanes
         ; and [1, COMMON_LO) for the subnormals, rendered from Log.
         ;
-        ; What is proven, for every long bits (every double, NaNs of either sign included), each
-        ; Java operator as java.smt2 defines it and | over bit-vectors (pinned to the JVM here):
-        ; inRange is lo <= bits < hi for every lo <= hi; the common range is the C's two tests,
-        ; and the subnormal range the C's three. The sat checks refute the compare without the
-        ; bias (a negative bits passes it) and COMMON_LO and COMMON_HI moved by one.
+        """).formatted(Log.HX_MIN_NORMAL, Log.HX_NON_FINITE, hex(lo), hex(hi)));
+    out.append(JAVA_AS_BV);
+    out.append("""
+        ;
+        ; What is proven, for every long bits (every double, NaNs of either sign included): the
+        ; biased compare is lo <= bits < hi for every lo <= hi; the common range is the C's two
+        ; tests, and the subnormal range the C's three. The sat checks refute the compare without
+        ; the bias (a negative bits passes it) and COMMON_LO and COMMON_HI moved by one.
         ;
         ; What is not: that __HI(x) and __LO(x) are the raw bits' high int and low word (the
-        ; prelude's reading of fdlibm's macros), and that the port calls inRange with these
-        ; bounds, the code's text.
+        ; prelude's reading of fdlibm's macros), and that the port compares with these bounds,
+        ; the code's text.
         ;
-        ; The logic is ALL: the file mixes bit-vectors with java.smt2's integers.
-        """).formatted(Log.HX_MIN_NORMAL, Log.HX_NON_FINITE, hex(lo), hex(hi)));
+        ; The logic is ALL: dev/prove.sh inserts java.smt2's integer prelude, unused here.
+        """);
     out.append(ProofFiles.rendered("ALL"));
-    out.append(BITWISE);
-    bitwiseCheck(out);
     out.append("""
 
-        ; Log.inRange, and the C's tests on hx = __HI(x) signed and lx = __LO(x) unsigned.
-        (define-fun in.range ((b Int) (lo Int) (hi Int)) Bool
-          (< (jlong.add b (jlong.sub (- 9223372036854775808) lo))
-             (jlong.add (- 9223372036854775808) (jlong.sub hi lo))))
-        (define-fun c.hx ((b Int)) Int (l2i (jlong.shr b 32)))
-        (define-fun c.lx ((b Int)) Int (jlong.and.low b 4294967296))
+        ; The biased compare, and the C's tests on hx = __HI(x) signed and lx = __LO(x).
+        (define-fun in.range ((b (_ BitVec 64)) (lo (_ BitVec 64)) (hi (_ BitVec 64))) Bool
+          (bvslt (bvadd b (bvsub #x8000000000000000 lo)) (bvadd #x8000000000000000 (bvsub hi lo))))
+        (define-fun c.hx ((b (_ BitVec 64))) (_ BitVec 32) ((_ extract 63 32) b))
+        (define-fun c.lx ((b (_ BitVec 64))) (_ BitVec 32) ((_ extract 31 0) b))
         """);
-    check(out, "inRange(bits, lo, hi) is lo <= bits < hi, every long and lo <= hi", "unsat",
-        body("(declare-const b Int) (declare-const lo Int) (declare-const hi Int)",
-            "(assert (and (jlong.in b) (jlong.in lo) (jlong.in hi) (<= lo hi)))",
-            "(assert (not (= (in.range b lo hi) (and (<= lo b) (< b hi)))))"));
-    String common = "(and (not (< (c.hx b) " + Log.HX_MIN_NORMAL + ")) (not (>= (c.hx b) "
-        + Log.HX_NON_FINITE + ")))";
+    String common = "(and (not (bvslt (c.hx b) " + bv(Log.HX_MIN_NORMAL) + "))"
+        + " (not (bvsge (c.hx b) " + bv(Log.HX_NON_FINITE) + ")))";
+    String sub = "(and (bvslt (c.hx b) " + bv(Log.HX_MIN_NORMAL) + ") (not (= (bvor (bvand"
+        + " (c.hx b) #x7fffffff) (c.lx b)) #x00000000)) (not (bvslt (c.hx b) #x00000000)))";
+    var pins = new ArrayList<String>();
+    for (long b : samples()) {
+      int hx = (int) (b >> 32);
+      int lx = (int) b;
+      boolean cCommon = !(hx < Log.HX_MIN_NORMAL) && !(hx >= Log.HX_NON_FINITE);
+      boolean cSub = hx < Log.HX_MIN_NORMAL && ((hx & 0x7fffffff) | lx) != 0 && !(hx < 0);
+      String x = bv(b);
+      pins.add("(= (in.range " + x + " " + bv(lo) + " " + bv(hi) + ") "
+          + bool(biased(b, lo, hi)) + ") (= (in.range " + x + " " + bv(1L) + " " + bv(lo) + ") "
+          + bool(biased(b, 1, lo)) + ")");
+      pins.add("(= (let ((b " + x + ")) " + common + ") " + bool(cCommon) + ")");
+      pins.add("(= (let ((b " + x + ")) " + sub + ") " + bool(cSub) + ")");
+    }
+    equations(out, "the compare and the C's tests are Java's at sampled bits", pins);
+    String b64 = "(declare-const b (_ BitVec 64))";
+    check(out, "the biased compare is lo <= bits < hi, every long and lo <= hi", "unsat", body(
+        b64, "(declare-const lo (_ BitVec 64)) (declare-const hi (_ BitVec 64))",
+        "(assert (bvsle lo hi))",
+        "(assert (not (= (in.range b lo hi) (and (bvsle lo b) (bvslt b hi)))))"));
     check(out, "the common range is the C's: not hx < 0x" + Integer.toHexString(Log.HX_MIN_NORMAL)
-        + " and not hx >= 0x" + Integer.toHexString(Log.HX_NON_FINITE), "unsat", body(
-            "(declare-const b Int)", "(assert (jlong.in b))",
-            "(assert (not (= (in.range b " + lit(lo) + " " + lit(hi) + ") " + common + ")))"));
-    String sub = "(and (< (c.hx b) " + Log.HX_MIN_NORMAL + ") (not (= (jint.or (jint.and.low"
-        + " (c.hx b) 2147483648) (l2i (c.lx b))) 0)) (not (< (c.hx b) 0)))";
-    check(out, "the subnormal range [1, COMMON_LO) is the C's three tests", "unsat", body(
-        "(declare-const b Int)", "(assert (jlong.in b))",
-        "(assert (not (= (in.range b 1 " + lit(lo) + ") " + sub + ")))"));
+        + " and not hx >= 0x" + Integer.toHexString(Log.HX_NON_FINITE), "unsat", body(b64,
+            "(assert (not (= (in.range b " + bv(lo) + " " + bv(hi) + ") " + common + ")))"));
+    check(out, "the subnormal range [1, COMMON_LO) is the C's three tests", "unsat", body(b64,
+        "(assert (not (= (in.range b " + bv(1L) + " " + bv(lo) + ") " + sub + ")))"));
     out.append("""
 
         ; Each part is needed.
         """);
-    check(out, "refuted: without the bias a negative bits passes",
-        "sat", body("(declare-const b Int)", "(assert (jlong.in b))",
-            "(assert (and (< (jlong.sub b " + lit(lo) + ") " + lit(hi - lo) + ") (not " + common
-                + ")))"));
-    check(out, "refuted: COMMON_LO - 1 as the bottom", "sat", body(
-        "(declare-const b Int)", "(assert (jlong.in b))",
-        "(assert (not (= (in.range b " + lit(lo - 1) + " " + lit(hi) + ") " + common + ")))"));
-    check(out, "refuted: COMMON_HI + 1 as the top", "sat", body(
-        "(declare-const b Int)", "(assert (jlong.in b))",
-        "(assert (not (= (in.range b " + lit(lo) + " " + lit(hi + 1) + ") " + common + ")))"));
+    check(out, "refuted: without the bias a negative bits passes", "sat", body(b64,
+        "(assert (and (bvslt (bvsub b " + bv(lo) + ") " + bv(hi - lo) + ") (not " + common
+            + ")))"));
+    check(out, "refuted: COMMON_LO - 1 as the bottom", "sat", body(b64,
+        "(assert (not (= (in.range b " + bv(lo - 1) + " " + bv(hi) + ") " + common + ")))"));
+    check(out, "refuted: COMMON_HI + 1 as the top", "sat", body(b64,
+        "(assert (not (= (in.range b " + bv(lo) + " " + bv(hi + 1) + ") " + common + ")))"));
     return out.toString();
   }
 

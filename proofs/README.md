@@ -20,6 +20,10 @@ way.
 | `exp_highword_compare.smt2` | exp's L3: high-word compares on 64 bits | `ExpProofFiles` |
 | `exp_tiny_counterexample.smt2` | exp's L4: the tiny lanes' fold refuted | `ExpProofFiles` |
 | `exp_half_sign.smt2` | exp's L5: halF[xsb] from the sign bit | `ExpProofFiles` |
+| `log_zero_dk.smt2` | log's L6: the k == 0 forms as k != 0 forms, dk = +0 | `LogProofFiles` |
+| `log_exact_dk.smt2` | log's L7: dk = (double)k without L2D | `LogProofFiles` |
+| `log_long_words.smt2` | log's L8: the C's int words in long lanes | `LogProofFiles` |
+| `log_range_compare.smt2` | log's L9: common and subnormal lanes by one compare | `LogProofFiles` |
 
 - `java.smt2`: Java's `int` and `long` operators over SMT-LIB's integers, each as the JLS
   defines it, and doubles as `S * M * 2^E`, with round to nearest stated on the number line for
@@ -52,9 +56,18 @@ way.
   - L4: that `StrictMath.exp` is `one + x` at the witness (`ProofsTest`'s, the oracle being in
     no solver); the binades further off than the next, by the arithmetic of rationals.
   - L5: nothing more.
+- `log_*.smt2`: log's lemmas, rendered from `Log` by `LogProofFiles` the same way. Besides the
+  code's text they leave informal:
+  - L6: Sterbenz's lemma for `f = xn - 1.0`; the binades of `B` and `v` (bounds on the
+    polynomial, sampled); a nonzero product's sign; the binades further off than the next.
+  - L7: that the double named is Java's `(double) k` (JLS 5.1.2) and the `+0` at `k = 0`.
+  - L8 and L9: the reading of `__HI` and `__LO`. These two files are over SMT-LIB's bit-vectors,
+    each Java operator its two's-complement counterpart, pinned to the JVM at sampled bit
+    patterns; over integers with `int2bv`, as `exp_half_sign.smt2` is, both solvers answered
+    `unknown` after a minute.
 
   `exp_highword_compare.smt2` and `exp_tiny_counterexample.smt2` are `QF_NIA`; the other three
-  are `ALL`, each header saying why.
+  exp files and the four log files are `ALL`, each header saying why.
 
 ## Running them
 

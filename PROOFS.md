@@ -20,9 +20,9 @@ a named binade, not SMT's floating-point theory; `unsat` checks are the proofs, 
 the domain is not vacuous and that a constant changed by one is refuted, for the constants a claim
 is tight to: not `invln2` and `P1..P5`, as L2's **Encoding** says; `proofs/README.md`).
 Each lemma ends with an **Encoding** paragraph naming its file and saying which steps are
-machine-checked and which stay informal. The files' constants are rendered from `Exp` and
-`Lanes` by `ProofFiles`, so `ProofFilesTest` fails when one moves without its proof; `dev/prove.sh
---solver both` runs them under Z3 and cvc5.
+machine-checked and which stay informal. The files' constants are rendered from `Exp`, `Lanes`
+and `Log` by `ProofFiles`, so `ProofFilesTest` fails when one moves without its proof;
+`dev/prove.sh --solver both` runs them under Z3 and cvc5.
 
 Notation: `fl(v)` is `v` rounded to the nearest double, ties to even (Java's and fdlibm's only
 rounding mode; the JLS fixes it, and fdlibm assumes it). `hx` is the high word of `|x|`, as
@@ -279,8 +279,10 @@ e_log.c reduces `x` to `xn = 1 + f` in `[sqrt(2)/2, sqrt(2))` and `k` (lines 108
 returns one of four forms: `f == 0` (lines 115-116), `|f| < 2^-20` (117-119), the `i > 0` band
 with `hfsq` (132-134) and the rest (136-137). Each comes in a `k == 0` version and a `k != 0`
 version. The port computes the `k != 0` version on every lane, with `dk = +0` where `k == 0`
-(L6). Line numbers in this section are `reference/fdlibm-5.3/e_log.c`'s, and `hx` is the C's
-`int hx`.
+(L6). It holds the C's `int` words in the long lanes of the bits (L8), converts `k` to `dk`
+without `L2D`, which boxes on AVX2 (L7), and finds the common and subnormal lanes with one
+integer compare each (L9). Line numbers in this section are `reference/fdlibm-5.3/e_log.c`'s,
+and `hx` is the C's `int hx`.
 
 Two more IEEE properties are used here:
 
@@ -305,7 +307,7 @@ dk*ln2_lo = +0`:
 - (d) line 116's `dk*ln2_hi+dk*ln2_lo` is line 115's `zero`.
 
 **Hypotheses.**
-- (H8) `dk` is `+0` on exactly the `k == 0` lanes: `I2D` of 0 is `+0.0` (JLS 5.1.2), as is L8's
+- (H8) `dk` is `+0` on exactly the `k == 0` lanes: `I2D` of 0 is `+0.0` (JLS 5.1.2), as is L7's
   conversion there (an exact zero difference, R5); and `fl(+0 * c) = +0` for `c = ln2_hi`,
   `ln2_lo`, both positive and finite (R5). With `dk = -0` both products would be `-0`, and (d)
   would return `-0` for the C's `zero`.
@@ -355,3 +357,143 @@ masked, against `StrictMath` at the high words of the sqrt(2) split on both `k =
 (`0x3ff61479`, `0x3ff6147a`, `0x3fe6b851`, `0x3fe6b852`) and the `|f| < 2^-20` words around 1.0
 (`0x3feffffd` to `0x3ff00002`), low words 0, `0xffffffff` and 1024 seeded, plus the 4096 doubles
 each side of 1.0 and 64 each side of sqrt(2) and sqrt(2)/2, at every width and `SPECIES_MAX`.
+
+**Encoding.** `proofs/log_zero_dk.smt2`, partly machine-checked. Checked: the signs of exact
+zeros (R5) as three functions of the operands' sign bits, each pinned to the JVM over all four
+pairs of signed zeros and over `+-0 * ln2_hi`, `+-0 * ln2_lo`; over them, step 2's zero cases
+(every combination of `B` and `f` zeros with `f` not `-0`, and `B = f` nonzero), with a `sat`
+check that allowing `f = -0` gives the counter-case `B = +0, f = -0`; H10's zero case and step
+4's `shr + (+0)` with a `sat` refutation at `hfsq = -0`; step 5's `+0 + (+0) = +0`; the nonzero
+steps 1 and 2's `B - (+0) = B` and `+0 - v = -v` (the exact value is the double or its negation,
+which `jdouble.near` admits in every binade at once, and admits no other double in its binade or
+the ones next to it, either sign, for every binade from `2^-110` to `2^-1`); H9's first half,
+that `xn`'s bits built from any 20-bit `hx`, either `i` and any low word have sign 0 and biased
+exponent `0x3fe` or `0x3ff` (over bit-vectors) and so are a double in `[0.5, 2)` (over the
+prelude's integers), equal to 1.0 at one pattern only; and that `ln2_hi` and `ln2_lo` are
+positive and finite. Step 2's `fl(B - f) = -fl(f - B)` is `proofs/sign_symmetry.smt2`'s section
+A. Not checked, and informal above: Sterbenz's lemma for `f = xn - 1.0` (sampled exactly by
+`BigDecimal` in `ProofsTest`); that `B` and `v` lie in the binades checked (on the `k == 0`
+lanes `|f|` is in `[2^-53, 0.415)` or zero, `B` about `f^2/2` or smaller than `|f|`, `v` about
+`log(1+f)`: bounds on the polynomial, sampled, as exp's H2); a nonzero product's sign (H10 for
+nonzero `f`); that a value rounds to no double in a binade further off than the next (the
+arithmetic of rationals); and that the port computes these forms, the code's text.
+
+### L7. dk = (double)k without L2D
+
+**Statement.** For every long `k` with `-2^51 <= k < 2^51`, `fl(fromBits(k + B52) - C52) =
+(double) k` bit for bit, where `C52 = 0x1.8p52` (`Log.DK_MAGIC`) and `B52 =
+0x43380000_00000000` its bits (`Log.DK_MAGIC_BITS`). At `k = 0` it is `+0.0`.
+
+**Hypotheses.**
+- (H11) `k` is in the domain on every lane: L8 bounds the port's `k` to `[-1077, 3073]` for
+  every bit pattern, kept lanes or not.
+
+**Proof.** `C52 = 1.5 * 2^52` lies in binade `2^52`, whose ulp is 1, with significand field `2^51`.
+Adding `k` to the bits adds `k` to that field, and for `-2^51 <= k < 2^51` the field stays in
+`[0, 2^52)`, so no carry reaches the exponent: `fromBits(k + B52)` is the double `1.5 * 2^52 +
+k`, an integer in `[2^52, 2^53)`. Its difference with `C52` is the integer `k`, exact by (R6)
+(both lie in `[2^52, 2^53)`, within a factor of two), and a double since `|k| < 2^53`; for `k =
+0` it is `x - x = +0` (R5). Java's `(double) k` of a long with `|k| <= 2^53` is exact (JLS
+5.1.2), so the two are the same double. The C's `(double)k` of its `int k` is that double too,
+since L8 makes the port's `k` the C's.
+
+At `k = 2^51` the field carries into the exponent, giving `2^53`, and the difference is still
+`2^51`; at `k = 2^51 + 1` it is `2^53 + 2`, so the result is `k + 1`. The domain is therefore
+stated half-open, and it covers log's `k` with room to spare.
+
+**Hinge tests (scalar).** `ProofsTest.l7ExactConversionIsI2D`: the constant's bits; every `k`
+in `[-1077, 3073]`, 65536 draws over the domain and its ends, against Java's `(double) k` by
+bits, `+0.0` at 0; and the refutations at `2^51 + 1`, `-2^51 - 1` and with `B52 + 1`. **Vector
+tie.** Every `LogTest` case: a wrong `dk` moves every `k != 0` result.
+
+**Encoding.** `proofs/log_exact_dk.smt2`, machine-checked over the prelude's integers: `B52`
+decodes to `S = 1, E = 0, M = 3 * 2^51`; for every `k` in the domain, `k + B52` (`jlong.add`, so
+a wrap would show) decodes to `S = 1, E = 0, M = 3 * 2^51 + k`; and for `k` in each binade `2^0`
+to `2^51`, either sign, the exact difference `k` rounds to the double whose value is `k` and to
+no other in its binade or the next. The `sat` checks refute `k = 2^51 + 1` and `B52 + 1`. Not
+checked: that this double is Java's `(double) k` (JLS 5.1.2; `ProofsTest` compares the bits),
+the zero case's `+0` (R5, stated), the binades further off than the next (the arithmetic of
+rationals), and that the port computes this, the code's text.
+
+### L8. The C's int words in long lanes
+
+**Statement.** Let `b` be a lane's bits (`x`'s, or the scaled subnormal's in the blended arm)
+with the sign bit clear, `hx = (int) (b >> 32)` the C's signed high word. The port computes
+`HX = b >>> 32`, `HXM = HX & 0xfffff`, `I = (HXM + 0x95f64) & 0x100000`, the new high word `HXM |
+(I ^ 0x3ff00000)`, `kBits = ((HX >>> 20) + (B52 - 1023)) [- 54] + (I >>> 20)`, the test
+`((HXM + 2) & 0xfffff) < 3` and the band test `((HXM - 0x6147a) | (0x6b851 - HXM)) > 0`, all on
+longs. Then each is the C's int value of lines 104-131 widened to a long, `kBits` is the C's `k`
+plus `B52`, and the two tests are the C's. For every `b`, either sign, `kBits - B52` lies in
+`[-1077, 3073]`.
+
+**Hypotheses.**
+- (H12) The sign bit of `b` is clear on every lane whose result is kept: the common lanes are
+  positive (L9), and the blended arm's subnormals, positive, are scaled by `2^54` before the
+  high word is read. A negative lane's `HX` is `2^32` more than the C's negative `hx`; such
+  lanes are rare, their results replaced, and only the bound on `k` is needed there.
+
+**Proof.** With the sign bit clear, `b >> 32` lies in `[0, 2^31)`, so `(int)` keeps its value and
+`b >>> 32` is the same long (JLS 15.19). The mask keeps 20 bits, so `HXM` is in `[0, 2^20)`;
+`HXM + 0x95f64 < 2^21`; `I` is 0 or `2^20`; the new high word is below `2^30`; `HX >>> 20` is in
+`[0, 2^11)`; and the band's two differences lie in `(-2^20, 2^20)`. No value leaves 32 bits, so
+the C's int operations, which have no overflow on these values, and the long operations give the
+same integers; `|` of two longs sign-extended from ints is the sign extension of the ints' `|`.
+The shifts are logical where the C's are arithmetic, which agree on non-negative values: `HX`
+and `I` are never negative as longs. `kBits` adds `B52 - 1023` as one constant where the C
+subtracts 1023 from `k` and L7 adds `B52`: integer addition modulo `2^64` is associative and
+commutative, and the values are far from wrapping. For every `b`, `HX < 2^32`, so `HX >>> 20 <
+4096` and `k = (HX >>> 20) - 1023 + (I >>> 20)` is in `[-1023, 3073]`, `[-1077, 3019]` with the
+`-54`.
+
+The port so drops `L2I` (`vpmovqd`), `I2L` (`vpmovsxdq`), `I2D` and the int-to-double mask
+casts; and since AVX2 has no 64-bit arithmetic shift, writing the C's `>>` as `>>>` keeps each
+shift one instruction there.
+
+**Hinge tests (scalar).** `ProofsTest.l8LongWordsAreTheCsInts`: over the specials, sampled
+patterns of every kind, the `k == 0` domain and the subnormals, each also scaled by `2^54`, the
+port's words against the C's ints and the bound on `k` for every pattern; for a negative pattern
+the high words differ (H12 refuted). **Vector tie.** Every `LogTest` case runs the vector words;
+`LogTest.foldBoundaries` and `insideTheBranchWords` sit on the split's and the band's edges.
+
+**Encoding.** `proofs/log_long_words.smt2`, machine-checked over SMT-LIB's bit-vectors, Java's
+int and long operators being two's-complement bit-vector operators (the header lists each), every
+definition pinned by ground checks to the values Java computes at sampled bit patterns: for every
+`b` with the sign clear, the high word, masked word, `i`, new high word, `kBits` with and without
+the `-54`, and both tests; for every `b`, the bound on `k`. The `sat` checks refute H12 and
+`0x95f64`, `0x6147a` and `0x6b851` changed by one. Not checked: that `__HI(x)` is the high int of
+the bits (the macro's reading), and that the port writes the new high word's low 32 bits back as
+the C's `__HI(x) =` does and computes these words, the code's text. Over the prelude's integers
+with `int2bv` for `&`, `|` and `^`, as exp's L5 is written, both solvers answered `unknown` to
+these checks after a minute; over bit-vectors alone they decide the file at once.
+
+### L9. The common and subnormal lanes by one compare of the bits
+
+**Statement.** For every long `b` and longs `lo <= hi`, `b + (Long.MIN_VALUE - lo) <
+Long.MIN_VALUE + (hi - lo)`, as a signed compare with Java's wrapping `+` and `-`, holds iff
+`lo <= b < hi`. With `[lo, hi) = [0x00100000_00000000, 0x7ff00000_00000000)` it is the C's
+common lanes, `!(hx < 0x00100000) && !(hx >= 0x7ff00000)` for the signed `hx` (lines 100, 107);
+with `[1, 0x00100000_00000000)` it is the blended arm's subnormals, `hx < 0x00100000` and not
+`((hx&0x7fffffff)|lx) == 0` and not `hx < 0` (lines 100-104).
+
+**Proof.** `lo <= b < hi` iff `b - lo`, taken modulo `2^64` as an unsigned number, is below `hi -
+lo` (the interval does not wrap since `lo <= hi`). Adding `2^63` modulo `2^64` maps the unsigned
+order onto the signed one, so the unsigned compare is the signed compare of both sides plus
+`Long.MIN_VALUE`. For the bounds: the signed `hx` of `b` and `b` itself order alike against a
+word with a zero low word (L3's argument, on the raw bits instead of `|x|`'s), so `hx >=
+0x00100000` iff `b >= 0x00100000_00000000` and `hx < 0x7ff00000` iff `b < 0x7ff00000_00000000`;
+`hx < 0` iff `b < 0`; and `((hx&0x7fffffff)|lx) == 0` with `hx >= 0` iff `b == 0`. No IEEE
+property is used: every NaN, of either sign, falls outside both ranges as in the C. The double
+compares this replaces were two per range and an `and`; this is an add and one compare, both
+integer, on bits the body reads anyway.
+
+**Hinge tests (scalar).** `ProofsTest.l9RangeComparesAreTheCs`: the specials, sampled patterns
+and both sides of each bound against the C's tests; without the bias `-1.0` would pass as
+common. **Vector tie.** `LogTest.thresholdsAndSpecials` and `nearOneAndSubnormals` (the
+specials, every power of two down to the subnormals, the neighbours of `MIN_NORMAL`, both arms).
+
+**Encoding.** `proofs/log_range_compare.smt2`, machine-checked over bit-vectors as L8's file is,
+the definitions pinned to Java at sampled patterns: the biased compare is `lo <= b < hi` for
+every `b` and every `lo <= hi`, and the two ranges are the C's tests for every `b`. The `sat`
+checks refute the compare without the bias and each bound moved by one. Not checked: that
+`__HI(x)` and `__LO(x)` are the bits' high int and low word, and that the port compares with
+these bounds, the code's text.
