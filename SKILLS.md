@@ -2,9 +2,9 @@
 
 Lessons about benchmarking, the JIT and the Vector API that every port follows. Most were learned
 in Varka (github.com/vecbricks/varka, its `sql/varka/skills/`) and are rewritten here for a vector
-math library; the last section is what the `exp` port taught. Each entry says where its numbers
-come from. A new lesson goes in the section it belongs to, as a short entry; a negative result
-belongs here too, since it stops the next port re-trying a settled question.
+math library; the last sections are what the `exp` and `log` ports taught. Each entry says where
+its numbers come from. A new lesson goes in the section it belongs to, as a short entry; a
+negative result belongs here too, since it stops the next port re-trying a settled question.
 
 ## Benchmarking with JMH
 
@@ -193,3 +193,37 @@ belongs here too, since it stops the next port re-trying a settled question.
 - **Laptop first, then the EPYC.** The `D2L` boxing never showed under the laptop's default
   flags, where AVX512DQ is present; it showed only under `-XX:UseAVX=2`. Run a new port's
   benchmark under both before calling it done.
+
+## What the log port taught
+
+- **A whole int word pipeline lowers on AVX2.** log keeps the C's `int` words (`hx`, `k`, `i`,
+  `j`) in int lanes of half the double vector's size: `L2I` narrows the high word in, the masks,
+  shifts, adds and compares run as ints, an int mask is cast to a double mask of the same lane
+  count, `I2L` writes the new high word back and `I2D` gives `dk`. Under `-XX:UseAVX=2` at four
+  lanes `PrintIntrinsics` shows every `convert`, `compare`, `blend` and mask cast "late inline
+  succeeded" and nothing refused, and both 256-bit arms allocate ~0 B/op
+  (`bench/results/log-laptop-avx2-2026-11-02.txt`). So `L2I` and the int-to-double mask cast join
+  `D2I`, `I2D` and `I2L` as safe on AVX2; only `D2L`, `L2D`, `L2F` and `F2L` are not.
+- **The per-lane finish must not be a call that takes vectors.** Late in a large body C2 refuses
+  to inline the finish (`Log::finishPerLane ... failed to inline: NodeCountInliningCutoff`, under
+  `UseAVX=2`), and a refused call receives its vector arguments boxed. log's first finish took
+  `(x, result, rare)` and, on mixed data at 256 bits under `UseAVX=2`, cost 9150 ns and 51648
+  B/op per 1024 doubles against 3062 ns for the blend and 4104 for the scalar loop (2.2x slower
+  than not vectorising). Passing arrays and `rare.toLong()` instead cut it to 3062 ns and 5184
+  B/op. Doing the finish in the body with no helper, a loop over the set bits of `rare.toLong()`
+  with `result.withLane(lane, StrictMath.log(x.lane(lane)))`, made it ~0 B/op and 2921 ns: the
+  256- and 512-bit `lane` and `withLane` switch on the index to a constant lane, which C2
+  intrinsifies (`extract`, `insert`), and the only call left is `StrictMath.log` on a double.
+  exp's finish still takes vectors and allocates 52928 B/op on mixed data; its EPYC 7763 run
+  shows the cost the laptop hid (finish 12331 against blend 7512 ns on mixed data, in
+  `bench/results/exp-epyc7763-2026-11-02.txt` of vfdlibm#11).
+- **The laptop understates the finish's cost on mixed data.** Under `UseAVX=2` on the laptop
+  exp's two arms tied on mixed data; on the EPYC 7763 the finish lost by 1.6x. Read the finish
+  arm's `gc.alloc.rate.norm` on mixed data: anything above the arrays a finish makes on purpose is
+  boxing, and its cost grows on the EPYC.
+- **The arm choice is per function, and a fix can reverse it.** With the boxed finish the data
+  said to blend log; with the finish in registers it is ahead on common data, level on mixed at
+  256 bits (1.18x and 1.05x under `UseAVX=2`), and the blend wins at 512 bits on mixed data (1.36x
+  on the laptop's AVX-512, `bench/results/log-laptop-2026-11-02.txt`). `VFdlibm.log` uses the
+  finish provisionally; the EPYC 7763 run of the log port decides it. Measure the finish only once
+  it allocates nothing.
