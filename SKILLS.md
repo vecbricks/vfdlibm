@@ -2,9 +2,10 @@
 
 Lessons about benchmarking, the JIT and the Vector API that every port follows. Most were learned
 in Varka (github.com/vecbricks/varka, its `sql/varka/skills/`) and are rewritten here for a vector
-math library; the last sections are what the `exp` and `log` ports taught. Each entry says where
-its numbers come from. A new lesson goes in the section it belongs to, as a short entry; a
-negative result belongs here too, since it stops the next port re-trying a settled question.
+math library; the last sections are what the `exp`, `log` and `log1p` ports taught. Each entry
+says where its numbers come from. A new lesson goes in the section it belongs to, as a short
+entry; a negative result belongs here too, since it stops the next port re-trying a settled
+question.
 
 ## Benchmarking with JMH
 
@@ -93,6 +94,21 @@ negative result belongs here too, since it stops the next port re-trying a settl
   refusing, the finish allocates nothing at 256 and 512 bits; at `SPECIES_MAX` it still boxes
   (below). Any slow path called from a port's body belongs written out inline, as
   `Lanes.addExponent` is.
+- **Two port bodies in one loop do not fit, whatever the order.** `ExpBenchmark`'s
+  `finishPairBoxed256` calls `Exp.expRare` and `Exp.expCore` for two vectors per iteration. C2
+  spent its budget inside the first `expCore`, after the two `expRare` calls: `Lanes.hiAbove`,
+  `Lanes.hiBelow`, `Lanes.intSpecies` and then the second `expCore` were refused
+  (`NodeCountInliningCutoff`), and the rows allocate even on common data, at the default flags
+  and under `-XX:UseAVX=2`. The rule is in `opto/bytecodeInfo.cpp`: once the graph is over the
+  cutoff (a develop flag, 18000 nodes, fixed in product JVMs), any callee larger than
+  `MaxTrivialSize` (6 bytes of bytecode) is refused unless it is `@ForceInline`, and
+  `@ForceInline` callees, the Vector API's own methods, are delayed to incremental inlining
+  instead. That is why a single body's late Vector API calls survive while a vfdlibm call does
+  not, why a 7-byte wrapper such as `expCore` is refused, and why `CompileCommand=inline` does not
+  help. The consequence for callers: a kernel that inlines two vfdlibm calls can hit the same
+  cutoff and box, so interleaving two vectors needs the body written out by the caller (a code
+  generator, as Varka emits it), not two calls. The `*Boxed*` rows record this and
+  `bench/alloc-check.py` leaves them out by name.
 - **A forced inline changes the caller.** When a flag affects inlining, the method whose code
   moves is the one doing the calling; measure it, not only the callee.
 
@@ -232,6 +248,14 @@ negative result belongs here too, since it stops the next port re-trying a settl
   `VFdlibm.exp` keeps is decided by the EPYC run of that change, not by the laptop. Each port
   measures both on common and mixed data, decides per branch, and records the decision in its pull
   request (`PLAN.md` section 5).
+- **A blended alternative costs its whole form in every lane.** exp computed the C's near form
+  and its `k == 0` form for every lane and blended them. Proving that the far form and the
+  general tail already give those lanes' results (`PROOFS.md`, L1 and L2) left one form. With
+  native AVX-512 at 512 bits the hot path went from 77 instructions to 52, two `vdivpd` to one,
+  11 blends to 2 and 5 mask spills to none; at 256 bits under `-XX:UseAVX=2`, from 107 to 64,
+  with 11 blends to 2, 25 constant broadcasts to 12 and 4 spills to none
+  (`bench/asm/README.md`). Before blending two of the C's forms, look for a proof that one covers
+  the other's lanes; count the result with `bench/asm/` before timing it.
 - **Laptop first, then the EPYC.** The `D2L` boxing never showed under the laptop's default
   flags, where AVX512DQ is present; it showed only under `-XX:UseAVX=2`. Run a new port's
   benchmark under both before calling it done.
@@ -272,3 +296,52 @@ negative result belongs here too, since it stops the next port re-trying a settl
   (`bench/results/log-epyc7763-2026-11-02.txt`) kept the finish for `VFdlibm.log`: level with the
   blend on mixed data at 256 bits and allocating nothing, where exp's boxed finish had lost by
   1.6x. Measure the finish only once it allocates nothing.
+
+## What the log1p port taught
+
+- **The same int pipeline, with `hu` beside `hx`.** `log1p` keeps `hx`, `ax`, `hu` and `k` as
+  int lanes the way log does (above), reading both high words with `Lanes.hiInt`. Under
+  `-XX:UseAVX=2` every 256-bit arm allocates about 0.01 B/op on common and mixed data
+  (`bench/results/log1p-laptop-avx2-2026-11-02.txt`). The C's signed compares, such as `hx <=
+  (int)0xbfd2bec3` for a negative `x`, are then written as the C writes them.
+- **A helper that inlines in one body can be refused in another.** log calls the int
+  `Lanes.withHi` early in its body and stays unboxed. log1p writes `u`'s high word back after the
+  reduction, and a call to the same helper there was refused (`Lanes::withHi (25 bytes) failed to
+  inline: NodeCountInliningCutoff`, under `-XX:+PrintInlining`), and every arm then allocated in
+  `bench/alloc-check.py`, the refused call taking its vectors boxed. The same `I2L`, shift and
+  `or` written out in the body read ~0 B/op. `Lanes.hiInt`, called before the arithmetic, inlines
+  in both. Run the allocation check after moving any code into a helper.
+- **An invalid operation's NaN is not the hardware's.** For `x < -1` the C returns `(x-x)/(x-x)`.
+  x86's `divpd` gives `0xfff8000000000000` there, and a negative NaN `x` comes back quieted with
+  its payload, but `StrictMath.log1p` returns `Double.NaN`, `0x7ff8000000000000`, for every such
+  lane, negative NaNs of any payload included; a positive NaN takes `x+x` and keeps its payload.
+  Where the C makes a NaN by an invalid operation, check the oracle's bits on NaN inputs of both
+  signs and several payloads (`Inputs.specials` has them) before computing it.
+- **A third shape: blend the rare paths behind one test.** `log1p`'s rare paths (`x <= -1`,
+  `|x| < 2^-29`, `+inf` and NaN, and `|f| < 2^-20`) are a few vector operations each. Computing
+  and blending them only when a vector holds a rare lane (`if (rare.anyTrue())`) never allocates.
+  Against the per-lane finish written in the body (below) and the blend of every lane, by
+  minimums in ns per 1024 doubles over two runs each, laptop numbers: under `UseAVX=2` at 256
+  bits the guarded and finish arms are level on common data (2770 and 2745) and on mixed data
+  (3034 and 2952), and the blend's minimums are 3189 to 3264
+  (`bench/results/log1p-laptop-avx2-2026-11-02.txt`). The laptop's AVX-512 build was measured the
+  same way at 256 and 512 bits (`bench/results/log1p-laptop-2026-11-02.txt`). In both files the
+  arms are within 1.3x of each other on every row, and no direction is read: `VFdlibm.log1p` uses
+  the guarded arm provisionally, and the EPYC 7763 run decides. A port whose rare paths are cheap
+  in vector form should measure this shape beside the other two.
+- **The in-body finish allocates nothing in log1p too.** log1p's finish was first a call,
+  `finishPerLane(x, result, rare)`, and boxed: 52,928 B/op on mixed data at 256 bits under
+  `UseAVX=2`, 2.0x slower than the guarded arm there (the superseded runs kept at the end of
+  `bench/results/log1p-laptop-avx2-2026-11-02.txt`). Written out in the body as exp's and log's
+  are, a loop over the set bits of `rare.toLong()` with `result.withLane(lane,
+  StrictMath.log1p(x.lane(lane)))`, it reads ~0.01 B/op on mixed data at 256 and 512 bits, so
+  nothing in it was refused in log1p's large body (the current runs in the same files). Its
+  `SPECIES_MAX` form, which boxes in exp, is not measured. An earlier exploratory run had
+  measured a `withLane` loop at 47,232 B/op (quoted in the same superseded runs); whether that
+  loop sat in a helper taking vectors was not recorded, and it most likely measured that call's
+  boxing, not `withLane`.
+- **Possibly redundant, supported by sampling, unproved: the `hu == 0` path.** s_log1p.c's
+  `|f| < 2^-20` path may give the same bits as its general polynomial path. For `f == 0` both
+  paths reduce exactly to `k*ln2_hi + (k*ln2_lo + c)`. A sample of 199,804,321 `hu == 0` inputs
+  with `1+x` between 0.5 and 2^1024 showed 0 bit differences against `StrictMath.log1p`; `x` in
+  (-1, -0.5) was not sampled, and sampling is not proof. The port keeps the C's operations.

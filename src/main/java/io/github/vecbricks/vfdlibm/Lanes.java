@@ -28,7 +28,8 @@ import jdk.incubator.vector.VectorSpecies;
  */
 final class Lanes {
 
-  private static final long LOW_WORD = 0xffff_ffffL;
+  /** The low 32 bits of a long lane, fdlibm's {@code __LO} word; Log1p uses it too. */
+  static final long LOW_WORD = 0xffff_ffffL;
 
   private Lanes() {}
 
@@ -87,24 +88,62 @@ final class Lanes {
 
   /** The double whose high word is {@code h} and whose low word is zero. */
   static double fromHi(int h) {
-    return Double.longBitsToDouble((h & LOW_WORD) << 32);
+    return Double.longBitsToDouble(fromHiBits(h));
+  }
+
+  /** The double whose high word is {@code h} and whose low word is zero, as raw bits. */
+  static long fromHiBits(int h) {
+    return (h & LOW_WORD) << 32;
+  }
+
+  /**
+   * The raw bits of {@code |x|} in each lane: {@code x}'s bits with the sign bit cleared, NaN
+   * lanes included. This is the operand the long-form compares below take; unlike {@code
+   * lanewise(ABS)} it clears a NaN's sign by definition, on every host.
+   */
+  static LongVector absBits(LongVector bits) {
+    return bits.and(Long.MAX_VALUE);
+  }
+
+  /**
+   * fdlibm's {@code hx < h} on {@code |x|}'s bits ({@link #absBits}), as one signed 64-bit compare,
+   * {@code absBits < fromHiBits(h)}; see {@link #hiAtLeast(LongVector, int)}.
+   */
+  static VectorMask<Long> hiBelow(LongVector absBits, int h) {
+    return absBits.compare(VectorOperators.LT, fromHiBits(h));
+  }
+
+  /**
+   * fdlibm's {@code hx >= h} on {@code |x|}'s bits ({@link #absBits}), as one signed 64-bit
+   * compare, {@code absBits > fromHiBits(h) - 1}, exact for every lane, NaN lanes included, and
+   * every {@code h} from 0 to {@code 0x7fffffff} (PROOFS.md, lemma L3). The Vector API has no
+   * unordered double compare, so the double form, {@code !(ax < fromHi(h))}, costs a compare, an
+   * all-ones vector and an xor on AVX2; this is one {@code vpcmpgtq}.
+   */
+  static VectorMask<Long> hiAtLeast(LongVector absBits, int h) {
+    return absBits.compare(VectorOperators.GT, fromHiBits(h) - 1);
+  }
+
+  /** fdlibm's {@code hx > h}, as {@code hx >= h + 1}, for {@code h} below {@code 0x7fffffff}. */
+  static VectorMask<Long> hiAbove(LongVector absBits, int h) {
+    return hiAtLeast(absBits, h + 1);
   }
 
   /**
    * fdlibm's {@code hx < h}, where {@code hx} is the high word of {@code |x|} and {@code ax} is
-   * {@code |x|}. It is done as a compare of doubles, {@code ax < fromHi(h)}: for a non-negative
-   * {@code ax} the order of the doubles is the order of their bits, and a value whose high word is
-   * below {@code h} is below {@code fromHi(h)} whatever its low word. A NaN {@code ax} compares
-   * false, and its {@code hx} is at least {@code 0x7ff00000}, so the result matches the C for
-   * every lane when {@code h <= 0x7ff00000}.
+   * {@code |x|}: {@link #hiBelow(LongVector, int)} on {@code ax}'s bits with the sign cleared. A
+   * NaN {@code ax} of either sign has {@code hx >= 0x7ff00000}, as in the C.
    */
   static VectorMask<Double> hiBelow(DoubleVector ax, int h) {
-    return ax.compare(VectorOperators.LT, fromHi(h));
+    return hiBelow(absBits(bits(ax)), h).cast(ax.species());
   }
 
-  /** fdlibm's {@code hx >= h}, as {@link #hiBelow} negated: true for a NaN {@code ax}. */
+  /**
+   * fdlibm's {@code hx >= h}: {@link #hiAtLeast(LongVector, int)} on {@code ax}'s bits with the
+   * sign cleared. True for a NaN {@code ax}.
+   */
   static VectorMask<Double> hiAtLeast(DoubleVector ax, int h) {
-    return hiBelow(ax, h).not();
+    return hiAtLeast(absBits(bits(ax)), h).cast(ax.species());
   }
 
   /** fdlibm's {@code hx > h}, as {@code hx >= h + 1}: true for a NaN {@code ax}. */

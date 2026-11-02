@@ -19,7 +19,7 @@ Rows left out: 128 bits, since on x86 C2 lowers no mask at two 64-bit lanes and 
 128-bit body boxes (SKILLS.md); and 512 bits, which runs in software on an AVX2 host (the
 preferred arm covers 512 bits on a host that has it). Mixed inputs are checked because they are
 the ones that run the rare lanes' paths, which common inputs never reach. The *Max rows, at
-SPECIES_MAX, are left out by INCLUDE's regex (see the comment there).
+SPECIES_MAX, and the *Boxed* rows are left out by INCLUDE's regex (see the comment there).
 
 Usage, from the repository root:
     bench/alloc-check.py                                  # the host's own flags
@@ -44,7 +44,13 @@ THRESHOLD = 1.0
 # extract and insert (lane, withLane, at a variable lane index) are intrinsified for the fixed
 # shapes, whose rows pass, but not for the Max shape; the *Max rows exist in the benchmark to
 # record that (bench/results/exp-finish-laptop-2026-11-02.txt), not to gate on it.
-INCLUDE = r".*Benchmark\.\w+(256|Preferred)$"
+#
+# Not *Boxed* either: ExpBenchmark.finishPairBoxed256 and finishPairBoxedPreferred inline two
+# vfdlibm bodies in one loop, which exceeds C2's NodeCountInliningCutoff (a develop flag, 18000
+# nodes, fixed in product JVMs). Past it C2 refuses every callee larger than MaxTrivialSize
+# (6 bytes) that is not @ForceInline, and a refused call boxes its vectors, so those rows
+# allocate on every vector (SKILLS.md). They record that, like the *Max rows; they cannot pass.
+INCLUDE = r".*Benchmark\.(?!\w*Boxed)\w+(256|Preferred)$"
 INLINE = "-XX:CompileCommand=inline,io.github.vecbricks.vfdlibm.*::*"
 RESULT = "target/alloc-check.json"
 # One fork; warmup long enough for C2 to finish the body before the first measured iteration,

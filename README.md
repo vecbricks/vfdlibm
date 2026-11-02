@@ -13,7 +13,8 @@ DoubleVector y = VFdlibm.exp(DoubleVector.fromArray(DoubleVector.SPECIES_PREFERR
 DoubleVector z = VFdlibm.exp(y, live); // only the lanes set in live; the others keep y's bits
 ```
 
-Each method takes a vector of any species of 128 bits or more. Ported so far: `exp` and `log`.
+Each method takes a vector of any species of 128 bits or more. Ported so far: `exp`, `log` and
+`log1p`.
 
 ## Why
 
@@ -31,11 +32,12 @@ fdlibm's own sequence of operations, lane by lane. That is this library.
 - **fdlibm's operations, in fdlibm's order.** Only IEEE `+ - * /`, `sqrt` and bit operations. There
   is no fused multiply-add and no reassociation, so the rounding of every step is fdlibm's.
 - **Rare paths, exact too.** Lanes on a rare path (huge arguments, subnormals, special cases) are
-  either computed in the vector, every branch blended, or finished by `StrictMath` per lane; the
-  result is exact either way. The choice is made per function from benchmarks, and stays
-  provisional until the function's runs on the benchmark hosts (the AVX-512 Xeon Platinum 8573C
-  and Xeon 6973P-C first, the EPYC 9V45 when drawn, then the AVX2 EPYC 7763; `HARDWARE.md`): the
-  laptop's numbers do not agree at every width.
+  either computed in the vector, every branch blended (in every vector, or only in a vector that
+  holds a rare lane), or finished by `StrictMath` per lane; the result is exact either way. The
+  choice is made per function from benchmarks, and stays provisional until the function's runs on
+  the benchmark hosts (the AVX-512 Xeon Platinum 8573C and Xeon 6973P-C first, the EPYC 9V45 when
+  drawn, then the AVX2 EPYC 7763; `HARDWARE.md`): the laptop's numbers do not agree at every
+  width.
 
 ## Testing
 

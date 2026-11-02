@@ -11,6 +11,7 @@ package io.github.vecbricks.vfdlibm;
 import java.util.SplittableRandom;
 import java.util.concurrent.TimeUnit;
 import jdk.incubator.vector.DoubleVector;
+import jdk.incubator.vector.VectorMask;
 import jdk.incubator.vector.VectorSpecies;
 import org.openjdk.jmh.annotations.Benchmark;
 import org.openjdk.jmh.annotations.BenchmarkMode;
@@ -43,6 +44,23 @@ import org.openjdk.jmh.annotations.Warmup;
  * means the body boxed. A new arm named that way is checked with no further change. The
  * {@code *Max} rows are not checked: at {@code SPECIES_MAX} the finish arm boxes on mixed data
  * (see {@code bench/alloc-check.py}); they are here to record that.
+ *
+ * <p>The {@code finishPairBoxed} rows are an experiment for code generators. The hypothesis, read
+ * from the assembly census (bench/asm) and not measured, is that exp's body is bound by its
+ * dependency chain's latency rather than by issue width; to test it, each iteration loads two
+ * independent vectors, computes both branch-free cores ({@link Exp#expCore}) and rare masks ({@link
+ * Exp#expRare}), and runs one per-lane finish, written out in the loop as a code generator would
+ * emit it, only if either vector has a rare lane. They return exactly {@link VFdlibm#exp}'s results
+ * ({@code ExpTest.finishPairRowsMatchVFdlibmExp}), but they box, and {@code bench/alloc-check.py}
+ * leaves them out by name, as it does the {@code *Max} rows. Two inlined vfdlibm bodies exceed C2's
+ * {@code NodeCountInliningCutoff} (a develop flag, 18000 nodes, fixed in product JVMs); past it C2
+ * refuses every callee larger than {@code MaxTrivialSize} (6 bytes) that is not {@code
+ * @ForceInline} ({@code opto/bytecodeInfo.cpp}), and {@code CompileCommand=inline} does not lift
+ * that. {@code PrintInlining} shows the budget spent inside the first {@code expCore}, after both
+ * {@code expRare} calls: its {@code Lanes} calls and the second {@code expCore} are refused, and
+ * the rows allocate on common data at 256 bits, at the default flags and under {@code
+ * -XX:UseAVX=2}. An interleaved pair needs the body written out by its caller, as a code generator
+ * emits it (SKILLS.md).
  */
 @State(Scope.Thread)
 @BenchmarkMode(Mode.AverageTime)
@@ -52,7 +70,7 @@ import org.openjdk.jmh.annotations.Warmup;
 @Fork(value = 1, jvmArgsAppend = {"--add-modules", "jdk.incubator.vector"})
 public class ExpBenchmark {
 
-  private static final int N = 1024;
+  static final int N = 1024;
   private static final VectorSpecies<Double> S128 = DoubleVector.SPECIES_128;
   private static final VectorSpecies<Double> S256 = DoubleVector.SPECIES_256;
   private static final VectorSpecies<Double> S512 = DoubleVector.SPECIES_512;
@@ -77,6 +95,12 @@ public class ExpBenchmark {
         in[i] = rare[random.nextInt(rare.length)];
       }
     }
+  }
+
+  /** Replaces the inputs, for {@code ExpTest}; {@code xs} has {@code N} doubles. */
+  void setInputs(double[] xs) {
+    in = xs.clone();
+    out = new double[N];
   }
 
   @Benchmark
@@ -123,6 +147,66 @@ public class ExpBenchmark {
   public double[] finishMax() {
     for (int i = 0; i < N; i += SMAX.length()) {
       VFdlibm.exp(DoubleVector.fromArray(SMAX, in, i)).intoArray(out, i);
+    }
+    return out;
+  }
+
+  @Benchmark
+  public double[] finishPairBoxed256() {
+    int n = S256.length();
+    for (int i = 0; i < N; i += 2 * n) {
+      DoubleVector a = DoubleVector.fromArray(S256, in, i);
+      DoubleVector b = DoubleVector.fromArray(S256, in, i + n);
+      VectorMask<Double> rareA = Exp.expRare(a);
+      VectorMask<Double> rareB = Exp.expRare(b);
+      DoubleVector ya = Exp.expCore(a);
+      DoubleVector yb = Exp.expCore(b);
+      if (rareA.or(rareB).anyTrue()) {
+        long lanes = rareA.toLong();
+        while (lanes != 0) {
+          int lane = Long.numberOfTrailingZeros(lanes);
+          lanes &= lanes - 1;
+          ya = ya.withLane(lane, StrictMath.exp(a.lane(lane)));
+        }
+        lanes = rareB.toLong();
+        while (lanes != 0) {
+          int lane = Long.numberOfTrailingZeros(lanes);
+          lanes &= lanes - 1;
+          yb = yb.withLane(lane, StrictMath.exp(b.lane(lane)));
+        }
+      }
+      ya.intoArray(out, i);
+      yb.intoArray(out, i + n);
+    }
+    return out;
+  }
+
+  @Benchmark
+  public double[] finishPairBoxedPreferred() {
+    int n = SP.length();
+    for (int i = 0; i < N; i += 2 * n) {
+      DoubleVector a = DoubleVector.fromArray(SP, in, i);
+      DoubleVector b = DoubleVector.fromArray(SP, in, i + n);
+      VectorMask<Double> rareA = Exp.expRare(a);
+      VectorMask<Double> rareB = Exp.expRare(b);
+      DoubleVector ya = Exp.expCore(a);
+      DoubleVector yb = Exp.expCore(b);
+      if (rareA.or(rareB).anyTrue()) {
+        long lanes = rareA.toLong();
+        while (lanes != 0) {
+          int lane = Long.numberOfTrailingZeros(lanes);
+          lanes &= lanes - 1;
+          ya = ya.withLane(lane, StrictMath.exp(a.lane(lane)));
+        }
+        lanes = rareB.toLong();
+        while (lanes != 0) {
+          int lane = Long.numberOfTrailingZeros(lanes);
+          lanes &= lanes - 1;
+          yb = yb.withLane(lane, StrictMath.exp(b.lane(lane)));
+        }
+      }
+      ya.intoArray(out, i);
+      yb.intoArray(out, i + n);
     }
     return out;
   }
