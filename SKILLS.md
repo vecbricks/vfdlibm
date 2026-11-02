@@ -327,8 +327,9 @@ question.
   (`bench/results/log1p-laptop-avx2-2026-11-02.txt`). The laptop's AVX-512 build was measured the
   same way at 256 and 512 bits (`bench/results/log1p-laptop-2026-11-02.txt`). In both files the
   arms are within 1.3x of each other on every row, and no direction is read: `VFdlibm.log1p` uses
-  the guarded arm provisionally, and the EPYC 7763 run decides. A port whose rare paths are cheap
-  in vector form should measure this shape beside the other two.
+  the guarded arm provisionally. The EPYC 7763 run (`bench/results/log1p-epyc7763-2026-11-02.txt`)
+  keeps them within 1.3x at 256 bits too, so the AVX-512 hosts decide (`HARDWARE.md`). A port whose
+  rare paths are cheap in vector form should measure this shape beside the other two.
 - **The in-body finish allocates nothing in log1p too.** log1p's finish was first a call,
   `finishPerLane(x, result, rare)`, and boxed: 52,928 B/op on mixed data at 256 bits under
   `UseAVX=2`, 2.0x slower than the guarded arm there (the superseded runs kept at the end of
