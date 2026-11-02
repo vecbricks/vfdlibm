@@ -170,6 +170,23 @@ class Log1pTest {
     }
   }
 
+  /**
+   * SPECIES_MAX, which {@link VectorWidth} does not run: its shape is none of the fixed ones, so
+   * log1p's int lanes are a fixed-shape species of another shape ({@link Lanes#intSpecies}).
+   */
+  @Test
+  void maxSpecies() {
+    double[] xs = Inputs.concat(thresholds(), Inputs.sampled(1300L, 1 << 14),
+        Inputs.uniform(1301L, 1 << 14, Math.nextUp(-1.0), 4.0));
+    assertLog1p(DoubleVector.SPECIES_MAX, xs);
+    long seed = 1302L;
+    for (Map.Entry<String, BiFunction<DoubleVector, VectorMask<Double>, DoubleVector>> arm :
+        ARMS.entrySet()) {
+      Oracle.assertUnaryMasked(
+          arm.getKey(), DoubleVector.SPECIES_MAX, arm.getValue(), StrictMath::log1p, xs, seed++);
+    }
+  }
+
   @Test
   void maskedFormRejectsANullMask() {
     DoubleVector x = DoubleVector.zero(DoubleVector.SPECIES_128);
