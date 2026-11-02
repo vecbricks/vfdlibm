@@ -41,6 +41,7 @@ final class ProofFiles {
     files.put("exp_half_sign.smt2", ExpProofFiles.halfSign());
     files.put("exp_near_band.smt2", ExpProofFiles.nearBand());
     files.put("exp_zero_reduction.smt2", ExpProofFiles.zeroReduction());
+    files.put("exp_tiny_counterexample.smt2", ExpProofFiles.tinyCounterexample());
     return files;
   }
 
@@ -254,7 +255,7 @@ final class ProofFiles {
   private static final String SIGN = "(or (= S 1) (= S (- 1)))";
 
   /** The exact value of a finite double, as a numerator over a power-of-two denominator. */
-  private record Exact(BigInteger num, BigInteger den) {
+  record Exact(BigInteger num, BigInteger den) {
 
     static Exact of(double d) {
       long raw = Double.doubleToRawLongBits(d);

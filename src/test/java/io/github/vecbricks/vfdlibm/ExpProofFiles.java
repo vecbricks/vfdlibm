@@ -291,6 +291,82 @@ final class ExpProofFiles {
   }
 
   // ---------------------------------------------------------------------------------------------
+  // Ground evaluation: one operation on two doubles at a time
+
+  /**
+   * A computation evaluated one rounding at a time: each {@link #op} computes the result in Java
+   * and renders a check that the exact result of the operation on the two doubles rounds to that
+   * double, of its sign and binade, and to no other double in that binade or the two next to it.
+   * The operands are the doubles as Java holds them, so each check is ground and linear; a chain
+   * of them evaluates a formula with every intermediate double checked rather than trusted.
+   */
+  private static final class Chain {
+    private final StringBuilder out;
+    private final String at;
+
+    Chain(StringBuilder out, String at) {
+      this.out = out;
+      this.at = at;
+    }
+
+    double op(String name, double a, char op, double b) {
+      double q = switch (op) {
+        case '+' -> a + b;
+        case '-' -> a - b;
+        case '*' -> a * b;
+        case '/' -> a / b;
+        default -> throw new IllegalArgumentException("no such operation: " + op);
+      };
+      if (q == 0 || !Double.isFinite(q) || Math.abs(q) < Double.MIN_NORMAL) {
+        throw new IllegalArgumentException(name + " is not a normal double: " + q);
+      }
+      ProofFiles.Exact x = ProofFiles.Exact.of(a);
+      ProofFiles.Exact y = ProofFiles.Exact.of(b);
+      BigInteger num = switch (op) {
+        case '+' -> x.num().multiply(y.den()).add(y.num().multiply(x.den()));
+        case '-' -> x.num().multiply(y.den()).subtract(y.num().multiply(x.den()));
+        case '*' -> x.num().multiply(y.num());
+        default -> x.num().multiply(y.den());
+      };
+      BigInteger den = op == '/' ? x.den().multiply(y.num()) : x.den().multiply(y.den());
+      if (den.signum() < 0) {
+        num = num.negate();
+        den = den.negate();
+      }
+      int s = q < 0 ? -1 : 1;
+      String m = Long.toString(mant(q));
+      int j = binade(q);
+      check(out, at + ": " + name + " = " + hex(Double.doubleToRawLongBits(q)), "unsat",
+          body("(declare-const S2 Int) (declare-const M2 Int)",
+              "(assert (or (not " + near(lit(num), lit(den), sign(s), m, j) + ")",
+              "  " + roundsToOther(lit(num), lit(den), s, m, j) + "))"));
+      return q;
+    }
+
+    /**
+     * e_exp.c's lines 145-146 and the port's tail, on r: t = r*r, c = r - t*(P1+t*(P2+t*(P3+
+     * t*(P4+t*P5)))), then 2.0 - c and the quotient q = (r*c)/(2.0-c); returns c and q.
+     */
+    double[] cAndQ(double r) {
+      double t = op("t = r*r", r, '*', r);
+      double p = op("t*P5", t, '*', Exp.P5);
+      p = op("P4+t*P5", p, '+', Exp.P4);
+      p = op("t*(P4+t*P5)", t, '*', p);
+      p = op("P3+t*(...)", p, '+', Exp.P3);
+      p = op("t*(P3+...)", t, '*', p);
+      p = op("P2+t*(...)", p, '+', Exp.P2);
+      p = op("t*(P2+...)", t, '*', p);
+      p = op("P1+t*(...)", p, '+', Exp.P1);
+      p = op("t*(P1+...)", t, '*', p);
+      double c = op("c = r - t*(...)", r, '-', p);
+      double rc = op("r*c", r, '*', c);
+      double d = op("2.0-c", 2.0, '-', c);
+      double q = op("q = (r*c)/(2.0-c)", rc, '/', d);
+      return new double[] {c, q};
+    }
+  }
+
+  // ---------------------------------------------------------------------------------------------
   // exp_near_band.smt2: L2
 
   /**
@@ -596,6 +672,94 @@ final class ExpProofFiles {
         "(declare-const P Int) (declare-const M2 Int)",
         "(assert " + near(prodA, prodB, "1", "P", jp) + ")",
         "(assert " + near(sumA, sumB, "1", "M2", 0) + ")"));
+    out.append("""
+
+        ; Section D: the domain widened by a word is refuted. At the next word up, 0x%x, the C
+        ; reduces (its near form, k = +-1), and there the k == 0 tail gives another double: at
+        ; the two first witnesses ProofsTest found, one per sign, each rounding of both
+        ; computations is evaluated, then the C's scale-back, and the two results compared.
+        """.formatted(Exp.HX_HALF_LN2 + 1));
+    for (long wb : new long[] {Lanes.fromHiBits(Exp.HX_HALF_LN2 + 1) + 4,
+        Lanes.fromHiBits(Exp.HX_HALF_LN2 + 1) + 0x1f | Long.MIN_VALUE}) {
+      double x = Double.longBitsToDouble(wb);
+      int xsb = x < 0 ? 1 : 0;
+      var tail = new Chain(out, "k = 0 tail at " + hex(wb));
+      double r0 = tail.op("r = x - (+0)", x, '-', 0.0);
+      double q0 = tail.cAndQ(r0)[1];
+      double u0 = tail.op("+0 - q", 0.0, '-', q0);
+      double y0 = tail.op("y", 1.0, '-', tail.op("(+0 - q) - x", u0, '-', r0));
+      var c = new Chain(out, "the C at " + hex(wb));
+      double hi = c.op("hi = x - ln2HI[xsb]", x, '-', xsb == 0 ? Exp.LN2HI_0 : Exp.LN2HI_1);
+      double lo = xsb == 0 ? Exp.LN2LO_0 : Exp.LN2LO_1;
+      double r1 = c.op("r = hi - lo", hi, '-', lo);
+      double q1 = c.cAndQ(r1)[1];
+      double u1 = c.op("lo - q", lo, '-', q1);
+      double y1 = c.op("y", 1.0, '-', c.op("(lo - q) - hi", u1, '-', hi));
+      int k = 1 - 2 * xsb;
+      long port = Double.doubleToRawLongBits(y0);
+      long cBits = Double.doubleToRawLongBits(y1);
+      check(out, "refuted at " + hex(wb) + ": the k = 0 tail is not the C's y + (" + k
+          + " << 52)", "unsat", body("(assert (= " + lit(port) + " (jlong.add " + lit(cBits)
+              + " (jlong.shl " + lit(k) + " 52))))"));
+    }
+    return out.toString();
+  }
+
+  // ---------------------------------------------------------------------------------------------
+  // exp_tiny_counterexample.smt2: L4
+
+  /**
+   * {@code exp_tiny_counterexample.smt2}, lemma L4: at {@code x = 5 * 2^-53} the C's {@code one +
+   * x} and the general tail with k = 0 are different doubles, each rounding of both evaluated;
+   * at {@code 4 * 2^-53} they agree, so the witness is not an accident of the chain.
+   */
+  static String tinyCounterexample() {
+    var out = new StringBuilder(ProofFiles.LICENSE);
+    out.append("""
+        ; exp's tiny lanes cannot be folded into the k == 0 tail: a counter-example (PROOFS.md,
+        ; L4).
+        ;
+        ; e_exp.c (reference/fdlibm-5.3) returns one + x for |x| < 2^-28 (line 140). Folding
+        ; those lanes into L1's tail, with k = 0, hi = x and lo = +0, would compute
+        ; one - ((+0 - q) - x). The claim: at x = 5 * 2^-53 the two are different doubles; one + x
+        ; is a tie that rounds to even, and the tail adds q first and rounds up past it.
+        ;
+        ; What is proven: each rounding of both computations, evaluated: for every operation, the
+        ; exact result of the operation on the two doubles Java computed before it rounds to the
+        ; double Java computed, and to no other double in that binade or the binades next to it;
+        ; then the two results differ. The tie in one + x is one of those checks. At x =
+        ; 4 * 2^-53, the witness moved by one unit, both computations give the same double. The
+        ; constants P1..P5 are rendered from Exp. What is not: the subtraction from +0 of a
+        ; nonzero q giving exactly -q is the same as any other rounding here, but that
+        ; StrictMath.exp is one + x at the witness is ProofsTest's, since the oracle is not in a
+        ; solver; and a double further off than the next binade is excluded by the arithmetic of
+        ; rationals, as in sign_symmetry.smt2.
+        """);
+    out.append(ProofFiles.rendered("ALL"));
+    long tinyX = Double.doubleToRawLongBits(5 * 0x1p-53);
+    check(out, "x = " + hex(tinyX) + " is a tiny lane: hx < HX_TINY = " + hex(Exp.HX_TINY),
+        "unsat", body("(assert (not (< (jint.and.low (l2i (jlong.shr " + lit(tinyX)
+            + " 32)) 2147483648) " + Exp.HX_TINY + ")))"));
+    for (int m : new int[] {5, 4}) {
+      double x = m * 0x1p-53;
+      String at = m + "*2^-53";
+      out.append("\n; x = " + at + ".\n");
+      var c = new Chain(out, "one + x at " + at);
+      double one = c.op("one + x", 1.0, '+', x);
+      var tail = new Chain(out, "tail at " + at);
+      double q = tail.cAndQ(x)[1];
+      double u = tail.op("+0 - q", 0.0, '-', q);
+      double y = tail.op("y", 1.0, '-', tail.op("(+0 - q) - x", u, '-', x));
+      long a = Double.doubleToRawLongBits(one);
+      long b = Double.doubleToRawLongBits(y);
+      if (m == 5) {
+        check(out, at + ": one + x, " + hex(a) + ", is not the tail, " + hex(b),
+            "unsat", body("(assert (= " + lit(a) + " " + lit(b) + "))"));
+      } else {
+        check(out, "not a witness: at " + at + ", one + x and the tail are both " + hex(a),
+            "unsat", body("(assert (not (= " + lit(a) + " " + lit(b) + ")))"));
+      }
+    }
     return out.toString();
   }
 }
