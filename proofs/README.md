@@ -37,6 +37,9 @@ way.
     dev/prove.sh --self-test           # the checker of verdicts, checked
     dev/prove.sh --lint                # as CI runs them
 
+The solvers live under `target/`, so `mvn clean` removes them; `--install` puts them back in
+a few seconds and does nothing when they are there.
+
 By hand, the prelude goes after the file's `set-logic` line:
 `sed '/^(set-logic/r proofs/java.smt2' proofs/sign_symmetry.smt2 | z3 -in`. A solver's line
 numbers count the inserted prelude.

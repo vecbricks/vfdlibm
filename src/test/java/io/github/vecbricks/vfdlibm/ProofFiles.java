@@ -263,8 +263,8 @@ final class ProofFiles {
 
   /**
    * {@code (jdouble.near a b S M sn sd)} with the normal {@code q} as S, M and its binade, or
-   * {@code (jdouble.near.sub ...)} with the subnormal {@code q}, the rational scaled to units of
-   * 2^-1074 there.
+   * {@code (jdouble.near.sub a b S M)} with the subnormal {@code q}, whose M counts units of
+   * 2^-1074; the rational {@code a / b} is passed as it is in both.
    */
   private static String near(BigInteger a, BigInteger b, double q) {
     if (q == 0 || !Double.isFinite(q)) {
