@@ -137,9 +137,10 @@ from its rendering; `mvn -q test -Dtest=ProofFilesTest -Dvfdlibm.proofs.regen=tr
 Z3 5.1.0 (MIT) from PyPI's `z3-solver` 5.1.0.0, whose wheel ships the binary, and cvc5 1.4.1
 (BSD-3-Clause) from its GitHub release archive, its SHA-256 checked; the pins are Varka's. pip
 installs Z3 from a wheel only (`--only-binary=:all:`, never building from source) and checks
-the wheel's SHA-256 (`--require-hashes`); the hash pinned is that of the Linux x86_64 wheel,
-`z3_solver-5.1.0.0-py3-none-manylinux_2_27_x86_64.whl`, from PyPI's JSON API, so on another
-platform `--install` stops and asks for a Z3 5.1.0 in `VFDLIBM_Z3`, as it does for cvc5.
+the wheel's SHA-256 (`--require-hashes`). The hashes pinned, from PyPI's JSON API, are those of
+the wheels for Linux x86_64 (`manylinux_2_27_x86_64`), Linux aarch64 (`manylinux_2_38_aarch64`)
+and macOS arm64 and x86_64 (`macosx_13_0_arm64`, `macosx_13_0_x86_64`); on any other platform
+`--install` stops and asks for a Z3 5.1.0 in `VFDLIBM_Z3`, as cvc5's does off Linux x86_64.
 `dev/prove.sh` installs them under `target/solvers/` and refuses other versions. They are
 development tools: nothing here is compiled, packaged or shipped, and `pom.xml` does not know
 them.

@@ -45,9 +45,16 @@ solvers="$root/target/solvers"
 # The pinned solvers, Varka's pins. Z3 from PyPI, whose wheel ships the z3 binary; cvc5 from its
 # release archive, since its wheel has the Python bindings only.
 Z3_VERSION=5.1.0
-# The Linux x86_64 wheel of z3-solver 5.1.0.0, z3_solver-5.1.0.0-py3-none-manylinux_2_27_x86_64.whl,
-# its SHA-256 from PyPI's JSON API (https://pypi.org/pypi/z3-solver/5.1.0.0/json).
-Z3_WHEEL_SHA256=dfad9e309d7010b1ff6bdb33f21570a1603ef4727373221c7117a74448f0cfef
+# The SHA-256 of each z3-solver 5.1.0.0 wheel pinned, from PyPI's JSON API
+# (https://pypi.org/pypi/z3-solver/5.1.0.0/json), by the platform `uname -s`-`uname -m` names:
+# z3_solver-5.1.0.0-py3-none-<tag>.whl with tag manylinux_2_27_x86_64, manylinux_2_38_aarch64,
+# macosx_13_0_arm64 and macosx_13_0_x86_64. pip takes any of them that matches.
+declare -A Z3_WHEEL_SHA256=(
+  [Linux-x86_64]=dfad9e309d7010b1ff6bdb33f21570a1603ef4727373221c7117a74448f0cfef
+  [Linux-aarch64]=1dcfcccb4b027951d7adf267b5b236e7a67b8433cc358d802dcb0280151587bf
+  [Darwin-arm64]=399a38a85d784105e5df5a05c04a581481bfdb80af7424779cf76fa843b4e66c
+  [Darwin-x86_64]=069feb3ecfa0cbf40524b6a06bf0a02d604e1710bd42012ac197e2e343e39cc0
+)
 CVC5_VERSION=1.4.1
 CVC5_ZIP=cvc5-Linux-x86_64-static.zip
 CVC5_SHA256=2f8efe58fe27ba7bccbb504533f690b9312d69da14192712460e4a19231f02a1
@@ -103,13 +110,16 @@ require_solver() {
 install_z3() {
   local dir="$solvers/z3-$Z3_VERSION"
   [ -x "$dir/bin/z3" ] && return 0
-  if [ "$(uname -s)-$(uname -m)" != Linux-x86_64 ]; then
-    echo "prove: the pinned Z3 wheel is Linux x86_64's; install Z3 $Z3_VERSION" \
+  local platform hashes="" h
+  platform="$(uname -s)-$(uname -m)"
+  if [ -z "${Z3_WHEEL_SHA256[$platform]:-}" ]; then
+    echo "prove: no Z3 wheel is pinned for $platform; install Z3 $Z3_VERSION" \
       "and point VFDLIBM_Z3 at it" >&2
     return 1
   fi
+  for h in "${Z3_WHEEL_SHA256[@]}"; do hashes+=" --hash=sha256:$h"; done
   python3 -m venv "$dir" \
-    && echo "z3-solver==$Z3_VERSION.0 --hash=sha256:$Z3_WHEEL_SHA256" > "$dir/requirements.txt" \
+    && echo "z3-solver==$Z3_VERSION.0$hashes" > "$dir/requirements.txt" \
     && "$dir/bin/pip" install --quiet --disable-pip-version-check --only-binary=:all: \
       --require-hashes -r "$dir/requirements.txt"
 }
