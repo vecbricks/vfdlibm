@@ -81,7 +81,11 @@ five are a later, optional set; the large-argument reduction of the trigonometri
 - **Branches:** fdlibm's branches on the argument's range become lane masks. The common paths are
   computed for every lane and blended. A rare path is finished per lane by `StrictMath`, so the
   vector form never trades exactness for speed. Whether a given branch is blended or finished per
-  lane is decided by measurement and recorded in the function's pull request.
+  lane is decided by measurement and recorded in the function's pull request. For `exp` the
+  question is open again: on the EPYC 7763 the per-lane finish as first merged was 1.57x faster
+  than the blend on common data and 1.64x slower on mixed data, where its fallback allocated;
+  the fallback no longer allocates at 256 and 512 bits (it still boxes at `SPECIES_MAX` on
+  mixed data), and the EPYC run of that change decides (`SKILLS.md`).
 
 ## 6. Rules
 

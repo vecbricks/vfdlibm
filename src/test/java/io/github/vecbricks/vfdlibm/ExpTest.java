@@ -13,7 +13,9 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.SplittableRandom;
 import java.util.function.Consumer;
+import java.util.stream.LongStream;
 import jdk.incubator.vector.DoubleVector;
 import jdk.incubator.vector.VectorShape;
 import jdk.incubator.vector.VectorSpecies;
@@ -100,6 +102,120 @@ class ExpTest {
     Oracle.assertUnaryMasked("VFdlibm.exp", species, VFdlibm::exp, StrictMath::exp, xs, 502L);
     Oracle.assertUnaryMasked(
         "Exp.expBlended", species, Exp::expBlended, StrictMath::exp, xs, 503L);
+  }
+
+  /** Up to this many lanes {@link #rareLaneSubsets} lists every subset, 2^16 vectors at most. */
+  static final int ALL_SUBSETS_UP_TO_LANES = 16;
+
+  /**
+   * The subsets of a vector's lanes that {@link #everySubsetOfLanesRare(int)} makes rare, as bit
+   * masks: every subset up to {@link #ALL_SUBSETS_UP_TO_LANES} lanes. The cap bounds the test's
+   * size, since the count doubles with each lane (and {@code 1 << lanes} overflows an int from 31
+   * lanes on). Above it, the empty and the full set, each single lane, each lane alone left
+   * common, each adjacent pair, and 4096 seeded random subsets. No exp test reaches that branch:
+   * the widest species exp accepts is 1024 bits, 16 double lanes, since {@link Lanes#intSpecies}
+   * throws above it, so even a 2048-bit SPECIES_MAX (32 lanes) never runs exp here. {@link
+   * #rareLaneSubsetsAboveTheCap} tests the branch directly, ready for a wider species.
+   */
+  static long[] rareLaneSubsets(int lanes) {
+    if (lanes <= ALL_SUBSETS_UP_TO_LANES) {
+      long[] subsets = new long[1 << lanes];
+      for (int subset = 0; subset < subsets.length; subset++) {
+        subsets[subset] = subset;
+      }
+      return subsets;
+    }
+    long all = lanes == Long.SIZE ? -1L : (1L << lanes) - 1;
+    LongStream.Builder subsets = LongStream.builder();
+    subsets.add(0L).add(all);
+    for (int lane = 0; lane < lanes; lane++) {
+      subsets.add(1L << lane).add(all & ~(1L << lane));
+      if (lane + 1 < lanes) {
+        subsets.add(3L << lane);
+      }
+    }
+    SplittableRandom random = new SplittableRandom(505L);
+    for (int i = 0; i < 4096; i++) {
+      subsets.add(random.nextLong() & all);
+    }
+    return subsets.build().toArray();
+  }
+
+  /**
+   * One vector for every subset of a vector's lanes ({@link #rareLaneSubsets}), the subset's lanes
+   * rare and the others common: exactly one rare lane at each position, every lane rare, and every
+   * mix between. The per-lane finish walks the rare mask's set bits, so a lane it skipped or
+   * visited twice shows here. The rare inputs cycle through each kind the finish handles: NaN, the
+   * infinities, overflow, underflow and the subnormal scale-back.
+   */
+  static double[] everySubsetOfLanesRare(int lanes) {
+    double[] rare = {
+      Double.NaN, 800.0, -750.0, -708.5, Double.POSITIVE_INFINITY, Double.NEGATIVE_INFINITY,
+      K_BELOW_NORMAL_EDGE
+    };
+    long[] subsets = rareLaneSubsets(lanes);
+    double[] xs = new double[subsets.length * lanes];
+    int next = 0;
+    for (int s = 0; s < subsets.length; s++) {
+      for (int lane = 0; lane < lanes; lane++) {
+        boolean isRare = (subsets[s] >>> lane & 1L) != 0;
+        xs[s * lanes + lane] = isRare ? rare[next++ % rare.length] : 0.37 * lane - 1.0;
+      }
+    }
+    return xs;
+  }
+
+  @ParameterizedTest
+  @EnumSource(VectorWidth.class)
+  void everySubsetOfLanesRare(VectorWidth width) {
+    assertEverySubsetOfLanesRare(width.species());
+  }
+
+  /** {@link #everySubsetOfLanesRare(VectorWidth)} at SPECIES_MAX, which VectorWidth skips. */
+  @Test
+  void everySubsetOfLanesRareAtMaxSpecies() {
+    assertEverySubsetOfLanesRare(DoubleVector.SPECIES_MAX);
+  }
+
+  /**
+   * The cap's sampled branch, which no exp test reaches: exp accepts at most 1024 bits, 16 double
+   * lanes, the cap itself ({@link #rareLaneSubsets}). The expected masks are checked by their bit
+   * counts and lanes, not rebuilt the way the branch builds them.
+   */
+  @Test
+  void rareLaneSubsetsAboveTheCap() {
+    for (int lanes : new int[] {ALL_SUBSETS_UP_TO_LANES + 1, 32, Long.SIZE}) {
+      long[] subsets = rareLaneSubsets(lanes);
+      assertEquals(2 + 3 * lanes - 1 + 4096, subsets.length);
+      assertEquals(0L, subsets[0]);
+      assertEquals(lanes, Long.bitCount(subsets[1]));
+      assertEquals(lanes, Long.SIZE - Long.numberOfLeadingZeros(subsets[1]));
+      int next = 2;
+      for (int lane = 0; lane < lanes; lane++) {
+        long single = subsets[next++];
+        assertEquals(1, Long.bitCount(single), "single at lane " + lane);
+        assertEquals(lane, Long.numberOfTrailingZeros(single), "single at lane " + lane);
+        long complement = subsets[next++];
+        assertEquals(lanes - 1, Long.bitCount(complement), "complement of lane " + lane);
+        assertEquals(0L, complement >>> lane & 1L, "complement of lane " + lane);
+        assertEquals(subsets[1], complement | single, "complement of lane " + lane);
+        if (lane + 1 < lanes) {
+          long pair = subsets[next++];
+          assertEquals(2, Long.bitCount(pair), "pair at lane " + lane);
+          assertEquals(1L, pair >>> lane & 1L, "pair at lane " + lane);
+          assertEquals(1L, pair >>> (lane + 1) & 1L, "pair at lane " + lane);
+        }
+      }
+      for (long subset : subsets) {
+        assertEquals(0L, subset & ~subsets[1]);
+      }
+    }
+  }
+
+  private static void assertEverySubsetOfLanesRare(VectorSpecies<Double> species) {
+    double[] xs = everySubsetOfLanesRare(species.length());
+    assertExp(species, xs);
+    Oracle.assertUnaryMasked("VFdlibm.exp", species, VFdlibm::exp, StrictMath::exp, xs, 504L);
   }
 
   /**
