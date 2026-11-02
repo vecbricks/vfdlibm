@@ -59,16 +59,25 @@ port teaches.
 
 - Any performance claim, in a comment, a document or a pull request, traces to a committed
   results file under `bench/results/`. "Faster" with no file behind it is not written.
-- A results file opens with its provenance: what was run and why, the commit, JDK, CPU, vector
-  flags, kernel, load average at start and end, the JMH options and the command, then each row's
-  minimum, average and maximum and JMH's summary table with `gc.alloc.rate.norm`. The existing
-  files are the template. A file from the laptop says it is not a headline.
+- A results file opens with its provenance: what was run and why, the host, the commit, JDK, CPU,
+  CPU flags (whether `avx512f` and `avx512dq` are present), vector flags, kernel, load average at
+  start and end, the JMH options and the command, then each row's minimum, average and maximum
+  and JMH's summary table with `gc.alloc.rate.norm`. The existing files are the template. A file
+  from the laptop says it is not a headline.
+- A results file is named `bench/results/<function>-<host>-<date>.txt`, the host being the
+  workflow's host key (`epyc7763`, `xeon6973p`, `epyc9v74`) or `laptop` with a suffix for its
+  flags (`laptop-avx2`); `<function>` may name the comparison too (`exp-finish`). The files
+  written before the two newer hosts keep their names.
 - The method is fixed: `-f 2 -wi 3 -w 2s -i 5 -r 2s -prof gc`, the body inlined with
   `-XX:CompileCommand=inline,io.github.vecbricks.vfdlibm.*::*`, on an otherwise idle machine.
   The arms of a comparison run in one JMH run. A claim resting on a ratio under about 1.3x is
   re-run and compared by minimums before it is written down, and the file keeps both runs.
-- Headline numbers come from the EPYC 7763 run of `.github/workflows/benchmark.yml`, dispatched
-  with `bench/dispatch-epyc.sh`; never relax its CPU check.
+- Headline numbers come from `.github/workflows/benchmark.yml` on three named GitHub hosts,
+  dispatched with `bench/dispatch-bench.sh --host <host>`: the Intel Xeon 6973P-C (`xeon6973p`)
+  and the AMD EPYC 9V74 (`epyc9v74`), read first (`SKILLS.md` on what the 9V74 exposes), and the
+  AMD EPYC 7763 (`epyc7763`, the default) for AVX2. Each host decides for its own instruction
+  set, in files of its own; laptop numbers never headline. Never relax a host's CPU check
+  (`SKILLS.md`, "Where headline numbers come from").
 - When a change moves committed numbers, measure again and commit the new file, then requote
   every document from it, rather than patching quoted figures one by one.
 

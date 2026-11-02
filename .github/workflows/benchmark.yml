@@ -1,9 +1,12 @@
 name: Benchmark
 
-# A JMH run on the headline host, an AMD EPYC 7763 GitHub runner (SKILLS.md, "Where headline
-# numbers come from"). Dispatch it with bench/dispatch-epyc.sh, which dispatches again an hour
-# later whenever a run fails the CPU check. The expected CPU is fixed here on purpose, with no
-# input to change it: a run on another CPU is not comparable with the results before it.
+# A JMH run on one of three named benchmark hosts, GitHub-hosted runners drawn from the standard
+# ubuntu-latest pool (SKILLS.md, "Where headline numbers come from"): the AMD EPYC 7763 (Zen 3,
+# AVX2), the Intel Xeon 6973P-C (Granite Rapids, AVX-512) and the AMD EPYC 9V74 (Zen 4). Dispatch
+# it with bench/dispatch-bench.sh, which dispatches again an hour later whenever a run fails the
+# CPU check. The host input picks one of the three; each host's CPU string is fixed below, on
+# purpose, with no free-text input to change it: a run on another CPU is not comparable with the
+# results before it.
 
 # A dispatcher's tag, when given, goes into the run's name so the dispatcher can find its own run
 # among others on the same branch; it changes nothing else.
@@ -12,6 +15,15 @@ run-name: ${{ inputs.run-tag && format('Benchmark {0}', inputs.run-tag) || 'Benc
 on:
   workflow_dispatch:
     inputs:
+      host:
+        description: 'Benchmark host; the run fails its CPU check on any other CPU'
+        type: choice
+        required: true
+        default: epyc7763
+        options:
+          - epyc7763
+          - xeon6973p
+          - epyc9v74
       benchmarks:
         description: 'JMH benchmark regex, e.g. "ExpBenchmark" or "ExpBenchmark.finish256"'
         required: true
@@ -21,7 +33,7 @@ on:
         required: false
         default: ''
       run-tag:
-        description: 'Free text for the run name only; bench/dispatch-epyc.sh finds its run by it'
+        description: 'Free text for the run name only; bench/dispatch-bench.sh finds its run by it'
         required: false
         default: ''
 
@@ -32,20 +44,31 @@ jobs:
   benchmark:
     runs-on: ubuntu-latest
     env:
-      EXPECTED_CPU: AMD EPYC 7763
       JMH_OPTIONS: -f 2 -wi 3 -w 2s -i 5 -r 2s -prof gc
       INLINE: -XX:CompileCommand=inline,io.github.vecbricks.vfdlibm.*::*
     steps:
       # First, before any setup: a job checks its own machine, since every job is a new VM.
-      # bench/dispatch-epyc.sh looks for this step's name among a failed run's failed steps.
+      # bench/dispatch-bench.sh looks for this step's name among a failed run's failed steps.
+      # Each host's string is a substring of /proc/cpuinfo's model name as a run of that host
+      # printed it; the match ignores case, since Azure VMs have reported Intel names in
+      # capitals ("INTEL(R) XEON(R) PLATINUM 8573C").
       - name: Probe the machine's CPU
+        env:
+          HOST: ${{ inputs.host }}
         run: |
+          case "$HOST" in
+            epyc7763) expected='AMD EPYC 7763' ;;
+            xeon6973p) expected='Intel(R) Xeon(R) 6973P-C' ;;
+            epyc9v74) expected='AMD EPYC 9V74' ;;
+            *) echo "::error::Unknown host '$HOST'"; exit 1 ;;
+          esac
           cpu="$(grep -m1 'model name' /proc/cpuinfo | sed 's/.*: //')"
-          echo "CPU: $cpu"
-          if ! echo "$cpu" | grep -qF "$EXPECTED_CPU"; then
-            echo "::error::CPU mismatch! Expected '$EXPECTED_CPU' but got '$cpu'"
+          echo "Host: $HOST, CPU: $cpu"
+          if ! echo "$cpu" | grep -qiF "$expected"; then
+            echo "::error::CPU mismatch on host $HOST! Expected '$expected' but got '$cpu'"
             exit 1
           fi
+          echo "EXPECTED_CPU=$expected" >> "$GITHUB_ENV"
       - uses: actions/checkout@v5
       - uses: actions/setup-java@v5
         with:
@@ -55,21 +78,26 @@ jobs:
       - name: Run JMH
         env:
           BENCHMARKS: ${{ inputs.benchmarks }}
+          HOST: ${{ inputs.host }}
           JVM_ARGS: ${{ inputs.jvm-args }}
         run: |
           set -o pipefail
           out=bench-results.txt
+          flags="$(grep -m1 '^flags' /proc/cpuinfo)"
+          has() { if grep -qw "$1" <<<"$flags"; then echo yes; else echo no; fi; }
           append="$INLINE"
           if [ -n "$JVM_ARGS" ]; then append="$JVM_ARGS $INLINE"; fi
           {
             echo "# $BENCHMARKS on a GitHub runner, $(date -u +'%Y-%m-%d %H:%M UTC')"
             echo "#"
+            echo "# Host:        $HOST (expected CPU '$EXPECTED_CPU')"
             echo "# Commit:      $GITHUB_SHA ($GITHUB_REF_NAME)"
             echo "# Run:         $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
             echo "# JDK:         $(java -version 2>&1 | tail -n 1)"
             echo "# CPU:         $(grep -m1 'model name' /proc/cpuinfo | sed 's/.*: //')"
-            echo "# CPU flags:   $(grep -m1 '^flags' /proc/cpuinfo | tr ' ' '\n' \
-              | grep -E '^avx' | sort -u | tr '\n' ' ')"
+            echo "# AVX-512:     avx512f=$(has avx512f) avx512dq=$(has avx512dq)"
+            echo "# CPU flags:   $(tr ' ' '\n' <<<"$flags" | grep -E '^avx' | sort -u \
+              | tr '\n' ' ')"
             echo "# Vector:      $(java $JVM_ARGS -XX:+PrintFlagsFinal -version 2>/dev/null \
               | grep -E ' (MaxVectorSize|UseAVX) ' | awk '{print $2 "=" $4}' | tr '\n' ' ')"
             echo "# Kernel:      $(uname -r)"

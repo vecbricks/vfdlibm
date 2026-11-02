@@ -85,7 +85,8 @@ five are a later, optional set; the large-argument reduction of the trigonometri
   question is open again: on the EPYC 7763 the per-lane finish as first merged was 1.57x faster
   than the blend on common data and 1.64x slower on mixed data, where its fallback allocated;
   the fallback no longer allocates at 256 and 512 bits (it still boxes at `SPECIES_MAX` on
-  mixed data), and the EPYC run of that change decides (`SKILLS.md`).
+  mixed data), and that change's runs on the benchmark hosts decide, each for its own
+  instruction set, the AVX-512 hosts first (`SKILLS.md`).
 
 ## 6. Rules
 

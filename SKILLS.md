@@ -41,7 +41,7 @@ negative result belongs here too, since it stops the next port re-trying a settl
   load average is under 1.0, and between queued runs wait until it falls under 0.9: a JVM that
   just exited leaves it above 1.0 for a minute or two. A results file is checked by reading every
   section of it, not by the exit code of what wrote it.
-- **Laptop numbers are not headlines.** See the EPYC 7763 rule below.
+- **Laptop numbers are not headlines.** See the three benchmark hosts below.
 
 ## The JIT: boxing, intrinsics and inlining
 
@@ -148,18 +148,31 @@ negative result belongs here too, since it stops the next port re-trying a settl
   against 256-bit ones on three; EPYC 9V45 (Zen 5) 1.99. GitHub's x86 runners draw from all of
   these.
 
-## Where headline numbers come from: the EPYC 7763
+## Where headline numbers come from: three named hosts
 
-- **Headline numbers are measured on an AMD EPYC 7763**, a GitHub-hosted `ubuntu-latest` runner:
-  AVX2, `UseAVX=2`, `MaxVectorSize=32`, preferred species 256 bits. Laptop files say "laptop
-  numbers, not headlines" in their header.
+- **Headline numbers are measured on three named CPUs**, each drawn from GitHub's standard
+  `ubuntu-latest` pool and each with results files of its own (owner's decision, 2 November
+  2026): the Intel Xeon 6973P-C (Granite Rapids, full AVX-512, host `xeon6973p`), the AMD EPYC
+  9V74 (Zen 4, host `epyc9v74`) and the AMD EPYC 7763 (Zen 3, AVX2, `UseAVX=2`,
+  `MaxVectorSize=32`, preferred species 256 bits, host `epyc7763`). vfdlibm cares about AVX-512
+  first, so the AVX-512 hosts are read first; each host decides for its own instruction set, and
+  none speaks for another's. Laptop numbers never headline; laptop files say "laptop numbers, not
+  headlines" in their header.
+- **Read the 9V74's flags line before quoting it for AVX-512.** The three GitHub 9V74 VMs that
+  Varka measured exposed no `avx512` flags and ran at `UseAVX=2`, `MaxVectorSize=32` (above).
+  Every results header has an `AVX-512:` line (`avx512f=yes avx512dq=yes` or `no`); a 9V74 file
+  whose line reads `no` decides for Zen 4 at AVX2 width, not for AVX-512.
 - **The benchmark fails on any other CPU, and is retried, never relaxed.**
-  `.github/workflows/benchmark.yml` checks `/proc/cpuinfo` before anything else and fails unless
-  it names an AMD EPYC 7763; `bench/dispatch-epyc.sh` dispatches it and, when the run failed on
-  that check, waits an hour and dispatches again, until a run passes or fails on something else.
-  Newer EPYCs (9V45, 9V74) are common draws, and accepting one would put a result on a different
-  machine from every result before it. If the 7763 stays scarce for days, moving the headline
-  host is a decision for the owner, not a change to the check.
+  `.github/workflows/benchmark.yml` takes a `host` input with exactly three choices and maps each
+  to a model-name string fixed in the file, as runs of that host printed it: `AMD EPYC 7763`,
+  `Intel(R) Xeon(R) 6973P-C` and `AMD EPYC 9V74`, matched ignoring case. It checks
+  `/proc/cpuinfo` before anything else and fails unless the model name contains the host's
+  string; `bench/dispatch-bench.sh --host <host>` dispatches it and, when the run failed on that
+  check, waits an hour and dispatches again, until a run passes or fails on something else
+  (`bench/dispatch-epyc.sh` is the same with `--host epyc7763`). Other CPUs (EPYC 9V45, Xeon
+  Platinum 8573C and 8370C) are common draws, and accepting one would put a result on a
+  different machine from every result before it. If a host stays scarce for days, changing the
+  hosts is a decision for the owner, not a change to the check.
 - **A CPU check holds only for its own job.** Every GitHub-hosted job is a fresh VM, so a check
   in one job says nothing about another job's machine. The job that measures checks its own CPU
   and writes it into the results header.
