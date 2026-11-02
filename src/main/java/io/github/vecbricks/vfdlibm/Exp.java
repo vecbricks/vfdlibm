@@ -44,7 +44,11 @@ import jdk.incubator.vector.VectorSpecies;
  *   <li>{@link #exp} finishes those lanes per lane with {@code StrictMath.exp} after the vector
  *       body, behind one {@code anyTrue} a vector; on ordinary data that branch never runs. The
  *       finish walks the set bits of the rare mask ({@code toLong}), reads each lane with {@code
- *       lane} and writes it back with {@code withLane}, all in this body, so it allocates nothing.
+ *       lane} and writes it back with {@code withLane}, all in this body. At the fixed shapes
+ *       C2 intrinsifies that lane access: at 256 and 512 bits the finish allocates nothing (at
+ *       128 bits on x86 the masks box anyway). At {@code SPECIES_MAX} it is not intrinsified,
+ *       and the finish still boxes on data with rare lanes (the {@code finishMax} rows of {@code
+ *       bench/results/exp-finish-laptop-2026-11-02.txt}).
  *   <li>{@link #expBlended} computes them in every lane too and blends them, with no branch.
  * </ul>
  *
@@ -52,10 +56,10 @@ import jdk.incubator.vector.VectorSpecies;
  * host, the first arm as first merged ({@code bench/results/exp-epyc7763-2026-11-02.txt}, minimums
  * in ns per 1024 doubles at 256 bits) was 1.57x faster than the blend on common data, where no
  * lane is rare (4203 against 6590), and lost once rare lanes were common: on mixed data, one rare
- * input in 16, it was 1.64x slower than the blend (12331 against 7512) and no faster than the
- * scalar loop (11752). Its finish was then a separate method, which C2 refused to inline at the
- * end of this large body, so every vector boxed its arguments and the mixed rows allocated 52928
- * B/op. The finish is now written out inline and allocates nothing (laptop numbers in {@code
+ * input in 16, it was 1.64x slower than the blend (12331 against 7512). Its finish was then a
+ * separate method, which C2 refused to inline at the end of this large body, so every vector
+ * boxed its arguments and the mixed rows allocated 52928 B/op. The finish is now written out
+ * inline and allocates nothing at the fixed shapes (laptop numbers in {@code
  * bench/results/exp-finish-laptop-2026-11-02.txt}); the EPYC run of this code decides between
  * the arms again. The second arm is kept so the choice can be re-measured, on other hosts and as
  * the JDK changes.
@@ -228,7 +232,8 @@ final class Exp {
         // and a refused call takes x, result and rare as heap objects, boxed on every vector,
         // rare or not. The Vector API's own methods used here are inlined late instead. It
         // visits only the set lanes of rare, through its bits, and moves no lane through an
-        // array: lane and withLane are lane extract and insert.
+        // array: lane and withLane are lane extract and insert. C2 intrinsifies them at a
+        // variable lane index for the fixed shapes only; at SPECIES_MAX this loop still boxes.
         long rareLanes = rare.toLong();
         while (rareLanes != 0) {
           int lane = Long.numberOfTrailingZeros(rareLanes);

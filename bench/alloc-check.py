@@ -18,7 +18,8 @@ a benchmark that JMH lists for the regex threw or has no row there for an inputs
 Rows left out: 128 bits, since on x86 C2 lowers no mask at two 64-bit lanes and every masked
 128-bit body boxes (SKILLS.md); and 512 bits, which runs in software on an AVX2 host (the
 preferred arm covers 512 bits on a host that has it). Mixed inputs are checked because they are
-the ones that run the rare lanes' paths, which common inputs never reach.
+the ones that run the rare lanes' paths, which common inputs never reach. The *Max rows, at
+SPECIES_MAX, are left out by INCLUDE's regex (see the comment there).
 
 Usage, from the repository root:
     bench/alloc-check.py                                  # the host's own flags
@@ -39,6 +40,10 @@ import sys
 # 0.01 to 0.03 B/op, JMH's own allocation spread over the ops. 1 B/op sits between the two.
 THRESHOLD = 1.0
 
+# Not *Max: at SPECIES_MAX the finish arm boxes on mixed data, so finishMax would fail. Its lane
+# extract and insert (lane, withLane, at a variable lane index) are intrinsified for the fixed
+# shapes, whose rows pass, but not for the Max shape; the *Max rows exist in the benchmark to
+# record that (bench/results/exp-finish-laptop-2026-11-02.txt), not to gate on it.
 INCLUDE = r".*Benchmark\.\w+(256|Preferred)$"
 INLINE = "-XX:CompileCommand=inline,io.github.vecbricks.vfdlibm.*::*"
 RESULT = "target/alloc-check.json"
