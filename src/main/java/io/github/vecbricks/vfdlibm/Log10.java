@@ -93,6 +93,7 @@ final class Log10 {
   static final String DROP_CORRECTION = "log10.dropCorrection";
   static final String CONSTANT_OFF_BY_ONE_ULP = "log10.constantOffByOneUlp";
   static final String THRESHOLD_MOVED = "log10.thresholdMoved";
+  static final String SUBNORMAL_THRESHOLD_MOVED = "log10.subnormalThresholdMoved";
   /** ivln10 one ulp up, for {@link #CONSTANT_OFF_BY_ONE_ULP}. */
   private static final double IVLN10_UP = Double.longBitsToDouble(0x3FDBCB7B_1526E50FL);
   // Read once into constants, so the body holds no call and an unplanted fault folds away.
@@ -105,6 +106,19 @@ final class Log10 {
    * then rescaled to {@code [0.5, 1)} with {@code y = 1}, whose sum cancels and rounds otherwise.
    */
   private static final boolean MOVING_THRESHOLD = Faults.is(THRESHOLD_MOVED);
+  /**
+   * Moves line 76's {@code hx < 0x00100000} down one word, to {@code hx < 0x000fffff}, in both
+   * arms: the subnormals of high word 0x000fffff are then neither finished nor scaled, and are
+   * rescaled as if normal, with k = -1023 and the wrong significand. Moving it up changes no
+   * result (SKILLS.md, "A planted threshold must sit where the result changes").
+   */
+  private static final boolean MOVING_SUBNORMAL_THRESHOLD = Faults.is(SUBNORMAL_THRESHOLD_MOVED);
+  /** The lowest high word of a common lane in the finish arm, line 76's test. */
+  private static final int HX_COMMON_LOW =
+      MOVING_SUBNORMAL_THRESHOLD ? HX_MIN_NORMAL - 1 : HX_MIN_NORMAL;
+  /** The blended arm's subnormal bound: x below it is scaled by two54 (line 80). */
+  private static final double SUBNORMAL_BOUND =
+      MOVING_SUBNORMAL_THRESHOLD ? Lanes.fromHi(HX_MIN_NORMAL - 1) : Double.MIN_NORMAL;
 
   /** How the rare lanes are computed: finished per lane or blended. */
   private static final int FINISH = 0;
@@ -142,7 +156,7 @@ final class Log10 {
     VectorMask<Double> subnormal = null;
     if (arm == BLENDED) {
       subnormal = x.compare(VectorOperators.GT, ZERO)
-          .and(x.compare(VectorOperators.LT, Double.MIN_NORMAL));
+          .and(x.compare(VectorOperators.LT, SUBNORMAL_BOUND));
       xs = x.blend(x.mul(TWO54), subnormal);
     }
     // Lines 72 and 81: hx = __HI(x), the signed high word, of the scaled x where it was scaled.
@@ -178,7 +192,7 @@ final class Log10 {
     // The lanes the C returns early, from its own tests on hx. Lines 76 and 83: the common lanes
     // have 0x00100000 <= hx < 0x7ff00000, for a signed hx, so every NaN lane, of either sign, is
     // rare, as in the C. In the blended arm hx is the scaled x's, so a subnormal is common there.
-    VectorMask<Double> common = hx.compare(VectorOperators.GE, HX_MIN_NORMAL)
+    VectorMask<Double> common = hx.compare(VectorOperators.GE, HX_COMMON_LOW)
         .and(hx.compare(VectorOperators.LT, HX_NON_FINITE)).cast(species);
 
     // Lines 89-90: z = y*log10_2lo + ivln10*log(x); return z+y*log10_2hi. The product
