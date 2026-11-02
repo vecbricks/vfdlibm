@@ -34,7 +34,8 @@ import jdk.incubator.vector.VectorSpecies;
  * approximate {@code log(1+f)} with {@code s = f/(2+f)} and the degree-14 polynomial {@code
  * Lg1..Lg7} in {@code s}, or by {@code f - f*f*(0.5 - f/3)} when {@code |f| < 2^-20}; and add
  * {@code k*ln2}, split as {@code ln2_hi + ln2_lo}. Every operation is the C's, in the C's order,
- * with no fused multiply-add and no reassociation.
+ * with no fused multiply-add and no reassociation, except where a lemma of {@code PROOFS.md}
+ * (log, L6 on) proves a different computation gives the same bits for every input.
  *
  * <p>The C's {@code int} words stay in int lanes: {@code hx}, {@code k}, {@code i} and {@code j}
  * are computed in an {@link IntVector} with the double vector's lane count at half its bits, as
@@ -44,8 +45,8 @@ import jdk.incubator.vector.VectorSpecies;
  * <p>The C's branches become lane masks. Every lane computes the common path (a normal, positive,
  * finite {@code x}): both forms of {@code log(1+f)} for {@code |f| >= 2^-20} (the {@code i > 0}
  * one with {@code hfsq} and the other), the {@code |f| < 2^-20} form and the {@code f == 0}
- * result, each in its {@code k == 0} and its {@code k != 0} form as the C writes them, and the
- * masks blend them. Two arms differ in the C's rare paths, the lanes with {@code hx < 0x00100000}
+ * result, each in the C's {@code k != 0} form, which with {@code dk = +0.0} gives the {@code k ==
+ * 0} form's bits ({@code PROOFS.md}, L6), and the masks blend them. Two arms differ in the C's rare paths, the lanes with {@code hx < 0x00100000}
  * ({@code x <= 0}, a subnormal, a negative NaN) or {@code hx >= 0x7ff00000} (+inf, a positive NaN):
  *
  * <ul>
@@ -176,8 +177,7 @@ final class Log {
     IntVector j = IntVector.broadcast(intSpecies, HX_BAND_HI).sub(hxm);
     VectorMask<Double> band =
         hxm.sub(HX_BAND_LO).or(j).compare(VectorOperators.GT, 0).cast(species);
-    VectorMask<Double> kIsZero = k.compare(VectorOperators.EQ, 0).cast(species);
-    // Lines 115, 118 and 122: dk = (double)k, an exact I2D.
+    // Lines 115, 118 and 122: dk = (double)k, an exact I2D, +0.0 where k == 0.
     DoubleVector dk = (DoubleVector) k.convertShape(VectorOperators.I2D, species, 0);
 
     // Line 113: f = x-1.0.
@@ -194,25 +194,24 @@ final class Log {
     DoubleVector t2 = z.mul(w.mul(w.mul(w.mul(LG7).add(LG5)).add(LG3)).add(LG1));
     DoubleVector r = t2.add(t1);
 
-    // Lines 136-137, i <= 0: f-s*(f-R) when k == 0, else dk*ln2_hi-((s*(f-R)-dk*ln2_lo)-f).
+    // Each return of lines 115-137 comes in a k == 0 form and a k != 0 form. Every lane takes
+    // the k != 0 form: with k == 0, dk is +0.0, and that form gives the k == 0 form's bits
+    // (PROOFS.md, L6), so no k == 0 compare or blend is needed.
+    // Lines 136-137, i <= 0: dk*ln2_hi-((s*(f-R)-dk*ln2_lo)-f) (k == 0: f-s*(f-R)).
     DoubleVector sfr = s.mul(f.sub(r));
-    DoubleVector result = dkHi.sub(sfr.sub(dkLo).sub(f)).blend(f.sub(sfr), kIsZero);
-    // Lines 132-134, i > 0: hfsq = 0.5*f*f; f-(hfsq-s*(hfsq+R)) when k == 0,
-    // else dk*ln2_hi-((hfsq-(s*(hfsq+R)+dk*ln2_lo))-f).
+    DoubleVector result = dkHi.sub(sfr.sub(dkLo).sub(f));
+    // Lines 132-134, i > 0: hfsq = 0.5*f*f; dk*ln2_hi-((hfsq-(s*(hfsq+R)+dk*ln2_lo))-f)
+    // (k == 0: f-(hfsq-s*(hfsq+R))).
     DoubleVector hfsq = f.mul(0.5).mul(f);
     DoubleVector shr = s.mul(hfsq.add(r));
-    DoubleVector withHfsq =
-        dkHi.sub(hfsq.sub(shr.add(dkLo)).sub(f)).blend(f.sub(hfsq.sub(shr)), kIsZero);
-    result = result.blend(withHfsq, band);
-    // Lines 117-119, |f| < 2**-20: R = f*f*(0.5-0.33333333333333333*f); f-R when k == 0,
-    // else dk*ln2_hi-((R-dk*ln2_lo)-f).
+    result = result.blend(dkHi.sub(hfsq.sub(shr.add(dkLo)).sub(f)), band);
+    // Lines 117-119, |f| < 2**-20: R = f*f*(0.5-0.33333333333333333*f);
+    // dk*ln2_hi-((R-dk*ln2_lo)-f) (k == 0: f-R).
     DoubleVector rSmall = f.mul(f).mul(DoubleVector.broadcast(species, 0.5).sub(f.mul(THIRD)));
-    DoubleVector smallResult =
-        dkHi.sub(rSmall.sub(dkLo).sub(f)).blend(f.sub(rSmall), kIsZero);
-    // Lines 115-116, f == 0: zero when k == 0, else dk*ln2_hi+dk*ln2_lo.
+    DoubleVector smallResult = dkHi.sub(rSmall.sub(dkLo).sub(f));
+    // Lines 115-116, f == 0: dk*ln2_hi+dk*ln2_lo (k == 0: zero).
     VectorMask<Double> fIsZero = f.compare(VectorOperators.EQ, ZERO).and(small);
-    DoubleVector exact = dkHi.add(dkLo).blend(ZERO, kIsZero);
-    result = result.blend(smallResult, small).blend(exact, fIsZero);
+    result = result.blend(smallResult, small).blend(dkHi.add(dkLo), fIsZero);
 
     if (!finish) {
       // The rare paths, in the C's order of precedence (the last blend wins). Line 107: x+x for

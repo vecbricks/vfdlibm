@@ -272,3 +272,86 @@ signed long; `HALF_BITS` rendered from `Exp`) is the raw bits of the table's `ha
 `xsb` as line 113 computes it; and the two entries are the doubles 0.5 and -0.5. The `sat` checks
 refute `0x3fe00000_00000001` as the constant and a mask one bit below the sign. That the lane
 reinterprets those bits as its double is the code's text.
+
+## log (`Log.java`, from `e_log.c`)
+
+e_log.c reduces `x` to `xn = 1 + f` in `[sqrt(2)/2, sqrt(2))` and `k` (lines 108-113), then
+returns one of four forms: `f == 0` (lines 115-116), `|f| < 2^-20` (117-119), the `i > 0` band
+with `hfsq` (132-134) and the rest (136-137). Each comes in a `k == 0` version and a `k != 0`
+version. The port computes the `k != 0` version on every lane, with `dk = +0` where `k == 0`
+(L6). Line numbers in this section are `reference/fdlibm-5.3/e_log.c`'s, and `hx` is the C's
+`int hx`.
+
+Two more IEEE properties are used here:
+
+- **(R5) The sign of an exact zero (IEEE 754 6.3).** Under round to nearest, a sum `x + y` of
+  operands of opposite signs, or a difference `x - y` of operands of like signs, that is exactly
+  zero is `+0`; for two zeros, `x - y` is `-0` only for `x = -0, y = +0`, and `x + y` is `-0`
+  only for `x = y = -0`; a zero product has the exclusive or of its operands' signs. So `v +
+  (+0) = v` for every `v != -0`.
+- **(R6) Sterbenz's lemma.** If `y / 2 <= x <= 2y` for doubles `x, y > 0`, then `x - y` is a
+  double, so `fl(x - y) = x - y` exactly.
+
+### L6. The k == 0 forms are the k != 0 forms with dk = +0
+
+**Statement.** For doubles `B` and `f`, `f` finite and not `-0`, `fl(+0 - fl(fl(B - (+0)) - f))
+= fl(f - B)`, bit for bit. Hence on the C's `k == 0` lanes, where `dk = +0` and so `dk*ln2_hi =
+dk*ln2_lo = +0`:
+
+- (a) line 137's `dk*ln2_hi-((s*(f-R)-dk*ln2_lo)-f)` is line 136's `f-s*(f-R)`;
+- (b) line 134's `dk*ln2_hi-((hfsq-(s*(hfsq+R)+dk*ln2_lo))-f)` is line 133's
+  `f-(hfsq-s*(hfsq+R))`;
+- (c) line 119's `dk*ln2_hi-((R-dk*ln2_lo)-f)` is line 118's `f-R`;
+- (d) line 116's `dk*ln2_hi+dk*ln2_lo` is line 115's `zero`.
+
+**Hypotheses.**
+- (H8) `dk` is `+0` on exactly the `k == 0` lanes: `I2D` of 0 is `+0.0` (JLS 5.1.2), as is L8's
+  conversion there (an exact zero difference, R5); and `fl(+0 * c) = +0` for `c = ln2_hi`,
+  `ln2_lo`, both positive and finite (R5). With `dk = -0` both products would be `-0`, and (d)
+  would return `-0` for the C's `zero`.
+- (H9) `f` is finite and never `-0`, on every lane, rare ones included. Line 111 writes `xn`'s
+  high word as `hx|(i^0x3ff00000)` with `hx` masked to 20 bits by line 109 and `i` either 0 or
+  `0x100000`, so `xn`'s sign bit is clear and its biased exponent is `0x3ff` or `0x3fe`: `xn` is
+  in `[0.5, 2)`. Then `f = fl(xn - 1.0)` is exact by (R6), and zero only at `xn = 1`, where it is
+  `+0` (R5). So `f` lies in `[-0.5, 1)`, whatever bits `x` has.
+- (H10) `hfsq = fl(fl(0.5*f)*f)` is never `-0`: `fl(0.5*f)` has `f`'s sign (a zero included) and
+  the product of two operands of one sign is positive or `+0` (R5).
+
+**Proof.**
+1. `fl(B - (+0)) = B` for every `B`, `-0` included (R3).
+2. Let `v = fl(B - f)`. If `B - f` is not exactly zero, `v = -fl(f - B)`, nonzero, by (R1), and
+   `fl(+0 - v) = -v = fl(f - B)` by (R3). If `B - f` is exactly zero, `B` and `f` are the same
+   real: for `B = f != 0`, `v = +0`, `+0 - (+0) = +0` and `f - B = +0` (R5); for two zeros, `f =
+   +0` (H9's case), and `B = +0` gives `v = +0`, then `+0`, with `f - B = +0`, while `B = -0`
+   gives `v = -0`, then `+0 - (-0) = +0`, with `f - B = +0 - (-0) = +0` (R5). That is the
+   statement. Its one counter-case among zeros is `f = -0, B = +0`, where the C's `f - B` is
+   `-0` and the fold gives `+0`; H9 excludes it.
+3. (a) and (c): by H8 both products are `+0`; step 1 removes `- dk*ln2_lo`, and step 2 with `B =
+   s*(f-R)` or `B = R`, and `f` from H9, gives the C's `k == 0` result.
+4. (b): `dk*ln2_lo = +0` (H8). If `shr = s*(hfsq+R)` is not `-0`, `shr + (+0) = shr` (R5); if it
+   is, `shr + (+0) = +0`, and `hfsq - (+0) = hfsq = hfsq - (-0)`, since `hfsq` is not `-0` (H10).
+   Either way `hfsq - (shr + dk*ln2_lo)` is the C's `B = hfsq - shr`, and step 2 finishes as in
+   (a). (On the band's lanes `shr` is not `-0` at all, since `|f| > 0.28` there and `hfsq + R >
+   0`; the proof does not need it, and `ProofsTest` samples it.)
+5. (d): `+0 + (+0) = +0` (R5), and the C's `zero` is `+0.0`.
+
+So the port drops the `k == 0` compare and its four blends; the `f == 0` and `|f| < 2^-20` lanes
+are still told apart by the C's own tests (line 114 and `f == zero`), and the band by `i > 0`.
+The planted faults `log.dropCorrection` and `log.constantOffByOneUlp` change `dk*ln2_lo` and
+`dk*ln2_hi`, which are `+0` on the `k == 0` lanes either way, so they bite on the `k != 0` lanes,
+as before; `log.thresholdMoved` moves the sqrt(2) split. All three are still caught.
+
+**Hinge tests (scalar).** `ProofsTest.l6ZeroDkIsPositiveZero` (H8, and that `dk = -0` would give
+`-0` for (d)); `ProofsTest.l6FIsNeverNegativeZero` (H9 over the specials, sampled bit patterns,
+the subnormals and the `k == 0` domain: `xn` in `[0.5, 2)`, `f` finite and not `-0`, zero
+exactly at `xn = 1`, and `f = xn - 1` exactly, by `BigDecimal`);
+`ProofsTest.l6FoldedFormsAreTheKZeroForms` (all four forms over the `k == 0` domain's ends, the
+neighbours of 1.0 and 65536 draws, each form on every lane, not only its own; H10, and `shr` not
+`-0`); `ProofsTest.l6HingesRefuted` (at `f = -0, B = +0` the fold is not the C, and with `hfsq =
+shr = -0`, H10 false, `shr + (+0)` changes the difference). **Vector tie.** `LogTest.foldBoundaries`
+and `foldBoundariesAtMaxSpecies` run both arms (`VFdlibm.log` and `Log.logBlended`), unmasked and
+masked, against `StrictMath` at the high words of the sqrt(2) split on both `k == 0` binades
+(`0x3fe6a09b`, `0x3fe6a09c`, `0x3ff6a09b`, `0x3ff6a09c`), the band's edges inside them
+(`0x3ff61479`, `0x3ff6147a`, `0x3fe6b851`, `0x3fe6b852`) and the `|f| < 2^-20` words around 1.0
+(`0x3feffffd` to `0x3ff00002`), low words 0, `0xffffffff` and 1024 seeded, plus the 4096 doubles
+each side of 1.0 and 64 each side of sqrt(2) and sqrt(2)/2, at every width and `SPECIES_MAX`.

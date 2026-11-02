@@ -27,8 +27,8 @@ import org.junit.jupiter.params.provider.EnumSource;
  * log against {@code StrictMath.log}, by raw bits, at every width: the public {@link VFdlibm#log}
  * (rare lanes finished per lane) and the all-blended arm {@link Log#logBlended}, unmasked and
  * masked, on e_log.c's thresholds, the special values, sampled bit patterns over the whole domain,
- * dense draws over every binade, draws inside each high word the C branches on and the published
- * hard-to-round cases.
+ * dense draws over every binade, draws inside each high word the C branches on, the edges of the
+ * folds {@code PROOFS.md} proves and the published hard-to-round cases.
  */
 class LogTest {
 
@@ -161,6 +161,60 @@ class LogTest {
     Oracle.assertUnaryMasked("VFdlibm.log", species, VFdlibm::log, StrictMath::log, xs, 1303L);
     Oracle.assertUnaryMasked(
         "Log.logBlended", species, Log::logBlended, StrictMath::log, xs, 1304L);
+  }
+
+  /**
+   * The high words of the k == 0 binades' edges, where the folds of {@code PROOFS.md} (L6) take
+   * the C's k != 0 forms with dk = +0: the sqrt(2) split on both k == 0 binades (0x3fe6a09b, k =
+   * -1, against 0x3fe6a09c, k = 0; 0x3ff6a09b, k = 0, against 0x3ff6a09c, k = 1), the i > 0
+   * band's edges inside them (0x3ff61479, 0x3ff6147a and 0x3fe6b851, 0x3fe6b852) and the {@code
+   * |f| < 2^-20} words around 1.0 (0x3feffffd to 0x3ff00002; 0x3ff00000 holds 1.0, the f == 0, k
+   * == 0 lane).
+   */
+  private static final int[] FOLD_WORDS = {
+    0x3fe6a09b, 0x3fe6a09c, 0x3ff6a09b, 0x3ff6a09c, 0x3ff61479, 0x3ff6147a, 0x3fe6b851,
+    0x3fe6b852, 0x3feffffd, 0x3feffffe, 0x3fefffff, 0x3ff00000, 0x3ff00001, 0x3ff00002
+  };
+
+  /**
+   * Each of {@link #FOLD_WORDS} with low words 0, 0xffffffff and 1024 seeded ones, and the 4096
+   * doubles each side of 1.0 and 64 each side of sqrt(2) and sqrt(2)/2.
+   */
+  static double[] foldBoundaries() {
+    SplittableRandom random = new SplittableRandom(1500L);
+    double[] xs = new double[FOLD_WORDS.length * 1026];
+    int next = 0;
+    for (int h : FOLD_WORDS) {
+      long high = Lanes.fromHiBits(h);
+      xs[next++] = Double.longBitsToDouble(high);
+      xs[next++] = Double.longBitsToDouble(high | 0xffffffffL);
+      for (int i = 0; i < 1024; i++) {
+        xs[next++] = Double.longBitsToDouble(high | (random.nextLong() & 0xffffffffL));
+      }
+    }
+    double sqrt2 = Math.sqrt(2.0);
+    return Inputs.concat(xs, Inputs.around(1.0, 4096), Inputs.around(sqrt2, 64),
+        Inputs.around(sqrt2 / 2, 64));
+  }
+
+  @ParameterizedTest
+  @EnumSource(VectorWidth.class)
+  void foldBoundaries(VectorWidth width) {
+    assertFoldBoundaries(width.species());
+  }
+
+  @Test
+  void foldBoundariesAtMaxSpecies() {
+    assertFoldBoundaries(DoubleVector.SPECIES_MAX);
+  }
+
+  /** Both arms over {@link #foldBoundaries()} at {@code species}, unmasked and masked. */
+  private static void assertFoldBoundaries(VectorSpecies<Double> species) {
+    double[] xs = foldBoundaries();
+    assertLog(species, xs);
+    Oracle.assertUnaryMasked("VFdlibm.log", species, VFdlibm::log, StrictMath::log, xs, 1501L);
+    Oracle.assertUnaryMasked(
+        "Log.logBlended", species, Log::logBlended, StrictMath::log, xs, 1502L);
   }
 
   @Test

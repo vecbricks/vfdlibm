@@ -13,6 +13,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.math.BigDecimal;
 import java.util.Arrays;
 import java.util.SplittableRandom;
 import jdk.incubator.vector.DoubleVector;
@@ -272,5 +273,172 @@ class ProofsTest {
       long half = (bits(x) & Long.MIN_VALUE) | bits(0.5);
       assertEquals(bits(bits(x) < 0 ? -0.5 : 0.5), half, Oracle.hex(x));
     }
+  }
+
+  // L6: log's k == 0 forms are its k != 0 forms with dk = +0.
+
+  /**
+   * log's lines 109-113 for one double, scalar, as the C computes them: {@code {xn, f, k}} with
+   * {@code xn} the normalized {@code x} or {@code x/2} and {@code f = xn - 1.0}. Any bit pattern
+   * is accepted; for a rare one the values are what the vector body computes and discards.
+   */
+  private static double[] logReduce(double x) {
+    long b = bits(x);
+    int hx = (int) (b >> 32);
+    int k = (hx >> 20) - 1023;
+    hx &= 0x000fffff;
+    int i = (hx + Log.SQRT2_SPLIT) & 0x100000;
+    long hi = (hx | (i ^ 0x3ff00000)) & 0xffffffffL;
+    double xn = Double.longBitsToDouble((hi << 32) | (b & 0xffffffffL));
+    k += i >> 20;
+    return new double[] {xn, xn - 1.0, k};
+  }
+
+  /** The three non-exact returns of e_log.c's k != 0 forms with the given dk, scalar. */
+  private static double[] kNonZeroForms(double f, double dk) {
+    double s = f / (2.0 + f);
+    double z = s * s;
+    double w = z * z;
+    double t1 = w * (Log.LG2 + w * (Log.LG4 + w * Log.LG6));
+    double t2 = z * (Log.LG1 + w * (Log.LG3 + w * (Log.LG5 + w * Log.LG7)));
+    double r = t2 + t1;
+    double hfsq = 0.5 * f * f;
+    double rSmall = f * f * (0.5 - Log.THIRD * f);
+    double dkHi = dk * Log.LN2_HI;
+    double dkLo = dk * Log.LN2_LO;
+    return new double[] {
+      dkHi - ((s * (f - r) - dkLo) - f),
+      dkHi - ((hfsq - (s * (hfsq + r) + dkLo)) - f),
+      dkHi - ((rSmall - dkLo) - f),
+      dkHi + dkLo
+    };
+  }
+
+  /** The same returns' k == 0 forms, scalar, as e_log.c writes them. */
+  private static double[] kZeroForms(double f) {
+    double s = f / (2.0 + f);
+    double z = s * s;
+    double w = z * z;
+    double t1 = w * (Log.LG2 + w * (Log.LG4 + w * Log.LG6));
+    double t2 = z * (Log.LG1 + w * (Log.LG3 + w * (Log.LG5 + w * Log.LG7)));
+    double r = t2 + t1;
+    double hfsq = 0.5 * f * f;
+    double rSmall = f * f * (0.5 - Log.THIRD * f);
+    return new double[] {f - s * (f - r), f - (hfsq - s * (hfsq + r)), f - rSmall, Log.ZERO};
+  }
+
+  /**
+   * The k == 0 lanes, [sqrt(2)/2, sqrt(2)): both ends and their neighbours (the ones outside
+   * have k = +-1 and are skipped where k == 0 is the hypothesis), 1.0 and its
+   * neighbours, each high word's edges near 1.0, and seeded draws.
+   */
+  private static double[] logKZeroDomain() {
+    double lo = Lanes.fromHi(0x3fe6a09c);
+    double hi = Lanes.fromHi(0x3ff6a09c);
+    SplittableRandom random = new SplittableRandom(810L);
+    double[] draws = new double[1 << 16];
+    for (int i = 0; i < draws.length; i++) {
+      draws[i] = random.nextDouble(lo, hi);
+    }
+    return Inputs.concat(Inputs.around(lo, 64), Inputs.around(hi, 64), Inputs.around(1.0, 4096),
+        Inputs.around(Lanes.fromHi(0x3ff00001), 64), Inputs.around(Lanes.fromHi(0x3fefffff), 64),
+        draws);
+  }
+
+  /**
+   * L6 (H8): dk is +0 on the k == 0 lanes, by I2D of 0 and by the exact conversion of L8 alike,
+   * and +0 times ln2_hi or ln2_lo is +0. Had dk been -0, both products would be -0, and the f ==
+   * 0 lane's {@code dk*ln2_hi+dk*ln2_lo} would be -0, not the C's zero.
+   */
+  @Test
+  void l6ZeroDkIsPositiveZero() {
+    int k = 0;
+    double dk = k;
+    assertEquals(0L, bits(dk));
+    assertEquals(0L, bits(dk * Log.LN2_HI));
+    assertEquals(0L, bits(dk * Log.LN2_LO));
+    assertEquals(0L, bits(dk * Log.LN2_HI + dk * Log.LN2_LO));
+    double negative = -0.0;
+    assertEquals(Long.MIN_VALUE, bits(negative * Log.LN2_HI + negative * Log.LN2_LO));
+  }
+
+  /**
+   * L6 (H9): f = xn - 1.0 is never -0, nor a NaN or infinite, on any lane, rare ones included:
+   * xn's high word has a clear sign and the exponent of [0.5, 2), the subtraction is exact
+   * (Sterbenz) and zero only at xn = 1.0, where it is +0. Over the specials, sampled patterns
+   * of every kind and the branch words' edges.
+   */
+  @Test
+  void l6FIsNeverNegativeZero() {
+    double[] xs = Inputs.concat(Inputs.specials(), Inputs.sampled(811L, 1 << 16),
+        logKZeroDomain(), Inputs.uniform(812L, 1 << 12, 0.0, Double.MIN_NORMAL));
+    for (double x : xs) {
+      double[] red = logReduce(x);
+      double xn = red[0];
+      double f = red[1];
+      String at = Oracle.hex(x);
+      assertTrue(xn >= 0.5 && xn < 2.0, at);
+      assertTrue(Double.isFinite(f), at);
+      assertTrue(bits(f) != Long.MIN_VALUE, at);
+      assertEquals(xn == 1.0, f == 0.0, at);
+      assertEquals(new BigDecimal(xn).subtract(BigDecimal.ONE),
+          new BigDecimal(f), at);
+    }
+  }
+
+  /**
+   * L6: on the k == 0 lanes every k != 0 form with dk = +0 gives the k == 0 form's bits, each
+   * form on every lane (not only the lanes that keep it), so the identity is checked wherever
+   * the vector body computes it; the f == 0 lane's {@code +0 + +0} is the C's zero. And the
+   * band's {@code s*(hfsq+R)} is never -0 there, nor is any lane's hfsq (H10).
+   */
+  @Test
+  void l6FoldedFormsAreTheKZeroForms() {
+    for (double x : logKZeroDomain()) {
+      double[] red = logReduce(x);
+      String at = Oracle.hex(x);
+      boolean kZero = x >= Lanes.fromHi(0x3fe6a09c) && x < Lanes.fromHi(0x3ff6a09c);
+      assertEquals(kZero, (int) red[2] == 0, at);
+      if (!kZero) {
+        continue;
+      }
+      double f = red[1];
+      double[] folded = kNonZeroForms(f, 0.0);
+      double[] c = kZeroForms(f);
+      for (int form = 0; form < c.length; form++) {
+        if (form == 3 && f != 0.0) {
+          continue;
+        }
+        assertEquals(bits(c[form]), bits(folded[form]), at + " form " + form);
+      }
+      double hfsq = 0.5 * f * f;
+      assertTrue(bits(hfsq) >= 0, at);
+      double s = f / (2.0 + f);
+      double z = s * s;
+      double w = z * z;
+      double r = z * (Log.LG1 + w * (Log.LG3 + w * (Log.LG5 + w * Log.LG7)))
+          + w * (Log.LG2 + w * (Log.LG4 + w * Log.LG6));
+      double shr = s * (hfsq + r);
+      assertTrue(f == 0.0 || shr != 0.0, at);
+      assertTrue(bits(shr) != Long.MIN_VALUE, at);
+    }
+  }
+
+  /**
+   * L6's hinge, refuted: with f = -0, the case H9 excludes, the fold is not the C. For B = +0 the
+   * C's k == 0 form {@code f - B} is -0 and the k != 0 form with dk = +0 gives +0; and with dk =
+   * -0 (H8 false) the f == 0 lane would give -0 for the C's zero.
+   */
+  @Test
+  void l6HingesRefuted() {
+    double f = -0.0;
+    double b = 0.0;
+    double dk = 0.0;
+    assertEquals(Long.MIN_VALUE, bits(f - b));
+    assertEquals(0L, bits(dk * Log.LN2_HI - ((b - dk * Log.LN2_LO) - f)));
+    double hfsq = -0.0;
+    double shr = -0.0;
+    // H10 false: hfsq = -0 with s*(hfsq+R) = -0 makes shr + (+0) a different operand.
+    assertNotEquals(bits(hfsq - shr), bits(hfsq - (shr + 0.0)));
   }
 }
