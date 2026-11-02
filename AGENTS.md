@@ -16,9 +16,12 @@ vfdlibm ports fdlibm's double functions to the Java Vector API, each lane bit-id
 ## Build and test
 
 - `mvn -B verify` builds and runs the tests; the Vector API module is added by `pom.xml`.
-- One test: `mvn -q test -Dtest=ExpTest`.
-- Widths: `-Dvfdlibm.test.jvmArgs=-XX:MaxVectorSize=32` skips the 512-bit cases, as GitHub's x86
-  runners do; `=16` runs everything at 128 bits, as the Arm runners do.
+- One test: `mvn -q test -Dtest=ExpTest`. A `-Dtest` filter skips the fault runs below (the
+  profile `one-test` in `pom.xml`), since it would leave them no test, and a fault run that runs
+  no test fails.
+- Widths: `-Dvfdlibm.test.jvmArgs=-XX:MaxVectorSize=32` skips the 512-bit cases, as an AVX2
+  host does (GitHub's x86 runners are a mix of AVX2 and AVX-512 hosts); `=16` runs everything at
+  128 bits, as the Arm runners do.
 - Planted faults: a port reads each of its faults once, into a `static final` constant of its own
   class (`static final boolean DROPPING_CORRECTION = Faults.is("exp.dropCorrection")`), and tests
   that constant where the fault would go wrong. The vector body then holds no call, which C2 could
@@ -29,15 +32,16 @@ vfdlibm ports fdlibm's double functions to the Java Vector API, each lane bit-id
   execution in `pom.xml`; `PlantedFaultTest` fails if either is missing.
 - The harness is in `src/test/java`: `Oracle` compares lanes with `StrictMath` by raw bits,
   `Inputs` makes the inputs, `VectorWidth` runs a test at 128, 256 and 512 bits and the preferred
-  species, and `PlantedFault` plants a fault a check must catch. `HarnessSelfTest` tests them.
+  species, and `PlantedFaultTest` requires each fault planted through `Faults` (in the main
+  sources) to be caught by its check. `HarnessSelfTest` tests them.
 - A width wider than the host's vectors is skipped. To see an AVX2 host's skips on an AVX-512
   one: `mvn -B test -Dvfdlibm.test.jvmArgs=-XX:MaxVectorSize=32`. That keeps AVX-512's
-  instructions at 256 bits, though: to make C2 compile as on an AVX2 host (GitHub's x86 runners,
-  the EPYC 7763), pass `-XX:UseAVX=2`, and check `-prof gc` and `-XX:+PrintIntrinsics` under it.
+  instructions at 256 bits, though: to make C2 compile as on an AVX2 host such as the EPYC
+  7763, pass `-XX:UseAVX=2`, and check `-prof gc` and `-XX:+PrintIntrinsics` under it.
   Without AVX512DQ, C2 lowers no `D2L`, `L2D`, `L2F` or `F2L`; such a convert boxes there.
 - Benchmarks are JMH, in `src/jmh/java`; `verify` compiles them. Run them with
   `mvn -B -Pjmh test-compile exec:exec`, passing JMH options as `-Djmh.args="..."`, e.g.
-  `-Djmh.args="StrictMathExp -p lanes=4"`.
+  `-Djmh.args="ExpBenchmark.finish256 -p inputs=common"`.
 - A port's benchmark must pass the allocation check, which CI runs: `bench/alloc-check.py
   --mvn <mvn>` (add `--jvm-args "-XX:UseAVX=2 -XX:MaxVectorSize=32"` to compile as an AVX2 host).
   It covers each vector arm at 256 bits and at the preferred species if the class is named
