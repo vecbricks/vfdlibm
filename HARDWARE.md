@@ -26,15 +26,16 @@ Each host decides for its own instruction set (`SKILLS.md`, "Where headline numb
 
 ## The machines
 
-The host key is `benchmark.yml`'s `host` input, and the string after it is the substring of
-`/proc/cpuinfo`'s model name that the workflow's CPU check requires, matched ignoring case.
+The host key is `benchmark.yml`'s `host` input, and the string after it is what the workflow's
+CPU check requires of `/proc/cpuinfo`'s model name, matched ignoring case: the two EPYC strings
+are full names and must end it, the two Xeon strings may sit anywhere in it.
 
 | machine | host key and CPU string | vector flags | JVM | lane-ops/ns at 128 / 256 / 512 | control | 512:256 | source |
 |---|---|---|---|---|---|---|---|
 | Intel Xeon Platinum 8573C | `xeon8573c`, `INTEL(R) XEON(R) PLATINUM 8573C` | full `avx512` set | `UseAVX=3`, `MaxVectorSize=64` | see source | 2.00 to 2.03 | 1.34 to 1.36 | Varka, `VARKA-62.md` 11.9, 4 runs; the string from vecbricks/varka's fork runs 41465323581, 41255932044 and 41241977271 (MaxGekk/spark) |
 | Intel Xeon 6973P-C (Granite Rapids) | `xeon6973p`, `Intel(R) Xeon(R) 6973P-C` | full `avx512` set | `UseAVX=3`, `MaxVectorSize=64` | see source | 2.00 to 2.01 | 1.33 to 1.35 | Varka, `VARKA-62.md` 11.9, 2 runs; the string from vfdlibm run 41442062308 |
-| AMD EPYC 9V45 (Zen 5) | `epyc9v45`, `AMD EPYC 9V45` | full `avx512` set | `UseAVX=3`, `MaxVectorSize=64` | see source | 2.04 | 1.99 | Varka, `VARKA-62.md` 11.9, 1 run; the string ("AMD EPYC 9V45 96-Core Processor") from Varka's fork runs 41486339971, 41446843041 and 41329377429 |
-| AMD EPYC 7763 (Zen 3) | `epyc7763`, `AMD EPYC 7763` | `avx2`, no `avx512` | `UseAVX=2`, `MaxVectorSize=32` | 45.0 / 90.0 / 90.0 | 1.99 to 2.01 | 1.00 | Varka, `VARKA-62.md` 11.9, 8 runs; the lane rates from 16 Varka fork runs, 31 October to 2 November 2026 (41236071283 to 41460150392) |
+| AMD EPYC 9V45 (Zen 5) | `epyc9v45`, `AMD EPYC 9V45 96-Core Processor` | full `avx512` set | `UseAVX=3`, `MaxVectorSize=64` | see source | 2.04 | 1.99 | Varka, `VARKA-62.md` 11.9, 1 run; the string from Varka's fork runs 41486339971, 41446843041 and 41329377429 |
+| AMD EPYC 7763 (Zen 3) | `epyc7763`, `AMD EPYC 7763 64-Core Processor` | `avx2`, no `avx512` | `UseAVX=2`, `MaxVectorSize=32` | 45.0-46.5 / 90.0-92.6 / 90.0-92.6 | 1.99 to 2.01 | 1.00 | Varka, `VARKA-62.md` 11.9, 8 runs; the lane rates, a range, from 16 Varka fork runs, 31 October to 2 November 2026 (41236071283 to 41460150392); the string from `bench/results/exp-epyc7763-2026-11-02.txt` and `log-epyc7763-2026-11-02.txt` |
 | AMD EPYC 9V74 (Zen 4) | none: not a benchmark host | no `avx512` exposed | `UseAVX=2`, `MaxVectorSize=32` | see source | 2.00 | 0.91 to 1.00 | Varka, `VARKA-62.md` 11.9, 3 runs; dropped as a host on 2 November 2026, since the runners expose no AVX-512 |
 | AMD Ryzen AI 9 HX PRO 370 (Zen 5 mobile, 24 threads) | none: the owner's laptop, never a headline | full `avx512` set | `UseAVX=3`, `MaxVectorSize=64` | 65.5 / 130.8 / 149.4 | 2.00 | 1.14 | `bench/datapath.sh`, 2 November 2026, not pinned to one core type; Varka read 68 / 136 / 156, 2.02, 1.14 |
 

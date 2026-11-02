@@ -66,27 +66,47 @@ jobs:
     steps:
       # First, before any setup: a job checks its own machine, since every job is a new VM.
       # bench/dispatch-bench.sh looks for this step's exact name among a failed run's failed
-      # steps. Each host's string is a substring of /proc/cpuinfo's model name as runs of that
-      # host printed it (SKILLS.md names the runs); the match ignores case, since Azure VMs have
-      # reported Intel names in capitals ("INTEL(R) XEON(R) PLATINUM 8573C").
+      # steps. Each host's string is /proc/cpuinfo's model name as runs of that host printed it
+      # (SKILLS.md names the runs), matched ignoring case, since Azure VMs have reported Intel
+      # names in capitals ("INTEL(R) XEON(R) PLATINUM 8573C"). The two EPYC strings are the full
+      # names the runs printed and must end the model name, so that a longer model number cannot
+      # pass; the two Xeon strings have no recorded full form, so they may sit anywhere in it.
       - name: Probe the machine's CPU
         env:
           HOST: ${{ inputs.host }}
         run: |
           case "$HOST" in
-            epyc7763) expected='AMD EPYC 7763' ;;
-            xeon8573c) expected='INTEL(R) XEON(R) PLATINUM 8573C' ;;
-            xeon6973p) expected='Intel(R) Xeon(R) 6973P-C' ;;
-            epyc9v45) expected='AMD EPYC 9V45' ;;
+            epyc7763) expected='AMD EPYC 7763 64-Core Processor'; at_end=1 ;;
+            xeon8573c) expected='INTEL(R) XEON(R) PLATINUM 8573C'; at_end=0 ;;
+            xeon6973p) expected='Intel(R) Xeon(R) 6973P-C'; at_end=0 ;;
+            epyc9v45) expected='AMD EPYC 9V45 96-Core Processor'; at_end=1 ;;
             *) echo "::error::Unknown host '$HOST'"; exit 1 ;;
           esac
-          cpu="$(grep -m1 'model name' /proc/cpuinfo | sed 's/.*: //')"
+          cpu="$(grep -m1 'model name' /proc/cpuinfo | sed 's/.*: //; s/[[:space:]]*$//')"
           echo "Host: $HOST, CPU: $cpu"
-          if ! echo "$cpu" | grep -qiF "$expected"; then
+          lc="${cpu,,}"; want="${expected,,}"
+          if [ "$at_end" = 1 ]; then ok() { [[ "$lc" == *"$want" ]]; }
+          else ok() { [[ "$lc" == *"$want"* ]]; }; fi
+          if ! ok; then
             echo "::error::CPU mismatch on host $HOST! Expected '$expected' but got '$cpu'"
             exit 1
           fi
           echo "EXPECTED_CPU=$expected" >> "$GITHUB_ENV"
+      # A pair's free-text inputs, checked before any setup so that a typo costs seconds: the
+      # same rules as bench/pair.sh's, which checks them again.
+      - name: Check the pair inputs
+        if: inputs.base != ''
+        env:
+          ROUNDS: ${{ inputs.rounds }}
+          THRESHOLD: ${{ inputs.threshold }}
+        run: |
+          if ! [[ $ROUNDS =~ ^[0-9]+$ ]] || [ "$ROUNDS" -eq 0 ]; then
+            echo "::error::rounds takes a positive number, not '$ROUNDS'"; exit 1
+          fi
+          if ! [[ $THRESHOLD =~ ^[0-9]+(\.[0-9]+)?$ ]]; then
+            echo "::error::threshold takes a non-negative decimal percent, not '$THRESHOLD'"
+            exit 1
+          fi
       # A pair needs the base's commits too, so it takes the whole history.
       - uses: actions/checkout@v5
         with:
@@ -98,10 +118,14 @@ jobs:
           cache: maven
       # The datapath probe (bench/datapath.sh) at the machine's own JVM flags, so its reading is
       # comparable with HARDWARE.md's rows. It records and never gates: the CPU check above is
-      # the only gate, and a probe that fails leaves "not measured" in the header.
+      # the only gate. The header records the probe's datapath line as it is, "unusable" (a
+      # control below 1.50, and the step then shows as failed) included; only a probe that
+      # printed no such line leaves "not measured".
       - name: Measure the vector datapath
         continue-on-error: true
-        run: bench/datapath.sh | tee datapath.txt
+        run: |
+          set -o pipefail
+          bench/datapath.sh | tee datapath.txt
       - name: Run JMH
         if: inputs.base == ''
         env:
@@ -130,7 +154,7 @@ jobs:
             # shellcheck disable=SC2086 # the extra JVM options are words
             echo "# Vector:      $(java $JVM_ARGS -XX:+PrintFlagsFinal -version 2>/dev/null \
               | grep -E ' (MaxVectorSize|UseAVX) ' | awk '{print $2 "=" $4}' | tr '\n' ' ')"
-            echo "# Datapath:    ${datapath:-not measured: the probe failed, see its step}"
+            echo "# Datapath:    ${datapath:-not measured: the probe printed no line, see its step}"
             echo "#              (bench/datapath.sh, at the machine's own JVM flags)"
             echo "# Kernel:      $(uname -r)"
             echo "# Load:        $(cut -d ' ' -f 1-3 /proc/loadavg) at start ($(nproc) cores)"

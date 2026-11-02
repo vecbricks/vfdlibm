@@ -21,16 +21,18 @@
 # host's CPU string. bench/dispatch-epyc.sh is this script with the default host, kept for the
 # calls written before the other hosts.
 #
-# --attempts bounds the dispatches. For the three hosts results wait on it defaults to none (the
-# hourly retry goes on until the host is drawn). For epyc9v45, a draw of about one in eighteen
+# --attempts bounds the dispatches. For the three hosts that results wait on, it defaults to none
+# (the hourly retry goes on until the host is drawn). For epyc9v45, a draw of about one in eighteen
 # that is recorded whenever drawn but never waited for, it defaults to 18: an hourly try for
 # about a day, which draws it at least once with a chance of about 64%, each miss costing a
 # minute of runner time, since the check is the job's first step. --attempts 1 is a single
 # opportunistic try. Running out of attempts is exit status 3, not a failure of the run.
 #
 # --base <base> makes each run a pair (bench/pair.sh in the workflow): the benchmarks on <base>
-# and on the dispatched <ref> as head, alternating, on one machine. <base> is a branch, a commit,
-# or HEAD for an A/A pair.
+# and on the dispatched <ref> as head, alternating, on one machine. <base> is a branch or tag of
+# origin, a commit on one of origin's branches (as this clone last fetched them), or HEAD for an
+# A/A pair. It is checked here, before the first dispatch, so that a typo fails at once rather
+# than in a run hours of CPU retries away (exit status 64; 2 when origin could not be asked).
 #
 # Each dispatch carries a tag of its own, which names the host, as the run-tag input, which
 # benchmark.yml puts in the run's name, and the script follows the run of that name; so two
@@ -82,18 +84,36 @@ try() {
     out=$("$@") && { [ -n "$out" ] && printf '%s\n' "$out"; return 0; }
     echo "$(t) gh failed, try $i of 5: $*" >&2; [ $i -lt 5 ] && sleep 60
   done; return 1; }
-# The id of the run named "Benchmark <tag>", if GitHub lists one.
+# The id of the run named "Benchmark <tag>", if GitHub lists one. Anything but a number (a
+# failed call's error body) is no id.
 run_of() {
-  gh run list -R $R --workflow benchmark.yml --event workflow_dispatch -L 50 \
+  local id
+  id=$(gh run list -R "$R" --workflow benchmark.yml --event workflow_dispatch -L 50 \
     --json databaseId,displayTitle \
-    --jq ".[]|select(.displayTitle == \"Benchmark $1\")|.databaseId" | head -1; }
+    --jq ".[]|select(.displayTitle == \"Benchmark $1\")|.databaseId" | head -1)
+  [[ $id =~ ^[0-9]+$ ]] && printf '%s\n' "$id"; }
+# Whether the --base would resolve in the run: benchmark.yml takes a commit or a branch of its
+# checkout, which has every branch and tag of origin. A name is asked of origin itself; a commit
+# must be one that this clone knows to be on an origin branch.
+check_base() {
+  local g=(git -C "$(dirname "$0")") rc sha
+  [ "$P" = HEAD ] && return 0
+  "${g[@]}" ls-remote --exit-code origin "refs/heads/$P" "refs/tags/$P" > /dev/null; rc=$?
+  [ $rc -eq 0 ] && return 0
+  if [ $rc -ne 2 ]; then echo "could not ask origin whether base '$P' is on it" >&2; return 2; fi
+  if [[ $P =~ ^[0-9a-fA-F]{4,40}$ ]] && sha=$("${g[@]}" rev-parse -q --verify "$P^{commit}") \
+      && [ -n "$("${g[@]}" for-each-ref --count=1 --contains "$sha" refs/remotes/origin)" ]; then
+    return 0
+  fi
+  echo "base '$P' is neither a branch or tag of origin nor a commit on an origin branch" >&2
+  return 64; }
 bench() {
   local n=0
   while :; do n=$((n + 1)); tag="dispatch-$H-$(date -u +%Y%m%dT%H%M%SZ)-$$-$RANDOM"
     # A dispatch whose reply was lost may still have started a run, so before each retry look
     # for a run with this tag, and dispatch again only if there is none.
     d=0; for i in 1 2 3 4 5; do
-      gh workflow run benchmark.yml -R $R --ref "$B" -f host="$H" -f benchmarks="$N" \
+      gh workflow run benchmark.yml -R "$R" --ref "$B" -f host="$H" -f benchmarks="$N" \
         -f jvm-args="$X" ${P:+-f base="$P"} -f run-tag="$tag" && { d=1; break; }
       echo "$(t) dispatch failed, try $i of 5 (an older ref lacks an input)" >&2
       sleep 60; [ -n "$(run_of "$tag")" ] && { d=1; break; }
@@ -110,11 +130,11 @@ bench() {
       "attempt $n of ${A:-unbounded}"
     # A job runs for six hours at most; seven hours covers the queue too.
     s=""; for _ in $(seq 210); do
-      s=$(try gh api repos/$R/actions/runs/$m --jq .status) || s=""
+      s=$(try gh api "repos/$R/actions/runs/$m" --jq .status) || s=""
       [ "$s" = completed ] && break; sleep 120; done
     if [ "$s" != completed ]; then
       echo "$(t) run $m not completed after seven hours (status '$s'), stopping"; return 2; fi
-    if ! c=$(try gh api repos/$R/actions/runs/$m --jq .conclusion); then
+    if ! c=$(try gh api "repos/$R/actions/runs/$m" --jq .conclusion); then
       echo "$(t) could not read run $m's conclusion, stopping"; return 2; fi
     echo "$(t) $B $N benchmark on $H, run $m: $c"
     [ "$c" = success ] && return 0
@@ -130,4 +150,5 @@ bench() {
       return 3; fi
     echo "$(t) $N: CPU check failed (not $H), retry in an hour"; sleep 3600
   done; }
+if [ -n "$P" ]; then check_base || exit $?; fi
 bench

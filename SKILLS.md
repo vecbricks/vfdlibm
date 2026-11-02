@@ -180,9 +180,11 @@ negative result belongs here too, since it stops the next port re-trying a settl
   to a model-name string fixed in the file, as runs of that host printed it, matched ignoring
   case: `INTEL(R) XEON(R) PLATINUM 8573C` (Varka's fork runs 41465323581, 41255932044 and
   41241977271, in capitals as Azure printed it), `Intel(R) Xeon(R) 6973P-C` (vfdlibm run
-  41442062308), `AMD EPYC 9V45` (Varka's fork runs 41486339971, 41446843041, 41329377429, as
-  "AMD EPYC 9V45 96-Core Processor") and `AMD EPYC 7763`. It checks `/proc/cpuinfo` before
-  anything else and fails unless the model name contains the host's string;
+  41442062308), `AMD EPYC 9V45 96-Core Processor` (Varka's fork runs 41486339971, 41446843041,
+  41329377429) and `AMD EPYC 7763 64-Core Processor` (`bench/results/exp-epyc7763-2026-11-02.txt`).
+  It checks `/proc/cpuinfo` before anything else and fails unless the model name ends with the
+  host's string, for the two EPYCs, whose full names the runs printed, or contains it, for the
+  two Xeons, whose full names no run has recorded;
   `bench/dispatch-bench.sh --host <host>` dispatches it and, when the run failed on that check,
   waits an hour and dispatches again, until a run passes, fails on something else, or (for the
   9V45, or with `--attempts`) the attempts run out (`bench/dispatch-epyc.sh` is the same with

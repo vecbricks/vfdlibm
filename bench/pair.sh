@@ -21,9 +21,14 @@
 # discards the round a neighbour disturbed. Each round runs the regex once on the base and once
 # on the head, the order swapping every round, with the same JMH options and the body inlined
 # as in .github/workflows/benchmark.yml. After at least three rounds it stops early when every
-# row's median is within --within percent of the other side's. It then prints each row's change
-# by the median and by the best iteration (+ faster, - slower; bench/pair.py) and exits 1 if any
-# row is slower by --threshold percent or more by both. With --base HEAD it pairs the head with
+# row's median is within --within percent of the other side's. With an odd number of rounds,
+# the default five or an early stop at three, the base runs first in one round more than the
+# head; no order of two runs a round can balance an odd count, and stopping only at even rounds
+# would cost a round each time; the header counts the rounds each side led, and an A/A pair
+# (--base HEAD) shows what the order costs on the machine.
+# It then prints each row's change by the median and by the best iteration (+ faster, - slower;
+# bench/pair.py) and exits 1 if any row is slower by --threshold percent or more by both, or 2
+# if a row is on one side only or cannot be compared. With --base HEAD it pairs the head with
 # itself, an A/A run, whose widest change is the machine's own spread for those rows, to read a
 # real pair's changes against.
 #
@@ -50,11 +55,11 @@
 #   --mvn MVN         the Maven to run (default mvn).
 #   --keep            keep the base worktree, and print where it is.
 #
-# Exit status: 0 when no row is slower, 1 when one is, 2 when a build or a run failed or no row
-# was on both sides, 64 on a usage error.
+# Exit status: 0 when no row is slower, 1 when one is, 2 when a build or a run failed, a row was
+# on one side only or could not be compared (bench/pair.py), 64 on a usage error.
 
 set -uo pipefail
-usage() { sed -n '10,54p' "$0" >&2; exit 64; }
+usage() { sed -n '10,59p' "$0" >&2; exit 64; }
 base_ref=""; rounds=5; threshold=10; within=3; keep=0; out=""; result=""; mvn=mvn
 jmh="-f 2 -wi 3 -w 2s -i 5 -r 2s -prof gc"; jvm_args=""; host="local"; datapath=""; run=""
 while [ $# -gt 0 ]; do
@@ -80,6 +85,12 @@ done
 [ $# -eq 1 ] || usage
 regex="$1"
 case "$rounds" in ''|*[!0-9]*|0) echo "--rounds takes a positive number" >&2; usage ;; esac
+# A percent is a plain non-negative decimal: no "%", sign, exponent, nan or inf, which Python's
+# float() would take and turn into a gate that never fires.
+for opt in threshold within; do
+  [[ ${!opt} =~ ^[0-9]+(\.[0-9]+)?$ ]] \
+    || { echo "--$opt takes a non-negative decimal percent, not '${!opt}'" >&2; usage; }
+done
 
 here="$(cd "$(dirname "$0")" && pwd)"
 head_dir="$(git -C "$here" rev-parse --show-toplevel)" || exit 2
@@ -98,6 +109,7 @@ out="$(cd "$out" && pwd)"
 [ -n "$result" ] || result="$out/pair.txt"
 base_dir="$(mktemp -d -t vfdlibm-pair-base.XXXXXX)"
 rmdir "$base_dir"
+wrote=0
 # shellcheck disable=SC2329 # run by the EXIT trap
 cleanup() {
   if [ "$keep" -eq 0 ]; then
@@ -105,12 +117,18 @@ cleanup() {
   else
     echo "base worktree kept in $base_dir"
   fi
-  echo "rounds kept in $out; results in $result"
+  if [ "$wrote" -eq 1 ]; then
+    echo "rounds kept in $out; results in $result"
+  else
+    echo "rounds kept in $out; no results file was written"
+  fi
 }
 trap cleanup EXIT
 trap 'exit 130' INT TERM
 git -C "$head_dir" worktree add -q --detach "$base_dir" "$base_sha" || exit 2
 
+# Single-quotes a word for a shell, for the header's Command line.
+q() { local s=${1//\'/\'\\\'\'}; printf "'%s'" "$s"; }
 subject() { git -C "$head_dir" log -1 --format='%h %s' "$1" | cut -c1-72; }
 dirty=""
 [ -z "$(git -C "$head_dir" status --porcelain --untracked-files=no)" ] \
@@ -145,7 +163,7 @@ run_side() {  # side round
   echo "== round $r: $side (load $(cut -d ' ' -f 1 /proc/loadavg))"
   loads+=("round $r $side: load $(cut -d ' ' -f 1-3 /proc/loadavg) at start")
   if ! (cd "$tree" && "$mvn" -B -q --no-transfer-progress -Pjmh exec:exec \
-      "-Djmh.args=$regex $jmh -foe true -rf json -rff $out/$side-$r.json \
+      "-Djmh.args=$regex $jmh -foe true -rf json -rff \"$out/$side-$r.json\" \
 -jvmArgsAppend \"$append\"") > "$out/$side-$r.log" 2>&1; then
     tail -n 30 "$out/$side-$r.log" >&2; echo "the $side run of round $r failed" >&2; exit 2
   fi
@@ -183,26 +201,36 @@ has() { if grep -qw "$1" <<<"$flags"; then echo yes; else echo no; fi; }
   # shellcheck disable=SC2086 # the extra JVM options are words
   echo "# Vector:      $(java $jvm_args -XX:+PrintFlagsFinal -version 2>/dev/null \
     | grep -E ' (MaxVectorSize|UseAVX) ' | awk '{print $2 "=" $4}' | tr '\n' ' ')"
-  echo "# Datapath:    ${dp:-not measured (the probe failed)}"
+  echo "# Datapath:    ${dp:-not measured (the probe printed no datapath line)}"
   echo "#              (bench/datapath.sh, at the machine's own JVM flags)"
   echo "# Kernel:      $(uname -r)"
   echo "# Load:        $load_start at start, $(cut -d ' ' -f 1-3 /proc/loadavg) at end" \
     "($(nproc) cores)"
   echo "# JMH:         $jmh"
   echo "#              -jvmArgsAppend \"$append\""
-  echo "# Pair:        $done_rounds of at most $rounds rounds, base first in odd rounds;"
+  echo "# Pair:        $done_rounds of at most $rounds rounds, base first in odd rounds" \
+    "($(( (done_rounds + 1) / 2 )) base first, $(( done_rounds / 2 )) head first);"
   echo "#              threshold $threshold%, early stop within $within% after three rounds"
-  echo "# Command:     bench/pair.sh --base $base_ref --rounds $rounds --threshold $threshold" \
-    "'$regex'"
+  cmd="bench/pair.sh --base $(q "$base_ref") --rounds $rounds --threshold $threshold"
+  cmd+=" --within $within --jmh $(q "$jmh")"
+  [ -z "$jvm_args" ] || cmd+=" --jvm-args $(q "$jvm_args")"
+  [ "$host" = local ] || cmd+=" --host $(q "$host")"
+  echo "# Command:     $cmd $(q "$regex")"
   echo "#"
   echo "# Comparison (bench/pair.py): + is faster, - slower; median of the rounds' scores and"
   echo "# best measured iteration of any round, head against base."
   echo "#"
-} > "$result"
+} > "$result" || exit 2
+wrote=1
 "$here/pair.py" compare --base "${base_files[@]}" --head "${head_files[@]}" \
   --threshold "$threshold" > "$out/compare.txt" 2> "$out/compare.err"
 status=$?
 cat "$out/compare.txt" >> "$result"
+# The errors too (one-sided rows, a unit that differs, a traceback): the file must say why a
+# pair exits 2.
+if [ -s "$out/compare.err" ]; then
+  { echo; sed 's/^/# /' "$out/compare.err"; } >> "$result"
+fi
 {
   echo
   echo "# Load at the start of each side:"
