@@ -40,6 +40,7 @@ class PlantedFaultTest {
 
   static {
     CATCHERS.putAll(HarnessSelfTest.faultCatchers());
+    CATCHERS.putAll(ExpTest.faultCatchers());
   }
 
   /**

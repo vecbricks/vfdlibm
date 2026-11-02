@@ -31,7 +31,10 @@ vfdlibm ports fdlibm's double functions to the Java Vector API, each lane bit-id
   `Inputs` makes the inputs, `VectorWidth` runs a test at 128, 256 and 512 bits and the preferred
   species, and `PlantedFault` plants a fault a check must catch. `HarnessSelfTest` tests them.
 - A width wider than the host's vectors is skipped. To see an AVX2 host's skips on an AVX-512
-  one: `mvn -B test -Dvfdlibm.test.jvmArgs=-XX:MaxVectorSize=32`.
+  one: `mvn -B test -Dvfdlibm.test.jvmArgs=-XX:MaxVectorSize=32`. That keeps AVX-512's
+  instructions at 256 bits, though: to make C2 compile as on an AVX2 host (GitHub's x86 runners,
+  the EPYC 7763), pass `-XX:UseAVX=2`, and check `-prof gc` and `-XX:+PrintIntrinsics` under it.
+  Without AVX512DQ, C2 lowers no `D2L`, `L2D`, `L2F` or `F2L`; such a convert boxes there.
 - Benchmarks are JMH, in `src/jmh/java`; `verify` compiles them. Run them with
   `mvn -B -Pjmh test-compile exec:exec`, passing JMH options as `-Djmh.args="..."`, e.g.
   `-Djmh.args="StrictMathExp -p lanes=4"`.
