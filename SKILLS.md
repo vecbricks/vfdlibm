@@ -89,10 +89,12 @@ belongs here too, since it stops the next port re-trying a settled question.
   vector instructions on every AVX2 host. A port that needs an integer from a double goes
   through int lanes (below).
 - **`VectorSpecies.of` is not a constant to C2.** It reads a table, so a conversion whose target
-  species comes from it is not intrinsified (`missing constant ... vlen_to=LoadI`). Pick the
-  species by identity against the `SPECIES_*` constants, as `Lanes.intSpecies` does; once
-  inlined, C2 sees a constant. The same holds for any species loaded from a local or a field C2
-  cannot fold. `VectorSpecies.of` stays only as the fallback for an unusual shape.
+  species comes from it is not intrinsified (`missing constant ... vlen_to=LoadI`). Return one
+  of the `SPECIES_*` constants, chosen by a switch on `vectorBitSize()`, as `Lanes.intSpecies`
+  does; once inlined, C2 sees a constant. Not by identity: `SPECIES_MAX` is none of the named
+  species, and exp at `SPECIES_MAX` boxed that way (36864 B/op at 512 bits on the laptop). The
+  same holds for any species loaded from a local or a field C2 cannot fold. `VectorSpecies.of`
+  stays only as the fallback for an unusual shape.
 - **At two 64-bit lanes x86 C2 lowers no mask.** Compare to mask, blend, mask cast, mask
   broadcast, logic and test are `not supported` at `vlen=2` for double and long masks, and fine
   at four lanes. So on x86 every 128-bit double port that branches through masks runs per lane

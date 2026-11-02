@@ -149,7 +149,10 @@ class LanesTest {
     assertEquals(0xbff00000_00000000L, Double.doubleToRawLongBits(Lanes.fromHi(0xbff00000)));
   }
 
-  /** Same lane count at half the bits; the named species come back as IntVector's constants. */
+  /**
+   * Same lane count at half the bits; the named species come back as IntVector's constants, and
+   * so does SPECIES_MAX at 128, 256 and 512 bits, though it is none of the named double species.
+   */
   @Test
   void intSpecies() {
     assertSame(IntVector.SPECIES_64, Lanes.intSpecies(DoubleVector.SPECIES_128));
@@ -158,5 +161,11 @@ class LanesTest {
     VectorSpecies<Integer> max = Lanes.intSpecies(DoubleVector.SPECIES_MAX);
     assertEquals(DoubleVector.SPECIES_MAX.length(), max.length());
     assertEquals(DoubleVector.SPECIES_MAX.vectorBitSize() / 2, max.vectorBitSize());
+    switch (DoubleVector.SPECIES_MAX.vectorBitSize()) {
+      case 128 -> assertSame(IntVector.SPECIES_64, max);
+      case 256 -> assertSame(IntVector.SPECIES_128, max);
+      case 512 -> assertSame(IntVector.SPECIES_256, max);
+      default -> { }
+    }
   }
 }

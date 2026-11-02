@@ -97,20 +97,21 @@ final class Lanes {
 
   /**
    * The int species with as many lanes as {@code species}, at half its size, for an fdlibm {@code
-   * int} such as exp's {@code k} converted from or to double lanes. The usual species are picked
-   * by identity, so once inlined C2 sees a constant species, which it needs to intrinsify the
-   * conversion; {@code VectorSpecies.of} reads a table and is not a constant to C2. The species
+   * int} such as exp's {@code k} converted from or to double lanes. The usual sizes are picked
+   * by the species' bit size, a constant once inlined, and return {@code IntVector}'s named
+   * species, so C2 sees a constant species, which it needs to intrinsify the conversion; {@code
+   * VectorSpecies.of} reads a table and is not a constant to C2. Picking by size rather than by
+   * identity covers {@code SPECIES_MAX} too, which is none of the named double species. Any other
+   * size, such as an Arm SVE host's widest, falls back to {@code VectorSpecies.of}. The species
    * must have 128 bits or more.
    */
   static VectorSpecies<Integer> intSpecies(VectorSpecies<Double> species) {
-    if (species == DoubleVector.SPECIES_256) {
-      return IntVector.SPECIES_128;
-    } else if (species == DoubleVector.SPECIES_512) {
-      return IntVector.SPECIES_256;
-    } else if (species == DoubleVector.SPECIES_128) {
-      return IntVector.SPECIES_64;
-    }
-    return VectorSpecies.of(int.class, VectorShape.forBitSize(species.vectorBitSize() / 2));
+    return switch (species.vectorBitSize()) {
+      case 128 -> IntVector.SPECIES_64;
+      case 256 -> IntVector.SPECIES_128;
+      case 512 -> IntVector.SPECIES_256;
+      default -> VectorSpecies.of(int.class, VectorShape.forBitSize(species.vectorBitSize() / 2));
+    };
   }
 
   /**
