@@ -45,6 +45,9 @@ solvers="$root/target/solvers"
 # The pinned solvers, Varka's pins. Z3 from PyPI, whose wheel ships the z3 binary; cvc5 from its
 # release archive, since its wheel has the Python bindings only.
 Z3_VERSION=5.1.0
+# The Linux x86_64 wheel of z3-solver 5.1.0.0, z3_solver-5.1.0.0-py3-none-manylinux_2_27_x86_64.whl,
+# its SHA-256 from PyPI's JSON API (https://pypi.org/pypi/z3-solver/5.1.0.0/json).
+Z3_WHEEL_SHA256=dfad9e309d7010b1ff6bdb33f21570a1603ef4727373221c7117a74448f0cfef
 CVC5_VERSION=1.4.1
 CVC5_ZIP=cvc5-Linux-x86_64-static.zip
 CVC5_SHA256=2f8efe58fe27ba7bccbb504533f690b9312d69da14192712460e4a19231f02a1
@@ -96,11 +99,19 @@ require_solver() {
   echo "$path"
 }
 
+# A wheel only, never a build from source, and only the wheel whose hash is pinned.
 install_z3() {
   local dir="$solvers/z3-$Z3_VERSION"
   [ -x "$dir/bin/z3" ] && return 0
+  if [ "$(uname -s)-$(uname -m)" != Linux-x86_64 ]; then
+    echo "prove: the pinned Z3 wheel is Linux x86_64's; install Z3 $Z3_VERSION" \
+      "and point VFDLIBM_Z3 at it" >&2
+    return 1
+  fi
   python3 -m venv "$dir" \
-    && "$dir/bin/pip" install --quiet --disable-pip-version-check "z3-solver==$Z3_VERSION.0"
+    && echo "z3-solver==$Z3_VERSION.0 --hash=sha256:$Z3_WHEEL_SHA256" > "$dir/requirements.txt" \
+    && "$dir/bin/pip" install --quiet --disable-pip-version-check --only-binary=:all: \
+      --require-hashes -r "$dir/requirements.txt"
 }
 
 install_cvc5() {
@@ -270,6 +281,29 @@ EOF
 (set-logic QF_NIA)
 (echo "a check whose verdict never comes: expect sat")
 EOF
+  # A check that holds, then a check-sat with no expectation before it, whose sat is unmatched.
+  cat > "$dir/unexpected.smt2" <<'EOF'
+(set-logic QF_NIA)
+(echo "an int can be zero: expect sat")
+(push 1)
+(declare-const x Int)
+(assert (and (jint.in x) (= x 0)))
+(check-sat)
+(pop 1)
+(push 1)
+(check-sat)
+(pop 1)
+EOF
+  # The real solver, but answering --version with another version in the field require_solver
+  # reads, so only the version check can fail a run with it.
+  local old
+  case "$name" in
+    z3) old="Z3 version 4.8.0 - 64 bit" ;;
+    cvc5) old="cvc5 1.0.0 [git 0000000 on branch HEAD]" ;;
+  esac
+  printf '#!/bin/sh\n[ "$1" = --version ] && { echo "%s"; exit 0; }\nexec "%s" "$@"\n' \
+    "$old" "$solver" > "$dir/old-solver"
+  chmod +x "$dir/old-solver"
   expect_run() {
     local what="$1" want="$2"
     shift 2
@@ -295,8 +329,13 @@ EOF
   expect_run "a check past its time limit fails" fails past_limit
   expect_run "an expectation with no verdict fails" fails \
     run_file "$name" "$solver" "$dir/missing.smt2"
+  expect_run "a verdict with no expectation before it fails" fails \
+    run_file "$name" "$solver" "$dir/unexpected.smt2"
   expect_run "a missing solver fails" fails \
     env "VFDLIBM_${name^^}=$dir/no-such-solver" "$root/dev/prove.sh" --solver "$name" \
+    "$dir/control.smt2"
+  expect_run "a solver at another version fails" fails \
+    env "VFDLIBM_${name^^}=$dir/old-solver" "$root/dev/prove.sh" --solver "$name" \
     "$dir/control.smt2"
   rm -rf "$dir"
   return "$bad"

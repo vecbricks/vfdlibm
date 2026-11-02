@@ -19,15 +19,16 @@ way.
 - `java.smt2`: Java's `int` and `long` operators over SMT-LIB's integers, each as the JLS
   defines it, and doubles as `S * M * 2^E`, with round to nearest stated on the number line for
   either sign (`jdouble.near`, and `jdouble.near.sub` for the subnormals) and the raw bits.
-- `java_check.smt2`: each of the prelude's operators over boundary operands, the doubles at both
-  signs and at the edge of the subnormals, each rounding with both neighbours refused; the
-  expected values computed by Java while rendering.
+- `java_check.smt2`: each of the prelude's operators over boundary operands, every entry of the
+  shifts' `pow2` table, the ranges of a double's S and M, the doubles at both signs and at the
+  edge of the subnormals, each rounding with both neighbours refused; the expected values
+  computed by Java while rendering.
 - `sign_symmetry.smt2`: round to nearest commutes with negation, for every rational and every
   binade at once, normal and subnormal; and for every double `c` in `[-2, 1]`,
-  `fl(c - 2) = -fl(2 - c)`, negative, normal and in `[-4, -1]`. So exp's `a / (c - 2.0)` has the
-  bits of `-(a / (2.0 - c))`, unless the quotient rounds to zero, where IEEE 754's sign rule
-  gives the same (stated, not checked). The file's header says exactly what is proven and what
-  is not.
+  `fl(c - 2) = -fl(2 - c)`, negative, normal, in `[-4, -1]` and the only double `c - 2` rounds
+  to. So for a finite `a`, exp's `a / (c - 2.0)` has the bits of `-(a / (2.0 - c))`, unless the
+  quotient rounds to zero, where IEEE 754's sign rule gives the same (stated, not checked). The
+  file's header says exactly what is proven and what is not.
 
 ## Running them
 
@@ -94,10 +95,12 @@ the proof names, passing `2^E` as `sn / sd`. Two ways to cover the binades:
 
 A rational with a fixed power-of-two denominator keeps a check linear: every double is an integer
 multiple of `2^-1074`, so a sum or difference of doubles is `n / 2^1074` exactly
-(`jdouble.SUB`). A symbolic denominator multiplies two unknowns, and the solvers may answer
-`unknown`: the uniqueness of `jdouble.near`'s double within a binade, stated so, was out of reach
-for both in a minute, and rests instead on `java_check.smt2` refusing both neighbours of every
-double it checks.
+(`jdouble.SUB`). Over it both solvers prove in milliseconds that `jdouble.near` names at most
+one double for a value, within a binade and across binades, as `sign_symmetry.smt2`'s section B
+does for its binades. A symbolic denominator multiplies two unknowns, and the solvers may answer
+`unknown`: the same uniqueness stated so, as section A would need it, was out of reach for both
+in a minute, and rests there on `java_check.smt2` refusing both neighbours of every double it
+checks.
 
 Zero is not in the prelude: a proof whose value can round to zero states its own case.
 
@@ -131,8 +134,12 @@ from its rendering; `mvn -q test -Dtest=ProofFilesTest -Dvfdlibm.proofs.regen=tr
 
 ## The solvers
 
-Z3 5.1.0 (MIT) from PyPI's `z3-solver`, whose wheel ships the binary, and cvc5 1.4.1
-(BSD-3-Clause) from its GitHub release archive, its SHA-256 checked; the pins are Varka's.
+Z3 5.1.0 (MIT) from PyPI's `z3-solver` 5.1.0.0, whose wheel ships the binary, and cvc5 1.4.1
+(BSD-3-Clause) from its GitHub release archive, its SHA-256 checked; the pins are Varka's. pip
+installs Z3 from a wheel only (`--only-binary=:all:`, never building from source) and checks
+the wheel's SHA-256 (`--require-hashes`); the hash pinned is that of the Linux x86_64 wheel,
+`z3_solver-5.1.0.0-py3-none-manylinux_2_27_x86_64.whl`, from PyPI's JSON API, so on another
+platform `--install` stops and asks for a Z3 5.1.0 in `VFDLIBM_Z3`, as it does for cvc5.
 `dev/prove.sh` installs them under `target/solvers/` and refuses other versions. They are
 development tools: nothing here is compiled, packaged or shipped, and `pom.xml` does not know
 them.

@@ -124,6 +124,13 @@ final class ProofFiles {
     longs(out, "jlong.shl", "long <<, its count masked", counts, (a, s) -> a << s);
     longs(out, "jlong.shr", "long >>, its count masked", counts, (a, s) -> a >> s);
     longs(out, "jlong.ushr", "long >>>, its count masked", counts, (a, s) -> a >>> s);
+    // The shifts above reach pow2 at a few counts only; each entry of its table is pinned here,
+    // so a wrong entry at a count no shift above uses cannot pass.
+    var pow2 = new ArrayList<String>();
+    for (int k = 0; k < 64; k++) {
+      pow2.add(eq("pow2", Integer.toString(k), Long.toUnsignedString(1L << k)));
+    }
+    equations(out, "pow2 k is Java's 1L << k read unsigned, every k in 0..63", pow2);
     var longUnary = new ArrayList<String>();
     for (long a : LONGS) {
       longUnary.add(eq("jlong.neg", lit(a), lit(-a)));
@@ -152,6 +159,7 @@ final class ProofFiles {
    * edge of the subnormals is refused as well as one inside.
    */
   private static void doubles(StringBuilder out) {
+    encodings(out);
     var l2d = new ArrayList<String>();
     for (long v : new long[] {1, 7, P52 - 1, P52, P52 + 1, P53 - 1, P53, P53 + 1, P53 + 2,
         P53 + 3, P53 + 5, 2 * P53 - 2, 2 * P53 - 1, 3 * P53 + 1, Long.MAX_VALUE}) {
@@ -208,6 +216,34 @@ final class ProofFiles {
     }
     equations(out, "jdouble.bits, fromBits are Java's raw bits, both ways", bits);
   }
+
+  /**
+   * Each double has one encoding: S is 1 or -1, a normal M is in [2^52, 2^53) and a subnormal M
+   * in (0, 2^52), so Java's 2^53 is M = 2^52 in binade 2^1, never M = 2^53 in binade 2^0. The
+   * ranges are checked at both ends and one past each, and S at 0; then through the rounding,
+   * with the value and the double free and the binade fixed, so that a range made wider or
+   * dropped from jdouble.near or jdouble.near.sub fails here: a value rounds only to an S and an
+   * M in range.
+   */
+  private static void encodings(StringBuilder out) {
+    // The ranges written out rather than through jdouble.S.in and jdouble.M.in, so that a wrong
+    // range there cannot agree with itself here.
+    var ranges = List.of("(jdouble.S.in 1)", "(jdouble.S.in (- 1))", "(not (jdouble.S.in 0))",
+        "(jdouble.M.in " + P52 + ")", "(jdouble.M.in " + (P53 - 1) + ")",
+        "(not (jdouble.M.in " + (P52 - 1) + "))", "(not (jdouble.M.in " + P53 + "))");
+    equations(out, "jdouble.S.in, M.in hold at their ends, not past them", ranges);
+    check(out, "jdouble.near rounds only to an S and an M of a normal double", "unsat", List.of(
+        "(declare-const a Int) (declare-const S Int) (declare-const M Int)",
+        "(assert (jdouble.near a 1 S M 1 1))",
+        "(assert (not (and " + SIGN + " (<= " + P52 + " M) (< M " + P53 + "))))"));
+    check(out, "jdouble.near.sub rounds only to an S and an M of a subnormal", "unsat", List.of(
+        "(declare-const a Int) (declare-const S Int) (declare-const M Int)",
+        "(assert (jdouble.near.sub a 1 S M))",
+        "(assert (not (and " + SIGN + " (< 0 M) (< M " + P52 + "))))"));
+  }
+
+  /** S is 1 or -1, written out. */
+  private static final String SIGN = "(or (= S 1) (= S (- 1)))";
 
   /** The exact value of a finite double, as a numerator over a power-of-two denominator. */
   private record Exact(BigInteger num, BigInteger den) {

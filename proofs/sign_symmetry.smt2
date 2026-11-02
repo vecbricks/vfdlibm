@@ -13,12 +13,16 @@
 ;   k == 0:  one-((x*c)/(c-2.0)-x)              a / (c - 2.0)
 ;   k != 0:  y = one-((lo-(x*c)/(2.0-c))-hi)    a / (2.0 - c)
 ;
-; The claim: for every double a and every double c with -2 <= c <= 1, Java's a / (c - 2.0) has
-; the bits of -(a / (2.0 - c)), unless the quotient rounds to zero. So a port may compute either
-; quotient from the other with a negation, which flips the sign bit only (JLS 15.15.4). It is
-; four steps, each a check below or the arithmetic of rationals:
+; The claim: for every finite double a and every double c with -2 <= c <= 1, Java's
+; a / (c - 2.0) has the bits of -(a / (2.0 - c)), unless the quotient rounds to zero. So a port
+; may compute either quotient from the other with a negation, which flips the sign bit only
+; (JLS 15.15.4). A NaN a is left out: Java's quotients of it are the canonical NaN of either
+; sign, 0x7ff8... and 0xfff8..., not each other's negation, but e_exp.c returns before the
+; quotients for a NaN x (its filter, |x| >= 709.78), and a vector port overwrites those lanes
+; with the filter's result. It is four steps, each a check below or the arithmetic of rationals:
 ;
-;   1. fl(c - 2) = -fl(2 - c), and that double is negative, normal and in [-4, -1]: section B;
+;   1. fl(c - 2) = -fl(2 - c), and that double is negative, normal and in [-4, -1], the only
+;      double c - 2 rounds to: section B;
 ;   2. a / -b = -(a / b) exactly, for b != 0, so fl(a / -b) = fl(-(a / b)): rationals;
 ;   3. fl(-v) = -fl(v) for every rational v whose double is normal or subnormal: section A;
 ;   4. the S, M and E of a double name its bits one to one, so equal S, M, E are equal bits and
@@ -28,10 +32,12 @@
 ;   - Section A holds for every rational and every binade at once: the scale 2^E is a symbolic
 ;     positive rational sn / sd, which jdouble.near does not need to be a power of two, so one
 ;     check covers the 2046 normal binades, and one more the subnormals.
-;   - That jdouble.near names one double for a value - the rounding is a function - is the
-;     prelude's correctness, pinned by java_check.smt2, which refuses both neighbours of every
-;     double it checks; it is not proven in general here. Stated over a symbolic denominator it
-;     multiplies two unknowns, M * b, and both solvers answer unknown to it in a minute.
+;   - That jdouble.near names one double for a value - the rounding is a function - is proven
+;     for section B's values, over its fixed denominator 2^1074: within each of its binades,
+;     either sign, and across each pair of them. For section A's symbolic denominator it is not
+;     proven: stated so, it multiplies two unknowns, M * b, and both solvers answer unknown to it
+;     in a minute. There it rests on java_check.smt2, which refuses both neighbours of every
+;     double it checks.
 ;   - Zero is not in the prelude. A quotient that rounds to zero, |a / b| <= 2^-1075, takes the
 ;     sign of the exact quotient under IEEE 754 6.3, which is the same symmetry by the sign rule
 ;     rather than by a rounding; it is stated here, not checked. On exp's k == 0 path
@@ -41,14 +47,19 @@
 ;   - The domain -2 <= c <= 1 is wider than exp needs and is what section B checks. That exp's c
 ;     lies in it is not checked here: sampled, |x| <= 0.5 ln 2 gives c in about [-0.367, 0.327],
 ;     so 2.0 - c in about [1.673, 2.367] and |a| <= 0.128.
+;   - The domain holds for the lanes whose result is kept. A vector port computes both quotients
+;     in every lane, and a lane whose result is discarded - one past the filter, such as a huge
+;     |x| before the blend that replaces it, or a lane outside the live mask - may have c outside
+;     [-2, 1], or a NaN c; what its quotients give does not matter.
 ;
 ; A double c is an integer multiple of 2^-1074, normal, subnormal or zero alike, so section B
 ; writes c = n / 2^1074 for an integer n, and 2 - c = (2^1075 - n) / 2^1074 exactly: each check
 ; is linear, and holds for every rational of that form in the domain, doubles among them.
 ;
 ; Written by hand. Run by dev/prove.sh, which inserts java.smt2 after the set-logic line. The
-; logic is ALL, not QF_NIA: under QF_NIA cvc5 answers unknown to two of the satisfiable checks
-; and to section C's read-back, and under ALL it decides the file in a tenth of a second.
+; logic is ALL, not QF_NIA: under QF_NIA cvc5 answers unknown to some checks, among them a
+; satisfiable one and section C's read-back, and under ALL it decides the file in a tenth of a
+; second.
 
 (set-logic ALL)
 
@@ -115,15 +126,15 @@
 ; Section B: for every double c with -2 <= c <= 1, fl(c - 2) = -fl(2 - c), negative, normal and
 ; in [-4, -1]. c = n / 2^1074. 2 - c lies in [1, 4], and since 1 and 4 are doubles and rounding
 ; is monotone, fl(2 - c) does too: in binade 2^0 or 2^1, or 4 at the bottom of binade 2^2. The
-; first check shows the exact values lie in those binades' span, [2^0, 2^3); the next three
+; first check shows the exact values lie in [1, 4], so in those three binades; the next three
 ; give the claim in each binade.
 
-(echo "for -2 <= c <= 1 the exact 2 - c lies in [2^0, 2^3), binades 2^0 to 2^2: expect unsat")
+(echo "for -2 <= c <= 1 the exact 2 - c lies in [1, 4], binades 2^0 to 2^2: expect unsat")
 (push 1)
 (declare-const n Int)
 (assert (and (<= (* (- 2) jdouble.SUB) n) (<= n jdouble.SUB)))
 (assert (not (and (<= jdouble.SUB (- (* 2 jdouble.SUB) n))
-                  (< (- (* 2 jdouble.SUB) n) (* 8 jdouble.SUB)))))
+                  (<= (- (* 2 jdouble.SUB) n) (* 4 jdouble.SUB)))))
 (check-sat)
 (pop 1)
 
@@ -154,6 +165,70 @@
 (assert (jdouble.near (- (* 2 jdouble.SUB) n) jdouble.SUB S M 1 1125899906842624))
 (assert (not (and (= S 1)
   (jdouble.near (- n (* 2 jdouble.SUB)) jdouble.SUB (- 1) M 1 1125899906842624))))
+(check-sat)
+(pop 1)
+
+; The double each check above names is the only one: any n / 2^1074 - n any integer, not only
+; the domain's - rounds to at most one double of either sign within each of the three binades,
+; and to doubles in no two of them at once. A double in any other binade is not named either,
+; by the arithmetic of rationals: the values it can be rounded from lie within half its step of
+; its binade, below 1 - 2^-54 or from 8 - 2^-51 up in magnitude, so outside [1, 4]. So the double
+; c - 2 rounds to is the negation of fl(2 - c) that the checks name, and no other.
+
+(echo "any n / 2^1074 rounds to at most one double in binade 2^0, either sign: expect unsat")
+(push 1)
+(declare-const n Int) (declare-const S1 Int) (declare-const M1 Int)
+(declare-const S2 Int) (declare-const M2 Int)
+(assert (jdouble.near n jdouble.SUB S1 M1 1 4503599627370496))
+(assert (jdouble.near n jdouble.SUB S2 M2 1 4503599627370496))
+(assert (not (and (= S1 S2) (= M1 M2))))
+(check-sat)
+(pop 1)
+
+(echo "any n / 2^1074 rounds to at most one double in binade 2^1, either sign: expect unsat")
+(push 1)
+(declare-const n Int) (declare-const S1 Int) (declare-const M1 Int)
+(declare-const S2 Int) (declare-const M2 Int)
+(assert (jdouble.near n jdouble.SUB S1 M1 1 2251799813685248))
+(assert (jdouble.near n jdouble.SUB S2 M2 1 2251799813685248))
+(assert (not (and (= S1 S2) (= M1 M2))))
+(check-sat)
+(pop 1)
+
+(echo "any n / 2^1074 rounds to at most one double in binade 2^2, either sign: expect unsat")
+(push 1)
+(declare-const n Int) (declare-const S1 Int) (declare-const M1 Int)
+(declare-const S2 Int) (declare-const M2 Int)
+(assert (jdouble.near n jdouble.SUB S1 M1 1 1125899906842624))
+(assert (jdouble.near n jdouble.SUB S2 M2 1 1125899906842624))
+(assert (not (and (= S1 S2) (= M1 M2))))
+(check-sat)
+(pop 1)
+
+(echo "no n / 2^1074 rounds both to a double in binade 2^0 and to one in 2^1: expect unsat")
+(push 1)
+(declare-const n Int) (declare-const S1 Int) (declare-const M1 Int)
+(declare-const S2 Int) (declare-const M2 Int)
+(assert (jdouble.near n jdouble.SUB S1 M1 1 4503599627370496))
+(assert (jdouble.near n jdouble.SUB S2 M2 1 2251799813685248))
+(check-sat)
+(pop 1)
+
+(echo "no n / 2^1074 rounds both to a double in binade 2^1 and to one in 2^2: expect unsat")
+(push 1)
+(declare-const n Int) (declare-const S1 Int) (declare-const M1 Int)
+(declare-const S2 Int) (declare-const M2 Int)
+(assert (jdouble.near n jdouble.SUB S1 M1 1 2251799813685248))
+(assert (jdouble.near n jdouble.SUB S2 M2 1 1125899906842624))
+(check-sat)
+(pop 1)
+
+(echo "no n / 2^1074 rounds both to a double in binade 2^0 and to one in 2^2: expect unsat")
+(push 1)
+(declare-const n Int) (declare-const S1 Int) (declare-const M1 Int)
+(declare-const S2 Int) (declare-const M2 Int)
+(assert (jdouble.near n jdouble.SUB S1 M1 1 4503599627370496))
+(assert (jdouble.near n jdouble.SUB S2 M2 1 1125899906842624))
 (check-sat)
 (pop 1)
 
