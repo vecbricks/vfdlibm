@@ -17,6 +17,7 @@ import java.util.SplittableRandom;
 import java.util.function.Consumer;
 import java.util.stream.LongStream;
 import jdk.incubator.vector.DoubleVector;
+import jdk.incubator.vector.VectorMask;
 import jdk.incubator.vector.VectorShape;
 import jdk.incubator.vector.VectorSpecies;
 import org.junit.jupiter.api.Test;
@@ -229,6 +230,133 @@ class ExpTest {
     assertExp(DoubleVector.SPECIES_MAX, xs);
     Oracle.assertUnaryMasked(
         "VFdlibm.exp", DoubleVector.SPECIES_MAX, VFdlibm::exp, StrictMath::exp, xs, 602L);
+  }
+
+  /** The high words where PROOFS.md's folds hinge: the tiny, k == 0 and near-band edges. */
+  static final int[] FOLD_WORDS = {
+    Exp.HX_TINY - 1, Exp.HX_TINY, Exp.HX_HALF_LN2, Exp.HX_HALF_LN2 + 1,
+    Exp.HX_THREE_HALVES_LN2 - 1, Exp.HX_THREE_HALVES_LN2
+  };
+
+  /**
+   * Every high word of {@link #FOLD_WORDS}, both signs, with the low words 0 and 0xffffffff and
+   * 1024 seeded ones, and the doubles just above 0.5 ln2: the inputs where lemmas L1 and L2 of
+   * PROOFS.md would first break.
+   */
+  static double[] foldBoundaries() {
+    SplittableRandom random = new SplittableRandom(700L);
+    double[] xs = new double[FOLD_WORDS.length * 2 * 1026];
+    int next = 0;
+    for (int h : FOLD_WORDS) {
+      for (long sign : new long[] {0L, Long.MIN_VALUE}) {
+        long high = Lanes.fromHiBits(h) | sign;
+        xs[next++] = Double.longBitsToDouble(high);
+        xs[next++] = Double.longBitsToDouble(high | 0xffffffffL);
+        for (int i = 0; i < 1024; i++) {
+          xs[next++] = Double.longBitsToDouble(high | (random.nextLong() & 0xffffffffL));
+        }
+      }
+    }
+    // The part of word 0x3fd62e42 above 0.5 ln2, where the formula alone would give k = +-1
+    // and about one result in 14 would differ (PROOFS.md, L1): its first 4096 doubles.
+    double halfLn2 = 0.5 * LN2;
+    return Inputs.concat(xs, Inputs.around(halfLn2, 4096), Inputs.around(-halfLn2, 4096));
+  }
+
+  @ParameterizedTest
+  @EnumSource(VectorWidth.class)
+  void foldBoundaries(VectorWidth width) {
+    assertExp(width.species(), foldBoundaries());
+    Oracle.assertUnaryMasked(
+        "VFdlibm.exp", width.species(), VFdlibm::exp, StrictMath::exp, foldBoundaries(), 701L);
+  }
+
+  @Test
+  void foldBoundariesAtMaxSpecies() {
+    assertExp(DoubleVector.SPECIES_MAX, foldBoundaries());
+  }
+
+  /**
+   * {@link Exp#expCore} with {@link Exp#expRare}'s lanes finished by {@code StrictMath.exp} is
+   * exp, and {@code expRare} sets exactly the lanes of e_exp.c's filter and of its subnormal
+   * scale-back, computed here per lane from the C.
+   */
+  @ParameterizedTest
+  @EnumSource(VectorWidth.class)
+  void coreAndRareMaskAreTheFinishArm(VectorWidth width) {
+    assertCoreAndRare(width.species());
+  }
+
+  @Test
+  void coreAndRareMaskAreTheFinishArmAtMaxSpecies() {
+    assertCoreAndRare(DoubleVector.SPECIES_MAX);
+  }
+
+  private static void assertCoreAndRare(VectorSpecies<Double> species) {
+    int n = species.length();
+    double[] xs = Inputs.concat(thresholds(), foldBoundaries(), everySubsetOfLanesRare(n),
+        Inputs.sampled(702L, 1 << 14), Inputs.uniform(703L, 1 << 14, -746.0, 710.0));
+    for (int base = 0; base + n <= xs.length; base += n) {
+      DoubleVector x = DoubleVector.fromArray(species, xs, base);
+      DoubleVector core = Exp.expCore(x);
+      VectorMask<Double> rare = Exp.expRare(x);
+      for (int i = 0; i < n; i++) {
+        double xi = xs[base + i];
+        String at = Oracle.hex(xi);
+        assertEquals(cRare(xi), rare.laneIsSet(i), "rare lane at " + at);
+        double got = rare.laneIsSet(i) ? StrictMath.exp(xi) : core.lane(i);
+        assertBits(Double.doubleToRawLongBits(StrictMath.exp(xi)), got);
+      }
+    }
+  }
+
+  /** e_exp.c's rare paths for one double: the filter, or a reduced lane with k < -1021. */
+  private static boolean cRare(double x) {
+    long hx = (Double.doubleToRawLongBits(x) >>> 32) & 0x7fffffffL;
+    if (hx >= Exp.HX_FILTER) {
+      return true;
+    }
+    if (hx <= Exp.HX_HALF_LN2) {
+      return false;
+    }
+    int k = hx < Exp.HX_THREE_HALVES_LN2 ? (x < 0 ? -1 : 1)
+        : (int) (Exp.INVLN2 * x + (x < 0 ? -0.5 : 0.5));
+    return k < Exp.K_MIN_NORMAL;
+  }
+
+  /**
+   * The {@code finishPair} rows of {@code ExpBenchmark} return {@link VFdlibm#exp}'s bits, on the
+   * benchmark's own common and mixed inputs and on vectors of every rare-lane subset.
+   */
+  @Test
+  void finishPairRowsMatchVFdlibmExp() {
+    for (String inputs : new String[] {"common", "mixed"}) {
+      ExpBenchmark bench = new ExpBenchmark();
+      bench.inputs = inputs;
+      bench.setUp();
+      assertPairRows(bench);
+    }
+    int lanes = DoubleVector.SPECIES_PREFERRED.length();
+    double[] subsets = everySubsetOfLanesRare(lanes);
+    double[] xs = new double[ExpBenchmark.N];
+    for (int i = 0; i < xs.length; i++) {
+      xs[i] = subsets[i % subsets.length];
+    }
+    ExpBenchmark bench = new ExpBenchmark();
+    bench.setInputs(xs);
+    assertPairRows(bench);
+  }
+
+  private static void assertPairRows(ExpBenchmark bench) {
+    double[] want = bench.finish256().clone();
+    double[] strict = bench.scalarStrictMath().clone();
+    double[] pair256 = bench.finishPair256().clone();
+    double[] pairPreferred = bench.finishPairPreferred().clone();
+    for (int i = 0; i < want.length; i++) {
+      assertBits(Double.doubleToRawLongBits(strict[i]), want[i]);
+      assertBits(Double.doubleToRawLongBits(want[i]), pair256[i]);
+      assertBits(Double.doubleToRawLongBits(want[i]), pairPreferred[i]);
+    }
   }
 
   @Test
