@@ -65,8 +65,10 @@ five are a later, optional set; the large-argument reduction of the trigonometri
   and an unplanted fault folds away. The build runs each fault in a forked JVM of its own, where
   the tests tagged `fault` require that fault's checks to fail.
 - **Every vector width:** each test runs at the preferred species and at 128, 256 and 512 bits
-  where the host supports them. CI runs the suite on x86 (128 and 256 bits), on x86 with
-  `-XX:MaxVectorSize=16` (all of it at 128 bits) and on Arm (128 bits).
+  where the host supports them. CI runs the suite on x86 at the drawn runner's widths (128 and
+  256 bits, and 512 on an AVX-512 draw), on x86 as an AVX2 host (`-XX:UseAVX=2
+  -XX:MaxVectorSize=32`, 128 and 256 bits on every draw), on x86 with `-XX:MaxVectorSize=16`
+  (all of it at 128 bits) and on Arm (128 bits).
 - **Masked forms:** a masked form is checked under seeded random masks, all-true and all-false;
   active lanes must equal `StrictMath` and inactive lanes must keep the input's raw bits (for a
   two-argument function, the first argument's).
