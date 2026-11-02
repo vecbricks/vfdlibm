@@ -65,9 +65,10 @@ import jdk.incubator.vector.VectorSpecies;
  * separate method, which C2 refused to inline at the end of this large body, so every vector
  * boxed its arguments and the mixed rows allocated 52928 B/op. The finish is now written out
  * inline and allocates nothing at 256 and 512 bits (laptop numbers in {@code
- * bench/results/exp-finish-laptop-2026-11-02.txt}); the EPYC run of this code decides between
- * the arms again. The second arm is kept so the choice can be re-measured, on other hosts and as
- * the JDK changes. Those figures predate the folds above, which cut the common path C2 emits
+ * bench/results/exp-finish-laptop-2026-11-02.txt}); the runs of this code on the benchmark hosts
+ * decide between the arms again, each for its own instruction set, the AVX-512 hosts first
+ * ({@code HARDWARE.md}). The second arm is kept so the choice can be re-measured, on other hosts
+ * and as the JDK changes. Those figures predate the folds above, which cut the common path C2 emits
  * from 77 instructions with two divisions to 52 with one at 512 bits on AVX-512, and from 107 to
  * 64 at 256 bits under {@code -XX:UseAVX=2} ({@code bench/asm/README.md}); no timing of the
  * folded body has been taken yet.
