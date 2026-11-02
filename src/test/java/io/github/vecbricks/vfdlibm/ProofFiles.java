@@ -39,6 +39,7 @@ final class ProofFiles {
     files.put("java_check.smt2", javaCheck());
     files.put("exp_highword_compare.smt2", ExpProofFiles.highwordCompare());
     files.put("exp_half_sign.smt2", ExpProofFiles.halfSign());
+    files.put("exp_near_band.smt2", ExpProofFiles.nearBand());
     return files;
   }
 

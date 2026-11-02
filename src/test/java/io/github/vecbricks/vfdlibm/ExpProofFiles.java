@@ -243,4 +243,205 @@ final class ExpProofFiles {
                 + " 18446744073709551616 0)) (c.half b))))"));
     return out.toString();
   }
+
+  // ---------------------------------------------------------------------------------------------
+  // Doubles as S, M and a binade, for the proofs below
+
+  private static final long P52 = 1L << 52;
+
+  /** The M of a normal double: its 52 stored bits under the implicit 2^52. */
+  private static long mant(double d) {
+    return (Double.doubleToRawLongBits(d) & (P52 - 1)) | P52;
+  }
+
+  /** The binade of a normal double: j with 2^j <= |d| < 2^(j+1). */
+  private static int binade(double d) {
+    return Math.getExponent(d);
+  }
+
+  /**
+   * {@code (jdouble.near a b S M sn sd)}: {@code a / b} rounds to {@code S * M * 2^(j - 52)}, the
+   * double of binade {@code j} with sign {@code s} and significand {@code m}, each a term.
+   */
+  private static String near(String a, String b, String s, String m, int j) {
+    int unit = j - 52;
+    String scale = pow2(Math.abs(unit));
+    return "(jdouble.near " + a + " " + b + " " + s + " " + m + " " + (unit >= 0 ? scale : "1")
+        + " " + (unit >= 0 ? "1" : scale) + ")";
+  }
+
+  /** {@code -t} for a term, {@code t} for sign 1. */
+  private static String signed(int sign, String t) {
+    return sign > 0 ? t : "(- " + t + ")";
+  }
+
+  private static String sign(int sign) {
+    return sign > 0 ? "1" : "(- 1)";
+  }
+
+  /**
+   * That the exact double {@code s * m * 2^(j - 52)}, as a rational over a power of two, rounds
+   * to no double but itself in its binade and in the binades on either side, either sign: the
+   * disjunction an {@code unsat} check refutes, over declared {@code S2} and {@code M2}.
+   */
+  private static String roundsToOther(String a, String b, int s, String m, int j) {
+    return "(or (and " + near(a, b, "S2", "M2", j) + " (not (and (= S2 " + sign(s) + ") (= M2 "
+        + m + "))))\n  " + near(a, b, "S2", "M2", j - 1) + "\n  " + near(a, b, "S2", "M2", j + 1)
+        + ")";
+  }
+
+  // ---------------------------------------------------------------------------------------------
+  // exp_near_band.smt2: L2
+
+  /**
+   * {@code exp_near_band.smt2}, lemma L2: on the C's near band the far form's {@code k} is
+   * {@code +-1}, for every double of the band, and its {@code t*ln2HI[0]} and {@code t*ln2LO[0]}
+   * are the near form's {@code ln2HI[xsb]} and {@code ln2LO[xsb]}.
+   */
+  static String nearBand() {
+    double x1 = Double.longBitsToDouble(Lanes.fromHiBits(Exp.HX_HALF_LN2 + 1));
+    double x2 = Double.longBitsToDouble(Lanes.fromHiBits(Exp.HX_THREE_HALVES_LN2) - 1);
+    long mi = mant(Exp.INVLN2);
+    int ji = binade(Exp.INVLN2);
+    var out = new StringBuilder(ProofFiles.LICENSE);
+    out.append(("""
+        ; On exp's near band the far form is the near form (PROOFS.md, L2).
+        ;
+        ; e_exp.c (reference/fdlibm-5.3) reduces 0.5 ln2 < |x| < 1.5 ln2, hx in [0x%x,
+        ; 0x%x], by its near form, k = 1 - 2*xsb, hi = x - ln2HI[xsb], lo = ln2LO[xsb]
+        ; (line 130), and the port (Exp) by the far form for every lane: k = (int) s with
+        ; s = fl(fl(invln2 * x) + halF[xsb]), t = k, hi = x - fl(t * ln2HI[0]),
+        ; lo = fl(t * ln2LO[0]). The band is X1 <= |x| <= X2, X1 = %s and
+        ; X2 = %s, rendered from Exp's words; invln2, ln2HI and ln2LO from Exp.
+        ;
+        ; What is proven, for every double of the band of either sign, with no appeal to
+        ; monotonicity: x is S * Mx * 2^(j - 52) in one of the band's binades, with Mx symbolic
+        ; and bounded by X1 and X2 in the end binades; invln2 * x is the exact rational
+        ; S * M(invln2) * Mx / 2^n, which rounds into the binades listed for it and no other next
+        ; to them; then s, the sum with halF[xsb] = S / 2 (exp_half_sign.smt2), rounds into binade
+        ; 2^0 with sign S and into no binade next to it, so (int) s = S, the near form's k. Every
+        ; binade pair is reached by some x, or the check says it is not. And t * ln2HI[0] for
+        ; t = +-1 is exact, the double +-ln2HI[0], whose bits for t = -1 are ln2HI[1]'s, and
+        ; likewise for ln2LO: so hi and lo are the near form's operations on the same operands.
+        ;
+        ; The unsat checks hold for every double jdouble.near admits for a value, so they need
+        ; no proof that it admits only one; the sat checks at the band's ends name the binade a
+        ; value rounds into, and rest for that on java_check.smt2, which refuses both neighbours
+        ; of every double it checks.
+        ;
+        ; What is not: that a value rounds to no double in a binade further off than the next
+        ; one rests on the arithmetic of rationals (a double of binade j is rounded to only from
+        ; within half its step of [2^j, 2^(j+1)), and the values here lie in [0.5, 2)); and (int)
+        ; truncating toward zero (JLS 5.1.3, D2I), I2D of +-1 being exact and both forms then
+        ; sharing every later operation are the code's text.
+        """).formatted(Exp.HX_HALF_LN2 + 1, Exp.HX_THREE_HALVES_LN2 - 1, hex(
+            Double.doubleToRawLongBits(x1)), hex(Double.doubleToRawLongBits(x2))));
+    out.append(ProofFiles.rendered("ALL"));
+
+    int jpLo = binade(x1 * Exp.INVLN2);
+    int jpHi = binade(x2 * Exp.INVLN2);
+    for (int s : new int[] {1, -1}) {
+      String sx = s > 0 ? "x > 0" : "x < 0";
+      for (int jx = binade(x1); jx <= binade(x2); jx++) {
+        long lo = jx == binade(x1) ? mant(x1) : P52;
+        long hi = jx == binade(x2) ? mant(x2) : 2 * P52 - 1;
+        String mx = "(and (<= " + lo + " Mx) (<= Mx " + hi + "))";
+        String prodA = "(* " + lit(s * mi) + " Mx)";
+        String prodB = pow2(52 - ji + 52 - jx);
+        out.append("\n; " + sx + " in binade 2^" + jx + ": Mx in [" + lo + ", " + hi + "].\n");
+        var others = new ArrayList<String>();
+        for (int jp = jpLo - 1; jp <= jpHi + 1; jp++) {
+          if (jp < jpLo || jp > jpHi) {
+            others.add(near(prodA, prodB, "S2", "M2", jp));
+          } else {
+            others.add(near(prodA, prodB, sign(-s), "M2", jp));
+          }
+        }
+        check(out, sx + ", binade 2^" + jx + ": invln2 * x rounds only into binades 2^" + jpLo
+            + " to 2^" + jpHi + ", sign S", "unsat", body(
+                "(declare-const Mx Int) (declare-const S2 Int) (declare-const M2 Int)",
+                "(assert " + mx + ")", "(assert (or " + String.join("\n  ", others) + "))"));
+        for (int jp = jpLo; jp <= jpHi; jp++) {
+          String sumA = signed(s, "(+ P " + pow2(51 - jp) + ")");
+          String sumB = pow2(52 - jp);
+          String inP = near(prodA, prodB, sign(s), "P", jp);
+          String what = sx + " in 2^" + jx + ", invln2 * x in 2^" + jp;
+          check(out, what + ": s is in 2^0, sign S, and (int) s = S", "unsat", body(
+              "(declare-const Mx Int) (declare-const P Int) (declare-const S2 Int)"
+                  + " (declare-const M2 Int)",
+              "(assert " + mx + ")", "(assert " + inP + ")",
+              "(assert (or " + near(sumA, sumB, "S2", "M2", -1),
+              "  " + near(sumA, sumB, "S2", "M2", 1),
+              "  " + near(sumA, sumB, sign(-s), "M2", 0),
+              "  (and " + near(sumA, sumB, sign(s), "M2", 0) + " (not (= (div M2 " + P52
+                  + ") 1)))))"));
+          double xa = Math.scalb(1.0, jx);
+          double xb = Math.nextDown(Math.scalb(1.0, jx + 1));
+          xa = Math.max(xa, x1);
+          xb = Math.min(xb, x2);
+          boolean reached = binade(xa * Exp.INVLN2) <= jp && jp <= binade(xb * Exp.INVLN2);
+          check(out, what + (reached ? ": reached" : ": not reached"), reached ? "sat" : "unsat",
+              body("(declare-const Mx Int) (declare-const P Int)", "(assert " + mx + ")",
+                  "(assert " + inP + ")"));
+        }
+      }
+    }
+
+    out.append("""
+
+        ; The band's ends are its own: at both boundary doubles, either sign, the chain above is
+        ; satisfiable with s in binade 2^0. Then the band widened by a word at either end is
+        ; refuted: at the next word down s rounds below 1, so k = 0, and at the top of the next
+        ; word up it rounds to 2 or more, so k = 2 - neither the near form's k.
+        """);
+    record End(String what, double x, int js, String expect) {}
+    var ends = List.of(new End("X1, the band's bottom", x1, 0, "sat"),
+        new End("X2, the band's top", x2, 0, "sat"),
+        new End("refuted: the word below the band, " + hex(Exp.HX_HALF_LN2) + "_00000000,", Double
+            .longBitsToDouble(Lanes.fromHiBits(Exp.HX_HALF_LN2)), -1, "sat"),
+        new End("refuted: the word above, " + hex(Lanes.fromHiBits(Exp.HX_THREE_HALVES_LN2 + 1)
+            - 1) + ",", Double.longBitsToDouble(Lanes.fromHiBits(Exp.HX_THREE_HALVES_LN2 + 1)
+                - 1), 1, "sat"));
+    for (End e : ends) {
+      for (int s : new int[] {1, -1}) {
+        int jx = binade(e.x());
+        int jp = binade(e.x() * Exp.INVLN2);
+        String prodA = lit(s * mi * 1) + " " + mant(e.x());
+        String sumA = signed(s, "(+ P " + pow2(51 - jp) + ")");
+        check(out, e.what() + (s > 0 ? " +" : " -") + ": s rounds into 2^" + e.js(), e.expect(),
+            body("(declare-const P Int) (declare-const M2 Int)",
+                "(assert " + near("(* " + prodA + ")", pow2(52 - ji + 52 - jx), sign(s), "P", jp)
+                    + ")",
+                "(assert " + near(sumA, pow2(52 - jp), sign(s), "M2", e.js()) + ")"));
+      }
+    }
+
+    out.append("""
+
+        ; t * ln2HI[0] and t * ln2LO[0] for t = +-1: the exact product is the double +-c itself,
+        ; which rounds to no other double, and the one t = -1 gives has the bits of the source's
+        ; ln2HI[1] or ln2LO[1] (Exp's LN2HI_1, LN2LO_1).
+        """);
+    record Pair(String name, double c0, double c1) {}
+    for (Pair p : List.of(new Pair("ln2HI", Exp.LN2HI_0, Exp.LN2HI_1),
+        new Pair("ln2LO", Exp.LN2LO_0, Exp.LN2LO_1))) {
+      long m = mant(p.c0());
+      int j = binade(p.c0());
+      String b = pow2(52 - j);
+      for (int s : new int[] {1, -1}) {
+        check(out, (s > 0 ? "+1" : "-1") + " * " + p.name() + "[0] rounds to "
+            + (s > 0 ? "itself" : "its negation") + " only", "unsat", body(
+                "(declare-const S2 Int) (declare-const M2 Int)",
+                "(assert " + roundsToOther(lit(s * m), b, s, Long.toString(m), j) + ")"));
+      }
+      long raw1 = Double.doubleToRawLongBits(p.c1());
+      check(out, p.name() + "[1] = " + hex(raw1) + " is -" + p.name() + "[0]: its S, M, E",
+          "unsat", body("(assert (not (and (= (jdouble.fromBits.S " + lit(raw1) + ") (- 1))",
+              "  (= (jdouble.fromBits.M " + lit(raw1) + ") " + m + ")",
+              "  (= (jdouble.fromBits.E " + lit(raw1) + ") " + lit(j - 52) + "))))"));
+      check(out, "refuted: " + p.name() + "[1] with M one more", "sat", body(
+          "(assert (not (= (jdouble.fromBits.M " + lit(raw1 + 1) + ") " + m + ")))"));
+    }
+    return out.toString();
+  }
 }
