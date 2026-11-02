@@ -50,10 +50,19 @@ five are a later, optional set; the large-argument reduction of the trigonometri
   - fdlibm's special cases (NaN, the infinities, `+-0.0`, subnormals, overflow and underflow
     edges);
   - published hard cases.
-- **Every check proves it can fail:** a test-only flag plants a known fault (a dropped correction
-  term, a constant off by one ulp, a branch threshold moved), and the suite must catch it.
+- **Every check proves it can fail:** a flag plants a known fault (a dropped correction term, a
+  constant off by one ulp, a branch threshold moved), and the suite must catch it. The flag is
+  the system property `vfdlibm.fault`, read once into a `static final` in the main sources'
+  `Faults` class. A port reads each of its faults through `Faults.is` once, into a `static final`
+  constant of its own class, and tests that constant in its body: the vector body holds no call,
+  and an unplanted fault folds away. The build runs each fault in a forked JVM of its own, where
+  the tests tagged `fault` require that fault's checks to fail.
 - **Every vector width:** each test runs at the preferred species and at 128, 256 and 512 bits
-  where the host supports them.
+  where the host supports them. CI runs the suite on x86 (128 and 256 bits), on x86 with
+  `-XX:MaxVectorSize=16` (all of it at 128 bits) and on Arm (128 bits).
+- **Masked forms:** a masked form is checked under seeded random masks, all-true and all-false;
+  active lanes must equal `StrictMath` and inactive lanes must keep the input's raw bits (for a
+  two-argument function, the first argument's).
 
 ## 5. API shape
 
