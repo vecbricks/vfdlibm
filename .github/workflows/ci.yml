@@ -49,6 +49,27 @@ jobs:
           mvn -B --no-transfer-progress verify
           "-Dvfdlibm.test.jvmArgs=${{ matrix.jvm-args }}"
 
+  # The SMT proofs under proofs/ (proofs/README.md), under the pinned Z3 that dev/prove.sh
+  # installs into target/solvers/ from PyPI's z3-solver wheel. --self-test shows the checker of
+  # verdicts catches a planted failure of each kind; --lint runs every proof, each under Z3 unless
+  # the script's CVC5_IN_LINT names it. No JVM: the solvers are development tools, not part of
+  # the build. Every proof under both solvers belongs to the nightly workflow that is planned.
+  proofs:
+    name: proofs
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      # dev/prove.sh installs Z3 into a venv of its own.
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install Z3
+        run: dev/prove.sh --install z3
+      - name: Check the checker of verdicts
+        run: dev/prove.sh --self-test
+      - name: Check the proofs
+        run: dev/prove.sh --lint
+
   # A boxed vector body computes the right bits, so the tests pass on it; only its allocation
   # shows that the Vector API fell back to Java. bench/alloc-check.py runs every vector
   # benchmark named *256 or *Preferred under JMH's -prof gc, with the body inlined, and fails if

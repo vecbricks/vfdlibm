@@ -12,6 +12,8 @@ vfdlibm ports fdlibm's double functions to the Java Vector API, each lane bit-id
   `Double.doubleToRawLongBits` and passes, at every vector width the host has.
 - **fdlibm's order of operations.** No fused multiply-add, no reassociation, no algebraic
   shortcuts: the rounding of every step must be fdlibm's.
+- **A departure ships with its proof.** A change that departs from the C ships with the proof that
+  it computes the same double for every input; machine-checked proofs follow `proofs/README.md`.
 
 ## Build and test
 
