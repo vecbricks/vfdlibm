@@ -69,10 +69,9 @@ import jdk.incubator.vector.VectorSpecies;
  * the guarded arm, provisionally. On the laptop ({@code
  * bench/results/log1p-laptop-avx2-2026-11-02.txt}, under {@code -XX:UseAVX=2} as C2 compiles for
  * the AVX2 hosts that are the target, and {@code log1p-laptop-2026-11-02.txt}, AVX-512; laptop
- * numbers, not headlines) every gap between the three arms is under 1.3x, which sets no
- * direction: under {@code UseAVX=2} at 256 bits the guarded and finish arms are level on both
- * mixes and the blend is 1.05x to 1.17x behind. The EPYC 7763 run decides. The other two are kept
- * so the choice can be re-measured, on other hosts and as the JDK changes.
+ * numbers, not headlines) the three arms are within 1.3x of each other at both widths and on
+ * both mixes, and no direction is read from them. The EPYC 7763 run decides. The other two are
+ * kept so the choice can be re-measured, on other hosts and as the JDK changes.
  */
 final class Log1p {
 
@@ -117,8 +116,6 @@ final class Log1p {
   static final int HX_HUGE = 0x43400000;
   /** {@code hu < 0x6a09e}: the significand below sqrt(2), normalised to [1, 2) (line 143). */
   static final int HU_SQRT2 = 0x6a09e;
-
-  private static final long LOW_WORD = 0xffff_ffffL;
 
   // Planted faults (PLAN.md section 4), read through Faults; each folds away when unplanted.
   static final String DROP_CORRECTION = "log1p.dropCorrection";
@@ -230,7 +227,8 @@ final class Log1p {
     // __HI(u) = uHi, written out: this late in the body C2 refuses to inline Lanes.withHi
     // (NodeCountInliningCutoff, under PrintInlining) and the whole body boxes (SKILLS.md).
     LongVector uHiBits = (LongVector) uHi.convertShape(VectorOperators.I2L, longSpecies, 0);
-    DoubleVector uNormal = (DoubleVector) ((LongVector) u.viewAsIntegralLanes()).and(LOW_WORD)
+    DoubleVector uNormal = (DoubleVector) ((LongVector) u.viewAsIntegralLanes())
+        .and(Lanes.LOW_WORD)
         .or(uHiBits.lanewise(VectorOperators.LSHL, 32)).viewAsFloatingLanes();
     // Line 150: f = u-1.0. Line 126: the k = 0 lanes take k = 0, f = x and hu = 1.
     DoubleVector f = uNormal.sub(1.0).blend(x, kZeroPath.cast(species));
@@ -296,12 +294,14 @@ final class Log1p {
     }
     if (mode == FINISH && rare.anyTrue()) {
       // The per-lane finish is written out here, with no call into vfdlibm, as Exp's and Log's
-      // are: a vfdlibm call this late in the body is refused (NodeCountInliningCutoff), and a
-      // refused call takes x, result and rare as heap objects, boxed on every vector. It visits
-      // only the set lanes of rare, through its bits, and moves no lane through an array: lane
-      // and withLane are lane extract and insert, which C2 intrinsifies at a variable lane index
-      // for the fixed shapes. rare is already and-ed with live, so an inactive lane is never
-      // rewritten.
+      // are. A vfdlibm call this late in the body is refused (NodeCountInliningCutoff), as
+      // PrintInlining showed for Exp's and Log's finishPerLane; for log1p's old finishPerLane
+      // that is inferred from the identical allocation (the superseded runs at the end of
+      // bench/results/log1p-laptop-avx2-2026-11-02.txt), not observed. A refused call takes x,
+      // result and rare as heap objects, boxed on every vector. This finish visits only the set
+      // lanes of rare, through its bits, and moves no lane through an array: lane and withLane
+      // are lane extract and insert, which C2 intrinsifies at a variable lane index for the
+      // fixed shapes. rare is already and-ed with live, so an inactive lane is never rewritten.
       long rareLanes = rare.toLong();
       while (rareLanes != 0) {
         int lane = Long.numberOfTrailingZeros(rareLanes);
