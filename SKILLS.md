@@ -2,9 +2,9 @@
 
 Lessons about benchmarking, the JIT and the Vector API that every port follows. Most were learned
 in Varka (github.com/vecbricks/varka, its `sql/varka/skills/`) and are rewritten here for a vector
-math library; the last sections are what the `exp`, `log` and `log1p` ports taught. Each entry
-says where its numbers come from. A new lesson goes in the section it belongs to, as a short
-entry; a negative result belongs here too, since it stops the next port re-trying a settled
+math library; the last sections are what the `exp`, `log`, `log1p` and `log10` ports taught.
+Each entry says where its numbers come from. A new lesson goes in the section it belongs to, as a
+short entry; a negative result belongs here too, since it stops the next port re-trying a settled
 question.
 
 ## Benchmarking with JMH
@@ -347,6 +347,31 @@ question.
   with `1+x` between 0.5 and 2^1024 showed 0 bit differences against `StrictMath.log1p`; `x` in
   (-1, -0.5) was not sampled, and sampling is not proof. The port keeps the C's operations.
 
+## What the log10 port taught
+
+- **A port that computes through another port nests both bodies in one graph.** e_log10.c
+  rescales `x` into `[0.5, 2)` and calls `__ieee754_log`, so `Log10` calls `Log.logCore`, log's
+  common path alone, as soon as the rescaled `x` exists. That was not enough: with the body
+  inlined, on the laptop's default flags, `PrintInlining` showed `Lanes::withHi (25 bytes) failed
+  to inline: NodeCountInliningCutoff` at bytecode 180 of Log's body, the high-word write-back
+  that log alone inlines, and `Log10Benchmark.blended256` allocated 45056 B/op on common data
+  (176 bytes per 4-lane vector). Moving every operation not needed for the argument after the
+  call did not save it. Writing `Lanes.withHi` out, in Log's body and in Log10's (an `I2L`, a
+  shift, an `and` and an `or`, as log1p's is), did: 0.024 B/op. A body meant to be nested inside
+  another port makes no vfdlibm call past its first lines; a `Lanes` helper above
+  `MaxTrivialSize` (6 bytes) there is written out. The allocation check covers the nesting, since
+  it runs the outer port's rows; a change to the inner body is checked through both.
+- **A planted threshold must sit where the result changes.** Moving log10's `hx < 0x00100000`
+  test by a word is invisible to both arms: the finish arm sends the extra normal lanes to
+  `StrictMath.log10`, and the blended arm scales them by `2^54` and subtracts 54 from `k`, which
+  rescales to the same `x` and the same `y`. So `log10.thresholdMoved` moves line 85's split
+  from `k < 0` to `k < 1` instead: the lanes of `[1, 2)` are rescaled to `[0.5, 1)` with `y = 1`,
+  where the sum cancels, and the suite and the fuzz catch it at every width. Before planting a
+  threshold, check that some lane's result depends on it.
+- **The invalid operation's NaN is the hardware's here, as in log.** For a negative `x`, -inf
+  and a negative NaN of any payload, `StrictMath.log10` returns the bits of `(x-x)/zero`, so the
+  blended arm keeps the C's expression, unlike log1p (above).
+
 ## The nightly sweep and fuzz
 
 - **What runs.** `.github/workflows/nightly.yml` runs `Sweep` and `Fuzz` (in `src/test/java`,
@@ -394,7 +419,10 @@ question.
   1.8 / 1.9; stripe `0/256` read within 0.6 s of these. On another 2^24 sample, exp at 256 bits
   swept 4.7 million high words a second on one thread and 9.7 million on the four, 2.1 times as
   many. Times 256, the whole sweep at every width is 67 minutes for exp, 70 for log and 128 for
-  log1p on those two laptop cores, 6 to 8 runner-hours a night on GitHub's x86 runners.
+  log1p on those two laptop cores, 6 to 8 runner-hours a night on GitHub's x86 runners. log10,
+  added later and timed the same way on its port's branch (one run, while other work shared the
+  laptop), took 13.6 / 2.0 / 1.7 / 1.8, about 81 minutes whole, a little above log, whose body it
+  holds; the projection below is for the first three functions.
 - **Why x86 sweeps 128 bits by a slice (Max, 2 November 2026).** The 128-bit species is 68 to
   80% of that cost: x86 C2 lowers no mask at two 64-bit lanes (above), so that width runs lane
   by lane in Java, and Varka declines 128-bit doubles on x86, so no user of the port runs it
