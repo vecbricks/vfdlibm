@@ -1,0 +1,260 @@
+# ExpBenchmark on the owner's laptop under -XX:UseAVX=2, 2 November 2026: the per-lane finish
+# before and after it was made allocation-free, and the finish at SPECIES_MAX, where it still boxes
+#
+# LAPTOP NUMBERS, NOT HEADLINES. -XX:UseAVX=2 makes C2 compile as for an AVX2 host (GitHub's x86
+# runners and the EPYC 7763 benchmark hosts). On the EPYC 7763 the finish arm as first merged was
+# 1.64x slower than the blend on mixed data (exp-epyc7763-2026-11-02.txt). The EPYC run of this
+# change decides between the arms; this file decides nothing.
+#
+# Why:         finish256 allocated 52928 B/op on mixed data. The fix writes the per-lane finish
+#              out inline in Exp's body; these runs check that it no longer allocates and how
+#              the two arms move relative to each other. The After runs also measure finishMax
+#              and blendedMax, at DoubleVector.SPECIES_MAX, where the finish still boxes.
+# Before:      9965b6c (main then; the finish in a separate method, finishPerLane)
+# After:       f2b76e9422c6b8142df4843e7c506ed14cef11de (branch exp-finish-no-alloc, with main's
+#              cbc60d2 merged, whose Lanes.intSpecies picks the int species by vectorBitSize();
+#              the finish written out inline: toLong, lane, withLane). The run checked that no
+#              tracked file differed from that commit before it started; at its end the commit
+#              was the same and only SKILLS.md, a document, had been edited. This replaces a
+#              first After run made on uncommitted code, which had no commit to name.
+# Span:        Before and After lie on either side of cbc60d2. Its changes reachable from Exp
+#              are Lanes.intSpecies alone (the others are a warning printed once in Faults'
+#              initialiser and Javadoc). At 128, 256 and 512 bits that method returns the same
+#              named IntVector species as before, so the vector bodies measured are inferred to
+#              be the same, not measured to be; the unchanged common-data finish256 rows (1933
+#              before, 1952 after) are consistent with that.
+# JDK:         OpenJDK 64-Bit Server VM (build 25.0.4.1+1-1-26.04.4-Ubuntu, mixed mode, sharing)
+# CPU:         AMD Ryzen AI 9 HX PRO 370 w/ Radeon 890M
+# Vector:      -XX:UseAVX=2 -XX:MaxVectorSize=32 (preferred and max species 256 bits); the
+#              512-bit section at the end runs at the laptop's default flags (max species 512)
+# Kernel:      7.0.0-42-generic
+# Load:        other agents share the machine; each run waited inside the lock for the one-minute
+#              load average to fall under 1.0
+#              before: load average: 0.88, 1.56, 1.61 at start;
+#                load average: 1.05, 1.39, 1.54 at end
+#              after: load average: 0.84, 1.57, 1.50 at start;
+#                load average: 1.26, 1.37, 1.43 at end
+#              before-rerun: load average: 0.93, 1.16, 1.25 at start;
+#                load average: 1.07, 1.13, 1.22 at end
+#              (24 logical cores)
+# JMH 1.37:    -f 2 -wi 3 -w 2s -i 5 -r 2s -prof gc
+#              -jvmArgsAppend "-XX:UseAVX=2 -XX:MaxVectorSize=32
+#              -XX:CompileCommand=inline,io.github.vecbricks.vfdlibm.*::*"
+#              (the body inlined into the loop, as Varka emits it)
+# Command:     java --add-modules jdk.incubator.vector -cp <test classpath> org.openjdk.jmh.Main
+#              "ExpBenchmark.(finish256|blended256)$" <the options above>; the After run went
+#              through the jmh profile, which runs that same command:
+#              mvn -B -q -Pjmh exec:exec -Djmh.args="ExpBenchmark.(finish256|blended256|
+#              finishMax|blendedMax)$ <the options above> -rf json"
+# Array:       1024 doubles; common = uniform [-20, 20]; mixed = one input in 16 replaced by NaN,
+#              800, -750 or -708.5 (62 of the 256 4-lane vectors hold a rare lane, 66 lanes)
+#
+# Where the 52928 B/op came from:
+# - -XX:+UnlockDiagnosticVMOptions -XX:+PrintInlining, before: in the final compile of the
+#   benchmark loop, "Exp::finishPerLane (59 bytes) failed to inline: NodeCountInliningCutoff".
+#   CompileCommand=inline lifts the size limit, not the node-count cutoff, so the call stayed a
+#   call, and x, result and the rare mask reached it as heap objects.
+# - They were boxed on every vector, rare or not, and the rare vectors also paid the call's own
+#   arrays: 256 vectors x 168 B (two 64-byte Double256Vector boxes, a 40-byte Double256Mask)
+#   = 43008 B, plus 62 rare vectors x 160 B (two toArray copies of 48 B and the 64-byte returned
+#   vector) = 9920 B, sum 52928 B/op, exactly the measured figure. JFR (settings=profile) on a
+#   loop of the same body named, by allocation site, DoubleVector.fromArray0Template,
+#   DoubleVector.blendTemplate, Double256Mask.or and DoubleVector.toArray (that recording is not
+#   kept). On common data the branch never ran, C2 compiled it as an uncommon trap, and nothing
+#   boxed.
+# - After: no call into vfdlibm at the end of the body; the Vector API's own toLong, lane and
+#   withLane are inlined late instead of refused. On mixed data finish256 reads 0.009 B/op and
+#   finish512 0.007 B/op (the AFTER tables below).
+#
+# SPECIES_MAX (finishMax, blendedMax; the After runs only):
+# - finishMax allocates on mixed data: 36992 B/op under UseAVX=2 (256 bits) and 30912 B/op at
+#   the default flags (512 bits), where finish256 and finish512, the same shapes, read 0.009 and
+#   0.007. On common data, where the finish never runs, it reads 0.007 and 0.005; blendedMax
+#   reads 0.016 or less everywhere.
+# - Why, -XX:+UnlockDiagnosticVMOptions -XX:+PrintIntrinsics at f2b76e9, default flags, mixed
+#   data, one fork (-f 1 -wi 2 -w 1s -i 1 -r 1s, the body inlined): in finish512,
+#   "VectorSupport::extract (35 bytes) (intrinsic) late inline succeeded" and the same for
+#   VectorSupport::insert, 56 lines each; in finishMax, both "failed to inline (intrinsic)",
+#   after "** missing constant: vclass=ConP etype=ConP vlen=ConI idx=CountTrailingZerosL": the
+#   lane index the finish computes from the mask's bits is not a constant, and at the Max shape
+#   the lane access is not intrinsified without one. Both runs also print the "not supported
+#   ... op=store ... atype=byte" lines the fixed shapes print; the allocation rate, not those
+#   lines, is the verdict (SKILLS.md).
+# - bench/alloc-check.py leaves the *Max rows out (its INCLUDE regex), so CI does not fail on
+#   this known box.
+# - Ratios: before, mixed finish256 and blended256 were within 1.3x, so the before run was
+#   repeated; the re-run is at the end and agrees. After, every finish/blend ratio at 256 and
+#   512 bits is over 1.3x. The same holds at 512 bits (the last section): the before mixed pair
+#   was re-run and agrees. The finishMax/blendedMax pairs on mixed data are under 1.3x; no
+#   direction is read from them, they are here for their allocation.
+#
+# Minimums at 512 bits, the laptop's default flags (8-lane vectors):
+#   row          inputs   before   before (re-run)   after
+#   finish512    common     1255              1294    1289
+#   finish512    mixed      3011              3079    1925
+#   blended512   common     2796              2864    2829
+#   blended512   mixed      3295              3281    3199
+#   finishMax    common        -                 -    1263
+#   finishMax    mixed         -                 -    3011
+#   blendedMax   common        -                 -    2842
+#   blendedMax   mixed         -                 -    3277
+#
+# Minimums in ns per 1024 doubles, under -XX:UseAVX=2 (from the tables below):
+#   row          inputs   before   before (re-run)   after
+#   finish256    common     1933              1933    1952
+#   finish256    mixed      4517              4490    2591
+#   blended256   common     3708              3688    3689
+#   blended256   mixed      4577              4575    4639
+#   finishMax    common        -                 -    1934
+#   finishMax    mixed         -                 -    3931
+#   blendedMax   common        -                 -    3746
+#   blendedMax   mixed         -                 -    4573
+#
+# BEFORE (9965b6c). Minimums and spread over 10 iterations (2 forks x 5), ns per 1024 doubles:
+benchmark          inputs     min ns/op    avg ns/op    max ns/op
+blended256         common      3708.352     3742.401     3808.011
+blended256         mixed       4577.001     4639.916     4681.305
+finish256          common      1933.056     1955.419     2018.073
+finish256          mixed       4517.273     4583.015     4698.694
+#
+# JMH's summary table (ns/op and gc.alloc.rate.norm rows; ExpBenchmark. prefix dropped):
+Benchmark                                   (inputs)  Mode  Cnt      Score     Error   Units
+blended256                       common   10   3742.401 +-  46.726   ns/op
+blended256:gc.alloc.rate.norm    common   10      0.013 +-   0.001    B/op
+blended256                        mixed   10   4639.916 +-  55.616   ns/op
+blended256:gc.alloc.rate.norm     mixed   10      0.016 +-   0.001    B/op
+finish256                        common   10   1955.419 +-  45.905   ns/op
+finish256:gc.alloc.rate.norm     common   10      0.007 +-   0.001    B/op
+finish256                         mixed   10   4583.015 +-  77.305   ns/op
+finish256:gc.alloc.rate.norm      mixed   10  52928.016 +-   0.001    B/op
+#
+# AFTER (f2b76e9, finish written out inline). Minimums and spread over 10 iterations, ns
+# per 1024 doubles:
+benchmark          inputs     min ns/op    avg ns/op    max ns/op
+blended256         common      3689.202     3738.356     3773.477
+blended256         mixed       4639.361     4707.804     4837.439
+blendedMax         common      3746.215     3777.435     3896.986
+blendedMax         mixed       4572.991     4620.940     4681.543
+finish256          common      1951.798     1979.589     2067.365
+finish256          mixed       2591.101     2652.266     2718.508
+finishMax          common      1934.341     1956.104     1969.606
+finishMax          mixed       3930.643     4023.389     4116.227
+#
+# JMH's summary table (ns/op and gc.alloc.rate.norm rows; ExpBenchmark. prefix dropped):
+Benchmark                                   (inputs)  Mode  Cnt      Score     Error   Units
+blended256                       common   10   3738.356 +-  51.208   ns/op
+blended256:gc.alloc.rate.norm    common   10      0.013 +-   0.001    B/op
+blended256                        mixed   10   4707.804 +- 100.617   ns/op
+blended256:gc.alloc.rate.norm     mixed   10      0.016 +-   0.001    B/op
+blendedMax                       common   10   3777.435 +-  67.477   ns/op
+blendedMax:gc.alloc.rate.norm    common   10      0.013 +-   0.001    B/op
+blendedMax                        mixed   10   4620.940 +-  55.474   ns/op
+blendedMax:gc.alloc.rate.norm     mixed   10      0.016 +-   0.001    B/op
+finish256                        common   10   1979.589 +-  48.464   ns/op
+finish256:gc.alloc.rate.norm     common   10      0.007 +-   0.001    B/op
+finish256                         mixed   10   2652.266 +-  67.148   ns/op
+finish256:gc.alloc.rate.norm      mixed   10      0.009 +-   0.001    B/op
+finishMax                        common   10   1956.104 +-  18.337   ns/op
+finishMax:gc.alloc.rate.norm     common   10      0.007 +-   0.001    B/op
+finishMax                         mixed   10   4023.389 +- 110.860   ns/op
+finishMax:gc.alloc.rate.norm      mixed   10  36992.014 +-   0.001    B/op
+#
+# BEFORE, RE-RUN (9965b6c), for the mixed pair within 1.3x:
+benchmark          inputs     min ns/op    avg ns/op    max ns/op
+blended256         common      3688.291     3741.685     3800.297
+blended256         mixed       4574.603     4588.498     4598.816
+finish256          common      1933.397     1944.259     1970.774
+finish256          mixed       4489.848     4540.442     4602.904
+#
+# JMH's summary table (ns/op and gc.alloc.rate.norm rows; ExpBenchmark. prefix dropped):
+Benchmark                                   (inputs)  Mode  Cnt      Score     Error   Units
+blended256                       common   10   3741.685 +-  53.688   ns/op
+blended256:gc.alloc.rate.norm    common   10      0.013 +-   0.001    B/op
+blended256                        mixed   10   4588.498 +-  10.354   ns/op
+blended256:gc.alloc.rate.norm     mixed   10      0.016 +-   0.001    B/op
+finish256                        common   10   1944.259 +-  16.762   ns/op
+finish256:gc.alloc.rate.norm     common   10      0.007 +-   0.001    B/op
+finish256                         mixed   10   4540.442 +-  48.965   ns/op
+finish256:gc.alloc.rate.norm      mixed   10  52928.016 +-   0.001    B/op
+#
+# 512 BITS AT THE LAPTOP'S DEFAULT FLAGS (AVX-512 instructions, MaxVectorSize=64, 8-lane
+# vectors; the datapath is 256 bits, SKILLS.md): the same JMH options without -XX:UseAVX=2
+# -XX:MaxVectorSize=32, rows "ExpBenchmark.(finish512|blended512)$". Run because the log port
+# saw its in-register finish slower than an array-passing one at 512 bits on mixed data. Here
+# the comparison is with the old boxed method, not with an array form, which allocates.
+# Before, finish512 on mixed data allocated 44032 B/op, the same boxing at 8 lanes: 128 vectors
+# x 232 B (two 96-byte Double512Vector boxes, a 40-byte mask) = 29696 B, plus 56 rare vectors
+# x 256 B (two 80-byte toArray copies, the 96-byte returned vector) = 14336 B. After, 0.007 B/op.
+#   before: load average: 0.85, 1.25, 1.27 at start;
+#     load average: 1.09, 1.21, 1.26 at end
+#   after (f2b76e9, rows "ExpBenchmark.(finish512|blended512|finishMax|blendedMax)$"):
+#     load average: 0.76, 1.24, 1.39 at start;
+#     load average: 1.41, 1.30, 1.37 at end
+#
+# 512 BITS, BEFORE:
+benchmark          inputs     min ns/op    avg ns/op    max ns/op
+blended512         common      2795.794     2925.766     3053.821
+blended512         mixed       3295.073     3341.024     3380.957
+finish512          common      1254.564     1295.481     1321.264
+finish512          mixed       3010.950     3071.640     3139.698
+#
+# JMH's summary table (ns/op and gc.alloc.rate.norm rows; ExpBenchmark. prefix dropped):
+Benchmark                                   (inputs)  Mode  Cnt      Score     Error   Units
+blended512                       common   10   2925.766 +- 137.463   ns/op
+blended512:gc.alloc.rate.norm    common   10      0.010 +-   0.001    B/op
+blended512                        mixed   10   3341.024 +-  48.155   ns/op
+blended512:gc.alloc.rate.norm     mixed   10      0.012 +-   0.001    B/op
+finish512                        common   10   1295.481 +-  29.443   ns/op
+finish512:gc.alloc.rate.norm     common   10      0.005 +-   0.001    B/op
+finish512                         mixed   10   3071.640 +-  68.378   ns/op
+finish512:gc.alloc.rate.norm      mixed   10  44032.011 +-   0.001    B/op
+#
+# 512 BITS, AFTER (f2b76e9):
+benchmark          inputs     min ns/op    avg ns/op    max ns/op
+blended512         common      2828.728     2879.172     2923.297
+blended512         mixed       3198.635     3308.658     3388.678
+blendedMax         common      2842.276     2875.764     2928.150
+blendedMax         mixed       3276.715     3322.872     3354.476
+finish512          common      1288.814     1298.130     1316.902
+finish512          mixed       1924.822     1939.284     2003.051
+finishMax          common      1263.497     1297.670     1320.049
+finishMax          mixed       3011.053     3031.878     3052.088
+#
+# JMH's summary table (ns/op and gc.alloc.rate.norm rows; ExpBenchmark. prefix dropped):
+Benchmark                                   (inputs)  Mode  Cnt      Score     Error   Units
+blended512                       common   10   2879.172 +- 50.250   ns/op
+blended512:gc.alloc.rate.norm    common   10      0.010 +-  0.001    B/op
+blended512                        mixed   10   3308.658 +- 82.272   ns/op
+blended512:gc.alloc.rate.norm     mixed   10      0.012 +-  0.001    B/op
+blendedMax                       common   10   2875.764 +- 49.283   ns/op
+blendedMax:gc.alloc.rate.norm    common   10      0.010 +-  0.001    B/op
+blendedMax                        mixed   10   3322.872 +- 44.783   ns/op
+blendedMax:gc.alloc.rate.norm     mixed   10      0.012 +-  0.001    B/op
+finish512                        common   10   1298.130 +- 15.529   ns/op
+finish512:gc.alloc.rate.norm     common   10      0.005 +-  0.001    B/op
+finish512                         mixed   10   1939.284 +- 34.934   ns/op
+finish512:gc.alloc.rate.norm      mixed   10      0.007 +-  0.001    B/op
+finishMax                        common   10   1297.670 +- 29.268   ns/op
+finishMax:gc.alloc.rate.norm     common   10      0.005 +-  0.001    B/op
+finishMax                         mixed   10   3031.878 +- 17.866   ns/op
+finishMax:gc.alloc.rate.norm      mixed   10  30912.011 +-  0.001    B/op
+#
+# 512 BITS, BEFORE, RE-RUN (the mixed pair was within 1.3x):
+#   load: load average: 0.96, 1.14, 1.23 at start;
+#     load average: 1.28, 1.21, 1.24 at end
+benchmark          inputs     min ns/op    avg ns/op    max ns/op
+blended512         common      2864.356     2891.607     2935.785
+blended512         mixed       3281.047     3329.116     3407.908
+finish512          common      1293.934     1317.124     1353.567
+finish512          mixed       3079.314     3157.302     3297.095
+#
+# JMH's summary table (ns/op and gc.alloc.rate.norm rows; ExpBenchmark. prefix dropped):
+Benchmark                                   (inputs)  Mode  Cnt      Score     Error   Units
+blended512                       common   10   2891.607 +-  39.378   ns/op
+blended512:gc.alloc.rate.norm    common   10      0.010 +-   0.001    B/op
+blended512                        mixed   10   3329.116 +-  49.072   ns/op
+blended512:gc.alloc.rate.norm     mixed   10      0.012 +-   0.001    B/op
+finish512                        common   10   1317.124 +-  28.733   ns/op
+finish512:gc.alloc.rate.norm     common   10      0.005 +-   0.001    B/op
+finish512                         mixed   10   3157.302 +- 117.015   ns/op
+finish512:gc.alloc.rate.norm      mixed   10  44032.011 +-   0.001    B/op

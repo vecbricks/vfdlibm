@@ -83,7 +83,11 @@ five are a later, optional set; the large-argument reduction of the trigonometri
   vector form never trades exactness for speed. Whether a given branch is blended or finished per
   lane is decided by measurement and recorded in the function's pull request. A rare path that is
   only a few vector operations can instead be computed and blended only for a vector that holds a
-  rare lane, behind one `anyTrue`, as `log1p` does.
+  rare lane, behind one `anyTrue`, as `log1p` does. For `exp` the question is open again: on the
+  EPYC 7763 the per-lane finish as first merged was 1.57x faster than the blend on common data
+  and 1.64x slower on mixed data, where its fallback allocated; the fallback no longer allocates
+  at 256 and 512 bits (it still boxes at `SPECIES_MAX` on mixed data), and the EPYC run of that
+  change decides (`SKILLS.md`).
 
 ## 6. Rules
 

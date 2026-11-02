@@ -27,8 +27,8 @@ import org.openjdk.jmh.annotations.Warmup;
 /**
  * exp over an array of 1024 doubles: the scalar {@code StrictMath.exp} loop, {@link VFdlibm#exp}
  * (rare lanes finished per lane) and the all-blended arm {@link Exp#expBlended}, each vector form
- * at 128, 256 and 512 bits and at the host's preferred species. On a host without 512-bit vectors
- * the 512-bit benchmarks run in software and measure nothing useful.
+ * at 128, 256 and 512 bits, at the host's preferred species and at {@code SPECIES_MAX}. On a host
+ * without 512-bit vectors the 512-bit benchmarks run in software and measure nothing useful.
  *
  * <p>{@code inputs} picks the data: {@code common} draws from {@code [-20, 20]}, where no lane
  * takes a rare path; {@code mixed} replaces one input in 16 with a rare one (a NaN, an overflow,
@@ -39,8 +39,10 @@ import org.openjdk.jmh.annotations.Warmup;
  * add {@code -jvmArgsAppend -XX:CompileCommand=inline,io.github.vecbricks.vfdlibm.*::*}.
  *
  * <p>{@code bench/alloc-check.py} runs the vector benchmarks named {@code *256} and
- * {@code *Preferred} on {@code common} inputs and fails if any allocates, which means the body
- * boxed. A new arm named that way is checked with no further change.
+ * {@code *Preferred} on {@code common} and {@code mixed} inputs and fails if any allocates, which
+ * means the body boxed. A new arm named that way is checked with no further change. The
+ * {@code *Max} rows are not checked: at {@code SPECIES_MAX} the finish arm boxes on mixed data
+ * (see {@code bench/alloc-check.py}); they are here to record that.
  */
 @State(Scope.Thread)
 @BenchmarkMode(Mode.AverageTime)
@@ -55,6 +57,7 @@ public class ExpBenchmark {
   private static final VectorSpecies<Double> S256 = DoubleVector.SPECIES_256;
   private static final VectorSpecies<Double> S512 = DoubleVector.SPECIES_512;
   private static final VectorSpecies<Double> SP = DoubleVector.SPECIES_PREFERRED;
+  private static final VectorSpecies<Double> SMAX = DoubleVector.SPECIES_MAX;
 
   @Param({"common", "mixed"})
   public String inputs;
@@ -117,6 +120,14 @@ public class ExpBenchmark {
   }
 
   @Benchmark
+  public double[] finishMax() {
+    for (int i = 0; i < N; i += SMAX.length()) {
+      VFdlibm.exp(DoubleVector.fromArray(SMAX, in, i)).intoArray(out, i);
+    }
+    return out;
+  }
+
+  @Benchmark
   public double[] blended128() {
     for (int i = 0; i < N; i += S128.length()) {
       Exp.expBlended(DoubleVector.fromArray(S128, in, i), null).intoArray(out, i);
@@ -144,6 +155,14 @@ public class ExpBenchmark {
   public double[] blendedPreferred() {
     for (int i = 0; i < N; i += SP.length()) {
       Exp.expBlended(DoubleVector.fromArray(SP, in, i), null).intoArray(out, i);
+    }
+    return out;
+  }
+
+  @Benchmark
+  public double[] blendedMax() {
+    for (int i = 0; i < N; i += SMAX.length()) {
+      Exp.expBlended(DoubleVector.fromArray(SMAX, in, i), null).intoArray(out, i);
     }
     return out;
   }

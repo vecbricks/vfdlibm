@@ -42,17 +42,27 @@ import jdk.incubator.vector.VectorSpecies;
  *
  * <ul>
  *   <li>{@link #exp} finishes those lanes per lane with {@code StrictMath.exp} after the vector
- *       body, behind one {@code anyTrue} a vector; on ordinary data that call never runs.
+ *       body, behind one {@code anyTrue} a vector; on ordinary data that branch never runs. The
+ *       finish walks the set bits of the rare mask ({@code toLong}), reads each lane with {@code
+ *       lane} and writes it back with {@code withLane}, all in this body. At the fixed shapes
+ *       C2 intrinsifies that lane access: at 256 and 512 bits the finish allocates nothing (at
+ *       128 bits on x86 the masks box anyway). At {@code SPECIES_MAX} it is not intrinsified,
+ *       and the finish still boxes on data with rare lanes (the {@code finishMax} rows of {@code
+ *       bench/results/exp-finish-laptop-2026-11-02.txt}).
  *   <li>{@link #expBlended} computes them in every lane too and blends them, with no branch.
  * </ul>
  *
- * <p>Both are exact. {@code VFdlibm.exp} is the first, chosen by the JMH measurement recorded in
- * the pull request that added this port and committed in {@code bench/results/}: {@code
- * exp-laptop-avx2-2026-11-02.txt} under {@code -XX:UseAVX=2}, as C2 compiles for the AVX2 hosts
- * that are the target, and {@code exp-laptop-2026-11-02.txt} with AVX-512. On ordinary data the
- * per-lane finish never runs, and skipping the rare paths' blends made the 256-bit body about 1.9x
- * faster there under AVX2 and 2.2x with AVX-512 (laptop numbers). The second is kept so the choice
- * can be re-measured, on other hosts and as the JDK changes.
+ * <p>Both are exact. {@code VFdlibm.exp} uses the first. On the AMD EPYC 7763, the headline
+ * host, the first arm as first merged ({@code bench/results/exp-epyc7763-2026-11-02.txt}, minimums
+ * in ns per 1024 doubles at 256 bits) was 1.57x faster than the blend on common data, where no
+ * lane is rare (4203 against 6590), and lost once rare lanes were common: on mixed data, one rare
+ * input in 16, it was 1.64x slower than the blend (12331 against 7512). Its finish was then a
+ * separate method, which C2 refused to inline at the end of this large body, so every vector
+ * boxed its arguments and the mixed rows allocated 52928 B/op. The finish is now written out
+ * inline and allocates nothing at 256 and 512 bits (laptop numbers in {@code
+ * bench/results/exp-finish-laptop-2026-11-02.txt}); the EPYC run of this code decides between
+ * the arms again. The second arm is kept so the choice can be re-measured, on other hosts and as
+ * the JDK changes.
  */
 final class Exp {
 
@@ -217,22 +227,21 @@ final class Exp {
         rare = rare.and(live);
       }
       if (rare.anyTrue()) {
-        result = finishPerLane(x, result, rare);
+        // The per-lane finish is written out here, with no call into vfdlibm, for the reason the
+        // Lanes calls come first: a vfdlibm call this late is refused (NodeCountInliningCutoff),
+        // and a refused call takes x, result and rare as heap objects, boxed on every vector,
+        // rare or not. The Vector API's own methods used here are inlined late instead. It
+        // visits only the set lanes of rare, through its bits, and moves no lane through an
+        // array: lane and withLane are lane extract and insert. C2 intrinsifies them at a
+        // variable lane index for the fixed shapes only; at SPECIES_MAX this loop still boxes.
+        long rareLanes = rare.toLong();
+        while (rareLanes != 0) {
+          int lane = Long.numberOfTrailingZeros(rareLanes);
+          rareLanes &= rareLanes - 1;
+          result = result.withLane(lane, StrictMath.exp(x.lane(lane)));
+        }
       }
     }
     return result;
-  }
-
-  /** The lanes of {@code rare} replaced by {@code StrictMath.exp} of their input. */
-  private static DoubleVector finishPerLane(
-      DoubleVector x, DoubleVector result, VectorMask<Double> rare) {
-    double[] xs = x.toArray();
-    double[] rs = result.toArray();
-    for (int lane = 0; lane < xs.length; lane++) {
-      if (rare.laneIsSet(lane)) {
-        rs[lane] = StrictMath.exp(xs[lane]);
-      }
-    }
-    return DoubleVector.fromArray(x.species(), rs, 0);
   }
 }

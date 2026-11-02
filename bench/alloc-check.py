@@ -10,15 +10,16 @@
 
 A boxed body computes the right bits, so the tests pass on it; only the allocation rate shows
 that the Vector API fell back to Java (SKILLS.md, "Allocation is the verdict"). This script runs
-every JMH benchmark method named *256 or *Preferred, on common inputs, under -prof gc with the
-body inlined as Varka emits it, and fails if any measured iteration of any row allocates
+every JMH benchmark method named *256 or *Preferred, on common and mixed inputs, under -prof gc
+with the body inlined as Varka emits it, and fails if any measured iteration of any row allocates
 THRESHOLD bytes per op or more. It reads the numbers from JMH's JSON result, and fails too when
-a benchmark that JMH lists for the regex threw or has no row there.
+a benchmark that JMH lists for the regex threw or has no row there for an inputs value it runs.
 
 Rows left out: 128 bits, since on x86 C2 lowers no mask at two 64-bit lanes and every masked
-128-bit body boxes (SKILLS.md); 512 bits, which runs in software on an AVX2 host (the preferred
-arm covers 512 bits on a host that has it); and mixed inputs, where the finish arm's per-lane
-fallback allocates its round trip arrays by design.
+128-bit body boxes (SKILLS.md); and 512 bits, which runs in software on an AVX2 host (the
+preferred arm covers 512 bits on a host that has it). Mixed inputs are checked because they are
+the ones that run the rare lanes' paths, which common inputs never reach. The *Max rows, at
+SPECIES_MAX, are left out by INCLUDE's regex (see the comment there).
 
 Usage, from the repository root:
     bench/alloc-check.py                                  # the host's own flags
@@ -39,12 +40,18 @@ import sys
 # 0.01 to 0.03 B/op, JMH's own allocation spread over the ops. 1 B/op sits between the two.
 THRESHOLD = 1.0
 
+# Not *Max: at SPECIES_MAX the finish arm boxes on mixed data, so finishMax would fail. Its lane
+# extract and insert (lane, withLane, at a variable lane index) are intrinsified for the fixed
+# shapes, whose rows pass, but not for the Max shape; the *Max rows exist in the benchmark to
+# record that (bench/results/exp-finish-laptop-2026-11-02.txt), not to gate on it.
 INCLUDE = r".*Benchmark\.\w+(256|Preferred)$"
 INLINE = "-XX:CompileCommand=inline,io.github.vecbricks.vfdlibm.*::*"
 RESULT = "target/alloc-check.json"
 # One fork; warmup long enough for C2 to finish the body before the first measured iteration,
 # which every iteration being checked (not only the mean) enforces.
-JMH_OPTIONS = "-f 1 -wi 3 -w 1s -i 3 -r 1s -prof gc -p inputs=common"
+# The inputs values the run covers; check() requires a row for each of them.
+INPUTS = ("common", "mixed")
+JMH_OPTIONS = f"-f 1 -wi 3 -w 1s -i 3 -r 1s -prof gc -p inputs={','.join(INPUTS)}"
 
 
 def mvn_jmh(mvn, jmh_args, capture=False):
@@ -76,7 +83,7 @@ def run_jmh(mvn, include, jvm_args):
 
 def check(path, threshold, expected=None):
     """Checks every row of the JSON at path; with expected, also that each of those benchmarks
-    has its inputs=common row."""
+    has a row for every value in INPUTS."""
     if not os.path.exists(path):
         print(f"FAIL: JMH wrote no {path}")
         return False
@@ -89,9 +96,10 @@ def check(path, threshold, expected=None):
     if expected is not None:
         got = {(row["benchmark"], row.get("params", {}).get("inputs")) for row in rows}
         for name in expected:
-            if (name, "common") not in got:
-                print(f"FAIL  {name} [inputs=common]: no row in {path}")
-                ok = False
+            for inputs in INPUTS:
+                if (name, inputs) not in got:
+                    print(f"FAIL  {name} [inputs={inputs}]: no row in {path}")
+                    ok = False
     for row in rows:
         name = row["benchmark"].rsplit(".", 2)[-2:]
         params = ",".join(f"{k}={v}" for k, v in sorted(row.get("params", {}).items()))
