@@ -27,7 +27,8 @@ import org.junit.jupiter.params.provider.EnumSource;
  * log against {@code StrictMath.log}, by raw bits, at every width: the public {@link VFdlibm#log}
  * (rare lanes finished per lane) and the all-blended arm {@link Log#logBlended}, unmasked and
  * masked, on e_log.c's thresholds, the special values, sampled bit patterns over the whole domain,
- * dense draws over every binade, and draws inside each high word the C branches on.
+ * dense draws over every binade, draws inside each high word the C branches on and the published
+ * hard-to-round cases.
  */
 class LogTest {
 
@@ -144,12 +145,19 @@ class LogTest {
         Inputs.uniform(1200L + width.ordinal(), 1 << 16, 0.0, Double.MIN_NORMAL)));
   }
 
+  /** The published hard-to-round inputs: see {@link Inputs#hardCases} and the resource header. */
+  @ParameterizedTest
+  @EnumSource(VectorWidth.class)
+  void publishedHardCases(VectorWidth width) {
+    assertLog(width.species(), Inputs.hardCases("log"));
+  }
+
   @ParameterizedTest
   @EnumSource(VectorWidth.class)
   void masked(VectorWidth width) {
     VectorSpecies<Double> species = width.species();
     double[] xs = Inputs.concat(thresholds(), Inputs.sampled(1300L, 4096),
-        positive(1301L, 4096), inWords(1302L, 4096));
+        positive(1301L, 4096), inWords(1302L, 4096), Inputs.hardCases("log"));
     Oracle.assertUnaryMasked("VFdlibm.log", species, VFdlibm::log, StrictMath::log, xs, 1303L);
     Oracle.assertUnaryMasked(
         "Log.logBlended", species, Log::logBlended, StrictMath::log, xs, 1304L);

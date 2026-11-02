@@ -56,13 +56,14 @@ import jdk.incubator.vector.VectorSpecies;
  *       subnormal lanes are scaled by {@code 2^54} before the high word is read.
  * </ul>
  *
- * <p>Both are exact. {@code VFdlibm.log} is the first, chosen by the JMH measurement committed in
- * {@code bench/results/log-laptop-avx2-2026-11-02.txt} (under {@code -XX:UseAVX=2}, as C2
- * compiles for the AVX2 hosts that are the target) and {@code log-laptop-2026-11-02.txt} (with
- * AVX-512). Under {@code UseAVX=2} at 256 bits the finish was about 1.2x faster than the blend on
- * ordinary data and level with it or slightly ahead when one input in 16 is rare, allocating
- * nothing on either (laptop numbers, not headlines). The second arm is kept so the choice can be
- * re-measured, on other hosts and as the JDK changes.
+ * <p>Both are exact. {@code VFdlibm.log} uses the first, a provisional choice from the laptop's
+ * JMH runs in {@code bench/results/log-laptop-avx2-2026-11-02.txt} (under {@code -XX:UseAVX=2},
+ * as C2 compiles for the AVX2 hosts that are the target) and {@code log-laptop-2026-11-02.txt}
+ * (with AVX-512), laptop numbers, not headlines. Under {@code UseAVX=2} at 256 bits the finish is
+ * about 1.2x ahead of the blend on ordinary data and level with it, about 1.05x, when one input
+ * in 16 is rare; both allocate nothing. With AVX-512 at 512 bits on that mixed data the blend
+ * wins, by 1.36x in both runs. The EPYC 7763 run of this port decides the choice. The second arm
+ * is kept so it can be re-measured, on other hosts and as the JDK changes.
  */
 final class Log {
 

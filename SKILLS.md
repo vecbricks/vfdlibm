@@ -191,5 +191,8 @@ negative result belongs here too, since it stops the next port re-trying a settl
   arm's `gc.alloc.rate.norm` on mixed data: anything above the arrays a finish makes on purpose is
   boxing, and its cost grows on the EPYC.
 - **The arm choice is per function, and a fix can reverse it.** With the boxed finish the data
-  said to blend log; with the finish in registers it wins on both mixes under `UseAVX=2` (by
-  1.18x on common data, 1.05x on mixed). Measure the finish only once it allocates nothing.
+  said to blend log; with the finish in registers it is ahead on common data, level on mixed at
+  256 bits (1.18x and 1.05x under `UseAVX=2`), and the blend wins at 512 bits on mixed data (1.36x
+  on the laptop's AVX-512, `bench/results/log-laptop-2026-11-02.txt`). `VFdlibm.log` uses the
+  finish provisionally; the EPYC 7763 run of the log port decides it. Measure the finish only once
+  it allocates nothing.
