@@ -20,8 +20,9 @@ import jdk.incubator.vector.VectorSpecies;
  * <p>A test runs at each of them with {@code @ParameterizedTest @EnumSource(VectorWidth.class)} and
  * takes its species from {@link #species()}. A fixed width wider than the preferred species is
  * skipped rather than run: the Vector API would still compute it, but in software, which neither
- * proves anything about the hardware path nor finishes quickly. GitHub's runners are AVX2, so
- * their 512-bit cases are skipped; an AVX-512 host runs them.
+ * proves anything about the hardware path nor finishes quickly. An AVX2 host, such as GitHub's
+ * EPYC 7763 runners, skips the 512-bit cases; an AVX-512 host, which some GitHub x86 runners are,
+ * runs them.
  */
 enum VectorWidth {
   BITS_128(128),
