@@ -17,6 +17,14 @@ vfdlibm ports fdlibm's double functions to the Java Vector API, each lane bit-id
 
 - `mvn -B verify` builds and runs the tests; the Vector API module is added by `pom.xml`.
 - One test: `mvn -q test -Dtest=ExpTest`.
+- The harness is in `src/test/java`: `Oracle` compares lanes with `StrictMath` by raw bits,
+  `Inputs` makes the inputs, `VectorWidth` runs a test at 128, 256 and 512 bits and the preferred
+  species, and `PlantedFault` plants a fault a check must catch. `HarnessSelfTest` tests them.
+- A width wider than the host's vectors is skipped. To see an AVX2 host's skips on an AVX-512
+  one: `mvn -B test -Dvfdlibm.test.jvmArgs=-XX:MaxVectorSize=32`.
+- Benchmarks are JMH, in `src/jmh/java`; `verify` compiles them. Run them with
+  `mvn -B -Pjmh test-compile exec:exec`, passing JMH options as `-Djmh.args="..."`, e.g.
+  `-Djmh.args="StrictMathExp -p lanes=4"`.
 
 ## Changes
 

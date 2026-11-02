@@ -54,6 +54,10 @@
     <jmh.version>1.37</jmh.version>
     <maven.surefire.version>3.2.5</maven.surefire.version>
     <vector.module>jdk.incubator.vector</vector.module>
+    <!-- Extra JVM options for the test JVM, empty by default. -Dvfdlibm.test.jvmArgs=
+         -XX:MaxVectorSize=32 makes an AVX-512 host behave like an AVX2 one (no 512-bit species),
+         which shows the skip path the GitHub runners take. -->
+    <vfdlibm.test.jvmArgs></vfdlibm.test.jvmArgs>
   </properties>
 
   <dependencies>
@@ -92,13 +96,54 @@
             <arg>-Xlint:all</arg>
           </compilerArgs>
         </configuration>
+        <executions>
+          <!-- JMH's annotation processor writes the benchmark list and harness classes. JDK 23
+               and later run no processor unless one is configured, so it is named here. -->
+          <execution>
+            <id>default-testCompile</id>
+            <configuration>
+              <annotationProcessorPaths>
+                <path>
+                  <groupId>org.openjdk.jmh</groupId>
+                  <artifactId>jmh-generator-annprocess</artifactId>
+                  <version>${jmh.version}</version>
+                </path>
+              </annotationProcessorPaths>
+            </configuration>
+          </execution>
+        </executions>
+      </plugin>
+      <plugin>
+        <!-- Benchmarks live in src/jmh/java and compile with the tests, so `verify` keeps them
+             building; the jmh profile runs them. -->
+        <groupId>org.codehaus.mojo</groupId>
+        <artifactId>build-helper-maven-plugin</artifactId>
+        <version>3.6.1</version>
+        <executions>
+          <execution>
+            <id>add-jmh-source</id>
+            <phase>generate-test-sources</phase>
+            <goals><goal>add-test-source</goal></goals>
+            <configuration>
+              <sources>
+                <source>src/jmh/java</source>
+              </sources>
+            </configuration>
+          </execution>
+        </executions>
       </plugin>
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-surefire-plugin</artifactId>
         <version>${maven.surefire.version}</version>
         <configuration>
-          <argLine>--add-modules ${vector.module}</argLine>
+          <argLine>--add-modules ${vector.module} ${vfdlibm.test.jvmArgs}</argLine>
+          <excludes>
+            <!-- JMH's generated *_jmhTest classes are benchmarks, not tests. -->
+            <exclude>**/jmh_generated/**</exclude>
+            <!-- Surefire's own default, which a list of excludes replaces. -->
+            <exclude>**/*$*</exclude>
+          </excludes>
         </configuration>
       </plugin>
       <plugin>
@@ -117,6 +162,31 @@
   </build>
 
   <profiles>
+    <!-- Benchmarks: `mvn -B -Pjmh test-compile exec:exec` runs every JMH benchmark, and
+         -Djmh.args="..." passes JMH's own options (a name regex, -p, -f, -wi, -i). -->
+    <profile>
+      <id>jmh</id>
+      <properties>
+        <jmh.args></jmh.args>
+      </properties>
+      <build>
+        <plugins>
+          <plugin>
+            <groupId>org.codehaus.mojo</groupId>
+            <artifactId>exec-maven-plugin</artifactId>
+            <version>3.6.1</version>
+            <configuration>
+              <executable>${java.home}/bin/java</executable>
+              <classpathScope>test</classpathScope>
+              <commandlineArgs>
+                --add-modules ${vector.module} -classpath %classpath
+                org.openjdk.jmh.Main ${jmh.args}
+              </commandlineArgs>
+            </configuration>
+          </plugin>
+        </plugins>
+      </build>
+    </profile>
     <!-- Publishing: sources and javadoc jars, signatures, and the Central portal. Releases are
          cut from tags; Varka pins a released version and never a snapshot. -->
     <profile>

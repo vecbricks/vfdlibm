@@ -76,6 +76,7 @@ five are a later, optional set; the large-argument reduction of the trigonometri
 
 ## 7. Open
 
-- Benchmarks (JMH under `src/jmh`) arrive with the first function, measured against the scalar
-  `StrictMath` loop at each vector width.
+- Benchmarks (JMH under `src/jmh`): the harness and the scalar `StrictMath.exp` baseline are in
+  place; each function adds its vector benchmark, measured against the scalar `StrictMath` loop at
+  each vector width.
 - The first release is cut once Varka's first exact kernel lands and needs a pinned version.
