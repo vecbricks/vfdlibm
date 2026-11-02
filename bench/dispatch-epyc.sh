@@ -30,7 +30,11 @@ bench() {
     until [ "$(gh api repos/$R/actions/runs/$m --jq .status)" = completed ]; do sleep 120; done
     c=$(gh api repos/$R/actions/runs/$m --jq .conclusion); echo "$(t) $B $N benchmark $m: $c"
     [ "$c" = success ] && return 0
-    if gh run view $m -R $R --log-failed 2>/dev/null | grep -q 'Probe the machine'; then
+    # The failed step's name comes from the jobs API: a failed log can label every line
+    # "UNKNOWN STEP", which made a log grep miss a CPU-check failure and stop.
+    if gh api "repos/$R/actions/runs/$m/jobs" \
+        --jq '.jobs[].steps[]|select(.conclusion=="failure")|.name' 2>/dev/null \
+        | grep -q '^Probe the machine'; then
       echo "$(t) $N: CPU check failed, retry in an hour"; sleep 3600
     else return 1; fi
   done; }
