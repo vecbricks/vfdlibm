@@ -7,8 +7,8 @@
 # express or implied. See the License for the specific language governing permissions and
 # limitations under the License.
 #
-# bench/dispatch-bench.sh on the AMD EPYC 7763 host, the only benchmark host before the other
-# two; kept so that the calls written before them still work unchanged:
+# bench/dispatch-bench.sh on the AMD EPYC 7763 host, the only benchmark host before the others;
+# kept so that the calls written before them still work unchanged:
 #
 #   bench/dispatch-epyc.sh <ref> [benchmark regex] [extra JVM options]
 

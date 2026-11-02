@@ -41,7 +41,7 @@ negative result belongs here too, since it stops the next port re-trying a settl
   load average is under 1.0, and between queued runs wait until it falls under 0.9: a JVM that
   just exited leaves it above 1.0 for a minute or two. A results file is checked by reading every
   section of it, not by the exit code of what wrote it.
-- **Laptop numbers are not headlines.** See the three benchmark hosts below.
+- **Laptop numbers are not headlines.** See the four benchmark hosts below.
 
 ## The JIT: boxing, intrinsics and inlining
 
@@ -141,38 +141,55 @@ negative result belongs here too, since it stops the next port re-trying a settl
   are not what a native AVX-512 host would show. The method generalises: to learn whether a
   machine's widest vector is real, time three widths, not two, so the 128-to-256 step proves the
   probe can see a doubling; `lscpu` and `MaxVectorSize` report the instruction set, not the
-  datapath.
+  datapath. `bench/datapath.sh` is that probe, ported from Varka; every benchmark run records
+  its reading in the results header.
 - **Hosts measured in Varka.** 512:256 in lanes per nanosecond: AMD EPYC 7763 (Zen 3, AVX2, no
   AVX-512) 1.00; EPYC 9V74 (Zen 4, no AVX-512 exposed) 0.91 to 1.00; Intel Xeon Platinum 8573C
   and Xeon 6973P-C (full AVX-512) 1.33 to 1.36, from issuing 512-bit operations on two ports
   against 256-bit ones on three; EPYC 9V45 (Zen 5) 1.99. GitHub's x86 runners draw from all of
-  these.
+  these. `HARDWARE.md` holds the table, with sources, and vfdlibm's runs extend it.
 
-## Where headline numbers come from: three named hosts
+## Where headline numbers come from: four named hosts
 
-- **Headline numbers are measured on three named CPUs**, each drawn from GitHub's standard
+- **Headline numbers are measured on four named CPUs**, each drawn from GitHub's standard
   `ubuntu-latest` pool and each with results files of its own (owner's decision, 2 November
-  2026): the Intel Xeon 6973P-C (Granite Rapids, full AVX-512, host `xeon6973p`), the AMD EPYC
-  9V74 (Zen 4, host `epyc9v74`) and the AMD EPYC 7763 (Zen 3, AVX2, `UseAVX=2`,
-  `MaxVectorSize=32`, preferred species 256 bits, host `epyc7763`). vfdlibm cares about AVX-512
+  2026, revised the same day): the AVX-512 hosts, the Intel Xeon Platinum 8573C (host
+  `xeon8573c`), the Intel Xeon 6973P-C (Granite Rapids, `xeon6973p`) and the AMD EPYC 9V45
+  (Zen 5, full-width AVX-512, `epyc9v45`); and the AMD EPYC 7763 (Zen 3, AVX2, `UseAVX=2`,
+  `MaxVectorSize=32`, preferred species 256 bits, `epyc7763`). vfdlibm cares about AVX-512
   first, so the AVX-512 hosts are read first; each host decides for its own instruction set, and
   none speaks for another's. Laptop numbers never headline; laptop files say "laptop numbers, not
-  headlines" in their header.
-- **Read the 9V74's flags line before quoting it for AVX-512.** The three GitHub 9V74 VMs that
-  Varka measured exposed no `avx512` flags and ran at `UseAVX=2`, `MaxVectorSize=32` (above).
-  Every results header has an `AVX-512:` line (`avx512f=yes avx512dq=yes` or `no`); a 9V74 file
-  whose line reads `no` decides for Zen 4 at AVX2 width, not for AVX-512.
+  headlines" in their header. `HARDWARE.md` lists the hosts' flags, JVM settings and ratios.
+- **The EPYC 9V74 is not a host: its runners expose no AVX-512.** The three GitHub 9V74 VMs that
+  Varka measured had no `avx512` flags and ran at `UseAVX=2`, `MaxVectorSize=32`, so a 9V74 file
+  could only ever decide for Zen 4 at AVX2 width, which the EPYC 7763 already covers. It was
+  proposed as a host on 2 November 2026 and dropped before any run. The lesson stands for any new
+  host: read its flags in a run's log before naming it for an instruction set; every results
+  header has an `AVX-512:` line (`avx512f=yes avx512dq=yes` or `no`) and a `Datapath:` line.
+- **The EPYC 9V45 is recorded whenever drawn, and nobody waits for it.** It is the one
+  full-width 512-bit datapath in the pool (512:256 of 1.99), and a scarce draw: one in eighteen
+  in Varka's survey of 11 September 2026, though 7 of Varka's last 30 benchmark dispatches (31
+  October to 2 November) and 15 of 109 option-matrix jobs on 28 October drew it. So
+  `bench/dispatch-bench.sh --host epyc9v45` stops after 18 dispatches, an hourly try for about a
+  day (at one in eighteen, a draw with a chance of about 64%; at the recent rates, almost
+  surely), with exit status 3 if none drew it; `--attempts 1` is a single opportunistic try. A
+  miss costs about a minute of runner time, since the CPU check is the job's first step. No
+  decision waits on a 9V45 file; when one exists, it is read with the other AVX-512 hosts.
 - **The benchmark fails on any other CPU, and is retried, never relaxed.**
-  `.github/workflows/benchmark.yml` takes a `host` input with exactly three choices and maps each
-  to a model-name string fixed in the file, as runs of that host printed it: `AMD EPYC 7763`,
-  `Intel(R) Xeon(R) 6973P-C` and `AMD EPYC 9V74`, matched ignoring case. It checks
-  `/proc/cpuinfo` before anything else and fails unless the model name contains the host's
-  string; `bench/dispatch-bench.sh --host <host>` dispatches it and, when the run failed on that
-  check, waits an hour and dispatches again, until a run passes or fails on something else
-  (`bench/dispatch-epyc.sh` is the same with `--host epyc7763`). Other CPUs (EPYC 9V45, Xeon
-  Platinum 8573C and 8370C) are common draws, and accepting one would put a result on a
-  different machine from every result before it. If a host stays scarce for days, changing the
-  hosts is a decision for the owner, not a change to the check.
+  `.github/workflows/benchmark.yml` takes a `host` input with exactly four choices and maps each
+  to a model-name string fixed in the file, as runs of that host printed it, matched ignoring
+  case: `INTEL(R) XEON(R) PLATINUM 8573C` (Varka's fork runs 41465323581, 41255932044 and
+  41241977271, in capitals as Azure printed it), `Intel(R) Xeon(R) 6973P-C` (vfdlibm run
+  41442062308), `AMD EPYC 9V45` (Varka's fork runs 41486339971, 41446843041, 41329377429, as
+  "AMD EPYC 9V45 96-Core Processor") and `AMD EPYC 7763`. It checks `/proc/cpuinfo` before
+  anything else and fails unless the model name contains the host's string;
+  `bench/dispatch-bench.sh --host <host>` dispatches it and, when the run failed on that check,
+  waits an hour and dispatches again, until a run passes, fails on something else, or (for the
+  9V45, or with `--attempts`) the attempts run out (`bench/dispatch-epyc.sh` is the same with
+  `--host epyc7763`). Other CPUs (the EPYC 9V74, the Xeon Platinum 8370C) are common draws, and
+  accepting one would put a result on a different machine from every result before it. If a
+  host stays scarce for days, changing the hosts is a decision for the owner, not a change to
+  the check.
 - **A CPU check holds only for its own job.** Every GitHub-hosted job is a fresh VM, so a check
   in one job says nothing about another job's machine. The job that measures checks its own CPU
   and writes it into the results header.
