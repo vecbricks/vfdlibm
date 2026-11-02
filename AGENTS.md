@@ -16,7 +16,9 @@ vfdlibm ports fdlibm's double functions to the Java Vector API, each lane bit-id
 ## Build and test
 
 - `mvn -B verify` builds and runs the tests; the Vector API module is added by `pom.xml`.
-- One test: `mvn -q test -Dtest=ExpTest`.
+- One test: `mvn -q test -Dtest=ExpTest`. A `-Dtest` filter skips the fault runs below (the
+  profile `one-test` in `pom.xml`), since it would leave them no test, and a fault run that runs
+  no test fails.
 - Widths: `-Dvfdlibm.test.jvmArgs=-XX:MaxVectorSize=32` skips the 512-bit cases, as an AVX2
   host does (GitHub's x86 runners are a mix of AVX2 and AVX-512 hosts); `=16` runs everything at
   128 bits, as the Arm runners do.

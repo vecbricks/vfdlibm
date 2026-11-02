@@ -58,6 +58,8 @@
          -XX:MaxVectorSize=32 makes an AVX-512 host behave like an AVX2 one (no 512-bit species),
          which shows the skip path an AVX2 runner takes; =16 runs every case at 128 bits. -->
     <vfdlibm.test.jvmArgs></vfdlibm.test.jvmArgs>
+    <!-- The phase the fault runs are bound to; the profile one-test sets it to none. -->
+    <vfdlibm.fault.phase>test</vfdlibm.fault.phase>
     <!-- The test JVM's options, shared by the normal run and every fault run. -->
     <vfdlibm.test.argLine>
       --add-modules ${vector.module} ${vfdlibm.test.jvmArgs}
@@ -161,59 +163,66 @@
                -Dvfdlibm.fault=<name> set before Faults loads, running only the tests tagged
                `fault`, which require the fault's checks to fail. A fault is listed in
                PlantedFaultTest.CATCHERS and gets an execution here; PlantedFaultTest checks that
-               both hold. With -Dtest=..., a fault run may match no test, which is not a
-               failure. -->
+               both hold. A fault run that runs no test fails (failIfNoTests), so a mistyped
+               group or a lost tag cannot drop the fault's check silently. With -Dtest=..., the
+               profile one-test unbinds the fault runs, which that filter would leave empty. -->
           <execution>
             <id>fault-selftest.oneUlp</id>
+            <phase>${vfdlibm.fault.phase}</phase>
             <goals><goal>test</goal></goals>
             <configuration>
               <groups>fault</groups>
-              <failIfNoSpecifiedTests>false</failIfNoSpecifiedTests>
+              <failIfNoTests>true</failIfNoTests>
               <argLine>${vfdlibm.test.argLine} -Dvfdlibm.fault=selftest.oneUlp</argLine>
             </configuration>
           </execution>
           <execution>
             <id>fault-selftest.nanPayload</id>
+            <phase>${vfdlibm.fault.phase}</phase>
             <goals><goal>test</goal></goals>
             <configuration>
               <groups>fault</groups>
-              <failIfNoSpecifiedTests>false</failIfNoSpecifiedTests>
+              <failIfNoTests>true</failIfNoTests>
               <argLine>${vfdlibm.test.argLine} -Dvfdlibm.fault=selftest.nanPayload</argLine>
             </configuration>
           </execution>
           <execution>
             <id>fault-selftest.zeroSign</id>
+            <phase>${vfdlibm.fault.phase}</phase>
             <goals><goal>test</goal></goals>
             <configuration>
               <groups>fault</groups>
-              <failIfNoSpecifiedTests>false</failIfNoSpecifiedTests>
+              <failIfNoTests>true</failIfNoTests>
               <argLine>${vfdlibm.test.argLine} -Dvfdlibm.fault=selftest.zeroSign</argLine>
             </configuration>
           </execution>
           <execution>
             <id>fault-exp.dropCorrection</id>
+            <phase>${vfdlibm.fault.phase}</phase>
             <goals><goal>test</goal></goals>
             <configuration>
               <groups>fault</groups>
-              <failIfNoSpecifiedTests>false</failIfNoSpecifiedTests>
+              <failIfNoTests>true</failIfNoTests>
               <argLine>${vfdlibm.test.argLine} -Dvfdlibm.fault=exp.dropCorrection</argLine>
             </configuration>
           </execution>
           <execution>
             <id>fault-exp.constantOffByOneUlp</id>
+            <phase>${vfdlibm.fault.phase}</phase>
             <goals><goal>test</goal></goals>
             <configuration>
               <groups>fault</groups>
-              <failIfNoSpecifiedTests>false</failIfNoSpecifiedTests>
+              <failIfNoTests>true</failIfNoTests>
               <argLine>${vfdlibm.test.argLine} -Dvfdlibm.fault=exp.constantOffByOneUlp</argLine>
             </configuration>
           </execution>
           <execution>
             <id>fault-exp.thresholdMoved</id>
+            <phase>${vfdlibm.fault.phase}</phase>
             <goals><goal>test</goal></goals>
             <configuration>
               <groups>fault</groups>
-              <failIfNoSpecifiedTests>false</failIfNoSpecifiedTests>
+              <failIfNoTests>true</failIfNoTests>
               <argLine>${vfdlibm.test.argLine} -Dvfdlibm.fault=exp.thresholdMoved</argLine>
             </configuration>
           </execution>
@@ -235,6 +244,17 @@
   </build>
 
   <profiles>
+    <!-- One test: `mvn test -Dtest=ExpTest` runs only the normal suite's filtered tests. The fault
+         runs are skipped, since a -Dtest filter leaves them no test and they fail on that. -->
+    <profile>
+      <id>one-test</id>
+      <activation>
+        <property><name>test</name></property>
+      </activation>
+      <properties>
+        <vfdlibm.fault.phase>none</vfdlibm.fault.phase>
+      </properties>
+    </profile>
     <!-- Benchmarks: `mvn -B -Pjmh test-compile exec:exec` runs every JMH benchmark, and
          -Djmh.args="..." passes JMH's own options (a name regex, -p, -f, -wi, -i). -->
     <profile>
