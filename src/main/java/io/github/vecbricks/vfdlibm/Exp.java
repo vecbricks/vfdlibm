@@ -47,10 +47,12 @@ import jdk.incubator.vector.VectorSpecies;
  * </ul>
  *
  * <p>Both are exact. {@code VFdlibm.exp} is the first, chosen by the JMH measurement recorded in
- * the pull request that added this port and committed in {@code
- * bench/results/exp-laptop-2026-11-02.txt}: on ordinary data the per-lane finish never runs, and
- * skipping the rare paths' blends made the body about 2.2x faster there (laptop numbers). The
- * second is kept so the choice can be re-measured, on other hosts and as the JDK changes.
+ * the pull request that added this port and committed in {@code bench/results/}: {@code
+ * exp-laptop-avx2-2026-11-02.txt} under {@code -XX:UseAVX=2}, as C2 compiles for the AVX2 hosts
+ * that are the target, and {@code exp-laptop-2026-11-02.txt} with AVX-512. On ordinary data the
+ * per-lane finish never runs, and skipping the rare paths' blends made the 256-bit body about 1.9x
+ * faster there under AVX2 and 2.2x with AVX-512 (laptop numbers). The second is kept so the choice
+ * can be re-measured, on other hosts and as the JDK changes.
  */
 final class Exp {
 
