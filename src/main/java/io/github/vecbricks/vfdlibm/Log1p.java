@@ -62,14 +62,17 @@ import jdk.incubator.vector.VectorSpecies;
  *       withLane}, all in this body, with no array and no call that takes a vector.
  * </ul>
  *
- * <p>All three are exact. {@link #log1p}, which {@code VFdlibm.log1p} calls, is the guarded arm,
- * provisionally. On the laptop ({@code bench/results/log1p-laptop-avx2-2026-11-02.txt}, under
- * {@code -XX:UseAVX=2} as C2 compiles for the AVX2 hosts that are the target, and {@code
- * log1p-laptop-2026-11-02.txt}, AVX-512) it never allocates, but the blended arm is ahead of it
- * at 256 bits on mixed data on the AVX-512 build (1.07x and 1.09x), and every gap between the
- * arms is under 1.3x, which sets no direction, except the finish arm's loss on mixed data, where
- * its call takes vectors and boxes them (SKILLS.md). The EPYC 7763 run decides. The other two are
- * kept so the choice can be re-measured, on other hosts and as the JDK changes.
+ * <p>All three are exact, and none allocates at 256 or 512 bits on ordinary data or when one
+ * input in 16 is rare. At {@code SPECIES_MAX} C2 does not intrinsify lane access at a variable
+ * index, and Exp's same finish boxes there on data with rare lanes (SKILLS.md); this one has not
+ * been measured at {@code SPECIES_MAX}. {@link #log1p}, which {@code VFdlibm.log1p} calls, is
+ * the guarded arm, provisionally. On the laptop ({@code
+ * bench/results/log1p-laptop-avx2-2026-11-02.txt}, under {@code -XX:UseAVX=2} as C2 compiles for
+ * the AVX2 hosts that are the target, and {@code log1p-laptop-2026-11-02.txt}, AVX-512; laptop
+ * numbers, not headlines) every gap between the three arms is under 1.3x, which sets no
+ * direction: under {@code UseAVX=2} at 256 bits the guarded and finish arms are level on both
+ * mixes and the blend is 1.05x to 1.17x behind. The EPYC 7763 run decides. The other two are kept
+ * so the choice can be re-measured, on other hosts and as the JDK changes.
  */
 final class Log1p {
 
@@ -225,7 +228,7 @@ final class Log1p {
     hu = hu.blend(IntVector.broadcast(intSpecies, 0x00100000).sub(hu)
         .lanewise(VectorOperators.ASHR, 2), halve);
     // __HI(u) = uHi, written out: this late in the body C2 refuses to inline Lanes.withHi
-    // (NodeCountInliningCutoff, under PrintInlining) and the whole body boxes, about 45 KB/op.
+    // (NodeCountInliningCutoff, under PrintInlining) and the whole body boxes (SKILLS.md).
     LongVector uHiBits = (LongVector) uHi.convertShape(VectorOperators.I2L, longSpecies, 0);
     DoubleVector uNormal = (DoubleVector) ((LongVector) u.viewAsIntegralLanes()).and(LOW_WORD)
         .or(uHiBits.lanewise(VectorOperators.LSHL, 32)).viewAsFloatingLanes();
