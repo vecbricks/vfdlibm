@@ -13,12 +13,20 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # x86 at the runner's widths. GitHub's x86 runners are AVX2, so the 128- and 256-bit
-          # cases run and the 512-bit cases are skipped (an AVX-512 host runs them); the
-          # preferred species is 256 bits.
-          - name: x86 128+256 bits
+          # x86 at whatever width the drawn runner has. GitHub's x86 runners are a mix: the AMD
+          # EPYC 7763 is AVX2 (preferred species 256 bits, the 512-bit cases skipped), while some
+          # draws are AVX-512 hosts such as an Intel Xeon 6973P-C, which run the 512-bit cases
+          # too and prefer 512 bits. The 128- and 256-bit cases run on every draw.
+          - name: x86 128+256 bits, 512 on AVX-512 runners
             os: ubuntu-latest
             jvm-args: ""
+          # x86 compiled as an AVX2 host, the headline EPYC 7763, whatever runner is drawn:
+          # UseAVX=2 caps vectors at 256 bits and takes AVX-512's instructions away, so the
+          # preferred species is 256 bits on every draw, and an operation C2 lowers only with
+          # AVX-512 (D2L and L2D need AVX512DQ) runs its Java fallback, whose bits count too.
+          - name: x86 as AVX2, 128+256 bits
+            os: ubuntu-latest
+            jvm-args: -XX:UseAVX=2 -XX:MaxVectorSize=32
           # x86 with vectors capped at 16 bytes: every case runs at 128 bits (the preferred
           # species is 128 bits too), and the 256- and 512-bit cases are skipped.
           - name: x86 128 bits
@@ -44,9 +52,10 @@ jobs:
   # A boxed vector body computes the right bits, so the tests pass on it; only its allocation
   # shows that the Vector API fell back to Java. bench/alloc-check.py runs every vector
   # benchmark named *256 or *Preferred under JMH's -prof gc, with the body inlined, and fails if
-  # any row allocates 1 B/op or more. It runs at the runner's own flags (an AVX-512 runner, when
-  # GitHub draws one, runs it at full AVX) and as an AVX2 host, where D2L and L2D box. Not on
-  # Arm: its vectors are 128 bits, where this check has not been shown to hold (SKILLS.md).
+  # any row allocates 1 B/op or more. It runs at the runner's own flags (AVX2 on an EPYC 7763,
+  # AVX-512 on the draws that have it, where the preferred arm is 512 bits) and as an AVX2 host
+  # on every draw, where D2L and L2D box. Not on Arm: its vectors are 128 bits, where this
+  # check has not been shown to hold (SKILLS.md).
   alloc:
     name: alloc (${{ matrix.name }})
     runs-on: ubuntu-latest

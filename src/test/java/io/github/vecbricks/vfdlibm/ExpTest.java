@@ -102,6 +102,19 @@ class ExpTest {
         "Exp.expBlended", species, Exp::expBlended, StrictMath::exp, xs, 503L);
   }
 
+  /**
+   * SPECIES_MAX, which {@link VectorWidth} does not run: its shape is none of the fixed ones, so
+   * exp's int lanes are a fixed-shape species of another shape ({@link Lanes#intSpecies}).
+   */
+  @Test
+  void maxSpecies() {
+    double[] xs = Inputs.concat(thresholds(), Inputs.sampled(600L, 1 << 14),
+        Inputs.uniform(601L, 1 << 14, -746.0, 710.0));
+    assertExp(DoubleVector.SPECIES_MAX, xs);
+    Oracle.assertUnaryMasked(
+        "VFdlibm.exp", DoubleVector.SPECIES_MAX, VFdlibm::exp, StrictMath::exp, xs, 602L);
+  }
+
   @Test
   void maskedFormRejectsANullMask() {
     DoubleVector x = DoubleVector.zero(DoubleVector.SPECIES_128);

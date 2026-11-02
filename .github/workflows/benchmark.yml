@@ -5,6 +5,10 @@ name: Benchmark
 # later whenever a run fails the CPU check. The expected CPU is fixed here on purpose, with no
 # input to change it: a run on another CPU is not comparable with the results before it.
 
+# A dispatcher's tag, when given, goes into the run's name so the dispatcher can find its own run
+# among others on the same branch; it changes nothing else.
+run-name: ${{ inputs.run-tag && format('Benchmark {0}', inputs.run-tag) || 'Benchmark' }}
+
 on:
   workflow_dispatch:
     inputs:
@@ -14,6 +18,10 @@ on:
         default: 'ExpBenchmark'
       jvm-args:
         description: 'Extra JVM options for the forked benchmark JVMs, e.g. "-XX:MaxVectorSize=16"'
+        required: false
+        default: ''
+      run-tag:
+        description: 'Free text for the run name only; bench/dispatch-epyc.sh finds its run by it'
         required: false
         default: ''
 
