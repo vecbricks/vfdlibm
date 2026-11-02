@@ -50,4 +50,27 @@ public final class VFdlibm {
   public static DoubleVector exp(DoubleVector x, VectorMask<Double> live) {
     return Exp.exp(x, Objects.requireNonNull(live, "live"));
   }
+
+  /**
+   * {@code StrictMath.log1p} in every lane. Ported from fdlibm 5.3's {@code s_log1p.c}.
+   *
+   * @param x the arguments
+   * @return the natural logarithm of {@code 1 + x} in each lane of {@code x}
+   */
+  public static DoubleVector log1p(DoubleVector x) {
+    return Log1p.log1p(x, null);
+  }
+
+  /**
+   * {@code StrictMath.log1p} in the lanes set in {@code live}; every other lane is {@code x}'s,
+   * untouched.
+   *
+   * @param x the arguments
+   * @param live the lanes to compute, of {@code x}'s species
+   * @return the natural logarithm of {@code 1 + x} in each live lane of {@code x}, and {@code x}
+   *     in the others
+   */
+  public static DoubleVector log1p(DoubleVector x, VectorMask<Double> live) {
+    return Log1p.log1p(x, Objects.requireNonNull(live, "live"));
+  }
 }

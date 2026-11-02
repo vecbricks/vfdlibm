@@ -162,3 +162,34 @@ belongs here too, since it stops the next port re-trying a settled question.
 - **Laptop first, then the EPYC.** The `D2L` boxing never showed under the laptop's default
   flags, where AVX512DQ is present; it showed only under `-XX:UseAVX=2`. Run a new port's
   benchmark under both before calling it done.
+
+## What the log1p port taught
+
+- **The C's ints in int lanes, end to end.** `log1p` keeps `hx`, `ax`, `hu` and `k` as
+  `IntVector` lanes, with the double vector's lane count at half its bits: a high word comes in
+  by `L2I` from the long view shifted right 32, goes back by `I2L` and a shift left 32, `k`
+  becomes a double by `I2D`, and the int compares' masks are cast to double masks. Under
+  `-XX:UseAVX=2` every 256-bit arm allocates about 0.01 B/op on common data, so `L2I`, `I2L`,
+  `I2D` and the int-to-double mask cast all lower at four lanes on AVX2
+  (`bench/results/log1p-laptop-avx2-2026-11-02.txt`). The C's signed compares, such as `hx <=
+  (int)0xbfd2bec3` for a negative `x`, are then written as the C writes them.
+- **An invalid operation's NaN is not the hardware's.** For `x < -1` the C returns `(x-x)/(x-x)`.
+  x86's `divpd` gives `0xfff8000000000000` there, and a negative NaN `x` comes back quieted with
+  its payload, but `StrictMath.log1p` returns `Double.NaN`, `0x7ff8000000000000`, for every such
+  lane, negative NaNs of any payload included; a positive NaN takes `x+x` and keeps its payload.
+  Where the C makes a NaN by an invalid operation, check the oracle's bits on NaN inputs of both
+  signs and several payloads (`Inputs.specials` has them) before computing it.
+- **A third shape: blend the rare paths behind one test.** `log1p`'s rare paths (`x <= -1`,
+  `|x| < 2^-29`, `+inf` and NaN, and `|f| < 2^-20`) are a few vector operations each. Computing
+  and blending them only when a vector holds a rare lane (`if (rare.anyTrue())`) never allocates
+  and, under `UseAVX=2` at 256 bits, by minimums in ns per 1024 doubles, ties the per-lane finish
+  on common data (2760 against 2716) and beats it 2.0x on mixed data (3011 against 6038, the
+  finish allocating 52,928 B/op); it beats blending every lane by 1.15x on common data and
+  1.07x on mixed (3185 and 3215). `VFdlibm.log1p` uses it. A port whose rare paths are cheap in
+  vector form should measure this shape beside the other two.
+- **`lane` and `withLane` in a loop do not avoid the finish's allocation.** A first per-lane
+  finish read the rare lanes from `rare.toLong()` and wrote each `StrictMath.log1p` result back
+  with `result.withLane(lane, ...)`, looping over the set bits. Under `UseAVX=2` it allocated
+  47,232 B/op on mixed data at 256 bits, against 52,928 for `toArray`/`fromArray`, at the same
+  speed, in a short exploratory run kept in the same results file. A version with a constant
+  lane index per step (no loop) was not tried.
