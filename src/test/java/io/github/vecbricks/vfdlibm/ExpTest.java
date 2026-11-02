@@ -102,6 +102,38 @@ class ExpTest {
         "Exp.expBlended", species, Exp::expBlended, StrictMath::exp, xs, 503L);
   }
 
+  /**
+   * One vector for every subset of a vector's lanes, the subset's lanes rare and the others common:
+   * exactly one rare lane at each position, every lane rare, and every mix between. The per-lane
+   * finish walks the rare mask's set bits, so a lane it skipped or visited twice shows here. The
+   * rare inputs cycle through each kind the finish handles: NaN, the infinities, overflow,
+   * underflow and the subnormal scale-back.
+   */
+  static double[] everySubsetOfLanesRare(int lanes) {
+    double[] rare = {
+      Double.NaN, 800.0, -750.0, -708.5, Double.POSITIVE_INFINITY, Double.NEGATIVE_INFINITY,
+      K_BELOW_NORMAL_EDGE
+    };
+    double[] xs = new double[(1 << lanes) * lanes];
+    int next = 0;
+    for (int subset = 0; subset < 1 << lanes; subset++) {
+      for (int lane = 0; lane < lanes; lane++) {
+        boolean isRare = (subset >> lane & 1) != 0;
+        xs[subset * lanes + lane] = isRare ? rare[next++ % rare.length] : 0.37 * lane - 1.0;
+      }
+    }
+    return xs;
+  }
+
+  @ParameterizedTest
+  @EnumSource(VectorWidth.class)
+  void everySubsetOfLanesRare(VectorWidth width) {
+    VectorSpecies<Double> species = width.species();
+    double[] xs = everySubsetOfLanesRare(species.length());
+    assertExp(species, xs);
+    Oracle.assertUnaryMasked("VFdlibm.exp", species, VFdlibm::exp, StrictMath::exp, xs, 504L);
+  }
+
   @Test
   void maskedFormRejectsANullMask() {
     DoubleVector x = DoubleVector.zero(DoubleVector.SPECIES_128);

@@ -39,8 +39,8 @@ import org.openjdk.jmh.annotations.Warmup;
  * add {@code -jvmArgsAppend -XX:CompileCommand=inline,io.github.vecbricks.vfdlibm.*::*}.
  *
  * <p>{@code bench/alloc-check.py} runs the vector benchmarks named {@code *256} and
- * {@code *Preferred} on {@code common} inputs and fails if any allocates, which means the body
- * boxed. A new arm named that way is checked with no further change.
+ * {@code *Preferred} on {@code common} and {@code mixed} inputs and fails if any allocates, which
+ * means the body boxed. A new arm named that way is checked with no further change.
  */
 @State(Scope.Thread)
 @BenchmarkMode(Mode.AverageTime)

@@ -10,14 +10,14 @@
 
 A boxed body computes the right bits, so the tests pass on it; only the allocation rate shows
 that the Vector API fell back to Java (SKILLS.md, "Allocation is the verdict"). This script runs
-every JMH benchmark method named *256 or *Preferred, on common inputs, under -prof gc with the
-body inlined as Varka emits it, and fails if any measured iteration of any row allocates
+every JMH benchmark method named *256 or *Preferred, on common and mixed inputs, under -prof gc
+with the body inlined as Varka emits it, and fails if any measured iteration of any row allocates
 THRESHOLD bytes per op or more. It reads the numbers from JMH's JSON result.
 
 Rows left out: 128 bits, since on x86 C2 lowers no mask at two 64-bit lanes and every masked
-128-bit body boxes (SKILLS.md); 512 bits, which runs in software on an AVX2 host (the preferred
-arm covers 512 bits on a host that has it); and mixed inputs, where the finish arm's per-lane
-fallback allocates its round trip arrays by design.
+128-bit body boxes (SKILLS.md); and 512 bits, which runs in software on an AVX2 host (the
+preferred arm covers 512 bits on a host that has it). Mixed inputs are checked because they are
+the ones that run the rare lanes' paths, which common inputs never reach.
 
 Usage, from the repository root:
     bench/alloc-check.py                                  # the host's own flags
@@ -41,7 +41,7 @@ INLINE = "-XX:CompileCommand=inline,io.github.vecbricks.vfdlibm.*::*"
 RESULT = "target/alloc-check.json"
 # One fork; warmup long enough for C2 to finish the body before the first measured iteration,
 # which every iteration being checked (not only the mean) enforces.
-JMH_OPTIONS = "-f 1 -wi 3 -w 1s -i 3 -r 1s -prof gc -p inputs=common"
+JMH_OPTIONS = "-f 1 -wi 3 -w 1s -i 3 -r 1s -prof gc -p inputs=common,mixed"
 
 
 def run_jmh(mvn, include, jvm_args):

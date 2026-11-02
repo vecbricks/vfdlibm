@@ -50,14 +50,15 @@ belongs here too, since it stops the next port re-trying a settled question.
   `gc.alloc.rate.norm` near 0 B/op means the body ran unboxed; a box is kilobytes per op (exp's
   128-bit rows allocate 1.36 to 1.90 MB per 1024 doubles). Read `-prof gc` on every row.
 - **CI checks it.** `bench/alloc-check.py` runs every benchmark method named `*256` or
-  `*Preferred`, on `inputs=common`, one fork under `-prof gc` with the body inlined, and fails if
-  any measured iteration reaches 1 B/op; the `alloc` job of `ci.yml` runs it at the runner's
-  flags and under `-XX:UseAVX=2`. On the laptop, under load, C2 finished exp's body within the
-  first one-second iteration and later ones read about 0.02 B/op, so three warmup seconds leave
-  two to spare; a row that fails only in its first iteration means C2 was late. Left
-  out: 128 bits (masks box at two lanes on x86, below), 512 bits (software on AVX2; the preferred
-  arm covers it where it is real) and `mixed` inputs (the finish arm's fallback allocates its
-  arrays by design). Arm is not checked yet: its preferred species is 128 bits, and no run has
+  `*Preferred`, on `inputs=common` and `mixed`, one fork under `-prof gc` with the body inlined,
+  and fails if any measured iteration reaches 1 B/op; the `alloc` job of `ci.yml` runs it at the
+  runner's flags and under `-XX:UseAVX=2`. On the laptop, under load, C2 finished exp's body
+  within the first one-second iteration and later ones read about 0.02 B/op, so three warmup
+  seconds leave two to spare; a row that fails only in its first iteration means C2 was late.
+  Left out: 128 bits (masks box at two lanes on x86, below) and 512 bits (software on AVX2; the
+  preferred arm covers it where it is real). Mixed inputs were left out too until the per-lane
+  finish stopped allocating (below); common data alone never runs a rare path, so it could not
+  see that path box. Arm is not checked yet: its preferred species is 128 bits, and no run has
   shown exp unboxed there.
 - **Ask C2 what it refused.** `-XX:+UnlockDiagnosticVMOptions -XX:+PrintIntrinsics`, or scoped
   to the library, `-XX:CompileCommand=PrintIntrinsics,io.github.vecbricks.vfdlibm.*::*`. Add
@@ -77,6 +78,19 @@ belongs here too, since it stops the next port re-trying a settled question.
   `Lanes.addExponent`, so nothing is refused near the end of the body. `CompileCommand=inline`
   lifts the size limit, not `NodeCountInliningCutoff`: a call refused for the node count stays
   refused under it, which only a change to the code fixes.
+- **A refused call boxes on every pass, not only when it runs.** `exp`'s per-lane finish was a
+  private method, `finishPerLane(x, result, rare)`, called at the end of the body behind
+  `rare.anyTrue()`. `PrintInlining` showed it refused with `NodeCountInliningCutoff` in the
+  final compile, under `-XX:UseAVX=2` with the body force-inlined. Its three arguments were then
+  boxed on every vector, rare or not: 256 vectors times 168 bytes (two 64-byte `DoubleVector`
+  boxes and a 40-byte mask) plus, for the 62 vectors of the mixed data that hold a rare lane,
+  160 bytes (two `toArray` copies and the returned box) sum to exactly the 52928 B/op measured;
+  JFR's allocation-by-site names `fromArray0Template`, `blendTemplate`, `Mask.or` and `toArray`.
+  On common data the branch never ran, C2 left it as an uncommon trap, and nothing boxed, which
+  is why the allocation check, on common data only, never saw it. Written out in the body with
+  the Vector API's own `toLong`, `lane` and `withLane`, which C2 inlines late instead of
+  refusing, the finish allocates nothing. Any slow path called from a port's body belongs
+  written out inline, as `Lanes.addExponent` is.
 - **A forced inline changes the caller.** When a flag affects inlining, the method whose code
   moves is the one doing the calling; measure it, not only the callee.
 
@@ -150,15 +164,20 @@ belongs here too, since it stops the next port re-trying a settled question.
 - **Per-lane finish against blend.** `exp` has both arms in one body, selected by a constant
   `boolean`, so they share every line but the rare paths and the unused arm folds away once
   inlined. The blended arm computes every branch of `e_exp.c` in every lane; the finish arm
-  computes the common path and, when any lane is rare, sends those lanes to `StrictMath.exp` via
-  `toArray` and `fromArray`. By minimums, in ns per 1024 doubles: on common data the finish arm
-  wins clearly, 1864 against 4036 at 256 bits and 1269 against 2834 at 512 on the laptop's
-  default flags, 1939 against 3690 under `UseAVX=2`. On mixed data (one rare input in 16) the
-  round trip costs about 53 KB/op and the arms close up: 3060 against 3269 at 512 bits
-  (re-run), level at 4528 against 4577 under `UseAVX=2` (re-run), and at 256 bits on the
-  AVX-512 build the blend wins, 4597 against 7688.
-  `VFdlibm.exp` uses the finish arm. Each port measures both on common and mixed data, decides
-  per branch, and records the decision in its pull request (`PLAN.md` section 5).
+  computes the common path and, when any lane is rare, sends those lanes to `StrictMath.exp`. On
+  the EPYC 7763 (`bench/results/exp-epyc7763-2026-11-02.txt`, minimums in ns per 1024 doubles
+  at 256 bits), the finish arm as first merged was 1.57x faster than the blend on common data,
+  4203 against 6590, and lost once rare lanes were common: on mixed data (one rare input in 16,
+  about a quarter of the 4-lane vectors holding a rare lane) it was 1.64x slower, 12331 against
+  7512, and no faster than scalar `StrictMath` (11752), while allocating 52928 B/op. The laptop
+  had understated that: under `UseAVX=2` the two arms read level on mixed data there.
+  The allocation was the refused call above; with the finish written out inline it is gone, and
+  on the laptop under `UseAVX=2` mixed data now reads 2555 against 4573 for the blend, and 1907
+  against 3303 at 512 bits on the default flags, where the old method allocated 44032 B/op
+  (`bench/results/exp-finish-laptop-2026-11-02.txt`, laptop numbers). Which arm `VFdlibm.exp`
+  keeps is decided by the EPYC run of that change, not by the laptop. Each port measures both
+  on common and mixed data, decides per branch, and records the decision in its pull request
+  (`PLAN.md` section 5).
 - **Laptop first, then the EPYC.** The `D2L` boxing never showed under the laptop's default
   flags, where AVX512DQ is present; it showed only under `-XX:UseAVX=2`. Run a new port's
   benchmark under both before calling it done.
