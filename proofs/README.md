@@ -15,6 +15,11 @@ way.
 | `java.smt2` | the prelude: Java's integer operators and doubles over integers | hand |
 | `java_check.smt2` | the prelude against the JVM's results | `ProofFiles` |
 | `sign_symmetry.smt2` | round to nearest commutes with negation; exp's two quotients | hand |
+| `exp_zero_reduction.smt2` | exp's L1: the k == 0 path's IEEE hinges | `ExpProofFiles` |
+| `exp_near_band.smt2` | exp's L2: the far form's k, hi, lo on the near band | `ExpProofFiles` |
+| `exp_highword_compare.smt2` | exp's L3: high-word compares on 64 bits | `ExpProofFiles` |
+| `exp_tiny_counterexample.smt2` | exp's L4: the tiny lanes' fold refuted | `ExpProofFiles` |
+| `exp_half_sign.smt2` | exp's L5: halF[xsb] from the sign bit | `ExpProofFiles` |
 
 - `java.smt2`: Java's `int` and `long` operators over SMT-LIB's integers, each as the JLS
   defines it, and doubles as `S * M * 2^E`, with round to nearest stated on the number line for
@@ -29,6 +34,12 @@ way.
   to. So for a finite `a`, exp's `a / (c - 2.0)` has the bits of `-(a / (2.0 - c))`, unless the
   quotient rounds to zero, where IEEE 754's sign rule gives the same (stated, not checked). The
   file's header says exactly what is proven and what is not.
+- `exp_*.smt2`: exp's lemmas in `PROOFS.md`, one file each, with the constants (`invln2`,
+  `ln2HI`, `ln2LO`, `P1..P5`, `HALF_BITS`, the high words, `K_MIN_NORMAL`) rendered from `Exp`
+  and `Lanes` by `ExpProofFiles`. Each header, and the lemma's **Encoding** paragraph in
+  `PROOFS.md`, says which steps are machine-checked and which stay informal: L2, L3, L4 and L5
+  are checked whole but for the code's text (that the port calls what the file encodes); of L1
+  the IEEE hinges are, and the bounds on the polynomial (H2, H3) are not.
 
 ## Running them
 
@@ -129,8 +140,15 @@ Zero is not in the prelude: a proof whose value can round to zero states its own
 6. A planted fault shows a check can fail: change a definition in a copy of `java.smt2` (a half
    step dropped, a midpoint moved) and see the proof's checks come back with the wrong verdict.
 
-`ProofFiles` writes the rendered files and `ProofFilesTest` fails when a committed one differs
-from its rendering; `mvn -q test -Dtest=ProofFilesTest -Dvfdlibm.proofs.regen=true` rewrites them.
+`ProofFiles` writes the rendered files (exp's through `ExpProofFiles`) and `ProofFilesTest` fails
+when a committed one differs from its rendering; `mvn -q test -Dtest=ProofFilesTest
+-Dvfdlibm.proofs.regen=true` rewrites them.
+
+A claim about one input, such as a counter-example, is evaluated rather than solved:
+`ExpProofFiles`' chain renders, for each operation of a formula, a check that the exact result
+on the two doubles Java computed before it rounds to the double Java computed and to no other
+double in its binade or the ones next to it. Every check is ground and linear, and no
+intermediate double is taken on trust.
 
 ## The solvers
 

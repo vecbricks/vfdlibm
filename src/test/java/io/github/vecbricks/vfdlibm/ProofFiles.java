@@ -20,9 +20,11 @@ import java.util.function.LongBinaryOperator;
 
 /**
  * The rendered files under {@code proofs/}: the check of the prelude, {@code java.smt2}, against
- * the JVM. {@link ProofFilesTest} fails when a committed file differs from what this renders, so
- * a definition and the JVM results that pin it cannot drift apart. {@code java.smt2} itself, and
- * the proofs whose constants are fdlibm's rather than computed, are written by hand.
+ * the JVM, and exp's proofs ({@link ExpProofFiles}), whose constants come from the code. {@link
+ * ProofFilesTest} fails when a committed file differs from what this renders, so a definition and
+ * the JVM results that pin it, or a constant and the proof that uses it, cannot drift apart.
+ * {@code java.smt2} itself, and the proofs whose constants are fdlibm's rather than computed, are
+ * written by hand.
  *
  * <p>Every check is an {@code (echo "<what it shows>: expect sat|unsat")} followed by its
  * {@code (check-sat)} between {@code push} and {@code pop}; {@code dev/prove.sh} pairs each

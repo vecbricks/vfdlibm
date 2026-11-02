@@ -28,6 +28,9 @@
 ;     s = fl(fl(invln2 * x) + 0.5) rounds into binade 2^0, so (int) s = 1, not 0: the
 ;     high-word test, not the formula, forces k = 0 (exp_highword_compare.smt2 proves
 ;     that test).
+;   - Section D: the domain widened by a word is refuted. At one double of the next word
+;     up per sign, every rounding of the k == 0 tail and of the C's near form is
+;     evaluated, and the two results differ.
 ;
 ; What is not machine-checked:
 ;   - H2 and H3, the bounds 0.94|x| <= |c| < 0.37 with c of x's sign, and q positive and

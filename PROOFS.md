@@ -13,12 +13,15 @@ lane's (R4); they prove the arithmetic, not that the vector code does it. The ve
 port's own vector code against `StrictMath` at the lemma's boundaries, so a port that strayed
 from the proven computation fails there.
 
-The proofs are informal, or reduced to a finite check by a theorem. Each lemma ends with a line
-saying how it would be machine-checked under the conventions of Varka's `sql/varka/proofs/`
-(SMT-LIB over integers, a double as `M * 2^E`, rounding as the `jdouble.rne` relation to the
-nearest double in a named binade, not SMT's floating-point theory; `unsat` checks are the proofs,
-`sat` checks show the domain is not vacuous and that a constant changed by one is refuted), and
-which constant change its `sat` check refutes. No proof is machine-checked yet.
+The proofs are informal, or reduced to a finite check by a theorem, and parts of them are
+machine-checked in `proofs/` under the conventions of Varka's `sql/varka/proofs/` (SMT-LIB over
+integers, a double as `M * 2^E`, rounding as the `jdouble.near` relation to the nearest double in
+a named binade, not SMT's floating-point theory; `unsat` checks are the proofs, `sat` checks show
+the domain is not vacuous and that a constant changed by one is refuted; `proofs/README.md`).
+Each lemma ends with an **Encoding** paragraph naming its file and saying which steps are
+machine-checked and which stay informal. The files' constants are rendered from `Exp` and
+`Lanes` by `ProofFiles`, so `ProofFilesTest` fails when one moves without its proof; `dev/prove.sh
+--solver both` runs them under Z3 and cvc5.
 
 Notation: `fl(v)` is `v` rounded to the nearest double, ties to even (Java's and fdlibm's only
 rounding mode; the JLS fixes it, and fdlibm assumes it). `hx` is the high word of `|x|`, as
@@ -99,18 +102,29 @@ of the word, and at `0x3fd62e42_fefa3a08` the far form with `k = 1` is not exp);
 and 1024 seeded, plus the 4096 doubles above `+-0.5 ln2`, at every width and `SPECIES_MAX`; with
 the `k` forcing removed it fails.
 
-**Encoding.** Steps 1-3: (R1) and (R3) as lemmas of the per-binade `jdouble.rne` relation over
-one symbolic binade, `unsat`. H2 and H3 multiply unknowns (`x*c`, `T*bracket`), which Varka's
-README says needs its own design: as a bound lemma per binade of `x` (the bracket's interval,
-then `c` linear in `x` within a binade), then linear, `unsat`; until then they are sampled. The
-`sat` check refutes the domain's top word changed by one, `0x3fd62e43`, whose lanes the C
-reduces: there the `k = 0` tail first gives a different double at `x = 0x3fd62e43_00000004`
-(positive) and `x = 0xbfd62e43_0000001f` (negative). The word's low words 0 and 1 are not
-witnesses: there the tail gives exactly `StrictMath.exp` (`0x3ff6a09e66dbc8da` for the positive,
-`0x3fe6a09e6622aec0` for the negative). Over the whole word, 313095227 positive and 301477648
-negative doubles differ (counted by an exhaustive scalar run, no fused multiply-add).
-`ProofsTest.l1DomainWidenedByAWordIsRefuted` asserts the four non-witnesses and the two
-witnesses.
+**Encoding.** `proofs/exp_zero_reduction.smt2`, partly machine-checked. Checked: step 1's and
+step 3's `x - (+0) = x` and `+0 - q = -q` (the exact value is the double or its negation, which
+`jdouble.near` admits in every binade at once, and admits no other double in its binade or the
+ones next to it, either sign, for every binade from `2^-60` to `2^-2`; the domain's ends,
+rendered from `Exp`'s words, lie in `2^-28` and `2^-2`); that `ln2HI[0]` and `ln2LO[0]` are
+positive and finite; step 4's scale-back, `y`'s bits plus `0 << 52` for every long, and `k = 0`
+not below `K_MIN_NORMAL`; H1's witness, that at the domain's top double `0x3fd62e42_ffffffff` the
+formula's `s` rounds into `[1, 2)`, so the cast would give 1; and the refutation below, every
+rounding evaluated. Step 2 is `proofs/sign_symmetry.smt2`'s, for `c` in `[-2, 1]`. Not checked,
+and informal above: H2 and H3, which bound the polynomial's eight roundings and multiply unknowns
+(`x*c`, `T*bracket`), so they are sampled by `ProofsTest`; with them the hypothesis of step 2 and
+the binades of `q` (`2^-59` to `2^-4`) that the check covers; the sign of the zero product
+`fl(+0 * v) = +0` (IEEE 754 6.3; zero is not in the prelude); the casts of `+0.0` and the blend
+that puts it on exactly the unreduced lanes, which are the code's text. The file refutes the
+domain's top word changed by one, `0x3fd62e43`, whose lanes the C reduces: there the `k = 0` tail
+first gives a different double at `x = 0x3fd62e43_00000004` (positive) and `x =
+0xbfd62e43_0000001f` (negative), shown by evaluating both computations one rounding at a time
+and an `unsat` check that the results are equal. The word's
+low words 0 and 1 are not witnesses: there the tail gives exactly `StrictMath.exp`
+(`0x3ff6a09e66dbc8da` for the positive, `0x3fe6a09e6622aec0` for the negative). Over the whole
+word, 313095227 positive and 301477648 negative doubles differ (counted by an exhaustive scalar
+run, no fused multiply-add). `ProofsTest.l1DomainWidenedByAWordIsRefuted` asserts the four
+non-witnesses and the two witnesses.
 
 ### L2. The near band's form is the far form
 
@@ -147,12 +161,21 @@ and their negatives, with the margins, and the two `sat` cases below);
 at 65536 uniform draws over the band and 8 neighbours of each end, both signs). **Vector tie.**
 `ExpTest.foldBoundaries` and `foldBoundariesAtMaxSpecies`, as for L1, at both ends of the band.
 
-**Encoding.** By (R2) the claim reduces to the two boundary doubles: the products `invln2 * X1`
-and `invln2 * X2` are exact rationals of known binades (`[0.5, 1)` and `[1, 2)`), the sums land in
-`[1, 2)`, one `jdouble.rne` step each; `unsat` for `(int) s != 1`, and (R1) for the negatives.
-Linear, since every factor but the rounding is a constant. The `sat` checks refute the band
-widened by a word at either end: at `hx = 0x3fd62e42`, `x = 0x3fd62e42_00000000` gives `k = 0`;
-past `0x3ff0a2b1`, `x = 0x3ff0a2b2_ffffffff` gives `k = 2`, not the near form's 1.
+**Encoding.** `proofs/exp_near_band.smt2`, machine-checked for every double of the band, both
+signs, without (R2): `x` is `S * Mx * 2^(j-52)` in each of the band's binades `2^-2`, `2^-1`,
+`2^0`, with `Mx` symbolic and bounded by `X1` and `X2` (rendered from `Exp`'s words); the product
+with `invln2` is then a constant times `Mx`, linear, and rounds only into the binades `[0.5, 1)`
+and `[1, 2)` with `x`'s sign; for each pair of binades the sum with `halF[xsb] = S/2`
+(`exp_half_sign.smt2`) rounds into `[1, 2)` with `x`'s sign, so `(int) s = S`, `unsat` against
+every other neighbouring binade; each pair is shown reached (`sat`) or unreachable (`unsat`).
+Step 3's exactness, `+-1 * ln2HI[0]` and `+-1 * ln2LO[0]` rounding to `+-ln2HI[0]` and
+`+-ln2LO[0]` and no other double, and H5, that the `t = -1` results have `LN2HI_1`'s and
+`LN2LO_1`'s bits, are checked too. Not checked: that a value rounds to no double in a binade
+further off than the next (the arithmetic of rationals), `D2I` truncating and `I2D` of `+-1` being
+exact (JLS), and step 4, that both forms then run the same operations, which is the code's text.
+The `sat` checks refute the band widened by a word at either end: at `hx = 0x3fd62e42`, `x =
+0x3fd62e42_00000000` gives `k = 0`; past `0x3ff0a2b1`, `x = 0x3ff0a2b2_ffffffff` gives `k = 2`,
+not the near form's 1; both signs.
 
 ### L3. A high-word compare is one signed 64-bit compare of |x|'s bits
 
@@ -182,9 +205,16 @@ that the raw bits of `0xfff8...`, sign set, would miss the filter);
 width, on the specials, sampled patterns and both sides of each word, through the
 `DoubleVector` forms, which now route through these).
 
-**Encoding.** Over integers, `b = hx * 2^32 + lo` with the bounds above, linear; `unsat` for each
-direction. The `sat` check refutes the comparand changed by one, `b > h * 2^32` for `hx >= h`:
-`b = h * 2^32` (`lo = 0`) is a model.
+**Encoding.** `proofs/exp_highword_compare.smt2`, machine-checked over integers with no lemma
+left informal: for every long `bits` and every `h` in `[0, 0x7fffffff]`, `absBits` is
+non-negative with the C's `hx` as its high word, and `hiAtLeast`, `hiBelow` and `hiAbove` (for `h
+< 0x7fffffff`) are the C's `hx >= h`, `hx < h` and `hx > h`, each Java operator (`&`, `>>`, `<<`,
+`-`, `l2i`) as `java.smt2` defines it; then the same at each of `Exp`'s words, rendered, and that
+every NaN and infinity, either sign, is a filter and non-finite lane. The `sat` checks refute
+the comparand changed by one (`b > h * 2^32` for `hx >= h`; `b = h * 2^32` is a model), `hiBelow`'s
+comparand less one, `hiAbove`'s `+ 1` dropped, and the raw bits of the sign-set NaN
+`0xfff80000_00000000` compared unmasked, which miss the filter. That `Exp` calls these compares
+with these words is the code's text.
 
 ### L4. The tiny lanes cannot be folded (a counter-example, not a fold)
 
@@ -201,7 +231,14 @@ tie.** `ExpTest.foldBoundaries` covers the words `0x3e300000 +- 1` on both sides
 lanes' edge, and the threshold cases (`ExpTest.thresholds()`) the 64 neighbours of `2^-28`:
 the port's `one + x` there is checked against `StrictMath`.
 
-**Encoding.** A single `sat` check: the witness `x` is a model of "folded tail != one + x".
+**Encoding.** `proofs/exp_tiny_counterexample.smt2`, machine-checked: at `x = 5 * 2^-53`
+(checked to be a tiny lane, `hx < 0x3e300000`), every rounding of `one + x` and of the folded tail
+is evaluated (the exact result of each operation on the two doubles before it rounds to the
+double Java computed, and to no other double in its binade or the ones next to it; the tie in
+`one + x` among them), and the two results differ, `unsat` for their equality; at `4 * 2^-53` the
+same evaluation gives one double for both, so the witness moved by one is not one. Not checked:
+that `StrictMath.exp(x)` is `one + x` there (the oracle is not in a solver; `ProofsTest` asserts
+it), and doubles further off than the next binade (the arithmetic of rationals).
 
 ### L5. halF[xsb] from the sign bit
 
@@ -215,5 +252,9 @@ table lookup (a compare and a blend of two constants) with an `and` and an `or`.
 **Test (scalar).** `ProofsTest.l5HalfFromSignBit`, on the specials of both signs. **Vector
 tie.** Every `ExpTest` case of a reduced lane, both signs: a wrong `halF` moves `k` there.
 
-**Encoding.** Over bit-vectors, two cases of the sign bit, `unsat`; the `sat` check refutes
-`0x3fe00000_00000001` as the constant.
+**Encoding.** `proofs/exp_half_sign.smt2`, machine-checked: for every long `bits`, `(bits &
+Long.MIN_VALUE) | HALF_BITS` (as bit-vector `and` and `or` on the 64-bit pattern, read back as a
+signed long; `HALF_BITS` rendered from `Exp`) is the raw bits of the table's `halF[xsb]`, with
+`xsb` as line 113 computes it; and the two entries are the doubles 0.5 and -0.5. The `sat` checks
+refute `0x3fe00000_00000001` as the constant and a mask one bit below the sign. That the lane
+reinterprets those bits as its double is the code's text.
