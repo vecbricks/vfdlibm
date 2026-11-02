@@ -26,10 +26,11 @@ import jdk.incubator.vector.VectorSpecies;
  *   <li>a uniformly random bit pattern (3 in 10), every exponent, NaN payload and sign;
  *   <li>a branch word's neighbourhood (1 in 4): a high word within 4 of one the C compares
  *       against, either sign, with a low word of 0, 1, all ones, all ones less one, or random;
- *   <li>a significand split's neighbourhood (1 in 5), for log and log1p: the low 20 bits of the
- *       high word within 4 of a split the C tests ({@code e_log.c}'s {@code 0x95f64} carry and
- *       its band, {@code s_log1p.c}'s {@code 0x6a09e}), at a random exponent; for log1p the split
- *       is in {@code 1+x}'s word, so the input is that double less one;
+ *   <li>a significand split's neighbourhood (1 in 5), for log, log10 and log1p: the low 20 bits
+ *       of the high word within 4 of a split the C tests ({@code e_log.c}'s {@code 0x95f64} carry
+ *       and its band, which log10's rescaled {@code x} keeps, and {@code s_log1p.c}'s {@code
+ *       0x6a09e}), at a random exponent; for log1p the split is in {@code 1+x}'s word, so the
+ *       input is that double less one;
  *   <li>a threshold's neighbourhood (1 in 4): a double the C's result changes form at, such as
  *       exp's overflow and underflow limits and the {@code (k+1/2) ln2} where its {@code k} steps,
  *       moved by up to 2^44 ulps, and of either sign one time in ten.
@@ -78,6 +79,20 @@ final class Fuzz {
       false,
       new double[] {1.0, Math.sqrt(2.0), Math.sqrt(0.5), Double.MIN_NORMAL, Double.MAX_VALUE});
 
+  /**
+   * log10: e_log10.c's high-word tests and line 85's split at 1.0 (the high words 0x3fefffff and
+   * 0x3ff00000), and e_log.c's significand splits, which the rescaled x keeps.
+   */
+  static final Edges LOG10 = new Edges(
+      new int[] {
+        Log10.HX_MIN_NORMAL, Log10.HX_NON_FINITE, 0x3ff00000, 0x3fefffff, 0x7fefffff, 0
+      },
+      LOG.splits(),
+      false,
+      new double[] {
+        1.0, 10.0, 0.1, Math.sqrt(2.0), Math.sqrt(0.5), Double.MIN_NORMAL, Double.MAX_VALUE
+      });
+
   /** log1p: s_log1p.c's tests on hx and ax, and its split of 1+x at sqrt(2). */
   static final Edges LOG1P = new Edges(
       new int[] {
@@ -104,6 +119,7 @@ final class Fuzz {
     return switch (function) {
       case EXP -> EXP;
       case LOG -> LOG;
+      case LOG10 -> LOG10;
       case LOG1P -> LOG1P;
     };
   }

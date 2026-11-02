@@ -12,7 +12,7 @@
 #   dev/nightly.sh sweep <function> <parts> <seed> [<species>...]
 #   dev/nightly.sh fuzz <function> <seconds> <seed> [<species>...]
 #
-# <function> is exp, log or log1p. A sweep checks the high words of <parts>: comma-separated
+# <function> is exp, log, log10 or log1p. A sweep checks the high words of <parts>: comma-separated
 # parts i/N of the 2^32, or stripe:s/S for the stripe Sweep.java's --stripe takes. A fuzz runs
 # <seconds> at each species (Fuzz.java). <seed> is decimal or 0x hex. The species default to the
 # host's: 128, 256 and 512 bits up to the preferred species, and max (`Nightly species`), less

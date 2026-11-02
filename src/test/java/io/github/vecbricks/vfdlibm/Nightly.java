@@ -102,6 +102,9 @@ final class Nightly {
     LOG("log", StrictMath::log, List.of(
         new Arm("VFdlibm.log", VFdlibm::log, VFdlibm::log),
         new Arm("Log.logBlended", x -> Log.logBlended(x, null), Log::logBlended))),
+    LOG10("log10", StrictMath::log10, List.of(
+        new Arm("VFdlibm.log10", VFdlibm::log10, VFdlibm::log10),
+        new Arm("Log10.log10Blended", x -> Log10.log10Blended(x, null), Log10::log10Blended))),
     LOG1P("log1p", StrictMath::log1p, List.of(
         // VFdlibm.log1p is Log1p.log1pGuarded, so the guarded arm is checked under that name.
         new Arm("VFdlibm.log1p", VFdlibm::log1p, VFdlibm::log1p),
@@ -124,7 +127,8 @@ final class Nightly {
           return f;
         }
       }
-      throw new IllegalArgumentException("unknown function '" + id + "'; known: exp, log, log1p");
+      throw new IllegalArgumentException(
+          "unknown function '" + id + "'; known: exp, log, log10, log1p");
     }
   }
 

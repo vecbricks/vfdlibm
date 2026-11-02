@@ -58,7 +58,7 @@ class NightlyTest {
     assertEquals(Nightly.OK, status);
   }
 
-  /** The fuzz finds each planted fault of the three functions in a second at most. */
+  /** The fuzz finds each planted fault of the four functions in a second at most. */
   @Test
   @Tag("fault")
   void fuzzCatchesThePlantedFault() {
