@@ -16,20 +16,29 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.Arrays;
+import java.util.LinkedHashMap;
+import java.util.Map;
+import java.util.function.BiConsumer;
+import java.util.function.Consumer;
 import jdk.incubator.vector.DoubleVector;
+import jdk.incubator.vector.VectorMask;
+import jdk.incubator.vector.VectorShape;
 import jdk.incubator.vector.VectorSpecies;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.function.Executable;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
 import org.opentest4j.AssertionFailedError;
 
 /**
- * Tests of the harness itself, before any function is ported: the oracle passes a correct vector
- * function at every width, and catches a one-ulp difference, a NaN-payload difference and a
- * sign-of-zero difference planted in any single lane.
+ * Tests of the harness itself: the oracle passes a correct vector function at every width, and
+ * catches a one-ulp difference, a NaN-payload difference and a sign-of-zero difference planted in
+ * any single lane; the masked checks pass a correct masked form and catch one that zeroes or
+ * computes its inactive lanes.
  *
  * <p>The function under test is a stand-in: {@code StrictMath} applied lane by lane, which reads
- * {@link PlantedFault} the way a port will and, when a fault is planted, damages one lane.
+ * {@link Faults} the way a port does and, when a fault is planted, damages one lane. The fault
+ * checks run in the fault runs ({@link PlantedFaultTest}), through {@link #faultCatchers}.
  */
 class HarnessSelfTest {
 
@@ -70,15 +79,15 @@ class HarnessSelfTest {
 
   private static void damage(double[] r) {
     double d = r[faultLane];
-    if (PlantedFault.is(ONE_ULP)) {
+    if (Faults.is(ONE_ULP)) {
       r[faultLane] = Math.nextUp(d);
-    } else if (PlantedFault.is(NAN_PAYLOAD) && Double.isNaN(d)) {
+    } else if (Faults.is(NAN_PAYLOAD) && Double.isNaN(d)) {
       long other = 0x7ff8_0000_0000_0001L;
       if (Double.doubleToRawLongBits(d) == other) {
         other = 0x7ff8_0000_0000_0002L;
       }
       r[faultLane] = Double.longBitsToDouble(other);
-    } else if (PlantedFault.is(ZERO_SIGN) && Double.doubleToRawLongBits(d) == 0L) {
+    } else if (Faults.is(ZERO_SIGN) && Double.doubleToRawLongBits(d) == 0L) {
       r[faultLane] = -0.0;
     }
   }
@@ -108,67 +117,109 @@ class HarnessSelfTest {
   // ---------------------------------------------------------------------------------------------
   // The oracle catches each kind of difference, in every lane
 
-  @ParameterizedTest
-  @EnumSource(VectorWidth.class)
-  void oracleCatchesOneUlpInEveryLane(VectorWidth width) {
-    VectorSpecies<Double> species = width.species();
+  /**
+   * The self-test's faults, each with the check that must catch it. The checks run in a JVM with
+   * that fault planted ({@link PlantedFaultTest}); the same inputs pass in the normal run, through
+   * {@link #oraclePassesOnTheFaultRunsInputs}.
+   */
+  static Map<String, Executable> faultCatchers() {
+    Map<String, Executable> catchers = new LinkedHashMap<>();
+    catchers.put(ONE_ULP, () -> {
+      forEachWidth(species -> assertCaughtInEveryLane(species, ONE_ULP, steps(species)));
+      forEachWidth(HarnessSelfTest::binaryOracleCatchesOneUlpInEveryLane);
+      failureReportsInputAndBothResultsInHex();
+    });
+    catchers.put(NAN_PAYLOAD, () -> forEachWidth(
+        species -> assertCaughtInEveryLane(species, NAN_PAYLOAD, nans(species))));
+    catchers.put(ZERO_SIGN, () -> forEachWidth(
+        species -> assertCaughtInEveryLane(species, ZERO_SIGN, zeroResults(species))));
+    return catchers;
+  }
+
+  /** Runs {@code check} at each width the host has (wider ones are skipped, as in VectorWidth). */
+  private static void forEachWidth(Consumer<VectorSpecies<Double>> check) {
+    int preferred = DoubleVector.SPECIES_PREFERRED.vectorBitSize();
+    for (int bits = 128; bits <= preferred; bits *= 2) {
+      check.accept(VectorSpecies.of(double.class, VectorShape.forBitSize(bits)));
+    }
+  }
+
+  /** Ordinary inputs, four vectors' worth: a one-ulp fault shows in every lane. */
+  private static double[] steps(VectorSpecies<Double> species) {
     double[] xs = new double[4 * species.length()];
     for (int i = 0; i < xs.length; i++) {
       xs[i] = i * 0.25 - 8.0;
     }
-    assertCaughtInEveryLane(species, ONE_ULP, xs);
+    return xs;
   }
 
-  @ParameterizedTest
-  @EnumSource(VectorWidth.class)
-  void oracleCatchesNanPayloadInEveryLane(VectorWidth width) {
-    VectorSpecies<Double> species = width.species();
+  /** NaNs with several payloads: exp returns them, so a payload fault shows in every lane. */
+  private static double[] nans(VectorSpecies<Double> species) {
     double[] xs = new double[4 * species.length()];
     for (int i = 0; i < xs.length; i++) {
       xs[i] = Double.longBitsToDouble(Inputs.QUIET_NAN_BITS[i % Inputs.QUIET_NAN_BITS.length]);
     }
-    assertCaughtInEveryLane(species, NAN_PAYLOAD, xs);
+    return xs;
   }
 
-  @ParameterizedTest
-  @EnumSource(VectorWidth.class)
-  void oracleCatchesSignOfZeroInEveryLane(VectorWidth width) {
-    VectorSpecies<Double> species = width.species();
+  /** Inputs whose exp is +0.0: a sign-of-zero fault shows in every lane. */
+  private static double[] zeroResults(VectorSpecies<Double> species) {
     double[] xs = new double[4 * species.length()];
     for (int i = 0; i < xs.length; i++) {
       xs[i] = i % 2 == 0 ? Double.NEGATIVE_INFINITY : -1000.0;
     }
-    assertCaughtInEveryLane(species, ZERO_SIGN, xs);
+    return xs;
   }
 
   @ParameterizedTest
   @EnumSource(VectorWidth.class)
-  void binaryOracleCatchesOneUlpInEveryLane(VectorWidth width) {
+  void oraclePassesOnTheFaultRunsInputs(VectorWidth width) {
     VectorSpecies<Double> species = width.species();
+    double[] xs = Inputs.concat(steps(species), nans(species), zeroResults(species));
+    for (int lane = 0; lane < species.length(); lane++) {
+      faultLane = lane;
+      Oracle.assertUnary("exp", species, HarnessSelfTest::exp, StrictMath::exp, xs);
+    }
+    faultLane = 0;
+    Oracle.assertUnary("exp", species, HarnessSelfTest::exp, StrictMath::exp,
+        new double[] {0.0, 1.0});
+    binaryInputs(species, (x, y) -> Oracle.assertBinary(
+        "pow", species, HarnessSelfTest::pow, StrictMath::pow, x, y));
+  }
+
+  private static void binaryInputs(
+      VectorSpecies<Double> species, BiConsumer<double[], double[]> check) {
     double[] xs = new double[2 * species.length()];
     double[] ys = new double[xs.length];
     for (int i = 0; i < xs.length; i++) {
       xs[i] = 1.5 + i;
       ys[i] = 0.5 - i * 0.125;
     }
-    for (int lane = 0; lane < species.length(); lane++) {
-      faultLane = lane;
-      AssertionFailedError e = PlantedFault.assertCaught(
-          ONE_ULP,
-          () -> Oracle.assertBinary(
-              "pow", species, HarnessSelfTest::pow, StrictMath::pow, xs, ys));
-      assertReports(e, lane, 2, xs.length);
-    }
+    check.accept(xs, ys);
   }
 
-  /** Plants {@code fault} in each lane in turn; each time the oracle must name that lane. */
+  private static void binaryOracleCatchesOneUlpInEveryLane(VectorSpecies<Double> species) {
+    binaryInputs(species, (xs, ys) -> {
+      for (int lane = 0; lane < species.length(); lane++) {
+        faultLane = lane;
+        AssertionFailedError e = PlantedFaultTest.assertCaught(
+            ONE_ULP,
+            () -> Oracle.assertBinary(
+                "pow", species, HarnessSelfTest::pow, StrictMath::pow, xs, ys));
+        assertReports(e, lane, 2, xs.length);
+      }
+      faultLane = 0;
+    });
+  }
+
+  /** With {@code fault} planted, damages each lane in turn; each time the oracle names it. */
   private static void assertCaughtInEveryLane(
       VectorSpecies<Double> species, String fault, double[] xs) {
     assertEquals(0, xs.length % species.length(), "inputs fill whole vectors");
     int vectors = xs.length / species.length();
     for (int lane = 0; lane < species.length(); lane++) {
       faultLane = lane;
-      AssertionFailedError e = PlantedFault.assertCaught(
+      AssertionFailedError e = PlantedFaultTest.assertCaught(
           fault,
           () -> Oracle.assertUnary("exp", species, HarnessSelfTest::exp, StrictMath::exp, xs));
       assertReports(e, lane, vectors, xs.length);
@@ -183,13 +234,12 @@ class HarnessSelfTest {
   }
 
   // ---------------------------------------------------------------------------------------------
-  // What a failure reports, and the switch itself
+  // What a failure reports
 
-  @Test
-  void failureReportsInputAndBothResultsInHex() {
+  private static void failureReportsInputAndBothResultsInHex() {
     VectorSpecies<Double> species = VectorWidth.BITS_128.species();
     faultLane = 1;
-    AssertionFailedError e = PlantedFault.assertCaught(
+    AssertionFailedError e = PlantedFaultTest.assertCaught(
         ONE_ULP,
         () -> Oracle.assertUnary(
             "exp", species, HarnessSelfTest::exp, StrictMath::exp, new double[] {0.0, 1.0}));
@@ -202,18 +252,101 @@ class HarnessSelfTest {
         e.getMessage());
   }
 
-  @Test
-  void plantingFailsWhenTheCheckPasses() {
-    VectorSpecies<Double> species = VectorWidth.BITS_128.species();
-    double[] xs = {0.0, 1.0, 2.0, 3.0};
+  // ---------------------------------------------------------------------------------------------
+  // The masked checks
+
+  /** A correct masked form: StrictMath.exp on live lanes, the input elsewhere. */
+  private static DoubleVector maskedExp(DoubleVector x, VectorMask<Double> live) {
+    double[] r = x.toArray();
+    for (int lane = 0; lane < r.length; lane++) {
+      if (live.laneIsSet(lane)) {
+        r[lane] = StrictMath.exp(r[lane]);
+      }
+    }
+    return DoubleVector.fromArray(x.species(), r, 0);
+  }
+
+  /** A wrong masked form: writes 0.0 to inactive lanes. */
+  private static DoubleVector maskedExpZeroingInactive(DoubleVector x, VectorMask<Double> live) {
+    return maskedExp(x, live).blend(0.0, live.not());
+  }
+
+  /** A wrong masked form: computes every lane, live or not. */
+  private static DoubleVector maskedExpComputingInactive(DoubleVector x, VectorMask<Double> l) {
+    return exp(x);
+  }
+
+  /** A correct two-argument masked form: StrictMath.pow on live lanes, x elsewhere. */
+  private static DoubleVector maskedPow(DoubleVector x, DoubleVector y, VectorMask<Double> live) {
+    return x.blend(pow(x, y), live);
+  }
+
+  /** Inputs for the masked checks, with NaN payloads and -0.0 among them for the inactive lanes. */
+  private static double[] maskedInputs() {
+    return Inputs.concat(
+        Inputs.specials(EXP_OVERFLOW, EXP_UNDERFLOW), Inputs.sampled(3L, 1024),
+        Inputs.around(1.0, 16));
+  }
+
+  /** Inputs whose exp differs from the input, so computing an inactive lane always shows. */
+  private static double[] movedByExp() {
+    double[] xs = new double[64];
+    for (int i = 0; i < xs.length; i++) {
+      xs[i] = i * 0.375 - 12.0 + (i == 32 ? 0.125 : 0.0);
+    }
+    return xs;
+  }
+
+  @ParameterizedTest
+  @EnumSource(VectorWidth.class)
+  void maskedOraclePassesCorrectForms(VectorWidth width) {
+    VectorSpecies<Double> species = width.species();
+    Oracle.assertUnaryMasked(
+        "exp", species, HarnessSelfTest::maskedExp, StrictMath::exp, maskedInputs(), 11L);
+    Inputs.Pairs p = Inputs.cross(Inputs.specials(), Inputs.sampled(4L, 16));
+    Oracle.assertBinaryMasked(
+        "pow", species, HarnessSelfTest::maskedPow, StrictMath::pow, p.x(), p.y(), 12L);
+  }
+
+  @ParameterizedTest
+  @EnumSource(VectorWidth.class)
+  void maskedOracleCatchesZeroInInactiveLanes(VectorWidth width) {
+    VectorSpecies<Double> species = width.species();
     AssertionFailedError e = assertThrows(
         AssertionFailedError.class,
-        () -> PlantedFault.assertCaught(
-            "selftest.notRead",
-            () -> Oracle.assertUnary("exp", species, HarnessSelfTest::exp, StrictMath::exp, xs)));
-    assertTrue(e.getMessage().startsWith("the check did not catch planted fault"), e.getMessage());
-    assertFalse(PlantedFault.is("selftest.notRead"), "the fault is cleared afterwards");
+        () -> Oracle.assertUnaryMasked(
+            "exp", species, HarnessSelfTest::maskedExpZeroingInactive, StrictMath::exp,
+            movedByExp(), 13L));
+    assertTrue(e.getMessage().contains(" inactive lane "), e.getMessage());
   }
+
+  @ParameterizedTest
+  @EnumSource(VectorWidth.class)
+  void maskedOracleCatchesComputedInactiveLanes(VectorWidth width) {
+    VectorSpecies<Double> species = width.species();
+    AssertionFailedError e = assertThrows(
+        AssertionFailedError.class,
+        () -> Oracle.assertUnaryMasked(
+            "exp", species, HarnessSelfTest::maskedExpComputingInactive, StrictMath::exp,
+            movedByExp(), 14L));
+    assertTrue(e.getMessage().contains(" inactive lane "), e.getMessage());
+  }
+
+  @ParameterizedTest
+  @EnumSource(VectorWidth.class)
+  void binaryMaskedOracleCatchesComputedInactiveLanes(VectorWidth width) {
+    VectorSpecies<Double> species = width.species();
+    double[] xs = movedByExp();
+    double[] ys = new double[xs.length];
+    Arrays.fill(ys, 3.0);
+    assertThrows(
+        AssertionFailedError.class,
+        () -> Oracle.assertBinaryMasked(
+            "pow", species, (x, y, live) -> pow(x, y), StrictMath::pow, xs, ys, 15L));
+  }
+
+  // ---------------------------------------------------------------------------------------------
+  // The oracle's own guards
 
   @Test
   void oracleRejectsEmptyInputs() {
