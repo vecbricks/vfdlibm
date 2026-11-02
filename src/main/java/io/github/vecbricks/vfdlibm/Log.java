@@ -69,7 +69,9 @@ import jdk.incubator.vector.VectorSpecies;
  * the finish: at 256 bits it ties the blend on mixed data, is not behind it on ordinary data,
  * is about 2x faster than scalar there, and allocates nothing. That settles AVX2 only: the
  * AVX-512 hosts ({@code HARDWARE.md}) decide at 512 bits, where the laptop had the blend ahead.
- * The second arm is kept so it can be re-measured, on other hosts and as the JDK changes.
+ * The second arm is kept so it can be re-measured, on other hosts and as the JDK changes. These
+ * runs measured the body before the departures of {@code PROOFS.md}'s L6 to L9; a paired run on
+ * the hosts ({@code bench/pair.sh}) measures it again.
  *
  * <p>{@link #logCore} is the common path alone, with no rare lanes and no finish: {@code Log10}
  * computes its {@code __ieee754_log} through it, the only entry it uses.
