@@ -25,11 +25,25 @@ package io.github.vecbricks.vfdlibm;
  * <p>Because the value is fixed for the life of the JVM, a planted fault is tested in a JVM of its
  * own: {@code pom.xml} runs the normal suite once with no fault, then one forked surefire execution
  * per fault with {@code -Dvfdlibm.fault=<name>}, which runs only the tests tagged {@code fault}.
+ *
+ * <p>This class is in the main sources, so the shipped jar reads the property too: a JVM started
+ * with {@code -Dvfdlibm.fault=exp.dropCorrection}, for example through a stray {@code
+ * JAVA_TOOL_OPTIONS}, gets wrong results from {@link VFdlibm#exp}. The property is meant for this
+ * project's tests only. So that such a JVM does not go unnoticed, loading this class with a fault
+ * planted prints one warning to {@code System.err}; it runs once, in this class's initialiser, and
+ * adds nothing to any vector body.
  */
 final class Faults {
 
   /** The fault planted in this JVM, or null. */
   private static final String PLANTED = System.getProperty("vfdlibm.fault");
+
+  static {
+    if (PLANTED != null) {
+      System.err.println("WARNING: vfdlibm: fault " + PLANTED + " is planted by -Dvfdlibm.fault;"
+          + " its functions may return wrong results. The property is for vfdlibm's own tests.");
+    }
+  }
 
   private Faults() {}
 

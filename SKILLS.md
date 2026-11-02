@@ -103,10 +103,11 @@ belongs here too, since it stops the next port re-trying a settled question.
   vector instructions on every AVX2 host. A port that needs an integer from a double goes
   through int lanes (below).
 - **`VectorSpecies.of` is not a constant to C2.** It reads a table, so a conversion whose target
-  species comes from it is not intrinsified (`missing constant ... vlen_to=LoadI`). Pick the
-  species by identity against the `SPECIES_*` constants, as `Lanes.intSpecies` does; once
-  inlined, C2 sees a constant. The same holds for any species loaded from a local or a field C2
-  cannot fold. `VectorSpecies.of` stays only as the fallback for an unusual shape.
+  species comes from it is not intrinsified (`missing constant ... vlen_to=LoadI`). Return one
+  of the `SPECIES_*` constants, chosen by a switch on `vectorBitSize()`, as `Lanes.intSpecies`
+  does; once inlined, C2 sees a constant. Not by identity: `SPECIES_MAX` is none of the named
+  species, and exp at `SPECIES_MAX` boxed that way. The same holds for any species loaded from a local or a field C2 cannot fold. `VectorSpecies.of`
+  stays only as the fallback for an unusual shape.
 - **At two 64-bit lanes x86 C2 lowers no mask.** Compare to mask, blend, mask cast, mask
   broadcast, logic and test are `not supported` at `vlen=2` for double and long masks, and fine
   at four lanes. So on x86 every 128-bit double port that branches through masks runs per lane
@@ -116,9 +117,11 @@ belongs here too, since it stops the next port re-trying a settled question.
   so this is an x86 fact; check `PrintIntrinsics` on Arm before assuming either way for a new
   operation.
 - **Simulating a host's width.** `-XX:MaxVectorSize=32` caps vectors at 256 bits but keeps
-  AVX-512's instructions (and its `D2L`). To compile as on an AVX2 host, which GitHub's x86
-  runners and the EPYC 7763 are, pass `-XX:UseAVX=2` (with `-XX:MaxVectorSize=32`, the preferred
-  species is then 256 bits), and read `-prof gc` and `PrintIntrinsics` under it.
+  AVX-512's instructions (and its `D2L`). To compile as on an AVX2 host such as the EPYC 7763,
+  pass `-XX:UseAVX=2` (with `-XX:MaxVectorSize=32`, the preferred species is then 256 bits), and
+  read `-prof gc` and `PrintIntrinsics` under it. GitHub's x86 runners are not all AVX2: some
+  draws are AVX-512 hosts (below), whose CI job runs the 512-bit cases and prefers 512 bits, so
+  `ci.yml` has a row pinned to `-XX:UseAVX=2 -XX:MaxVectorSize=32` that is AVX2 on every draw.
   `-XX:MaxVectorSize=16` runs everything at 128 bits, as the Arm runners do.
 - **The laptop's AVX-512 is 256 bits wide.** The owner's laptop (AMD Ryzen AI 9 HX PRO 370,
   Zen 5 mobile) has the whole AVX-512 instruction set and HotSpot picks `MaxVectorSize=64`, but

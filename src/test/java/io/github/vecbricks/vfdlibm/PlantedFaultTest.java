@@ -75,8 +75,18 @@ class PlantedFaultTest {
   void everyFaultHasAnExecution() throws Exception {
     String pom = Files.readString(Path.of("pom.xml"));
     for (String name : CATCHERS.keySet()) {
-      if (!pom.contains("-Dvfdlibm.fault=" + name + "</argLine>")) {
+      int at = pom.indexOf("-Dvfdlibm.fault=" + name + "</argLine>");
+      if (at < 0) {
         fail("pom.xml has no surefire execution planting " + name);
+      }
+      // The execution must also fail when it runs no test, or a mistyped tag makes it pass
+      // vacuously, and must take its phase from the property the one-test profile switches off.
+      String execution = pom.substring(
+          pom.lastIndexOf("<execution>", at), pom.indexOf("</execution>", at));
+      if (!execution.contains("<failIfNoTests>true</failIfNoTests>")
+          || !execution.contains("<phase>${vfdlibm.fault.phase}</phase>")) {
+        fail("pom.xml's execution planting " + name
+            + " lacks <failIfNoTests>true</failIfNoTests> or the vfdlibm.fault.phase phase");
       }
     }
   }

@@ -24,6 +24,11 @@ import jdk.incubator.vector.VectorMask;
  *
  * <p>Each function is ported from fdlibm 5.3's C source, kept in {@code reference/fdlibm-5.3/};
  * the class that holds a function's port names the file it follows and carries its notice.
+ *
+ * <p>The system property {@code vfdlibm.fault} plants a known fault in a function, to prove that
+ * this project's tests catch it, and it works in the shipped jar too: never set it outside those
+ * tests, including through {@code JAVA_TOOL_OPTIONS}. A JVM with a fault planted prints a warning
+ * to {@code System.err} once, when the first function that reads its faults is initialised.
  */
 public final class VFdlibm {
 
