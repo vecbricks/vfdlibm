@@ -10,6 +10,7 @@ package io.github.vecbricks.vfdlibm;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import jdk.incubator.vector.DoubleVector;
 import jdk.incubator.vector.IntVector;
@@ -165,7 +166,10 @@ class LanesTest {
       case 128 -> assertSame(IntVector.SPECIES_64, max);
       case 256 -> assertSame(IntVector.SPECIES_128, max);
       case 512 -> assertSame(IntVector.SPECIES_256, max);
+      case 1024 -> assertSame(IntVector.SPECIES_512, max);
       default -> { }
     }
+    // Below 128 bits there is no int species at half the size.
+    assertThrows(IllegalArgumentException.class, () -> Lanes.intSpecies(DoubleVector.SPECIES_64));
   }
 }

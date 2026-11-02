@@ -18,30 +18,44 @@
 # run's name, and the script follows the run of that name; so two dispatchers on one branch, or
 # a clock that differs from GitHub's, cannot make it follow the wrong run. The <ref> must have
 # the run-tag input; on an older one the dispatch fails and the script says so. A gh call that
-# fails is tried five times, a minute apart, and every wait is bounded. Exit status: 0 on
-# success, 1 when the run failed other than on the CPU check, 2 when GitHub could not be asked.
+# fails is tried five times, a minute apart. Finding the run and waiting for it are bounded
+# (ten minutes, about seven hours plus retries); the hourly CPU retry is not, by design.
+# Exit status: 0 on success, 1 when the run failed other than on the CPU check, 2 when GitHub
+# could not be asked.
 #
 # Then fetch the results: gh run download <run id> -R vecbricks/vfdlibm -n bench-results
 
 R=vecbricks/vfdlibm; B=${1:?usage: bench/dispatch-epyc.sh <ref> [benchmark regex] [jvm args]}
 N=${2:-ExpBenchmark}; X=${3:-}
 t() { date +%H:%M; }
-# Runs a gh command up to five times, a minute apart, until it succeeds.
+# Runs a gh command up to five times, a minute apart, until it succeeds, and prints only the
+# successful attempt's output: a failed gh api call prints its error body to stdout, which
+# must not be read as the answer.
 try() {
-  local i; for i in 1 2 3 4 5; do
-    "$@" && return 0
+  local i out; for i in 1 2 3 4 5; do
+    out=$("$@") && { [ -n "$out" ] && printf '%s\n' "$out"; return 0; }
     echo "$(t) gh failed, try $i of 5: $*" >&2; [ $i -lt 5 ] && sleep 60
   done; return 1; }
+# The id of the run named "Benchmark <tag>", if GitHub lists one.
+run_of() {
+  gh run list -R $R --workflow benchmark.yml --event workflow_dispatch -L 50 \
+    --json databaseId,displayTitle \
+    --jq ".[]|select(.displayTitle == \"Benchmark $1\")|.databaseId" | head -1; }
 bench() {
   while :; do tag="dispatch-$(date -u +%Y%m%dT%H%M%SZ)-$$-$RANDOM"
-    if ! try gh workflow run benchmark.yml -R $R --ref "$B" -f benchmarks="$N" \
-        -f jvm-args="$X" -f run-tag="$tag"; then
+    # A dispatch whose reply was lost may still have started a run, so before each retry look
+    # for a run with this tag, and dispatch again only if there is none.
+    d=0; for i in 1 2 3 4 5; do
+      gh workflow run benchmark.yml -R $R --ref "$B" -f benchmarks="$N" -f jvm-args="$X" \
+        -f run-tag="$tag" && { d=1; break; }
+      echo "$(t) dispatch failed, try $i of 5 (an older ref has no run-tag input)" >&2
+      sleep 60; [ -n "$(run_of "$tag")" ] && { d=1; break; }
+    done
+    if [ $d = 0 ]; then
       echo "$(t) could not dispatch benchmark.yml on $B, stopping"; return 2; fi
     # The run appears within seconds as a rule; ten minutes without it is an error.
     m=""; for _ in $(seq 30); do sleep 20
-      m=$(gh run list -R $R --workflow benchmark.yml --event workflow_dispatch -L 50 \
-        --json databaseId,displayTitle \
-        --jq ".[]|select(.displayTitle == \"Benchmark $tag\")|.databaseId" | head -1)
+      m=$(run_of "$tag")
       [ -n "$m" ] && break; done
     if [ -z "$m" ]; then
       echo "$(t) no run named \"Benchmark $tag\" after ten minutes, stopping"; return 2; fi

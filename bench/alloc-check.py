@@ -132,6 +132,7 @@ def main():
                 sys.exit(1)
             run_jmh(args.mvn, args.include, args.jvm_args)
         except subprocess.CalledProcessError as e:
+            print(e.stdout or "", end="")
             print(f"FAIL: Maven exited with {e.returncode}; a benchmark threw or the build"
                   " failed, see its output above")
             sys.exit(1)
