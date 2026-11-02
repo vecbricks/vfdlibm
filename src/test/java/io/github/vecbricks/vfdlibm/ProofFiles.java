@@ -40,6 +40,7 @@ final class ProofFiles {
     files.put("exp_highword_compare.smt2", ExpProofFiles.highwordCompare());
     files.put("exp_half_sign.smt2", ExpProofFiles.halfSign());
     files.put("exp_near_band.smt2", ExpProofFiles.nearBand());
+    files.put("exp_zero_reduction.smt2", ExpProofFiles.zeroReduction());
     return files;
   }
 

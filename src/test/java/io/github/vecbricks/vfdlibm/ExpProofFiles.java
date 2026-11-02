@@ -444,4 +444,158 @@ final class ExpProofFiles {
     }
     return out.toString();
   }
+
+  // ---------------------------------------------------------------------------------------------
+  // exp_zero_reduction.smt2: L1
+
+  /**
+   * The binades {@code exp_zero_reduction.smt2} proves "a double less +0, or +0 less a double, is
+   * that double or its negation" in: from q's lowest, {@code 2^-60}, below H3's informal bound
+   * {@code q > 0.94 * 2^-56 / 2.37 > 2^-59}, to the domain's top binade, 2^-2.
+   */
+  private static final int ZERO_REDUCTION_LOWEST = -60;
+
+  /**
+   * {@code exp_zero_reduction.smt2}, lemma L1: the hinges of the k == 0 path that are IEEE facts
+   * rather than bounds of the polynomial - x - (+0) = x, +0 - q = -q, the scale-back adding 0 -
+   * and H1's witness, that the formula alone would give k = 1 at the top of the domain.
+   */
+  static String zeroReduction() {
+    double bottom = Double.longBitsToDouble(Lanes.fromHiBits(Exp.HX_TINY));
+    double top = Double.longBitsToDouble(Lanes.fromHiBits(Exp.HX_HALF_LN2 + 1) - 1);
+    int jBottom = binade(bottom);
+    int jTop = binade(top);
+    var out = new StringBuilder(ProofFiles.LICENSE);
+    out.append(("""
+        ; exp's k == 0 path is the general tail with hi = x, lo = +0, k = 0 (PROOFS.md, L1): the
+        ; hinges that are IEEE facts, not bounds on the polynomial.
+        ;
+        ; e_exp.c (reference/fdlibm-5.3) returns one-((x*c)/(c-2.0)-x) for hx in [0x%x,
+        ; 0x%x] (line 147), and the port (Exp) computes the general tail there with k = 0 and
+        ; t = +0: hi = x - fl(t*ln2HI[0]), lo = fl(t*ln2LO[0]), r = hi - lo,
+        ; y = one-((lo-(r*c)/(2.0-c))-hi), and y's bits plus k << 52. The domain's ends,
+        ; %s and %s, are rendered from Exp's words.
+        ;
+        ; What is proven:
+        ;   - Section A: a nonzero double less +0 is itself and +0 less a double q is -q, in
+        ;     the PROOFS.md steps 1 and 3: the exact value is the double (or its negation),
+        ;     which jdouble.near admits in every binade at once, and admits no other double in
+        ;     its own binade or the ones next to it, for every double, either sign, of the binades
+        ;     2^%d to 2^%d. Those cover the domain's x, binades 2^%d to 2^%d (pinned below from
+        ;     Exp's words), and q, whose binades from 2^-59 to 2^-4 follow from H2 and H3's bounds.
+        ;   - Section B: the scale-back adds 0 << 52 = 0 to y's bits, for every long, and k = 0
+        ;     is not below Exp's K_MIN_NORMAL, so neither the subnormal scale-back nor the finish
+        ;     takes the lane (step 4); with k = 1 the bits would move.
+        ;   - Section C: H1's witness. At the domain's top double the formula's
+        ;     s = fl(fl(invln2 * x) + 0.5) rounds into binade 2^0, so (int) s = 1, not 0: the
+        ;     high-word test, not the formula, forces k = 0 (exp_highword_compare.smt2 proves
+        ;     that test).
+        ;
+        ; What is not machine-checked:
+        ;   - H2 and H3, the bounds 0.94|x| <= |c| < 0.37 with c of x's sign, and q positive and
+        ;     normal: they bound the polynomial's eight roundings, products of unknowns, and stay
+        ;     the informal proof of PROOFS.md with ProofsTest's samples. So q's binades rest on
+        ;     them, and so does step 2's hypothesis, c in [-2, 1], under which sign_symmetry.smt2
+        ;     proves fl(c - 2.0) = -fl(2.0 - c) and the quotient's sign symmetry.
+        ;   - fl(+0 * v) = +0 for a positive finite v, IEEE 754's sign rule for an exact zero
+        ;     (section 6.3): zero is not in the prelude. Section A checks only that ln2HI[0] and
+        ;     ln2LO[0] are positive and finite, which the rule needs.
+        ;   - That D2I of +0.0 is 0 and I2D of 0 is +0.0 (JLS 5.1.3, 5.1.2), that the port puts
+        ;     +0.0 in the cast's argument exactly on the lanes the high-word test leaves out, and
+        ;     that the C's steps after these are the port's on the same operands: the code's text.
+        ;   - That jdouble.near admits no double in a binade further off than the next one: the
+        ;     arithmetic of rationals, as in sign_symmetry.smt2.
+        """).formatted(Exp.HX_TINY, Exp.HX_HALF_LN2,
+            hex(Double.doubleToRawLongBits(bottom)), hex(Double.doubleToRawLongBits(top)),
+            ZERO_REDUCTION_LOWEST, jTop, jBottom, jTop));
+    out.append(ProofFiles.rendered("ALL"));
+
+    out.append("""
+
+        ; Section A: x - (+0) = x and +0 - q = -q. The exact difference is the double S * M * 2^E
+        ; or its negation, a / b with a = S * M * sn and b = sd.
+        """);
+    check(out, "a double, either sign, is a double jdouble.near admits for itself, any binade",
+        "unsat", body("(declare-const S Int) (declare-const M Int)",
+            "(declare-const sn Int) (declare-const sd Int)",
+            "(assert (and (< 0 sn) (< 0 sd) (jdouble.S.in S) (jdouble.M.in M)))",
+            "(assert (not (jdouble.near (* S M sn) sd S M sn sd)))"));
+    for (int j = ZERO_REDUCTION_LOWEST; j <= jTop; j++) {
+      String a = "(ite (= S 1) M (- M))";
+      String b = pow2(52 - j);
+      check(out, "a double of binade 2^" + j + ", either sign, rounds to no other double",
+          "unsat", body("(declare-const S Int) (declare-const M Int)",
+              "(declare-const S2 Int) (declare-const M2 Int)",
+              "(assert (and (jdouble.S.in S) (jdouble.M.in M)))",
+              "(assert (or (and " + near(a, b, "S2", "M2", j)
+                  + " (not (and (= S2 S) (= M2 M))))",
+              "  " + near(a, b, "S2", "M2", j - 1),
+              "  " + near(a, b, "S2", "M2", j + 1) + "))"));
+    }
+    long botBits = Double.doubleToRawLongBits(bottom);
+    long topBits = Double.doubleToRawLongBits(top);
+    check(out, "the domain's ends " + hex(botBits) + ", " + hex(topBits) + " are in 2^" + jBottom
+        + ", 2^" + jTop, "unsat", body(
+            "(assert (not (and (= (jdouble.fromBits.E " + lit(botBits) + ") " + lit(jBottom - 52)
+                + ")",
+            "  (= (jdouble.fromBits.E " + lit(topBits) + ") " + lit(jTop - 52) + "))))"));
+    long hiBits = Double.doubleToRawLongBits(Exp.LN2HI_0);
+    long loBits = Double.doubleToRawLongBits(Exp.LN2LO_0);
+    check(out, "ln2HI[0] and ln2LO[0] are positive and finite, as the zero product needs", "unsat",
+        body("(assert (not (and (= (jdouble.fromBits.S " + lit(hiBits) + ") 1)"
+                + " (< (jdouble.fromBits.E " + lit(hiBits) + ") 972)",
+            "  (= (jdouble.fromBits.S " + lit(loBits) + ") 1)"
+                + " (< (jdouble.fromBits.E " + lit(loBits) + ") 972))))"));
+    check(out, "not vacuous: the double 1.5 * 2^" + jTop + " admits itself in its binade", "sat",
+        body("(declare-const M2 Int)",
+            "(assert " + near(lit(3 * (P52 / 2)), pow2(52 - jTop), "1", "M2", jTop) + ")"));
+    check(out, "refuted: a double less 2^" + (jTop - 52) + ", one step of its binade, is itself",
+        "sat", body("(declare-const M Int) (declare-const M2 Int)",
+            "(assert (jdouble.M.in M))",
+            "(assert " + near("(- M 1)", pow2(52 - jTop), "1", "M2", jTop) + ")",
+            "(assert (not (= M2 M)))"));
+
+    out.append("""
+
+        ; Section B: the scale-back with k = 0.
+        """);
+    check(out, "y's bits plus 0 << 52 are y's bits, every long", "unsat", body(
+        "(declare-const y Int)", "(assert (jlong.in y))",
+        "(assert (not (= (jlong.add y (jlong.shl 0 52)) y)))"));
+    check(out, "k = 0 is not below K_MIN_NORMAL = " + Exp.K_MIN_NORMAL + ", the scale-back's"
+        + " plain path", "unsat", body("(assert (< 0 " + lit(Exp.K_MIN_NORMAL) + "))"));
+    check(out, "refuted: with k = 1 the scale-back moves some y's bits", "sat", body(
+        "(declare-const y Int)", "(assert (jlong.in y))",
+        "(assert (not (= (jlong.add y (jlong.shl 1 52)) y)))"));
+
+    out.append("""
+
+        ; Section C: H1's witness, at the domain's top double x: the formula's k is 1. The
+        ; product rounds into its binade (or its neighbours, which are refused), then the sum
+        ; with 0.5 rounds into binade 2^0, and not below it.
+        """);
+    long mi = mant(Exp.INVLN2);
+    int ji = binade(Exp.INVLN2);
+    int jp = binade(top * Exp.INVLN2);
+    String prodA = "(* " + mi + " " + mant(top) + ")";
+    String prodB = pow2(52 - ji + 52 - jTop);
+    String sumA = "(+ P " + pow2(51 - jp) + ")";
+    String sumB = pow2(52 - jp);
+    check(out, "at the top, invln2 * x rounds into 2^" + jp + " only, positive", "unsat", body(
+        "(declare-const S2 Int) (declare-const M2 Int)",
+        "(assert (or " + near(prodA, prodB, "S2", "M2", jp - 1),
+        "  " + near(prodA, prodB, "S2", "M2", jp + 1),
+        "  " + near(prodA, prodB, "(- 1)", "M2", jp) + "))"));
+    check(out, "at the top, s rounds into 2^0, so (int) s = 1, and not into 2^-1, k = 0", "unsat",
+        body("(declare-const P Int) (declare-const S2 Int) (declare-const M2 Int)",
+            "(assert " + near(prodA, prodB, "1", "P", jp) + ")",
+            "(assert (or " + near(sumA, sumB, "S2", "M2", -1),
+            "  " + near(sumA, sumB, "S2", "M2", 1),
+            "  " + near(sumA, sumB, "(- 1)", "M2", 0) + "))"));
+    check(out, "not vacuous: at the top, s rounds into 2^0", "sat", body(
+        "(declare-const P Int) (declare-const M2 Int)",
+        "(assert " + near(prodA, prodB, "1", "P", jp) + ")",
+        "(assert " + near(sumA, sumB, "1", "M2", 0) + ")"));
+    return out.toString();
+  }
 }
