@@ -266,14 +266,21 @@ class ExpTest {
   @ParameterizedTest
   @EnumSource(VectorWidth.class)
   void foldBoundaries(VectorWidth width) {
-    assertExp(width.species(), foldBoundaries());
-    Oracle.assertUnaryMasked(
-        "VFdlibm.exp", width.species(), VFdlibm::exp, StrictMath::exp, foldBoundaries(), 701L);
+    assertFoldBoundaries(width.species());
   }
 
   @Test
   void foldBoundariesAtMaxSpecies() {
-    assertExp(DoubleVector.SPECIES_MAX, foldBoundaries());
+    assertFoldBoundaries(DoubleVector.SPECIES_MAX);
+  }
+
+  /** Both arms over {@link #foldBoundaries()} at {@code species}, unmasked and masked. */
+  private static void assertFoldBoundaries(VectorSpecies<Double> species) {
+    double[] xs = foldBoundaries();
+    assertExp(species, xs);
+    Oracle.assertUnaryMasked("VFdlibm.exp", species, VFdlibm::exp, StrictMath::exp, xs, 701L);
+    Oracle.assertUnaryMasked(
+        "Exp.expBlended", species, Exp::expBlended, StrictMath::exp, xs, 705L);
   }
 
   /**

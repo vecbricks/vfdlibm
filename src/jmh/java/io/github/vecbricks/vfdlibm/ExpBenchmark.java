@@ -45,21 +45,22 @@ import org.openjdk.jmh.annotations.Warmup;
  * {@code *Max} rows are not checked: at {@code SPECIES_MAX} the finish arm boxes on mixed data
  * (see {@code bench/alloc-check.py}); they are here to record that.
  *
- * <p>The {@code finishPairBoxed} rows are an experiment for code generators: exp's body is bound
- * by latency, not by issue width, so each iteration loads two independent vectors, computes both
- * branch-free cores ({@link Exp#expCore}) and rare masks ({@link Exp#expRare}), and runs one
- * per-lane finish, written out in the loop as a code generator would emit it, only if either
- * vector has a rare lane. They return exactly {@link VFdlibm#exp}'s results ({@code
- * ExpTest.finishPairRowsMatchVFdlibmExp}), but they box, and {@code bench/alloc-check.py} leaves
- * them out by name, as it does the {@code *Max} rows. Two inlined vfdlibm bodies exceed C2's
- * {@code NodeCountInliningCutoff} (a develop flag, 18000 nodes, fixed in product JVMs); past it
- * C2 refuses every callee larger than {@code MaxTrivialSize} (6 bytes) that is not {@code
+ * <p>The {@code finishPairBoxed} rows are an experiment for code generators. The hypothesis, read
+ * from the assembly census (bench/asm) and not measured, is that exp's body is bound by its
+ * dependency chain's latency rather than by issue width; to test it, each iteration loads two
+ * independent vectors, computes both branch-free cores ({@link Exp#expCore}) and rare masks ({@link
+ * Exp#expRare}), and runs one per-lane finish, written out in the loop as a code generator would
+ * emit it, only if either vector has a rare lane. They return exactly {@link VFdlibm#exp}'s results
+ * ({@code ExpTest.finishPairRowsMatchVFdlibmExp}), but they box, and {@code bench/alloc-check.py}
+ * leaves them out by name, as it does the {@code *Max} rows. Two inlined vfdlibm bodies exceed C2's
+ * {@code NodeCountInliningCutoff} (a develop flag, 18000 nodes, fixed in product JVMs); past it C2
+ * refuses every callee larger than {@code MaxTrivialSize} (6 bytes) that is not {@code
  * @ForceInline} ({@code opto/bytecodeInfo.cpp}), and {@code CompileCommand=inline} does not lift
  * that. {@code PrintInlining} shows the budget spent inside the first {@code expCore}, after both
  * {@code expRare} calls: its {@code Lanes} calls and the second {@code expCore} are refused, and
- * on the laptop the rows allocate 59392 B/op on common data at 256 bits, at the default flags and
- * under {@code -XX:UseAVX=2}. An interleaved pair needs the body written out by its caller, as a
- * code generator emits it (SKILLS.md).
+ * the rows allocate on common data at 256 bits, at the default flags and under {@code
+ * -XX:UseAVX=2}. An interleaved pair needs the body written out by its caller, as a code generator
+ * emits it (SKILLS.md).
  */
 @State(Scope.Thread)
 @BenchmarkMode(Mode.AverageTime)

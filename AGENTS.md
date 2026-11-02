@@ -22,7 +22,8 @@ vfdlibm ports fdlibm's double functions to the Java Vector API, each lane bit-id
   Varka's `sql/varka/proofs/` (SMT-LIB over integers, a double as `M * 2^E` with a round-to-nearest
   relation per binade, `unsat` checks as the proofs and `sat` checks for non-vacuity and for a
   constant changed by one being refuted). Fused multiply-add, reassociation and division by a
-  reciprocal stay out: they change results.
+  reciprocal stay out because they change results in general, so no proof covers them as a
+  rule; a specific use proven equal for every input would follow the proof rule like any other.
 
 ## Build and test
 

@@ -137,7 +137,10 @@ final class Lanes {
     return hiBelow(absBits(bits(ax)), h).cast(ax.species());
   }
 
-  /** fdlibm's {@code hx >= h}, as {@link #hiBelow} negated: true for a NaN {@code ax}. */
+  /**
+   * fdlibm's {@code hx >= h}: {@link #hiAtLeast(LongVector, int)} on {@code ax}'s bits with the
+   * sign cleared. True for a NaN {@code ax}.
+   */
   static VectorMask<Double> hiAtLeast(DoubleVector ax, int h) {
     return hiAtLeast(absBits(bits(ax)), h).cast(ax.species());
   }

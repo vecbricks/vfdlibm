@@ -97,9 +97,9 @@ negative result belongs here too, since it stops the next port re-trying a settl
   `finishPairBoxed256` calls `Exp.expRare` and `Exp.expCore` for two vectors per iteration. C2
   spent its budget inside the first `expCore`, after the two `expRare` calls: `Lanes.hiAbove`,
   `Lanes.hiBelow`, `Lanes.intSpecies` and then the second `expCore` were refused
-  (`NodeCountInliningCutoff`), and the rows allocate 59392 B/op even on common data, at the
-  default flags and under `-XX:UseAVX=2`. The rule is in `opto/bytecodeInfo.cpp`: once the graph
-  is over the cutoff (a develop flag, 18000 nodes, fixed in product JVMs), any callee larger than
+  (`NodeCountInliningCutoff`), and the rows allocate even on common data, at the default flags
+  and under `-XX:UseAVX=2`. The rule is in `opto/bytecodeInfo.cpp`: once the graph is over the
+  cutoff (a develop flag, 18000 nodes, fixed in product JVMs), any callee larger than
   `MaxTrivialSize` (6 bytes of bytecode) is refused unless it is `@ForceInline`, and
   `@ForceInline` callees, the Vector API's own methods, are delayed to incremental inlining
   instead. That is why a single body's late Vector API calls survive while a vfdlibm call does

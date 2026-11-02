@@ -128,6 +128,25 @@ class ProofsTest {
     assertEquals(bits(StrictMath.exp(w)), bits(farForm(w, 0)));
   }
 
+  /**
+   * L1's sat check: the domain's top word changed by one, 0x3fd62e43, is refuted. The k == 0 tail
+   * still gives exp at that word's low words 0 and 1, both signs, and first differs at low word 4
+   * (positive) and 0x1f (negative).
+   */
+  @Test
+  void l1DomainWidenedByAWordIsRefuted() {
+    for (long b : new long[] {
+      0x3fd62e43_00000000L, 0x3fd62e43_00000001L, 0xbfd62e43_00000000L, 0xbfd62e43_00000001L
+    }) {
+      double x = Double.longBitsToDouble(b);
+      assertEquals(bits(StrictMath.exp(x)), bits(farForm(x, 0)), Oracle.hex(x));
+    }
+    for (long b : new long[] {0x3fd62e43_00000004L, 0xbfd62e43_0000001fL}) {
+      double x = Double.longBitsToDouble(b);
+      assertNotEquals(bits(StrictMath.exp(x)), bits(farForm(x, 0)), Oracle.hex(x));
+    }
+  }
+
   /** e_exp.c's far form and general tail for a given k, scalar, with the exponent add. */
   private static double farForm(double x, int k) {
     double t = k;

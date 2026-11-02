@@ -104,8 +104,10 @@ five are a later, optional set; the large-argument reduction of the trigonometri
   operations plus evaluation at the boundary doubles). Proofs live in `PROOFS.md` as numbered
   lemmas (statement, hypotheses, proof, and the test that checks the hinges, which must fail if a
   hinge were false), with a short Javadoc pointer at the code.
-- No fused multiply-add, no reassociation, no division by a reciprocal: they change results. No
-  `Math.*` call inside a vector body except the per-lane `StrictMath` fallback.
+- No fused multiply-add, no reassociation, no division by a reciprocal: they change results in
+  general, so no proof covers them as a rule. A specific use proven equal for every input would
+  follow the proof rule above like any other different computation. No `Math.*` call inside a
+  vector body except the per-lane `StrictMath` fallback.
 - Java 25, the Vector API module, no preview features.
 - Lines at most 100 columns; ASCII only, except for string literals that need it.
 - Commits and pull requests end with `Generated-by: <tool> (<model>)` when AI tooling was used.
