@@ -128,7 +128,7 @@ final class Fuzz {
       budget = Double.parseDouble(Nightly.require(options, "seconds"));
       threads = Integer.parseInt(
           options.getOrDefault("threads", "" + Runtime.getRuntime().availableProcessors()));
-      if (threads < 1 || !(budget >= 0)) {
+      if (threads < 1 || !(budget > 0)) {
         throw new IllegalArgumentException("--threads and --seconds take positive numbers");
       }
       out = Path.of(options.getOrDefault("out", "target/nightly/fuzz-mismatches.txt"));

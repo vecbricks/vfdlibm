@@ -15,8 +15,10 @@
 # <function> is exp, log or log1p. A sweep checks the high words of <parts>: comma-separated
 # parts i/N of the 2^32, or stripe:s/S for the stripe Sweep.java's --stripe takes. A fuzz runs
 # <seconds> at each species (Fuzz.java). <seed> is decimal or 0x hex. The species default to the
-# host's: 128, 256 and 512 bits up to the preferred species, and max (`Nightly species`). For
-# example, a slice of exp at 256 bits:
+# host's: 128, 256 and 512 bits up to the preferred species, and max (`Nightly species`), less
+# the one NIGHTLY_EXCEPT names (the nightly sweeps x86 at 128 bits, and Arm at max, by a
+# separate slice); a width the host lacks gets a line in the output saying so. For example, a
+# slice of exp at 256 bits:
 #
 #   mvn -B -q test-compile && dev/nightly.sh sweep exp 1023/4096 0x1234 256
 #
@@ -58,12 +60,25 @@ java_cmd=(java --add-modules jdk.incubator.vector "${jvm_args[@]}" -cp "$cp")
 if [ $# -gt 0 ]; then
   species=("$@")
 else
-  read -r -a species <<< "$("${java_cmd[@]}" io.github.vecbricks.vfdlibm.Nightly species \
-    2>/dev/null)"
-  if [ ${#species[@]} -eq 0 ]; then
+  # Standard error says which fixed widths the host lacks, "512: not on this host (...)".
+  skipped="$out/species-skipped.txt"
+  read -r -a host <<< "$("${java_cmd[@]}" io.github.vecbricks.vfdlibm.Nightly species \
+    2>"$skipped")"
+  if [ ${#host[@]} -eq 0 ]; then
     echo "dev/nightly.sh: could not list the host's species" >&2
+    cat "$skipped" >&2
     exit 2
   fi
+  grep -v 'incubator modules' "$skipped" | sed 's/^/== /'
+  rm -f "$skipped"
+  species=()
+  for s in "${host[@]}"; do
+    if [ "$s" = "${NIGHTLY_EXCEPT:-}" ]; then
+      echo "== $s: left out (NIGHTLY_EXCEPT)"
+    else
+      species+=("$s")
+    fi
+  done
 fi
 
 status=0

@@ -40,10 +40,13 @@ import jdk.incubator.vector.VectorSpecies;
  * block unmasked, every lane against the oracle, and the whole block masked, each vector under one
  * mask drawn from the run's seed and the vector's position, active lanes against the oracle and
  * inactive lanes against the input's raw bits (PLAN.md section 5). The unit tests check all-true
- * and all-false masks; over a sweep every input is an active and an inactive lane about equally
- * often. A JVM checks one function at one species: SKILLS.md's "one species of a lane type per
- * JVM" (a second species makes the shared vector templates bimorphic and boxes them, which keeps
- * the bits right but costs the time), so the workflow starts one JVM per species.
+ * and all-false masks. Each input meets one mask per arm and run, so it is an active or an
+ * inactive lane with probability 1/2 each: a bug of a masked form that a single input shows is
+ * caught with probability about 1/2 per species and night, though a bug a band of inputs shows
+ * is caught all but surely. A JVM checks one function at one species: SKILLS.md's "one species
+ * of a lane type per JVM" (a second species makes the shared vector templates bimorphic and
+ * boxes them, which keeps the bits right but costs the time), so the workflow starts one JVM per
+ * species.
  */
 final class Nightly {
 
@@ -59,7 +62,9 @@ final class Nightly {
   /**
    * {@code Nightly species} prints the species this host runs, as {@code --species} takes them:
    * 128 bits, 256 and 512 where the preferred species is that wide, and {@code max}.
-   * {@code dev/nightly.sh} starts one JVM for each.
+   * {@code dev/nightly.sh} starts one JVM for each. Each fixed width it leaves out gets a line on
+   * standard error, such as {@code 512: not on this host (preferred species 256 bits)}, so a log
+   * says why a width is missing.
    */
   public static void main(String[] args) {
     if (args.length != 1 || !args[0].equals("species")) {
@@ -68,8 +73,12 @@ final class Nightly {
     }
     int preferred = DoubleVector.SPECIES_PREFERRED.vectorBitSize();
     StringBuilder names = new StringBuilder("128");
-    for (int bits = 256; bits <= 512 && bits <= preferred; bits *= 2) {
-      names.append(' ').append(bits);
+    for (int bits = 256; bits <= 512; bits *= 2) {
+      if (bits <= preferred) {
+        names.append(' ').append(bits);
+      } else {
+        System.err.println(bits + ": not on this host (preferred species " + preferred + " bits)");
+      }
     }
     System.out.println(names.append(" max"));
   }
@@ -87,6 +96,8 @@ final class Nightly {
         new Arm("Exp.expBlended", x -> Exp.expBlended(x, null), Exp::expBlended),
         // The pair experiment's split of the finish arm (ExpBenchmark.finishPairBoxed256): the
         // core in every lane, the rare mask's lanes finished per lane here. It has no masked form.
+        // It catches expRare missing a lane the core gets wrong, never expRare marking too many:
+        // an extra lane is finished by StrictMath here and so matches.
         new Arm("Exp.expCore+expRare", Nightly::expCoreAndRare, null))),
     LOG("log", StrictMath::log, List.of(
         new Arm("VFdlibm.log", VFdlibm::log, VFdlibm::log),
@@ -262,8 +273,14 @@ final class Nightly {
    * {@code Inputs.hardCases} form, each input as {@code 0x} and 16 hex digits on its own line
    * after {@code #} lines saying what differed, so the inputs can be appended as they are to a
    * {@code hard-cases/<function>.txt} resource. Every mismatch is counted; the first
-   * {@link #KEPT_PER_KIND} of each arm, mask form and kind of difference are written, so one
-   * broken branch cannot fill the disk.
+   * {@link #KEPT_PER_KIND} of each arm and mask form are written, so one broken branch cannot
+   * fill the disk. Each written mismatch is flushed at once, so a JVM killed by a timeout or a
+   * cancel leaves every mismatch it wrote, though no {@code # total mismatches} line.
+   *
+   * <p>A replay finds the same mismatches but need not write the same file: the threads reach
+   * them in no fixed order, so which ones are printed and which pass {@link #KEPT_PER_KIND} vary
+   * from run to run, and so does the total of a run stopped at {@link #ENOUGH}. A run that is
+   * not stopped early counts the same total; the inputs it writes are a subset of the same set.
    */
   static final class Mismatches implements AutoCloseable {
 
@@ -325,6 +342,7 @@ final class Nightly {
         if (seen == KEPT_PER_KIND) {
           out.println("# " + kind + ": later mismatches are counted, not written");
         }
+        out.flush();
       }
     }
 
