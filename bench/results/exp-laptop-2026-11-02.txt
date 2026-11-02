@@ -1,0 +1,80 @@
+# ExpBenchmark on the owner's laptop, 2 November 2026
+#
+# LAPTOP NUMBERS, NOT HEADLINES. The CPU is AVX-512 but has a 256-bit vector datapath, so the
+# 512-bit rows are not representative of a native AVX-512 host. Headline numbers come later from
+# GitHub's EPYC 7763 runners.
+#
+# Commit:      the commit adding this file; only comments in Exp.java changed since the run
+# JDK:         OpenJDK 64-Bit Server VM (build 25.0.4.1+1-1-26.04.4-Ubuntu, mixed mode, sharing)
+# CPU:         AMD Ryzen AI 9 HX PRO 370 w/ Radeon 890M
+# Vector:      default MaxVectorSize and UseAVX (AVX-512, preferred species 512 bits)
+# Kernel:      7.0.0-42-generic
+# Load:        load average: 1.45, 1.69, 2.43 at start;
+#              load average: 3.24, 2.24, 2.33 at end (24 logical cores)
+# JMH 1.37:    -f 2 -wi 3 -w 2s -i 5 -r 2s -prof gc
+#              -jvmArgsAppend -XX:CompileCommand=inline,io.github.vecbricks.vfdlibm.*::*
+#              (the body inlined into the loop, as Varka emits it; without the command the call
+#              is not inlined and boxes its argument and result)
+# Command:     mvn -B -Pjmh exec:exec -Djmh.args="ExpBenchmark <the options above>"
+# Array:       1024 doubles; common = uniform [-20, 20]; mixed = one input in 16 replaced by NaN,
+#              800, -750 or -708.5
+#
+# Checks behind the vector rows:
+# - Allocation: gc.alloc.rate.norm is ~0 B/op (under 0.02) for finish256, finish512, blended256
+#   and blended512 on common data, so the vector body ran unboxed. finish256/512 on mixed data
+#   allocate 52928 / 44032 B/op: that is the per-lane finish's toArray/fromArray, by design.
+# - 128-bit rows are NOT vector code: they allocate 1.36-1.90 MB/op. -XX:+PrintIntrinsics shows
+#   VectorSupport::compare/blend/test failing to intrinsify for 128-bit double masks on this JDK
+#   (x86, also with -XX:UseAVX=2); a mask-free 128-bit loop (mul, add, div, D2L/L2D, shifts)
+#   did intrinsify. Do not read the 128-bit rows as the port's speed.
+# - Before the run, PrintIntrinsics showed calls into Lanes refused with NodeCountInliningCutoff
+#   late in the body; the body now makes those calls first and writes the exponent add out,
+#   after which the 256/512-bit rows above allocate nothing.
+#
+# Minimums and spread over the 10 measured iterations (2 forks x 5), ns per 1024 doubles:
+benchmark          inputs     min ns/op    avg ns/op    max ns/op
+blended128         common    164706.996   168221.897   170714.996
+blended128         mixed     171159.627   171828.913   174334.636
+blended256         common      3878.965     3990.116     4228.287
+blended256         mixed       4475.777     4679.385     5210.105
+blended512         common      2672.775     3011.933     3713.607
+blended512         mixed       3057.340     3137.800     3270.338
+finish128          common    116689.688   119033.993   121089.499
+finish128          mixed     120652.784   125249.711   130135.178
+finish256          common      1764.784     1797.019     1817.912
+finish256          mixed       7840.665     7939.421     8071.823
+finish512          common      1168.972     1230.438     1278.709
+finish512          mixed       2991.702     3066.206     3133.602
+scalarStrictMath   common      4875.947     5789.390     7597.529
+scalarStrictMath   mixed       4895.052     5406.819     6610.669
+#
+# JMH's summary table (ns/op and gc.alloc.rate.norm rows; ExpBenchmark. prefix dropped):
+Benchmark                                inputs   Cnt          Score        Error  Units
+blended128                               common    10     168221.897     2655.325  ns/op
+blended128:gc.alloc.rate.norm            common    10    1904640.593        0.009  B/op
+blended128                               mixed     10     171828.913     1425.501  ns/op
+blended128:gc.alloc.rate.norm            mixed     10    1904640.606        0.005  B/op
+blended256                               common    10       3990.116      177.279  ns/op
+blended256:gc.alloc.rate.norm            common    10          0.014        0.001  B/op
+blended256                               mixed     10       4679.385      331.612  ns/op
+blended256:gc.alloc.rate.norm            mixed     10          0.016        0.001  B/op
+blended512                               common    10       3011.933      453.363  ns/op
+blended512:gc.alloc.rate.norm            common    10          0.010        0.002  B/op
+blended512                               mixed     10       3137.800       82.038  ns/op
+blended512:gc.alloc.rate.norm            mixed     10          0.011        0.001  B/op
+finish128                                common    10     119033.993     2514.916  ns/op
+finish128:gc.alloc.rate.norm             common    10    1355776.421        0.010  B/op
+finish128                                mixed     10     125249.711     6086.510  ns/op
+finish128:gc.alloc.rate.norm             mixed     10    1363056.443        0.022  B/op
+finish256                                common    10       1797.019       29.969  ns/op
+finish256:gc.alloc.rate.norm             common    10          0.006        0.001  B/op
+finish256                                mixed     10       7939.421      130.727  ns/op
+finish256:gc.alloc.rate.norm             mixed     10      52928.028        0.001  B/op
+finish512                                common    10       1230.438       42.071  ns/op
+finish512:gc.alloc.rate.norm             common    10          0.004        0.001  B/op
+finish512                                mixed     10       3066.206       76.979  ns/op
+finish512:gc.alloc.rate.norm             mixed     10      44032.011        0.001  B/op
+scalarStrictMath                         common    10       5789.390     1336.403  ns/op
+scalarStrictMath:gc.alloc.rate.norm      common    10          0.020        0.005  B/op
+scalarStrictMath                         mixed     10       5406.819     1037.286  ns/op
+scalarStrictMath:gc.alloc.rate.norm      mixed     10          0.019        0.004  B/op

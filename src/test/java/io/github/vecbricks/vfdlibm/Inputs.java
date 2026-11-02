@@ -47,6 +47,31 @@ final class Inputs {
     return xs;
   }
 
+  /** {@code n} doubles drawn uniformly from {@code [lo, hi)}, reproducibly from {@code seed}. */
+  static double[] uniform(long seed, int n, double lo, double hi) {
+    SplittableRandom random = new SplittableRandom(seed);
+    double[] xs = new double[n];
+    for (int i = 0; i < n; i++) {
+      xs[i] = random.nextDouble(lo, hi);
+    }
+    return xs;
+  }
+
+  /**
+   * {@code n} doubles of random sign whose magnitudes are spread evenly over the binary exponents
+   * from {@code 2^minExponent} to {@code 2^maxExponent}, with random significands.
+   */
+  static double[] magnitudes(long seed, int n, int minExponent, int maxExponent) {
+    SplittableRandom random = new SplittableRandom(seed);
+    double[] xs = new double[n];
+    for (int i = 0; i < n; i++) {
+      long exponent = random.nextInt(minExponent, maxExponent + 1) + 1023L;
+      long bits = (exponent << 52) | (random.nextLong() & 0x000f_ffff_ffff_ffffL);
+      xs[i] = random.nextBoolean() ? Double.longBitsToDouble(bits) : -Double.longBitsToDouble(bits);
+    }
+    return xs;
+  }
+
   /**
    * {@code threshold} and its {@code ulps} neighbours on each side, in increasing order: the
    * doubles a branch on {@code threshold} must get right. The sweep stops early at an infinity.

@@ -1,0 +1,103 @@
+/*
+ * Licensed to the vecbricks contributors under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License. You may obtain a copy of the
+ * License at http://www.apache.org/licenses/LICENSE-2.0. Software distributed under the License
+ * is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either
+ * express or implied. See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+package io.github.vecbricks.vfdlibm;
+
+import jdk.incubator.vector.DoubleVector;
+import jdk.incubator.vector.LongVector;
+import jdk.incubator.vector.VectorMask;
+import jdk.incubator.vector.VectorOperators;
+
+/**
+ * fdlibm's word access, over lanes. fdlibm reads and writes a double's two 32-bit halves through
+ * the {@code __HI} and {@code __LO} macros of {@code fdlibm.h}; here each lane's halves live in
+ * the long view of the vector ({@link DoubleVector#viewAsIntegralLanes}), which has the same lane
+ * count, so no reshaping is needed.
+ *
+ * <p>A word is held in a long lane as its unsigned 32-bit value, {@code 0} to {@code 0xffffffff},
+ * as fdlibm's {@code unsigned hx} holds it. Where fdlibm does {@code int} arithmetic on a word or
+ * on an exponent count {@code k}, the long lanes give the same result whenever the C has no
+ * overflow, which fdlibm's own range checks guarantee for the lanes whose result is kept.
+ */
+final class Lanes {
+
+  private static final long LOW_WORD = 0xffff_ffffL;
+
+  private Lanes() {}
+
+  /** The raw bits of each lane. */
+  static LongVector bits(DoubleVector x) {
+    return (LongVector) x.viewAsIntegralLanes();
+  }
+
+  /** The doubles whose raw bits are the lanes of {@code bits}. */
+  static DoubleVector fromBits(LongVector bits) {
+    return (DoubleVector) bits.viewAsFloatingLanes();
+  }
+
+  /** {@code __HI(x)}: each lane's high word, unsigned, sign bit included. */
+  static LongVector hi(DoubleVector x) {
+    return bits(x).lanewise(VectorOperators.LSHR, 32);
+  }
+
+  /** {@code __LO(x)}: each lane's low word, unsigned. */
+  static LongVector lo(DoubleVector x) {
+    return bits(x).and(LOW_WORD);
+  }
+
+  /** {@code __HI(x) = hi}: {@code x} with its high word replaced by {@code hi}'s low 32 bits. */
+  static DoubleVector withHi(DoubleVector x, LongVector hi) {
+    return fromBits(bits(x).and(LOW_WORD).or(hi.lanewise(VectorOperators.LSHL, 32)));
+  }
+
+  /** {@code __LO(x) = lo}: {@code x} with its low word replaced by {@code lo}'s low 32 bits. */
+  static DoubleVector withLo(DoubleVector x, LongVector lo) {
+    return fromBits(bits(x).and(~LOW_WORD).or(lo.and(LOW_WORD)));
+  }
+
+  /** The doubles whose high and low words are the low 32 bits of {@code hi} and {@code lo}. */
+  static DoubleVector fromHiLo(LongVector hi, LongVector lo) {
+    return fromBits(hi.lanewise(VectorOperators.LSHL, 32).or(lo.and(LOW_WORD)));
+  }
+
+  /** The double whose high word is {@code h} and whose low word is zero. */
+  static double fromHi(int h) {
+    return Double.longBitsToDouble((h & LOW_WORD) << 32);
+  }
+
+  /**
+   * fdlibm's {@code hx < h}, where {@code hx} is the high word of {@code |x|} and {@code ax} is
+   * {@code |x|}. It is done as a compare of doubles, {@code ax < fromHi(h)}: for a non-negative
+   * {@code ax} the order of the doubles is the order of their bits, and a value whose high word is
+   * below {@code h} is below {@code fromHi(h)} whatever its low word. A NaN {@code ax} compares
+   * false, and its {@code hx} is at least {@code 0x7ff00000}, so the result matches the C for
+   * every lane when {@code h <= 0x7ff00000}.
+   */
+  static VectorMask<Double> hiBelow(DoubleVector ax, int h) {
+    return ax.compare(VectorOperators.LT, fromHi(h));
+  }
+
+  /** fdlibm's {@code hx >= h}, as {@link #hiBelow} negated: true for a NaN {@code ax}. */
+  static VectorMask<Double> hiAtLeast(DoubleVector ax, int h) {
+    return hiBelow(ax, h).not();
+  }
+
+  /** fdlibm's {@code hx > h}, as {@code hx >= h + 1}: true for a NaN {@code ax}. */
+  static VectorMask<Double> hiAbove(DoubleVector ax, int h) {
+    return hiAtLeast(ax, h + 1);
+  }
+
+  /**
+   * {@code __HI(y) += (k << 20)}: adds {@code k} to each lane's binary exponent by adding {@code
+   * k << 52} to its bits. The low word of {@code k << 52} is zero, so the sum's high word is the
+   * C's {@code int} sum modulo 2^32 and its low word is unchanged.
+   */
+  static DoubleVector addExponent(DoubleVector y, LongVector k) {
+    return fromBits(bits(y).add(k.lanewise(VectorOperators.LSHL, 52)));
+  }
+}

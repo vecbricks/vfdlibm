@@ -6,6 +6,15 @@ bit-identical to `java.lang.StrictMath`.
 **Status: pre-alpha.** The repository, build, licence and plan exist. Functions are added one at
 a time, as [Varka](https://github.com/vecbricks/varka) needs them. Nothing is published yet.
 
+## Use
+
+```java
+DoubleVector y = VFdlibm.exp(DoubleVector.fromArray(DoubleVector.SPECIES_PREFERRED, xs, i));
+DoubleVector z = VFdlibm.exp(y, live); // only the lanes set in live; the others keep y's bits
+```
+
+Each method takes a vector of any species. Ported so far: `exp`.
+
 ## Why
 
 `StrictMath` is specified as fdlibm's results, the same on every host, and Apache Spark computes
