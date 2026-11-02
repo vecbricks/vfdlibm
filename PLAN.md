@@ -11,7 +11,8 @@ The library is filled step by step. When Varka needs an exact vector form of a f
 function is ported here and in Varka's kernel together, and the two are cross-checked:
 
 1. **Port it here.** Port the function from fdlibm 5.3's C file (`e_exp.c`, `s_expm1.c`, ...) into
-   a static method over `DoubleVector`, with that file's Sun notice in the source header.
+   a static method over `DoubleVector`, with that file's Sun notice in the source header. The C
+   files are committed unchanged under `reference/fdlibm-5.3/`, and a port cites the one it follows.
 2. **Test it here** against `StrictMath`, lane by lane and bit for bit (section 4).
 3. **Build Varka's side.** Varka's kernel emits the same sequence of operations as its own IR
    nodes. A large function body is not inlined by C2, so a call into the library from a kernel
@@ -66,8 +67,9 @@ five are a later, optional set; the large-argument reduction of the trigonometri
 
 ## 6. Rules
 
-- Port from fdlibm 5.3's C sources only (netlib). Never copy from or translate OpenJDK's
-  `FdLibm.java`, HotSpot's Intel LIBM stubs or glibc, which are GPL or LGPL.
+- Port from fdlibm 5.3's C sources only (netlib), as committed in `reference/fdlibm-5.3/`. Never
+  copy from or translate OpenJDK's `FdLibm.java`, HotSpot's Intel LIBM stubs or glibc, which are
+  GPL or LGPL.
 - No fused multiply-add, no reassociation, no `Math.*` call inside a vector body except the per-lane
   `StrictMath` fallback.
 - Java 25, the Vector API module, no preview features.
