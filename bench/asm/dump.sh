@@ -7,19 +7,29 @@
 # express or implied. See the License for the specific language governing permissions and
 # limitations under the License.
 #
-# Dumps C2's code for AsmDriver's exp loop as an AVX2 host compiles it and counts its hot path.
-# Usage: bench/asm/dump.sh <classes dir> <out dir> [hsdis dir]
+# Dumps C2's code for AsmDriver's exp loop and counts its hot path, in one of two modes:
+#   avx512  512 bits on the host's own flags (native AVX-512 on the owner's laptop)
+#   avx2    256 bits compiled as an AVX2 host such as the EPYC 7763 (-XX:UseAVX=2
+#           -XX:MaxVectorSize=32)
+# Usage: bench/asm/dump.sh <avx512|avx2> <classes dir> <out dir> [hsdis dir]
 # <classes dir> holds vfdlibm's compiled main classes (target/classes after `mvn compile`).
 set -eu
-classes=$1
-out=$2
-hsdis=${3:-$HOME/hsdis}
+mode=$1
+classes=$2
+out=$3
+hsdis=${4:-$HOME/hsdis}
 here=$(cd "$(dirname "$0")" && pwd)
+case $mode in
+  avx512) flags="-Dasm.bits=512" ;;
+  avx2) flags="-Dasm.bits=256 -XX:UseAVX=2 -XX:MaxVectorSize=32" ;;
+  *) echo "mode must be avx512 or avx2" >&2; exit 2 ;;
+esac
 mkdir -p "$out/driver"
 javac --add-modules jdk.incubator.vector -cp "$classes" -d "$out/driver" "$here/AsmDriver.java"
-LD_LIBRARY_PATH=$hsdis java --add-modules jdk.incubator.vector -XX:UseAVX=2 -XX:MaxVectorSize=32 \
+# shellcheck disable=SC2086
+LD_LIBRARY_PATH=$hsdis java --add-modules jdk.incubator.vector $flags \
   -XX:+UnlockDiagnosticVMOptions '-XX:CompileCommand=inline,io.github.vecbricks.vfdlibm.*::*' \
   '-XX:CompileCommand=print,AsmDriver::loopExp' -XX:PrintAssemblyOptions=intel \
-  -XX:-TieredCompilation -cp "$classes:$out/driver" AsmDriver > "$out/asm-avx2.txt" 2>&1
-python3 "$here/census.py" "$out/asm-avx2.txt" > "$out/census.txt"
-head -9 "$out/census.txt"
+  -XX:-TieredCompilation -cp "$classes:$out/driver" AsmDriver > "$out/asm-$mode.txt" 2>&1
+python3 "$here/census.py" "$out/asm-$mode.txt" > "$out/census-$mode.txt"
+head -10 "$out/census-$mode.txt"

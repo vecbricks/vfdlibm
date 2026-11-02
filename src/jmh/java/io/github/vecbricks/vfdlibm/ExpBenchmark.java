@@ -45,21 +45,21 @@ import org.openjdk.jmh.annotations.Warmup;
  * {@code *Max} rows are not checked: at {@code SPECIES_MAX} the finish arm boxes on mixed data
  * (see {@code bench/alloc-check.py}); they are here to record that.
  *
- * <p>The {@code finishPair} rows are an experiment for code generators: exp's body is bound by
- * latency, not by issue width, so each iteration loads two independent vectors, computes both
+ * <p>The {@code finishPairBoxed} rows are an experiment for code generators: exp's body is bound
+ * by latency, not by issue width, so each iteration loads two independent vectors, computes both
  * branch-free cores ({@link Exp#expCore}) and rare masks ({@link Exp#expRare}), and runs one
  * per-lane finish, written out in the loop as a code generator would emit it, only if either
  * vector has a rare lane. They return exactly {@link VFdlibm#exp}'s results ({@code
- * ExpTest.finishPairRowsMatchVFdlibmExp}). Two bodies in one loop pass C2's inlining budget, and
- * on the laptop, default flags and {@code -XX:UseAVX=2} alike, they box: 59392 B/op on common
- * data at 256 bits. {@code PrintInlining} shows the budget spent inside the first {@code
- * expCore}, after both {@code expRare} calls: its {@code Lanes} calls and then the second {@code
- * expCore} are refused with {@code NodeCountInliningCutoff}. HotSpot refuses there any callee
- * over {@code MaxTrivialSize} (6 bytes) that is not {@code @ForceInline}, which only the JDK's
- * own Vector API methods are and which are delayed rather than refused
- * ({@code opto/bytecodeInfo.cpp}); {@code CompileCommand=inline} does not lift it. So as written
- * these rows fail {@code bench/alloc-check.py}; a pair stays unboxed only with no vfdlibm call
- * in it, the body emitted inline as Varka emits it (SKILLS.md).
+ * ExpTest.finishPairRowsMatchVFdlibmExp}), but they box, and {@code bench/alloc-check.py} leaves
+ * them out by name, as it does the {@code *Max} rows. Two inlined vfdlibm bodies exceed C2's
+ * {@code NodeCountInliningCutoff} (a develop flag, 18000 nodes, fixed in product JVMs); past it
+ * C2 refuses every callee larger than {@code MaxTrivialSize} (6 bytes) that is not {@code
+ * @ForceInline} ({@code opto/bytecodeInfo.cpp}), and {@code CompileCommand=inline} does not lift
+ * that. {@code PrintInlining} shows the budget spent inside the first {@code expCore}, after both
+ * {@code expRare} calls: its {@code Lanes} calls and the second {@code expCore} are refused, and
+ * on the laptop the rows allocate 59392 B/op on common data at 256 bits, at the default flags and
+ * under {@code -XX:UseAVX=2}. An interleaved pair needs the body written out by its caller, as a
+ * code generator emits it (SKILLS.md).
  */
 @State(Scope.Thread)
 @BenchmarkMode(Mode.AverageTime)
@@ -151,7 +151,7 @@ public class ExpBenchmark {
   }
 
   @Benchmark
-  public double[] finishPair256() {
+  public double[] finishPairBoxed256() {
     int n = S256.length();
     for (int i = 0; i < N; i += 2 * n) {
       DoubleVector a = DoubleVector.fromArray(S256, in, i);
@@ -181,7 +181,7 @@ public class ExpBenchmark {
   }
 
   @Benchmark
-  public double[] finishPairPreferred() {
+  public double[] finishPairBoxedPreferred() {
     int n = SP.length();
     for (int i = 0; i < N; i += 2 * n) {
       DoubleVector a = DoubleVector.fromArray(SP, in, i);

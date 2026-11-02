@@ -67,9 +67,10 @@ import jdk.incubator.vector.VectorSpecies;
  * inline and allocates nothing at 256 and 512 bits (laptop numbers in {@code
  * bench/results/exp-finish-laptop-2026-11-02.txt}); the EPYC run of this code decides between
  * the arms again. The second arm is kept so the choice can be re-measured, on other hosts and as
- * the JDK changes. Those figures predate the folds above, which cut the common path C2 emits at
- * 256 bits under {@code -XX:UseAVX=2} from 107 instructions with two divisions to 64 with one
- * ({@code bench/asm/README.md}); no timing of the folded body has been taken yet.
+ * the JDK changes. Those figures predate the folds above, which cut the common path C2 emits
+ * from 77 instructions with two divisions to 52 with one at 512 bits on AVX-512, and from 107 to
+ * 64 at 256 bits under {@code -XX:UseAVX=2} ({@code bench/asm/README.md}); no timing of the
+ * folded body has been taken yet.
  *
  * <p>{@link #expCore} and {@link #expRare} split the finish arm into its branch-free part and its
  * rare-lane mask, for {@code ExpBenchmark}'s experiment with two vectors per loop iteration.
@@ -149,7 +150,7 @@ final class Exp {
 
   /**
    * The finish arm's branch-free part, for an experiment in emitting two vectors per loop
-   * iteration ({@code ExpBenchmark.finishPair256}): {@code StrictMath.exp} in every lane that
+   * iteration ({@code ExpBenchmark.finishPairBoxed256}): {@code StrictMath.exp} in every lane that
    * {@link #expRare} leaves clear, and an unspecified value in the lanes it sets, which the caller
    * finishes per lane with {@code StrictMath.exp}.
    */

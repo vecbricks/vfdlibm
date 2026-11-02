@@ -82,8 +82,9 @@ def main():
     print(f"blends:                {sum(1 for op in ops if 'blend' in op)}")
     print(f"broadcasts:            {sum(1 for op in ops if 'broadcast' in op)}")
     print(f"stack accesses:        {spills} (spill stores and reloads)")
-    print(f"vpcmpgtq:              {ops.count('vpcmpgtq')}")
+    print(f"integer compares:      {sum(1 for op in ops if op.startswith('vpcmp'))}")
     print(f"double compares:       {sum(1 for op in ops if op.startswith('vcmp'))}")
+    print(f"mask-register ops:     {sum(1 for op in ops if op.startswith('k'))}")
     for _, op, o in hot:
         print(f"    {op:16} {o}")
 

@@ -12,11 +12,15 @@ import jdk.incubator.vector.DoubleVector;
 import jdk.incubator.vector.VectorSpecies;
 
 /**
- * Warms exp's and log's 256-bit loops on common data until C2 compiles them, so that
- * -XX:CompileCommand=print shows the code a benchmark row runs. See README.md.
+ * Warms exp's and log's loops on common data until C2 compiles them, so that
+ * -XX:CompileCommand=print shows the code a benchmark row runs: at 512 bits with
+ * {@code -Dasm.bits=512}, otherwise at 256. The species is a static final, a constant to C2.
+ * See README.md.
  */
 public class AsmDriver {
-  static final VectorSpecies<Double> S = DoubleVector.SPECIES_256;
+  static final VectorSpecies<Double> S =
+      Integer.getInteger("asm.bits", 256) == 512 ? DoubleVector.SPECIES_512
+          : DoubleVector.SPECIES_256;
   static final int N = 1024;
 
   static void loopExp(double[] in, double[] out) {

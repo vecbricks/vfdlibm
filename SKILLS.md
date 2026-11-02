@@ -93,17 +93,21 @@ negative result belongs here too, since it stops the next port re-trying a settl
   refusing, the finish allocates nothing at 256 and 512 bits; at `SPECIES_MAX` it still boxes
   (below). Any slow path called from a port's body belongs written out inline, as
   `Lanes.addExponent` is.
-- **Two port bodies in one loop do not fit, whatever the order.** `ExpBenchmark.finishPair256`
-  calls `Exp.expRare` and `Exp.expCore` for two vectors per iteration. C2 spent its budget inside
-  the first `expCore`, after the two `expRare` calls: `Lanes.hiAbove`, `Lanes.hiBelow`,
-  `Lanes.intSpecies` and then the second `expCore` were refused (`NodeCountInliningCutoff`), and
-  the rows allocate 59392 B/op even on common data, at the default flags and under
-  `-XX:UseAVX=2`. The rule is in `opto/bytecodeInfo.cpp`: once the graph is over the cutoff,
-  any callee larger than `MaxTrivialSize` (6 bytes of bytecode) is refused unless it is
-  `@ForceInline`, and `@ForceInline` callees, the Vector API's own methods, are delayed to
-  incremental inlining instead. That is why a single body's late Vector API calls survive while a
-  vfdlibm call does not, and why a 7-byte wrapper such as `expCore` is refused. An interleaved
-  pair stays unboxed only with no vfdlibm call in it, emitted inline as Varka does.
+- **Two port bodies in one loop do not fit, whatever the order.** `ExpBenchmark`'s
+  `finishPairBoxed256` calls `Exp.expRare` and `Exp.expCore` for two vectors per iteration. C2
+  spent its budget inside the first `expCore`, after the two `expRare` calls: `Lanes.hiAbove`,
+  `Lanes.hiBelow`, `Lanes.intSpecies` and then the second `expCore` were refused
+  (`NodeCountInliningCutoff`), and the rows allocate 59392 B/op even on common data, at the
+  default flags and under `-XX:UseAVX=2`. The rule is in `opto/bytecodeInfo.cpp`: once the graph
+  is over the cutoff (a develop flag, 18000 nodes, fixed in product JVMs), any callee larger than
+  `MaxTrivialSize` (6 bytes of bytecode) is refused unless it is `@ForceInline`, and
+  `@ForceInline` callees, the Vector API's own methods, are delayed to incremental inlining
+  instead. That is why a single body's late Vector API calls survive while a vfdlibm call does
+  not, why a 7-byte wrapper such as `expCore` is refused, and why `CompileCommand=inline` does not
+  help. The consequence for callers: a kernel that inlines two vfdlibm calls can hit the same
+  cutoff and box, so interleaving two vectors needs the body written out by the caller (a code
+  generator, as Varka emits it), not two calls. The `*Boxed*` rows record this and
+  `bench/alloc-check.py` leaves them out by name.
 - **A forced inline changes the caller.** When a flag affects inlining, the method whose code
   moves is the one doing the calling; measure it, not only the callee.
 
@@ -202,10 +206,11 @@ negative result belongs here too, since it stops the next port re-trying a settl
   measures both on common and mixed data, decides per branch, and records the decision in its pull
   request (`PLAN.md` section 5).
 - **A blended alternative costs its whole form in every lane.** exp computed the C's near form
-  and its `k == 0` form for every lane and blended them: at 256 bits under `-XX:UseAVX=2` the hot
-  loop was 107 instructions with two `vdivpd`, 11 blends, 25 constant broadcasts and 4 spills.
-  Proving that the far form and the general tail already give those lanes' results (`PROOFS.md`,
-  L1 and L2) left one form: 64 instructions, one `vdivpd`, 2 blends, 12 broadcasts, no spill
+  and its `k == 0` form for every lane and blended them. Proving that the far form and the
+  general tail already give those lanes' results (`PROOFS.md`, L1 and L2) left one form. With
+  native AVX-512 at 512 bits the hot path went from 77 instructions to 52, two `vdivpd` to one,
+  11 blends to 2 and 5 mask spills to none; at 256 bits under `-XX:UseAVX=2`, from 107 to 64,
+  with 11 blends to 2, 25 constant broadcasts to 12 and 4 spills to none
   (`bench/asm/README.md`). Before blending two of the C's forms, look for a proof that one covers
   the other's lanes; count the result with `bench/asm/` before timing it.
 - **Laptop first, then the EPYC.** The `D2L` boxing never showed under the laptop's default

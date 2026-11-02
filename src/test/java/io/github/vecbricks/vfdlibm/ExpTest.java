@@ -325,8 +325,8 @@ class ExpTest {
   }
 
   /**
-   * The {@code finishPair} rows of {@code ExpBenchmark} return {@link VFdlibm#exp}'s bits, on the
-   * benchmark's own common and mixed inputs and on vectors of every rare-lane subset.
+   * The {@code finishPairBoxed} rows of {@code ExpBenchmark} return {@link VFdlibm#exp}'s bits,
+   * on the benchmark's own common and mixed inputs and on vectors of every rare-lane subset.
    */
   @Test
   void finishPairRowsMatchVFdlibmExp() {
@@ -350,8 +350,8 @@ class ExpTest {
   private static void assertPairRows(ExpBenchmark bench) {
     double[] want = bench.finish256().clone();
     double[] strict = bench.scalarStrictMath().clone();
-    double[] pair256 = bench.finishPair256().clone();
-    double[] pairPreferred = bench.finishPairPreferred().clone();
+    double[] pair256 = bench.finishPairBoxed256().clone();
+    double[] pairPreferred = bench.finishPairBoxedPreferred().clone();
     for (int i = 0; i < want.length; i++) {
       assertBits(Double.doubleToRawLongBits(strict[i]), want[i]);
       assertBits(Double.doubleToRawLongBits(want[i]), pair256[i]);
