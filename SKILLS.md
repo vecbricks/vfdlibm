@@ -346,3 +346,93 @@ question.
   paths reduce exactly to `k*ln2_hi + (k*ln2_lo + c)`. A sample of 199,804,321 `hu == 0` inputs
   with `1+x` between 0.5 and 2^1024 showed 0 bit differences against `StrictMath.log1p`; `x` in
   (-1, -0.5) was not sampled, and sampling is not proof. The port keeps the C's operations.
+
+## The nightly sweep and fuzz
+
+- **What runs.** `.github/workflows/nightly.yml` runs `Sweep` and `Fuzz` (in `src/test/java`,
+  `main` programs, not tests) through `dev/nightly.sh`, one JVM per species, since a second
+  species in one JVM makes the shared vector templates bimorphic (above). Each checks every arm
+  (`VFdlibm`'s and the alternatives, `Exp.expCore+expRare` included) unmasked, and masked under
+  one mask per vector drawn from the seed and the vector's position, against `StrictMath` by raw
+  bits; all-true and all-false masks are the unit tests'. The sweep takes each of the 2^32 high
+  words with low words 0, `0xffffffff` and `mix(seed + hi * 0x9e3779b97f4a7c15L)`, so any of its
+  inputs replays from the seed alone. The fuzz takes random bits and the neighbourhoods of the
+  high words, significand splits and doubles each function branches on (`Fuzz.java` lists
+  them), for a fixed time.
+- **What a night can miss.** Each input meets one mask per arm, so it is an active or an
+  inactive lane with probability 1/2 each: a bug of a masked form that a single input shows is
+  caught with probability about 1/2 per species and night, though a bug a band of inputs shows
+  is caught all but surely. `Exp.expCore+expRare` catches `expRare` missing a lane, never
+  marking too many: an extra lane is finished by `StrictMath` and matches. And taking every
+  high-word branch is not seeing a moved split. The planted `log.thresholdMoved`, a split one
+  step off on the high word, gave no mismatch on sweep stripe `255/256` and 2 on stripe `0/4`,
+  both through the seed's low word, while the fuzz, which draws each split's neighbourhood,
+  catches it within a second (`NightlyTest`'s fault runs). The sweep is for bands nothing
+  samples; the fuzz is for splits.
+- **A slice by hand.** After `mvn -B -q test-compile`, `dev/nightly.sh sweep exp 1023/4096 0x5eed
+  256` sweeps the 2^20 high words of `[1, 2)` at 256 bits (a second or two);
+  `dev/nightly.sh sweep log stripe:255/256 0x5eed` sweeps the stripe the sizing below used at
+  every width the host has (`NIGHTLY_EXCEPT=128` leaves one out, as the nightly does);
+  `dev/nightly.sh fuzz log1p 30 0x5eed` fuzzes for 30 seconds a species. A width the host lacks
+  is named in the output (`512: not on this host`). `NIGHTLY_JVM_ARGS` passes JVM options,
+  `-XX:UseAVX=2 -XX:MaxVectorSize=32` or a planted fault:
+  `NIGHTLY_JVM_ARGS=-Dvfdlibm.fault=exp.dropCorrection dev/nightly.sh sweep exp 1023/4096 0x5eed
+  256` must exit 1 and write the mismatches to `target/nightly/sweep-exp-256.txt`. That file is
+  `Inputs.hardCases`'s form: each mismatch is a `# MISMATCH` line (function, species, seed, arm,
+  masked and the mask, lane, input, expected and actual as raw hex) and then the input alone, so
+  the inputs go into `src/test/resources/.../hard-cases/<function>.txt` as they are. Each is
+  flushed as it is written, so a JVM killed by a timeout keeps what it found, without the
+  closing `# total mismatches` line. A run stops after 100,000 mismatches. A replay finds the
+  same mismatches but not the same file: the threads reach them in no fixed order, so which 200
+  per arm and mask form are written, and a stopped run's total, vary. On the laptop, take the
+  heavy lock and pin to one core type, for example
+  `flock ~/proj/.varka-locks/heavy.lock taskset -c 0,1,12,13 dev/nightly.sh ...`.
+- **Its cost, measured once (laptop, 2 November 2026).** Stripe `255/256` of each function, 2^24
+  high words over 16 exponents of both signs, with 4 threads on two Zen 5 cores and their SMT
+  siblings (`taskset -c 0,1,12,13`, the shape of a 4-vCPU runner), took in seconds at 128 / 256
+  / 512 bits / max: exp 10.7 / 1.9 / 1.5 / 1.6, log 11.6 / 1.7 / 1.6 / 1.6, log1p 24.1 / 2.2 /
+  1.8 / 1.9; stripe `0/256` read within 0.6 s of these. On another 2^24 sample, exp at 256 bits
+  swept 4.7 million high words a second on one thread and 9.7 million on the four, 2.1 times as
+  many. Times 256, the whole sweep at every width is 67 minutes for exp, 70 for log and 128 for
+  log1p on those two laptop cores, 6 to 8 runner-hours a night on GitHub's x86 runners.
+- **Why x86 sweeps 128 bits by a slice (Max, 2 November 2026).** The 128-bit species is 68 to
+  80% of that cost: x86 C2 lowers no mask at two 64-bit lanes (above), so that width runs lane
+  by lane in Java, and Varka declines 128-bit doubles on x86, so no user of the port runs it
+  there. So on x86 the nightly sweeps every high word at 256 bits and max (and 512 on an AVX-512
+  draw), and at 128 bits a rotating slice: on night n of 32, stripe `n*shards + j` of
+  `32*shards` in shard j's job, every high word in 32 nights. 1/32 keeps the slice near a tenth
+  of the x86 sweep while covering it every month; the 128-bit logic itself is swept whole every
+  night on Arm, natively, so what the slice alone guards is x86's per-lane fallback. The fuzz
+  still runs at 128 bits on x86 every night. The dispatch inputs `slice-nights` and
+  `slice-night` change or replay the rotation; `nights` and `shards` do the same for the rest.
+- **The Arm job** sweeps every high word at 128 bits every night, in 4 stripes per function
+  (`arm-shards`), the same rotating 1/32 slice at max (128 bits wide on Arm too, a second
+  species of the same width), and fuzzes both species once per function, in shard 0's job. Its
+  time is not measured yet. It is sized by the laptop's x86 128-bit time as an upper bound: that
+  path runs per lane, where Arm lowers the masks natively, and the bound assumes a Neoverse N2
+  core is not slower than a Zen 5 core with its SMT sibling, which nobody has measured. Under it
+  a log1p stripe sweeps for 26 minutes and an exp or log stripe for 12, plus the slice (under 2)
+  and 8 minutes of fuzz in shard 0 (30 at the 900-second cap), against a 120-minute timeout.
+- **The projection, in runner-hours a night (the first nights' logs, which print each species'
+  time, replace it).** From the laptop numbers, with GitHub's cores taken as 1.5 to 2 times
+  slower (not measured), the x86 sweep is 16, 16 and 21 laptop-minutes for exp, log and log1p
+  (256 bits, max and the 128 slice), 79 to 105 runner-minutes in all, plus 31 to 42 on an
+  AVX-512 draw; 2 jobs per function of 12 to 30 minutes. That is 2 shards, not 4: the jobs got
+  short, and each pays its setup and build (about 2 minutes) and is billed by the started
+  minute. The fuzz is unchanged: 6 jobs of 240 seconds times 3 or 4 species, 72 to 84 minutes.
+  The proofs and every job's setup add about half an hour. So x86 is 1.3 to 1.8 runner-hours of
+  sweep (6 to 8 before) and 3 to 3.7 with fuzz and setup. Arm is at most 4.2 under the bound
+  above (198 minutes of sweep, 6 of slice, 24 of fuzz, 24 of setup for its 12 jobs) and, if its
+  native 128 bits costs twice x86's 256 bits per vector (half the lanes) on cores 1.5 to 2 times
+  slower than the laptop's, 2 to 2.5. The target is 2 to 3 runner-hours a night:
+  the sweep is within it; the whole night is above it until the logs say otherwise, mostly from
+  the fuzz, which this schedule does not change.
+- **When a night fails,** the `alert` job (the only one with `issues: write`) opens an issue
+  labelled `nightly-failure`, or comments on the open one, with the run's link, the seed, each
+  job's result, the dispatch inputs that replay the run (seed, `nights`, `shards`, `arm-shards`,
+  `night`, `slice-nights`, `slice-night`, `fuzz-seconds`), and for each mismatch file its replay
+  and JVM arguments (an as-AVX2 fuzz replays only with `-XX:UseAVX=2 -XX:MaxVectorSize=32`), its
+  total (or, when a killed JVM wrote none, the count it wrote) and its first mismatches; the
+  artifacts `nightly-*` hold the rest. A dispatch with those inputs replays every job, Arm's
+  too. That the job's `issues: write` and its `gh` calls work is verified by the first real
+  failure, not before.

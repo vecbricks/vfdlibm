@@ -44,7 +44,11 @@ fdlibm's own sequence of operations, lane by lane. That is this library.
 Each function is checked against `StrictMath` on the same JVM:
 - exhaustively where a range is small enough;
 - by sampled bit patterns over the whole domain;
-- with fdlibm's thresholds and the known hard cases as fixed vectors.
+- with fdlibm's thresholds and the known hard cases as fixed vectors;
+- every night (`.github/workflows/nightly.yml`), by a sweep of all 2^32 high words, three low
+  words each, and by fuzzing from a fresh seed, every arm at every width the runner has; x86's
+  128 bits, which run lane by lane there, are swept a 1/32 slice a night, and Arm's 128 bits
+  whole every night (`SKILLS.md`, "The nightly sweep and fuzz").
 
 ## Licence
 

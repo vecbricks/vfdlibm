@@ -1,0 +1,423 @@
+name: Nightly
+
+# The nightly correctness run (SKILLS.md, "The nightly sweep and fuzz"): every arm of exp, log
+# and log1p, unmasked and masked, compared with StrictMath by raw bits.
+#
+# - sweep (x86): every one of the 2^32 high words with three low words each (Sweep.java) at
+#   every width the drawn runner has except 128 bits: 256 and max on every draw, 512 on an
+#   AVX-512 draw. Each function is split into `shards` stripes run as parallel jobs and rotated
+#   over `nights` nights: night n (days since 1970 modulo `nights`) checks stripes n*shards to
+#   n*shards+shards-1 of nights*shards. With the defaults, 1 night and 2 shards, all of it every
+#   night. At 128 bits the same jobs sweep a rotating slice, 1/`slice-nights` of the high words
+#   (default 32, all of them in 32 nights): x86 C2 lowers no two-lane mask, so 128 bits runs per
+#   lane in Java and was 68 to 80% of a whole sweep's cost.
+# - fuzz (x86): a fixed time per species, 128 bits included, from a fresh seed (Fuzz.java), at
+#   the runner's own flags and compiled as an AVX2 host, as ci.yml's rows are.
+# - arm: on an Arm runner, where 128 bits runs natively, every high word at 128 bits every
+#   night (`arm-shards` stripes per function, the same `nights` rotation), the rotating slice
+#   at max, and the fuzz at both.
+# - proofs: every SMT proof under both solvers (proofs/README.md).
+# - alert: when any of them fails, opens a GitHub issue labelled nightly-failure, or comments on
+#   the open one, with the run's link, the dispatch inputs that replay it, and the mismatches. It
+#   is the only job that may write.
+#
+# The seed is fresh each night; the plan job prints it with the night and slice night, and a
+# dispatch with those inputs (as the issue lists them) replays every job of the run, Arm's too.
+# Every mismatch file is uploaded as an artifact, its inputs one per line as
+# hard-cases/<function>.txt takes them.
+
+on:
+  schedule:
+    - cron: '17 2 * * *'
+  workflow_dispatch:
+    inputs:
+      seed:
+        description: 'Seed, 0x and up to 16 hex digits; blank for a fresh one'
+        required: false
+        default: ''
+      nights:
+        description: 'Sweep: nights to cover every high word in, a power of two'
+        required: false
+        default: '1'
+      shards:
+        description: 'Sweep (x86): parallel jobs per function and night, a power of two to 64'
+        required: false
+        default: '2'
+      arm-shards:
+        description: 'Sweep (Arm): parallel jobs per function and night, a power of two to 64'
+        required: false
+        default: '4'
+      night:
+        description: 'Sweep: which night of the rotation, 0 to nights-1; blank for today'
+        required: false
+        default: ''
+      slice-nights:
+        description: 'Slice (x86 128 bits, Arm max): nights to cover it in, a power of two'
+        required: false
+        default: '32'
+      slice-night:
+        description: 'Slice: which night of its rotation, 0 to slice-nights-1; blank for today'
+        required: false
+        default: ''
+      fuzz-seconds:
+        description: 'Fuzz: seconds per function and species, 1 to 900'
+        required: false
+        default: '240'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: nightly
+  cancel-in-progress: false
+
+jobs:
+  plan:
+    # Scheduled runs only in the main repository; a fork may still dispatch it.
+    if: github.event_name != 'schedule' || github.repository == 'vecbricks/vfdlibm'
+    runs-on: ubuntu-latest
+    outputs:
+      seed: ${{ steps.plan.outputs.seed }}
+      sweep: ${{ steps.plan.outputs.sweep }}
+      arm: ${{ steps.plan.outputs.arm }}
+      fuzz-seconds: ${{ steps.plan.outputs.fuzz-seconds }}
+      replay: ${{ steps.plan.outputs.replay }}
+    steps:
+      - name: Plan the night
+        id: plan
+        env:
+          SEED: ${{ inputs.seed }}
+          NIGHTS: ${{ inputs.nights || '1' }}
+          SHARDS: ${{ inputs.shards || '2' }}
+          ARM_SHARDS: ${{ inputs.arm-shards || '4' }}
+          NIGHT: ${{ inputs.night }}
+          SLICE_NIGHTS: ${{ inputs.slice-nights || '32' }}
+          SLICE_NIGHT: ${{ inputs.slice-night }}
+          FUZZ_SECONDS: ${{ inputs.fuzz-seconds || '240' }}
+        run: |
+          pow2() { [[ $1 =~ ^[0-9]+$ ]] && [ "$1" -ge 1 ] && [ $(($1 & ($1 - 1))) -eq 0 ]; }
+          if [ -z "$SEED" ]; then
+            SEED="0x$(od -An -N8 -tx8 /dev/urandom | tr -d ' \n')"
+          elif ! [[ $SEED =~ ^0x[0-9a-fA-F]{1,16}$ ]]; then
+            echo "::error::seed takes 0x and up to 16 hex digits, not '$SEED'"; exit 1
+          fi
+          # A matrix holds at most 256 jobs: 3 functions times 64 shards is 192. A stripe count
+          # (nights or slice-nights times shards) is at most Sweep's 4096 chunks.
+          for n in "$NIGHTS" "$SLICE_NIGHTS"; do
+            for s in "$SHARDS" "$ARM_SHARDS"; do
+              if ! pow2 "$n" || ! pow2 "$s" || [ "$s" -gt 64 ] || [ $((n * s)) -gt 4096 ]; then
+                echo "::error::nights, slice-nights and the shards take powers of two, the" \
+                  "shards at most 64, a nights count times a shard count at most 4096"
+                exit 1
+              fi
+            done
+          done
+          days=$(( $(date -u +%s) / 86400 ))
+          if [ -z "$NIGHT" ]; then NIGHT=$((days % NIGHTS)); fi
+          if [ -z "$SLICE_NIGHT" ]; then SLICE_NIGHT=$((days % SLICE_NIGHTS)); fi
+          if ! [[ $NIGHT =~ ^[0-9]+$ ]] || [ "$NIGHT" -ge "$NIGHTS" ]; then
+            echo "::error::night takes 0 to $((NIGHTS - 1)), not '$NIGHT'"; exit 1
+          fi
+          if ! [[ $SLICE_NIGHT =~ ^[0-9]+$ ]] || [ "$SLICE_NIGHT" -ge "$SLICE_NIGHTS" ]; then
+            echo "::error::slice-night takes 0 to $((SLICE_NIGHTS - 1)), not '$SLICE_NIGHT'"
+            exit 1
+          fi
+          # The fuzz job runs up to 4 species (128, 256, 512, max) in its 90 minutes.
+          if ! [[ $FUZZ_SECONDS =~ ^[0-9]+$ ]] || [ "$FUZZ_SECONDS" -lt 1 ] \
+              || [ "$FUZZ_SECONDS" -gt 900 ]; then
+            echo "::error::fuzz-seconds takes 1 to 900, not '$FUZZ_SECONDS'"; exit 1
+          fi
+          # One matrix entry per function and shard: the whole-sweep stripe, the slice's stripe
+          # and the species the slice takes; on Arm the first shard also fuzzes.
+          matrix() {
+            local shards="$1" slice_species="$2" json='{"include":[' sep='' f j fuzz
+            for f in exp log log1p; do
+              for ((j = 0; j < shards; j++)); do
+                if [ "$j" = 0 ]; then fuzz=true; else fuzz=false; fi
+                json="$json$sep{\"function\":\"$f\",\"shard\":$j"
+                json="$json,\"stripe\":\"$((NIGHT * shards + j))/$((NIGHTS * shards))\""
+                json="$json,\"slice\":\"$((SLICE_NIGHT * shards + j))/$((SLICE_NIGHTS * shards))\""
+                json="$json,\"slice-species\":\"$slice_species\",\"fuzz\":$fuzz}"
+                sep=','
+              done
+            done
+            echo "$json]}"
+          }
+          replay="seed=$SEED nights=$NIGHTS shards=$SHARDS arm-shards=$ARM_SHARDS"
+          replay="$replay night=$NIGHT slice-nights=$SLICE_NIGHTS slice-night=$SLICE_NIGHT"
+          replay="$replay fuzz-seconds=$FUZZ_SECONDS"
+          echo "replay with the dispatch inputs: $replay"
+          echo "sweep: night $NIGHT of $NIGHTS; x86 stripes $((NIGHT * SHARDS)) to" \
+            "$((NIGHT * SHARDS + SHARDS - 1)) of $((NIGHTS * SHARDS)), Arm stripes" \
+            "$((NIGHT * ARM_SHARDS)) to $((NIGHT * ARM_SHARDS + ARM_SHARDS - 1)) of" \
+            "$((NIGHTS * ARM_SHARDS)) per function"
+          echo "slice (x86 128 bits, Arm max): night $SLICE_NIGHT of $SLICE_NIGHTS"
+          echo "fuzz: $FUZZ_SECONDS s per function and species"
+          {
+            echo "seed=$SEED"
+            echo "sweep=$(matrix "$SHARDS" 128)"
+            echo "arm=$(matrix "$ARM_SHARDS" max)"
+            echo "fuzz-seconds=$FUZZ_SECONDS"
+            echo "replay=$replay"
+          } >> "$GITHUB_OUTPUT"
+
+  sweep:
+    name: sweep (${{ matrix.function }}, stripe ${{ matrix.stripe }})
+    needs: plan
+    runs-on: ubuntu-latest
+    # A job of log1p, the slowest, is projected at 15 to 30 minutes with 2 shards (SKILLS.md).
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      # The free organisation plan runs 20 jobs at once across vecbricks: with fuzz's 3, arm's 4
+      # and proofs, this run takes at most 16, leaving room for CI.
+      max-parallel: 8
+      matrix: ${{ fromJSON(needs.plan.outputs.sweep) }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-java@v5
+        with:
+          distribution: zulu
+          java-version: 25
+          cache: maven
+      # The machine in the log: CPU, vector flags, UseAVX and MaxVectorSize, and the datapath.
+      - name: Record the machine
+        continue-on-error: true
+        run: bench/datapath.sh
+      - name: Build
+        run: mvn -B --no-transfer-progress -q test-compile
+      - name: Sweep every high word of the stripe at the wide species
+        env:
+          FUNCTION: ${{ matrix.function }}
+          STRIPE: ${{ matrix.stripe }}
+          NIGHTLY_EXCEPT: ${{ matrix.slice-species }}
+          SEED: ${{ needs.plan.outputs.seed }}
+        run: dev/nightly.sh sweep "$FUNCTION" "stripe:$STRIPE" "$SEED"
+      - name: Sweep the slice at 128 bits
+        if: ${{ !cancelled() }}
+        env:
+          FUNCTION: ${{ matrix.function }}
+          STRIPE: ${{ matrix.slice }}
+          SLICE_SPECIES: ${{ matrix.slice-species }}
+          SEED: ${{ needs.plan.outputs.seed }}
+        run: dev/nightly.sh sweep "$FUNCTION" "stripe:$STRIPE" "$SEED" "$SLICE_SPECIES"
+      - name: Upload the logs and mismatches
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: nightly-sweep-${{ matrix.function }}-${{ matrix.shard }}
+          path: target/nightly/
+          if-no-files-found: ignore
+
+  fuzz:
+    name: fuzz (${{ matrix.function }}, ${{ matrix.name }})
+    needs: plan
+    runs-on: ubuntu-latest
+    # Up to 4 species times fuzz-seconds: 16 minutes by default, 60 at the cap of 900.
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      max-parallel: 3
+      matrix:
+        function: [exp, log, log1p]
+        name: [runner flags, as AVX2]
+        include:
+          - name: runner flags
+            jvm-args: ''
+            salt: 1
+          - name: as AVX2
+            jvm-args: -XX:UseAVX=2 -XX:MaxVectorSize=32
+            salt: 2
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-java@v5
+        with:
+          distribution: zulu
+          java-version: 25
+          cache: maven
+      - name: Record the machine
+        continue-on-error: true
+        run: bench/datapath.sh
+      - name: Build
+        run: mvn -B --no-transfer-progress -q test-compile
+      # Each job draws its own inputs: the night's seed plus the job's salt.
+      - name: Fuzz
+        env:
+          FUNCTION: ${{ matrix.function }}
+          SECONDS_EACH: ${{ needs.plan.outputs.fuzz-seconds }}
+          SEED: ${{ needs.plan.outputs.seed }}
+          SALT: ${{ matrix.salt }}
+          NIGHTLY_JVM_ARGS: ${{ matrix.jvm-args }}
+        run: |
+          seed="$(printf '0x%016x' $((SEED + SALT)))"
+          dev/nightly.sh fuzz "$FUNCTION" "$SECONDS_EACH" "$seed"
+      - name: Upload the logs and mismatches
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: nightly-fuzz-${{ matrix.function }}-${{ matrix.salt }}
+          path: target/nightly/
+          if-no-files-found: ignore
+
+  arm:
+    name: arm (${{ matrix.function }}, stripe ${{ matrix.stripe }})
+    needs: plan
+    runs-on: ubuntu-24.04-arm
+    # Bounded by the laptop's x86 per-lane 128-bit time, a job of log1p sweeps for at most 26
+    # minutes with 4 shards, and the first shard fuzzes for 2 species times fuzz-seconds, 30
+    # minutes at the cap (SKILLS.md).
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      max-parallel: 4
+      matrix: ${{ fromJSON(needs.plan.outputs.arm) }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-java@v5
+        with:
+          distribution: zulu
+          java-version: 25
+          cache: maven
+      - name: Record the machine
+        continue-on-error: true
+        run: bench/datapath.sh
+      - name: Build
+        run: mvn -B --no-transfer-progress -q test-compile
+      - name: Sweep every high word of the stripe at 128 bits
+        env:
+          FUNCTION: ${{ matrix.function }}
+          STRIPE: ${{ matrix.stripe }}
+          NIGHTLY_EXCEPT: ${{ matrix.slice-species }}
+          SEED: ${{ needs.plan.outputs.seed }}
+        run: dev/nightly.sh sweep "$FUNCTION" "stripe:$STRIPE" "$SEED"
+      - name: Sweep the slice at max
+        if: ${{ !cancelled() }}
+        env:
+          FUNCTION: ${{ matrix.function }}
+          STRIPE: ${{ matrix.slice }}
+          SLICE_SPECIES: ${{ matrix.slice-species }}
+          SEED: ${{ needs.plan.outputs.seed }}
+        run: dev/nightly.sh sweep "$FUNCTION" "stripe:$STRIPE" "$SEED" "$SLICE_SPECIES"
+      - name: Fuzz
+        if: ${{ !cancelled() && matrix.fuzz }}
+        env:
+          FUNCTION: ${{ matrix.function }}
+          SECONDS_EACH: ${{ needs.plan.outputs.fuzz-seconds }}
+          SEED: ${{ needs.plan.outputs.seed }}
+        run: |
+          seed="$(printf '0x%016x' $((SEED + 3)))"
+          dev/nightly.sh fuzz "$FUNCTION" "$SECONDS_EACH" "$seed"
+      - name: Upload the logs and mismatches
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: nightly-arm-${{ matrix.function }}-${{ matrix.shard }}
+          path: target/nightly/
+          if-no-files-found: ignore
+
+  # Every proof under Z3 and cvc5, each held to every expectation (proofs/README.md); ci.yml
+  # runs them under Z3 only.
+  proofs:
+    needs: plan
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install Z3 and cvc5
+        run: dev/prove.sh --install both
+      - name: Check the proofs under both solvers
+        run: dev/prove.sh --solver both
+
+  alert:
+    needs: [plan, sweep, fuzz, arm, proofs]
+    # A job past its timeout fails; a cancelled one is reported too, since nothing here cancels
+    # a nightly by itself (cancel-in-progress is off).
+    if: always() && (contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled'))
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+    steps:
+      # No artifact at all (the plan failed) must not stop the issue from being opened.
+      - name: Download the mismatches
+        continue-on-error: true
+        uses: actions/download-artifact@v4
+        with:
+          pattern: nightly-*
+          path: nightly
+      - name: Open or update the issue
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          SERVER: ${{ github.server_url }}
+          RUN_ID: ${{ github.run_id }}
+          SHA: ${{ github.sha }}
+          SEED: ${{ needs.plan.outputs.seed }}
+          REPLAY: ${{ needs.plan.outputs.replay }}
+          RESULTS: >-
+            plan=${{ needs.plan.result }} sweep=${{ needs.sweep.result }}
+            fuzz=${{ needs.fuzz.result }} arm=${{ needs.arm.result }}
+            proofs=${{ needs.proofs.result }}
+        run: |
+          body=body.md
+          run_url="$SERVER/$GH_REPO/actions/runs/$RUN_ID"
+          {
+            echo "The nightly correctness run failed: $run_url"
+            echo
+            echo "Commit $SHA, seed \`${SEED:-none}\`. Jobs: $RESULTS."
+            echo
+            echo "Replay: dispatch nightly.yml at $SHA with \`${REPLAY:-none}\`."
+            echo
+            found=0
+            for f in nightly/*/*.txt; do
+              [ -f "$f" ] || continue
+              total="$(sed -n 's/^# total mismatches: //p' "$f")"
+              # A JVM killed by a timeout or a cancel writes no total, but every mismatch it
+              # wrote is flushed: those count too.
+              written="$(grep -c '^# MISMATCH ' "$f" || true)"
+              case "$total" in 0\ *) continue ;; esac
+              if [ -z "$total" ] && [ "$written" = 0 ]; then continue; fi
+              found=1
+              echo "### ${f#nightly/}"
+              echo
+              echo '```'
+              grep -m1 '^# replay: ' "$f"
+              grep -m1 '^# jvm args: ' "$f" || true
+              echo "# total mismatches: ${total:-none written, the JVM was stopped}"
+              echo "# mismatches written to the file: $written"
+              grep -m 20 -A1 '^# MISMATCH ' "$f" | grep -v '^--$'
+              echo '```'
+              echo
+            done
+            if [ "$found" = 0 ]; then
+              echo "No mismatch file records a mismatch: a job failed for another reason (a"
+              echo "build, a timeout, a proof). See the run's logs."
+            else
+              echo "Each artifact's .txt files hold the inputs, one per line, as"
+              echo "src/test/resources/io/github/vecbricks/vfdlibm/hard-cases/<function>.txt"
+              echo "takes them."
+            fi
+          } > "$body"
+          # An issue body or comment holds at most 65536 characters.
+          # Close the fence only when the cut falls inside one (an odd count of fence lines).
+          if [ "$(wc -c < "$body")" -gt 60000 ]; then
+            head -c 60000 "$body" > body.cut
+            fences="$(grep -c '^```$' body.cut || true)"
+            if [ $((fences % 2)) -eq 1 ]; then
+              printf '\n```\n' >> body.cut
+            fi
+            printf '\n(cut at 60000 characters; the artifacts hold the rest)\n' >> body.cut
+            mv body.cut "$body"
+          fi
+          gh label create nightly-failure --color B60205 --force \
+            --description "The nightly correctness run failed"
+          open="$(gh issue list --label nightly-failure --state open --limit 1 \
+            --json number --jq '.[0].number // empty')"
+          if [ -n "$open" ]; then
+            gh issue comment "$open" --body-file "$body"
+          else
+            gh issue create --title "Nightly correctness run failed" \
+              --label nightly-failure --body-file "$body"
+          fi
