@@ -13,8 +13,8 @@
 # expected CPU is never relaxed (SKILLS.md, "Where headline numbers come from"). Run it
 # detached, for example with nohup, and read its log.
 #
-#   bench/dispatch-bench.sh [--host <host>] [--attempts <n>] <ref> [benchmark regex]
-#                           [extra JVM options]
+#   bench/dispatch-bench.sh [--host <host>] [--attempts <n>] [--base <base>] <ref>
+#                           [benchmark regex] [extra JVM options]
 #
 # The host is one of epyc7763 (AMD EPYC 7763, the default), xeon8573c (Intel Xeon Platinum
 # 8573C), xeon6973p (Intel Xeon 6973P-C) or epyc9v45 (AMD EPYC 9V45); benchmark.yml holds each
@@ -28,29 +28,37 @@
 # minute of runner time, since the check is the job's first step. --attempts 1 is a single
 # opportunistic try. Running out of attempts is exit status 3, not a failure of the run.
 #
+# --base <base> makes each run a pair (bench/pair.sh in the workflow): the benchmarks on <base>
+# and on the dispatched <ref> as head, alternating, on one machine. <base> is a branch, a commit,
+# or HEAD for an A/A pair.
+#
 # Each dispatch carries a tag of its own, which names the host, as the run-tag input, which
 # benchmark.yml puts in the run's name, and the script follows the run of that name; so two
 # dispatchers on one branch, or a clock that differs from GitHub's, cannot make it follow the
-# wrong run. The <ref> must have the run-tag and host inputs; on an older one the dispatch fails
-# and the script says so. A gh call that fails is tried five times, a minute apart. Finding the
-# run and waiting for it are bounded (ten minutes, about seven hours plus retries); the hourly CPU
-# retry is bounded only by --attempts, by design. Exit status: 0 on success, 1 when the run failed
-# other than on the CPU check, 2 when GitHub could not be asked, 3 when --attempts ran out without
-# drawing the host, 64 on a usage error.
+# wrong run. The <ref> must have the run-tag and host inputs, and the base input with --base; on
+# an older one the dispatch fails and the script says so. A gh call that fails is tried five
+# times, a minute apart. Finding the run and waiting for it are bounded (ten minutes, about seven
+# hours plus retries); the hourly CPU retry is bounded only by --attempts, by design. Exit
+# status: 0 on success, 1 when the run failed other than on the CPU check (for a pair, also when
+# a row is slower), 2 when GitHub could not be asked, 3 when --attempts ran out without drawing
+# the host, 64 on a usage error.
 #
 # Then fetch the results: gh run download <run id> -R vecbricks/vfdlibm -n bench-results, and
-# save them as bench/results/<function>-<host>-<date>.txt (AGENTS.md, "Benchmarks").
+# save them as bench/results/<function>-<host>-<date>.txt (AGENTS.md, "Measurements, not
+# adjectives").
 
-R=vecbricks/vfdlibm; H=epyc7763; A=""
+R=vecbricks/vfdlibm; H=epyc7763; A=""; P=""
 usage() {
   echo "usage: bench/dispatch-bench.sh [--host epyc7763|xeon8573c|xeon6973p|epyc9v45]" \
-    "[--attempts n] <ref> [benchmark regex] [jvm args]" >&2; exit 64; }
+    "[--attempts n] [--base ref] <ref> [benchmark regex] [jvm args]" >&2; exit 64; }
 while [ $# -gt 0 ]; do
   case "$1" in
     --host) [ $# -ge 2 ] || usage; H=$2; shift 2 ;;
     --host=*) H=${1#--host=}; shift ;;
     --attempts) [ $# -ge 2 ] || usage; A=$2; shift 2 ;;
     --attempts=*) A=${1#--attempts=}; shift ;;
+    --base) [ $# -ge 2 ] || usage; P=$2; shift 2 ;;
+    --base=*) P=${1#--base=}; shift ;;
     --) shift; break ;;
     -*) usage ;;
     *) break ;;
@@ -86,7 +94,7 @@ bench() {
     # for a run with this tag, and dispatch again only if there is none.
     d=0; for i in 1 2 3 4 5; do
       gh workflow run benchmark.yml -R $R --ref "$B" -f host="$H" -f benchmarks="$N" \
-        -f jvm-args="$X" -f run-tag="$tag" && { d=1; break; }
+        -f jvm-args="$X" ${P:+-f base="$P"} -f run-tag="$tag" && { d=1; break; }
       echo "$(t) dispatch failed, try $i of 5 (an older ref lacks an input)" >&2
       sleep 60; [ -n "$(run_of "$tag")" ] && { d=1; break; }
     done
@@ -98,7 +106,7 @@ bench() {
       [ -n "$m" ] && break; done
     if [ -z "$m" ]; then
       echo "$(t) no run named \"Benchmark $tag\" after ten minutes, stopping"; return 2; fi
-    echo "$(t) dispatched $B $N benchmark on $H: $m ($tag)," \
+    echo "$(t) dispatched $B $N benchmark on $H${P:+ paired with $P}: $m ($tag)," \
       "attempt $n of ${A:-unbounded}"
     # A job runs for six hours at most; seven hours covers the queue too.
     s=""; for _ in $(seq 210); do

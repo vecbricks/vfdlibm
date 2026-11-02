@@ -19,8 +19,8 @@
 # probe bench/Datapath.java at 128, 256 and 512 bits in lane-operations per nanosecond, with the
 # 256:128 ratio (the probe's control, about 2 wherever 256-bit vectors exist) and the 512:256
 # ratio (about 2 on a full-width 512-bit datapath, about 1 on a double-pumped one; HARDWARE.md).
-# The last line, "datapath: ...", is the one the benchmark workflow copies into a results
-# header. It needs a JDK 25 on the path and nothing built, and takes about ten seconds.
+# The last line, "datapath: ...", is the one the benchmark workflow and bench/pair.sh copy into
+# a results header. It needs a JDK 25 on the path and nothing built, and takes about ten seconds.
 #
 # Exit status: 0 with a usable reading; 1 when the probe printed no rate or its control is under
 # 1.50, in which case the datapath line says the reading is unusable (no 512-bit verdict from a

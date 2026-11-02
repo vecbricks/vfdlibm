@@ -190,6 +190,16 @@ negative result belongs here too, since it stops the next port re-trying a settl
   accepting one would put a result on a different machine from every result before it. If a
   host stays scarce for days, changing the hosts is a decision for the owner, not a change to
   the check.
+- **Before and after on one machine: a pair.** A change that should be faster, or simpler at no
+  cost (one division instead of two in exp, say), is measured with `bench/pair.sh`, ported from
+  Varka's `dev/varka_bench_pair.sh`: the base and the head built side by side, JMH run on each in
+  alternating rounds (the order swapped every round), and per row the change by the median of
+  the rounds and by the best iteration; a row is slower only when both are past the threshold
+  (default 10%), and after three rounds the pair stops early once every row is within 3%. Two
+  separate dispatches cannot do this, since each draws a new VM and a host's VMs differ by more
+  than most changes. On a host: `bench/dispatch-bench.sh --host xeon8573c --base <base ref>
+  <head ref> '<regex>'` (the workflow's `base` input). Narrow the regex: each round costs two
+  full JMH runs of it. An A/A pair (`--base HEAD`) measures the machine's own spread.
 - **A CPU check holds only for its own job.** Every GitHub-hosted job is a fresh VM, so a check
   in one job says nothing about another job's machine. The job that measures checks its own CPU
   and writes it into the results header.

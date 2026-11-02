@@ -10,7 +10,7 @@ from Varka's measurements, named as such, and vfdlibm's own runs extend them.
 `MaxVectorSize`, and a datapath probe (`bench/Datapath.java`): the same integer vector loop timed
 at 128, 256 and 512 bits, in lane-operations per nanosecond. `.github/workflows/benchmark.yml`
 runs it before JMH on every benchmark run and copies its reading into the results header
-(`Datapath:`). Two ratios follow from it.
+(`Datapath:`), and `bench/pair.sh` does the same for a pair. Two ratios follow from it.
 
 - **control** is 256:128 and should read about 2. It is the probe's check that it measures the
   datapath and nothing else; a control far from 2 makes the row unusable, and the script says

@@ -81,6 +81,12 @@ port teaches.
   Each host decides for its own instruction set, in files of its own; laptop numbers never
   headline. Never relax a host's CPU check (`SKILLS.md`, "Where headline numbers come from").
   `HARDWARE.md` lists the hosts with their flags, JVM settings and datapath ratios.
+- A change meant to be faster or simpler at no cost is measured as a pair: `bench/pair.sh`
+  runs the benchmarks on the base and on the head in alternating rounds on one machine and
+  compares medians and bests per row, failing a row slower by both past the threshold. On a
+  host, dispatch it with `bench/dispatch-bench.sh --host <host> --base <base ref> <head ref>`;
+  the pair's results file goes to `bench/results/` like any other. An A/A pair (`--base HEAD`)
+  gives the machine's own spread to read a real pair against.
 - When a change moves committed numbers, measure again and commit the new file, then requote
   every document from it, rather than patching quoted figures one by one.
 
