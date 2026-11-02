@@ -13,7 +13,7 @@ DoubleVector y = VFdlibm.exp(DoubleVector.fromArray(DoubleVector.SPECIES_PREFERR
 DoubleVector z = VFdlibm.exp(y, live); // only the lanes set in live; the others keep y's bits
 ```
 
-Each method takes a vector of any species. Ported so far: `exp`.
+Each method takes a vector of any species of 128 bits or more. Ported so far: `exp`.
 
 ## Why
 

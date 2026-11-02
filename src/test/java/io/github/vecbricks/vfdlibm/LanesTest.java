@@ -9,8 +9,10 @@
 package io.github.vecbricks.vfdlibm;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertSame;
 
 import jdk.incubator.vector.DoubleVector;
+import jdk.incubator.vector.IntVector;
 import jdk.incubator.vector.LongVector;
 import jdk.incubator.vector.VectorMask;
 import jdk.incubator.vector.VectorSpecies;
@@ -145,5 +147,16 @@ class LanesTest {
   void fromHi() {
     assertEquals(0x40862E42_00000000L, Double.doubleToRawLongBits(Lanes.fromHi(0x40862E42)));
     assertEquals(0xbff00000_00000000L, Double.doubleToRawLongBits(Lanes.fromHi(0xbff00000)));
+  }
+
+  /** Same lane count at half the bits; the named species come back as IntVector's constants. */
+  @Test
+  void intSpecies() {
+    assertSame(IntVector.SPECIES_64, Lanes.intSpecies(DoubleVector.SPECIES_128));
+    assertSame(IntVector.SPECIES_128, Lanes.intSpecies(DoubleVector.SPECIES_256));
+    assertSame(IntVector.SPECIES_256, Lanes.intSpecies(DoubleVector.SPECIES_512));
+    VectorSpecies<Integer> max = Lanes.intSpecies(DoubleVector.SPECIES_MAX);
+    assertEquals(DoubleVector.SPECIES_MAX.length(), max.length());
+    assertEquals(DoubleVector.SPECIES_MAX.vectorBitSize() / 2, max.vectorBitSize());
   }
 }

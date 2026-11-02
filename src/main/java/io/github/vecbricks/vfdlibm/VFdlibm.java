@@ -16,9 +16,10 @@ import jdk.incubator.vector.VectorMask;
  * fdlibm's double functions over {@link DoubleVector} lanes, each lane bit-identical to the
  * {@link StrictMath} method of the same name, NaN payloads and signed zeros included.
  *
- * <p>Every method works on a vector of any species. Each comes in two forms: one computes every
- * lane, and a masked form computes only the lanes set in {@code live} and returns every other lane
- * of its argument untouched, raw bits and all. An inactive lane never sends the vector down a slow
+ * <p>Every method works on a vector of any species of 128 bits or more (exp holds its exponent
+ * count in int lanes of half the vector's size). Each comes in two forms: one computes every lane,
+ * and a masked form computes only the lanes set in {@code live} and returns every other lane of
+ * its argument untouched, raw bits and all. An inactive lane never sends the vector down a slow
  * path.
  *
  * <p>Each function is ported from fdlibm 5.3's C source, kept in {@code reference/fdlibm-5.3/};

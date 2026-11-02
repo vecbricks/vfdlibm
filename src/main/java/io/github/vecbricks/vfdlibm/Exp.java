@@ -19,6 +19,7 @@
 package io.github.vecbricks.vfdlibm;
 
 import jdk.incubator.vector.DoubleVector;
+import jdk.incubator.vector.IntVector;
 import jdk.incubator.vector.LongVector;
 import jdk.incubator.vector.VectorMask;
 import jdk.incubator.vector.VectorOperators;
@@ -130,18 +131,27 @@ final class Exp {
 
     // Every hx compare, first: C2 stops inlining calls once a method's graph is large
     // (NodeCountInliningCutoff), and a refused call boxes its vectors, so the calls into Lanes
-    // come before the arithmetic. Lines 117, 118, 128, 129 and 139.
+    // come before the arithmetic. Lines 117, 118, 128, 129 and 139, and the int species for k.
     VectorMask<Double> filter = Lanes.hiAtLeast(ax, HX_FILTER);
     VectorMask<Double> reduced = Lanes.hiAbove(ax, HX_HALF_LN2);
     VectorMask<Double> near = Lanes.hiBelow(ax, HX_THREE_HALVES_LN2);
     VectorMask<Double> isTiny = Lanes.hiBelow(ax, HX_TINY);
     VectorMask<Double> nonFiniteLane = finish ? null : Lanes.hiAtLeast(ax, HX_NON_FINITE);
+    VectorSpecies<Integer> intSpecies = Lanes.intSpecies(species);
 
     // Argument reduction, lines 128-137, for |x| > 0.5 ln2.
     // Far form: k = (int)(invln2*x+halF[xsb]); t = k; hi = x - t*ln2HI[0]; lo = t*ln2LO[0].
+    // k goes through int lanes, as the C's int k does: x86 C2 lowers D2L and L2D only with
+    // AVX512DQ, and without it (on AVX2 hosts) they run in Java and box, while D2I, I2D and I2L
+    // are vector instructions on every AVX2 host. D2I truncates toward zero like the C's (int);
+    // a NaN gives 0 and a huge |x| saturates, but those are filter lanes, whose k is never used.
+    // I2D is exact, so t = k as in the C. The int vector has the same lane count at half the
+    // bits, so each conversion is part 0.
     DoubleVector halF = DoubleVector.broadcast(species, 0.5).blend(-0.5, negative);
-    LongVector kFar = (LongVector) x.mul(INVLN2).add(halF).convert(VectorOperators.D2L, 0);
-    DoubleVector t = (DoubleVector) kFar.convert(VectorOperators.L2D, 0);
+    IntVector kInt =
+        (IntVector) x.mul(INVLN2).add(halF).convertShape(VectorOperators.D2I, intSpecies, 0);
+    DoubleVector t = (DoubleVector) kInt.convertShape(VectorOperators.I2D, species, 0);
+    LongVector kFar = (LongVector) kInt.convertShape(VectorOperators.I2L, bits.species(), 0);
     DoubleVector hiFar = x.sub(t.mul(LN2HI_0_USED));
     DoubleVector loFar = t.mul(LN2LO_0);
     // Near form: hi = x-ln2HI[xsb]; lo = ln2LO[xsb]; k = 1-xsb-xsb.

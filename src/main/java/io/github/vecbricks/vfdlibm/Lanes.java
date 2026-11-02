@@ -9,9 +9,12 @@
 package io.github.vecbricks.vfdlibm;
 
 import jdk.incubator.vector.DoubleVector;
+import jdk.incubator.vector.IntVector;
 import jdk.incubator.vector.LongVector;
 import jdk.incubator.vector.VectorMask;
 import jdk.incubator.vector.VectorOperators;
+import jdk.incubator.vector.VectorShape;
+import jdk.incubator.vector.VectorSpecies;
 
 /**
  * fdlibm's word access, over lanes. fdlibm reads and writes a double's two 32-bit halves through
@@ -90,6 +93,24 @@ final class Lanes {
   /** fdlibm's {@code hx > h}, as {@code hx >= h + 1}: true for a NaN {@code ax}. */
   static VectorMask<Double> hiAbove(DoubleVector ax, int h) {
     return hiAtLeast(ax, h + 1);
+  }
+
+  /**
+   * The int species with as many lanes as {@code species}, at half its size, for an fdlibm {@code
+   * int} such as exp's {@code k} converted from or to double lanes. The usual species are picked
+   * by identity, so once inlined C2 sees a constant species, which it needs to intrinsify the
+   * conversion; {@code VectorSpecies.of} reads a table and is not a constant to C2. The species
+   * must have 128 bits or more.
+   */
+  static VectorSpecies<Integer> intSpecies(VectorSpecies<Double> species) {
+    if (species == DoubleVector.SPECIES_256) {
+      return IntVector.SPECIES_128;
+    } else if (species == DoubleVector.SPECIES_512) {
+      return IntVector.SPECIES_256;
+    } else if (species == DoubleVector.SPECIES_128) {
+      return IntVector.SPECIES_64;
+    }
+    return VectorSpecies.of(int.class, VectorShape.forBitSize(species.vectorBitSize() / 2));
   }
 
   /**
