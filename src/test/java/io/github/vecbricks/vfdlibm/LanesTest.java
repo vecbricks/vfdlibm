@@ -103,6 +103,26 @@ class LanesTest {
     });
   }
 
+  /** The int forms: the signed high word, and a high word written back from int lanes. */
+  @ParameterizedTest
+  @EnumSource(VectorWidth.class)
+  void hiIntAndWithHiFromInts(VectorWidth width) {
+    VectorSpecies<Double> species = width.species();
+    VectorSpecies<Integer> intSpecies = Lanes.intSpecies(species);
+    forEachVector(species, (x, bits, other) -> {
+      int[] hi = Lanes.hiInt(x, intSpecies).toArray();
+      int[] words = new int[bits.length];
+      for (int i = 0; i < words.length; i++) {
+        words[i] = (int) other[i];
+      }
+      long[] withHi = raw(Lanes.withHi(x, IntVector.fromArray(intSpecies, words, 0)));
+      for (int i = 0; i < bits.length; i++) {
+        assertEquals((int) (bits[i] >>> 32), hi[i]);
+        assertEquals(((long) words[i] << 32) | (bits[i] & 0xffffffffL), withHi[i]);
+      }
+    });
+  }
+
   /** The compares match the C's unsigned compare of |x|'s high word, NaN lanes included. */
   @ParameterizedTest
   @EnumSource(VectorWidth.class)

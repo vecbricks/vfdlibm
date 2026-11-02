@@ -22,7 +22,6 @@ package io.github.vecbricks.vfdlibm;
 
 import jdk.incubator.vector.DoubleVector;
 import jdk.incubator.vector.IntVector;
-import jdk.incubator.vector.LongVector;
 import jdk.incubator.vector.VectorMask;
 import jdk.incubator.vector.VectorOperators;
 import jdk.incubator.vector.VectorSpecies;
@@ -41,9 +40,9 @@ import jdk.incubator.vector.VectorSpecies;
  * <p>The C's {@code int} words stay {@code int}: {@code hx}, {@code ax}, {@code hu} and {@code k}
  * are {@link IntVector} lanes, with the double vector's lane count at half its bits, and every
  * branch on them is the C's signed {@code int} compare. A high word comes in through {@code L2I}
- * from the long view, goes back through {@code I2L}, and {@code k} becomes a double through
- * {@code I2D}: all three are vector instructions on every AVX2 host, where {@code L2D} and {@code
- * D2L} are not (SKILLS.md).
+ * from the long view ({@code Lanes.hiInt}), goes back through {@code I2L} ({@code Lanes.withHi}),
+ * and {@code k} becomes a double through {@code I2D}: all three are vector instructions on every
+ * AVX2 host, where {@code L2D} and {@code D2L} are not (SKILLS.md).
  *
  * <p>The C's branches become lane masks. Every lane computes the reduction (both forms of {@code
  * u}, both normalisations, the {@code k == 0} lanes' {@code f = x}) and both results of the
@@ -101,8 +100,6 @@ final class Log1p {
   static final int HX_HUGE = 0x43400000;
   /** {@code hu < 0x6a09e}: the significand below sqrt(2), normalised to [1, 2) (line 143). */
   static final int HU_SQRT2 = 0x6a09e;
-
-  private static final long LOW_WORD = 0xffff_ffffL;
 
   // Planted faults (PLAN.md section 4), read through Faults; each folds away when unplanted.
   static final String DROP_CORRECTION = "log1p.dropCorrection";
@@ -163,16 +160,13 @@ final class Log1p {
    */
   private static DoubleVector log1p(DoubleVector x, VectorMask<Double> live, int mode) {
     VectorSpecies<Double> species = x.species();
-    // The only call into this package's code comes first, while the graph is small: C2 stops
+    // The calls into Lanes come early, before the polynomial, while the graph is small: C2 stops
     // inlining once a method is large (NodeCountInliningCutoff), and a refused call boxes.
     VectorSpecies<Integer> intSpecies = Lanes.intSpecies(species);
-    LongVector bits = (LongVector) x.viewAsIntegralLanes();
-    VectorSpecies<Long> longSpecies = bits.species();
     DoubleVector one = DoubleVector.broadcast(species, 1.0);
 
     // Lines 109-110: hx = __HI(x), ax = hx&0x7fffffff, as ints.
-    IntVector hx = (IntVector) bits.lanewise(VectorOperators.LSHR, 32)
-        .convertShape(VectorOperators.L2I, intSpecies, 0);
+    IntVector hx = Lanes.hiInt(x, intSpecies);
     IntVector ax = hx.and(0x7fffffff);
 
     // Every branch on hx and ax. Line 113: hx < 0x3FDA827A. Line 114: of those, ax >= 0x3ff00000
@@ -189,10 +183,8 @@ final class Log1p {
     // Lines 129-151, the reduction, for the lanes with k != 0 (the k = 0 lanes are blended in
     // below). Lines 131 and 137: u = 1.0+x, or u = x for x >= 2^53.
     DoubleVector u = one.add(x).blend(x, huge);
-    LongVector uBits = (LongVector) u.viewAsIntegralLanes();
     // Lines 132-133 and 138-139: hu = __HI(u); k = (hu>>20)-1023.
-    IntVector hu = (IntVector) uBits.lanewise(VectorOperators.LSHR, 32)
-        .convertShape(VectorOperators.L2I, intSpecies, 0);
+    IntVector hu = Lanes.hiInt(u, intSpecies);
     IntVector k = hu.lanewise(VectorOperators.ASHR, 20).sub(1023);
     // Lines 134-135: c = (k>0)? 1.0-(u-x):x-(u-1.0); c /= u. Line 140: c = 0 for x >= 2^53.
     VectorMask<Double> kPositive = k.compare(VectorOperators.GT, 0).cast(species);
@@ -208,10 +200,7 @@ final class Log1p {
     IntVector uHi = hu.or(0x3ff00000).blend(hu.or(0x3fe00000), halve);
     hu = hu.blend(IntVector.broadcast(intSpecies, 0x00100000).sub(hu)
         .lanewise(VectorOperators.ASHR, 2), halve);
-    LongVector uHiBits = (LongVector) uHi.convertShape(VectorOperators.I2L, longSpecies, 0);
-    DoubleVector uNormal =
-        (DoubleVector) uBits.and(LOW_WORD).or(uHiBits.lanewise(VectorOperators.LSHL, 32))
-            .viewAsFloatingLanes();
+    DoubleVector uNormal = Lanes.withHi(u, uHi);
     // Line 150: f = u-1.0. Line 126: the k = 0 lanes take k = 0, f = x and hu = 1.
     DoubleVector f = uNormal.sub(1.0).blend(x, kZeroPath.cast(species));
     k = k.blend(0, kZeroPath);

@@ -2,9 +2,10 @@
 
 Lessons about benchmarking, the JIT and the Vector API that every port follows. Most were learned
 in Varka (github.com/vecbricks/varka, its `sql/varka/skills/`) and are rewritten here for a vector
-math library; the last section is what the `exp` port taught. Each entry says where its numbers
-come from. A new lesson goes in the section it belongs to, as a short entry; a negative result
-belongs here too, since it stops the next port re-trying a settled question.
+math library; the last sections are what the `exp`, `log` and `log1p` ports taught. Each entry
+says where its numbers come from. A new lesson goes in the section it belongs to, as a short
+entry; a negative result belongs here too, since it stops the next port re-trying a settled
+question.
 
 ## Benchmarking with JMH
 
@@ -166,16 +167,48 @@ belongs here too, since it stops the next port re-trying a settled question.
   flags, where AVX512DQ is present; it showed only under `-XX:UseAVX=2`. Run a new port's
   benchmark under both before calling it done.
 
+## What the log port taught
+
+- **A whole int word pipeline lowers on AVX2.** log keeps the C's `int` words (`hx`, `k`, `i`,
+  `j`) in int lanes of half the double vector's size: `L2I` narrows the high word in, the masks,
+  shifts, adds and compares run as ints, an int mask is cast to a double mask of the same lane
+  count, `I2L` writes the new high word back and `I2D` gives `dk`. Under `-XX:UseAVX=2` at four
+  lanes `PrintIntrinsics` shows every `convert`, `compare`, `blend` and mask cast "late inline
+  succeeded" and nothing refused, and both 256-bit arms allocate ~0 B/op
+  (`bench/results/log-laptop-avx2-2026-11-02.txt`). So `L2I` and the int-to-double mask cast join
+  `D2I`, `I2D` and `I2L` as safe on AVX2; only `D2L`, `L2D`, `L2F` and `F2L` are not.
+- **The per-lane finish must not be a call that takes vectors.** Late in a large body C2 refuses
+  to inline the finish (`Log::finishPerLane ... failed to inline: NodeCountInliningCutoff`, under
+  `UseAVX=2`), and a refused call receives its vector arguments boxed. log's first finish took
+  `(x, result, rare)` and, on mixed data at 256 bits under `UseAVX=2`, cost 9150 ns and 51648
+  B/op per 1024 doubles against 3062 ns for the blend and 4104 for the scalar loop (2.2x slower
+  than not vectorising). Passing arrays and `rare.toLong()` instead cut it to 3062 ns and 5184
+  B/op. Doing the finish in the body with no helper, a loop over the set bits of `rare.toLong()`
+  with `result.withLane(lane, StrictMath.log(x.lane(lane)))`, made it ~0 B/op and 2921 ns: the
+  256- and 512-bit `lane` and `withLane` switch on the index to a constant lane, which C2
+  intrinsifies (`extract`, `insert`), and the only call left is `StrictMath.log` on a double.
+  exp's finish still takes vectors and allocates 52928 B/op on mixed data; its EPYC 7763 run
+  shows the cost the laptop hid (finish 12331 against blend 7512 ns on mixed data, in
+  `bench/results/exp-epyc7763-2026-11-02.txt` of vfdlibm#11).
+- **The laptop understates the finish's cost on mixed data.** Under `UseAVX=2` on the laptop
+  exp's two arms tied on mixed data; on the EPYC 7763 the finish lost by 1.6x. Read the finish
+  arm's `gc.alloc.rate.norm` on mixed data: anything above the arrays a finish makes on purpose is
+  boxing, and its cost grows on the EPYC.
+- **The arm choice is per function, and a fix can reverse it.** With the boxed finish the data
+  said to blend log; with the finish in registers it is ahead on common data, level on mixed at
+  256 bits (1.18x and 1.05x under `UseAVX=2`), and the blend wins at 512 bits on mixed data (1.36x
+  on the laptop's AVX-512, `bench/results/log-laptop-2026-11-02.txt`). `VFdlibm.log` uses the
+  finish provisionally; the EPYC 7763 run of the log port decides it. Measure the finish only once
+  it allocates nothing.
+
 ## What the log1p port taught
 
-- **The C's ints in int lanes, end to end.** `log1p` keeps `hx`, `ax`, `hu` and `k` as
-  `IntVector` lanes, with the double vector's lane count at half its bits: a high word comes in
-  by `L2I` from the long view shifted right 32, goes back by `I2L` and a shift left 32, `k`
-  becomes a double by `I2D`, and the int compares' masks are cast to double masks. Under
-  `-XX:UseAVX=2` every 256-bit arm allocates about 0.01 B/op on common data, so `L2I`, `I2L`,
-  `I2D` and the int-to-double mask cast all lower at four lanes on AVX2
-  (`bench/results/log1p-laptop-avx2-2026-11-02.txt`). The C's signed compares, such as `hx <=
-  (int)0xbfd2bec3` for a negative `x`, are then written as the C writes them.
+- **The same int pipeline, with `hu` beside `hx`.** `log1p` keeps `hx`, `ax`, `hu` and `k` as
+  int lanes the way log does (above), reading both high words with `Lanes.hiInt` and writing
+  `u`'s back with the int `Lanes.withHi`. Under `-XX:UseAVX=2` every 256-bit arm allocates about
+  0.01 B/op on common data (`bench/results/log1p-laptop-avx2-2026-11-02.txt`). The C's signed
+  compares, such as `hx <= (int)0xbfd2bec3` for a negative `x`, are then written as the C writes
+  them.
 - **An invalid operation's NaN is not the hardware's.** For `x < -1` the C returns `(x-x)/(x-x)`.
   x86's `divpd` gives `0xfff8000000000000` there, and a negative NaN `x` comes back quieted with
   its payload, but `StrictMath.log1p` returns `Double.NaN`, `0x7ff8000000000000`, for every such
@@ -188,11 +221,15 @@ belongs here too, since it stops the next port re-trying a settled question.
   and, under `UseAVX=2` at 256 bits, by minimums in ns per 1024 doubles, ties the per-lane finish
   on common data (2760 against 2716) and beats it 2.0x on mixed data (3011 against 6038, the
   finish allocating 52,928 B/op); it beats blending every lane by 1.15x on common data and
-  1.07x on mixed (3185 and 3215). `VFdlibm.log1p` uses it. A port whose rare paths are cheap in
-  vector form should measure this shape beside the other two.
+  1.07x on mixed (3185 and 3215). That finish is a call taking vectors, the shape the log port
+  found refused inlining and boxed (above), and its 52,928 B/op is exp's boxed figure, so the
+  2.0x is against a boxed finish. `VFdlibm.log1p` uses the guarded arm. A port whose rare paths are
+  cheap in vector form should measure this shape beside the other two.
 - **`lane` and `withLane` in a loop do not avoid the finish's allocation.** A first per-lane
   finish read the rare lanes from `rare.toLong()` and wrote each `StrictMath.log1p` result back
   with `result.withLane(lane, ...)`, looping over the set bits. Under `UseAVX=2` it allocated
   47,232 B/op on mixed data at 256 bits, against 52,928 for `toArray`/`fromArray`, at the same
   speed, in a short exploratory run kept in the same results file. A version with a constant
-  lane index per step (no loop) was not tried.
+  lane index per step (no loop) was not tried. The log port later did the same loop in the body
+  with no helper and measured ~0 B/op (above); whether log1p's trial ran inside a helper taking
+  vectors was not recorded, so this entry may describe that call's boxing, not `withLane`.

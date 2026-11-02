@@ -33,8 +33,8 @@ The set is the functions Spark computes with fdlibm on every host:
 
 That is thirteen functions, about 1,000 lines of fdlibm code in all; `pow` is the largest. Varka's
 row order decides which comes first. `exp` is the first port and is done (`VFdlibm.exp`, from
-`e_exp.c`); `pow`, `sinh` and `cosh` build on it.
-`log1p` is done too (`VFdlibm.log1p`, from `s_log1p.c`).
+`e_exp.c`); `pow`, `sinh` and `cosh` build on it. `log` and `log1p` are done too (`VFdlibm.log`,
+from `e_log.c`, and `VFdlibm.log1p`, from `s_log1p.c`).
 
 `tan`, `tanh` and `cbrt` are fdlibm on aarch64 but Intel LIBM stubs on x86, so a port of them
 matches the JVM only on Arm. `sin` and `cos` are HotSpot's own stubs on both architectures, so
@@ -99,9 +99,9 @@ five are a later, optional set; the large-argument reduction of the trigonometri
 ## 7. Open
 
 - Benchmarks (JMH under `src/jmh`): `ExpBenchmark` measures `exp`'s two arms against the scalar
-  `StrictMath.exp` loop at each vector width; each function adds its own benchmark the same way.
-  `Log1pBenchmark` does the same for `log1p`, with a third arm that blends the rare paths only
-  when a vector holds a rare lane.
+  `StrictMath.exp` loop at each vector width, and `LogBenchmark` does the same for `log`; each
+  function adds its own benchmark the same way. `Log1pBenchmark` does the same for `log1p`, with
+  a third arm that blends the rare paths only when a vector holds a rare lane.
   A function's body is larger than C2 inlines by default, so a call from a loop passes boxed
   vectors; the benchmarks are also run with `-XX:CompileCommand=inline,...` to measure the body
   as Varka emits it, inline.

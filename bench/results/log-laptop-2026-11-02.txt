@@ -1,0 +1,218 @@
+# LogBenchmark on the owner's laptop, 2 November 2026, default flags (AVX-512): three finishes
+#
+# LAPTOP NUMBERS, NOT HEADLINES. The CPU is AVX-512 but has a 256-bit vector datapath, so the
+# 512-bit rows are not representative of a native AVX-512 host. Headline numbers come from
+# GitHub's EPYC 7763 runners. The same benchmark under -XX:UseAVX=2, as C2 compiles for those
+# AVX2 runners, is in log-laptop-avx2-2026-11-02.txt; the arm's choice waits for the EPYC run.
+#
+# Commit:      4f8113a, which adds this file (base ecd354c). FINAL is its Log.java. The two earlier
+#              versions differ only in the finish arm's rare-lane code (described at each section)
+#              and, for FIRST, in VFdlibm.log calling Log.log (the benchmark now calls Log.log
+#              directly; the body is the same); every run measures Log.log and Log.logBlended.
+# JDK:         OpenJDK 64-Bit Server VM (build 25.0.4.1+1-1-26.04.4-Ubuntu, mixed mode, sharing)
+# CPU:         AMD Ryzen AI 9 HX PRO 370 w/ Radeon 890M
+# Vector:      default MaxVectorSize and UseAVX (AVX-512, preferred species 512 bits)
+# Kernel:      7.0.0-42-generic
+# Load:        each run waited for a one-minute load average under 1.0 (24 logical cores; other
+#              agents share the machine and the end loads show their return):
+#              final:    0.93, 1.77, 1.82 at start; 1.12, 1.31, 1.58 at end
+#              re-run:   0.86, 1.46, 1.68 at start; 1.24, 1.32, 1.56 at end
+#              arrays:   0.90, 1.55, 2.12 at start; 1.23, 1.30, 1.77 at end
+#              first:    0.91, 2.83, 3.48 at start; 1.11, 1.49, 2.55 at end
+# JMH 1.37:    -f 2 -wi 3 -w 2s -i 5 -r 2s -prof gc
+#              -jvmArgsAppend -XX:CompileCommand=inline,io.github.vecbricks.vfdlibm.*::*
+#              (the body inlined into the loop, as Varka emits it)
+# Command:     java --add-modules jdk.incubator.vector -cp <test classpath> org.openjdk.jmh.Main
+#              "LogBenchmark <the options above>" (what mvn -B -Pjmh exec:exec runs)
+# Array:       1024 doubles; common = positive normals with binary exponents uniform over
+#              [-30, 30] and random significands; mixed = one input in 16 replaced by 0.0, -1.5,
+#              NaN, 1.0e-310 (subnormal) or +inf
+#
+# Checks behind the vector rows:
+# - Allocation: the 256- and 512-bit rows of FINAL allocate ~0 B/op on both data sets, so the
+#   body ran unboxed. FIRST's finish on mixed data allocated 51648 / 42240 B/op at 256 / 512
+#   bits (boxed arguments of a refused call), SECOND's 5184 / 7840 B/op (its arrays).
+# - 128-bit rows are NOT vector code: they allocate 0.90 to 1.49 MB/op. C2 on x86 lowers no
+#   mask operation at two 64-bit lanes, so compare/blend/test fall back to Java and box.
+# - The arm's choice waits for the EPYC 7763 run. Here FINAL's finish is ahead at 256 bits
+#   on both data sets and at 512 bits on common data, but at 512 bits on mixed data the blend wins
+#   by about 1.36x: eight lanes of extract and insert cost more than SECOND's arrays did there
+#   (2086 ns). Under the 1.3x bar pairs were re-run (FINAL re-run below).
+#
+# FINAL: the finish in registers (the committed Log.java).
+# Minimums and spread over 10 iterations (2 forks x 5), ns per 1024 doubles:
+benchmark          inputs     min ns/op    avg ns/op    max ns/op
+blended128         common    133116.627   134987.117   137240.222
+blended128         mixed     128588.199   132578.038   135970.127
+blended256         common      2665.214     2748.536     2839.764
+blended256         mixed       2833.964     2892.204     2963.643
+blended512         common      1859.471     1867.170     1879.708
+blended512         mixed       1991.042     2016.107     2060.549
+finish128          common     71965.131    73088.107    76521.184
+finish128          mixed      70154.824    70710.823    71423.594
+finish256          common      2035.179     2047.494     2056.350
+finish256          mixed       2661.251     2699.517     2750.131
+finish512          common      1452.136     1472.731     1488.905
+finish512          mixed       2713.663     2763.165     2923.631
+scalarStrictMath   common      3979.085     4001.630     4049.120
+scalarStrictMath   mixed       4098.911     4110.244     4120.406
+#
+# JMH's summary table (ns/op and gc.alloc.rate.norm rows; LogBenchmark. prefix dropped):
+Benchmark                                inputs   Cnt          Score      Error  Units
+blended128                               common    10     134987.117   1759.488  ns/op
+blended128:gc.alloc.rate.norm            common    10    1486848.477      0.007  B/op
+blended128                               mixed     10     132578.038   3946.236  ns/op
+blended128:gc.alloc.rate.norm            mixed     10    1486848.469      0.016  B/op
+blended256                               common    10       2748.536     74.247  ns/op
+blended256:gc.alloc.rate.norm            common    10          0.010      0.000  B/op
+blended256                               mixed     10       2892.204     66.599  ns/op
+blended256:gc.alloc.rate.norm            mixed     10          0.010      0.000  B/op
+blended512                               common    10       1867.170      9.183  ns/op
+blended512:gc.alloc.rate.norm            common    10          0.007      0.000  B/op
+blended512                               mixed     10       2016.107     34.087  ns/op
+blended512:gc.alloc.rate.norm            mixed     10          0.007      0.000  B/op
+finish128                                common    10      73088.107   2098.086  ns/op
+finish128:gc.alloc.rate.norm             common    10     897024.258      0.009  B/op
+finish128                                mixed     10      70710.823    721.619  ns/op
+finish128:gc.alloc.rate.norm             mixed     10     899952.250      0.005  B/op
+finish256                                common    10       2047.494      9.563  ns/op
+finish256:gc.alloc.rate.norm             common    10          0.007      0.000  B/op
+finish256                                mixed     10       2699.517     39.441  ns/op
+finish256:gc.alloc.rate.norm             mixed     10          0.009      0.000  B/op
+finish512                                common    10       1472.731     22.601  ns/op
+finish512:gc.alloc.rate.norm             common    10          0.005      0.000  B/op
+finish512                                mixed     10       2763.165    100.073  ns/op
+finish512:gc.alloc.rate.norm             mixed     10          0.010      0.000  B/op
+scalarStrictMath                         common    10       4001.630     33.152  ns/op
+scalarStrictMath:gc.alloc.rate.norm      common    10          0.014      0.000  B/op
+scalarStrictMath                         mixed     10       4110.244     10.081  ns/op
+scalarStrictMath:gc.alloc.rate.norm      mixed     10          0.014      0.000  B/op
+#
+# FINAL, re-run of the 256- and 512-bit pairs (ratios under 1.3x), same options:
+# Minimums and spread over 10 iterations (2 forks x 5), ns per 1024 doubles:
+benchmark          inputs     min ns/op    avg ns/op    max ns/op
+blended256         common      2688.442     2735.645     2764.577
+blended256         mixed       2826.611     2898.821     2964.763
+blended512         common      1873.432     1901.471     1947.477
+blended512         mixed       2000.030     2017.721     2029.602
+finish256          common      2039.205     2043.041     2049.008
+finish256          mixed       2699.687     2740.701     2798.047
+finish512          common      1463.985     1482.434     1497.772
+finish512          mixed       2721.183     2743.335     2794.417
+#
+# JMH's summary table (ns/op and gc.alloc.rate.norm rows; LogBenchmark. prefix dropped):
+Benchmark                                inputs   Cnt          Score      Error  Units
+blended256                               common    10       2735.645     39.830  ns/op
+blended256:gc.alloc.rate.norm            common    10          0.010      0.000  B/op
+blended256                               mixed     10       2898.821     84.508  ns/op
+blended256:gc.alloc.rate.norm            mixed     10          0.010      0.000  B/op
+blended512                               common    10       1901.471     38.634  ns/op
+blended512:gc.alloc.rate.norm            common    10          0.007      0.000  B/op
+blended512                               mixed     10       2017.721     17.194  ns/op
+blended512:gc.alloc.rate.norm            mixed     10          0.007      0.000  B/op
+finish256                                common    10       2043.041      5.173  ns/op
+finish256:gc.alloc.rate.norm             common    10          0.007      0.000  B/op
+finish256                                mixed     10       2740.701     58.390  ns/op
+finish256:gc.alloc.rate.norm             mixed     10          0.010      0.000  B/op
+finish512                                common    10       1482.434     20.667  ns/op
+finish512:gc.alloc.rate.norm             common    10          0.005      0.000  B/op
+finish512                                mixed     10       2743.335     29.736  ns/op
+finish512:gc.alloc.rate.norm             mixed     10          0.010      0.000  B/op
+#
+# SECOND VERSION: the finish as a call taking arrays and rare.toLong(). Same blend body.
+# Minimums and spread over 10 iterations (2 forks x 5), ns per 1024 doubles:
+benchmark          inputs     min ns/op    avg ns/op    max ns/op
+blended128         common    132275.509   136339.576   139592.212
+blended128         mixed     133413.731   135518.636   137929.036
+blended256         common      2667.164     2745.366     2790.569
+blended256         mixed       2857.712     2902.915     2957.416
+blended512         common      1866.327     1882.438     1931.322
+blended512         mixed       1994.374     2009.484     2028.510
+finish128          common     71604.451    73003.836    74845.117
+finish128          mixed      70594.157    71471.907    73346.142
+finish256          common      2040.395     2067.072     2103.978
+finish256          mixed       2717.109     2726.687     2734.814
+finish512          common      1463.139     1479.276     1505.298
+finish512          mixed       2085.620     2152.182     2232.864
+scalarStrictMath   common      3969.625     4043.251     4205.667
+scalarStrictMath   mixed       4132.615     4199.748     4314.970
+#
+# JMH's summary table (ns/op and gc.alloc.rate.norm rows; LogBenchmark. prefix dropped):
+Benchmark                                inputs   Cnt          Score      Error  Units
+blended128                               common    10     136339.576   2710.017  ns/op
+blended128:gc.alloc.rate.norm            common    10    1486848.482      0.013  B/op
+blended128                               mixed     10     135518.636   2222.380  ns/op
+blended128:gc.alloc.rate.norm            mixed     10    1486848.479      0.009  B/op
+blended256                               common    10       2745.366     56.102  ns/op
+blended256:gc.alloc.rate.norm            common    10          0.010      0.000  B/op
+blended256                               mixed     10       2902.915     46.590  ns/op
+blended256:gc.alloc.rate.norm            mixed     10          0.010      0.000  B/op
+blended512                               common    10       1882.438     32.647  ns/op
+blended512:gc.alloc.rate.norm            common    10          0.007      0.000  B/op
+blended512                               mixed     10       2009.484     21.268  ns/op
+blended512:gc.alloc.rate.norm            mixed     10          0.007      0.000  B/op
+finish128                                common    10      73003.836   1384.181  ns/op
+finish128:gc.alloc.rate.norm             common    10     897024.258      0.005  B/op
+finish128                                mixed     10      71471.907   1269.546  ns/op
+finish128:gc.alloc.rate.norm             mixed     10     902688.252      0.005  B/op
+finish256                                common    10       2067.072     33.308  ns/op
+finish256:gc.alloc.rate.norm             common    10          0.007      0.000  B/op
+finish256                                mixed     10       2726.687      8.094  ns/op
+finish256:gc.alloc.rate.norm             mixed     10       5184.010      0.000  B/op
+finish512                                common    10       1479.276     24.402  ns/op
+finish512:gc.alloc.rate.norm             common    10          0.005      0.000  B/op
+finish512                                mixed     10       2152.182     91.046  ns/op
+finish512:gc.alloc.rate.norm             mixed     10       7840.008      0.000  B/op
+scalarStrictMath                         common    10       4043.251    120.164  ns/op
+scalarStrictMath:gc.alloc.rate.norm      common    10          0.014      0.000  B/op
+scalarStrictMath                         mixed     10       4199.748     92.818  ns/op
+scalarStrictMath:gc.alloc.rate.norm      mixed     10          0.015      0.000  B/op
+#
+# FIRST VERSION: the finish as a call taking (x, result, rare), refused inlining, boxed.
+# Minimums and spread over 10 iterations (2 forks x 5), ns per 1024 doubles:
+benchmark          inputs     min ns/op    avg ns/op    max ns/op
+blended128         common    133551.785   137648.474   147777.413
+blended128         mixed     134490.962   137556.628   141757.760
+blended256         common      2657.750     2727.479     2784.498
+blended256         mixed       2874.764     2913.787     2935.195
+blended512         common      1861.745     1888.805     1927.619
+blended512         mixed       2001.454     2014.866     2053.802
+finish128          common     72055.629    74065.564    76445.430
+finish128          mixed      69454.915    71040.952    73650.582
+finish256          common      2049.514     2113.361     2197.493
+finish256          mixed       3927.515     3960.401     4059.907
+finish512          common      1466.186     1484.737     1499.952
+finish512          mixed       2837.148     2882.648     2914.106
+scalarStrictMath   common      3994.894     4020.554     4141.603
+scalarStrictMath   mixed       4121.667     4132.464     4169.466
+#
+# JMH's summary table (ns/op and gc.alloc.rate.norm rows; LogBenchmark. prefix dropped):
+Benchmark                                inputs   Cnt          Score      Error  Units
+blended128                               common    10     137648.474   6293.768  ns/op
+blended128:gc.alloc.rate.norm            common    10    1486848.486      0.020  B/op
+blended128                               mixed     10     137556.628   4087.760  ns/op
+blended128:gc.alloc.rate.norm            mixed     10    1486848.486      0.014  B/op
+blended256                               common    10       2727.479     74.657  ns/op
+blended256:gc.alloc.rate.norm            common    10          0.010      0.000  B/op
+blended256                               mixed     10       2913.787     24.983  ns/op
+blended256:gc.alloc.rate.norm            mixed     10          0.010      0.000  B/op
+blended512                               common    10       1888.805     35.990  ns/op
+blended512:gc.alloc.rate.norm            common    10          0.007      0.000  B/op
+blended512                               mixed     10       2014.866     22.533  ns/op
+blended512:gc.alloc.rate.norm            mixed     10          0.007      0.000  B/op
+finish128                                common    10      74065.564   2564.321  ns/op
+finish128:gc.alloc.rate.norm             common    10     897024.262      0.009  B/op
+finish128                                mixed     10      71040.952   2031.456  ns/op
+finish128:gc.alloc.rate.norm             mixed     10     903632.251      0.009  B/op
+finish256                                common    10       2113.361     89.390  ns/op
+finish256:gc.alloc.rate.norm             common    10          0.007      0.000  B/op
+finish256                                mixed     10       3960.401     58.812  ns/op
+finish256:gc.alloc.rate.norm             mixed     10      51648.014      0.000  B/op
+finish512                                common    10       1484.737     20.988  ns/op
+finish512:gc.alloc.rate.norm             common    10          0.005      0.000  B/op
+finish512                                mixed     10       2882.648     39.023  ns/op
+finish512:gc.alloc.rate.norm             mixed     10      42240.010      0.000  B/op
+scalarStrictMath                         common    10       4020.554     67.381  ns/op
+scalarStrictMath:gc.alloc.rate.norm      common    10          0.014      0.000  B/op
+scalarStrictMath                         mixed     10       4132.464     20.827  ns/op
+scalarStrictMath:gc.alloc.rate.norm      mixed     10          0.014      0.000  B/op

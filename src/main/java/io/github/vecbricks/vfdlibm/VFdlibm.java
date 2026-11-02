@@ -16,11 +16,11 @@ import jdk.incubator.vector.VectorMask;
  * fdlibm's double functions over {@link DoubleVector} lanes, each lane bit-identical to the
  * {@link StrictMath} method of the same name, NaN payloads and signed zeros included.
  *
- * <p>Every method works on a vector of any species of 128 bits or more (exp holds its exponent
- * count in int lanes of half the vector's size). Each comes in two forms: one computes every lane,
- * and a masked form computes only the lanes set in {@code live} and returns every other lane of
- * its argument untouched, raw bits and all. An inactive lane never sends the vector down a slow
- * path.
+ * <p>Every method works on a vector of any species of 128 bits or more (exp, log and log1p hold
+ * fdlibm's {@code int} words in int lanes of half the vector's size). Each comes in two forms: one
+ * computes every lane, and a masked form computes only the lanes set in {@code live} and returns
+ * every other lane of its argument untouched, raw bits and all. An inactive lane never sends the
+ * vector down a slow path.
  *
  * <p>Each function is ported from fdlibm 5.3's C source, kept in {@code reference/fdlibm-5.3/};
  * the class that holds a function's port names the file it follows and carries its notice.
@@ -54,6 +54,28 @@ public final class VFdlibm {
    */
   public static DoubleVector exp(DoubleVector x, VectorMask<Double> live) {
     return Exp.exp(x, Objects.requireNonNull(live, "live"));
+  }
+
+  /**
+   * {@code StrictMath.log} in every lane. Ported from fdlibm 5.3's {@code e_log.c}.
+   *
+   * @param x the arguments
+   * @return the natural logarithm of each lane of {@code x}
+   */
+  public static DoubleVector log(DoubleVector x) {
+    return Log.log(x, null);
+  }
+
+  /**
+   * {@code StrictMath.log} in the lanes set in {@code live}; every other lane is {@code x}'s,
+   * untouched.
+   *
+   * @param x the arguments
+   * @param live the lanes to compute, of {@code x}'s species
+   * @return the natural logarithm of each live lane of {@code x}, and {@code x} in the others
+   */
+  public static DoubleVector log(DoubleVector x, VectorMask<Double> live) {
+    return Log.log(x, Objects.requireNonNull(live, "live"));
   }
 
   /**
