@@ -59,7 +59,7 @@ import jdk.incubator.vector.VectorSpecies;
  * input in 16, it was 1.64x slower than the blend (12331 against 7512). Its finish was then a
  * separate method, which C2 refused to inline at the end of this large body, so every vector
  * boxed its arguments and the mixed rows allocated 52928 B/op. The finish is now written out
- * inline and allocates nothing at the fixed shapes (laptop numbers in {@code
+ * inline and allocates nothing at 256 and 512 bits (laptop numbers in {@code
  * bench/results/exp-finish-laptop-2026-11-02.txt}); the EPYC run of this code decides between
  * the arms again. The second arm is kept so the choice can be re-measured, on other hosts and as
  * the JDK changes.
