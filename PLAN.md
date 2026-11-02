@@ -50,7 +50,13 @@ five are a later, optional set; the large-argument reduction of the trigonometri
   - dense sweeps around each threshold fdlibm branches on;
   - fdlibm's special cases (NaN, the infinities, `+-0.0`, subnormals, overflow and underflow
     edges);
-  - published hard cases.
+  - published hard cases: inputs where the exact result lies very close to a rounding boundary,
+    from Lefevre and Muller's worst-case tables (ARITH 15, 2001) and Lefevre's list of
+    round-to-nearest hard cases, one resource per function under
+    `src/test/resources/.../hard-cases/` (so far `exp`, `log`, `log10` and `log1p`), loaded with
+    `Inputs.hardCases("<function>")`. A port that keeps fdlibm's operations matches `StrictMath`
+    on them by construction; they sit where a dropped correction term or a reassociated sum, an
+    error far below one ulp, is most likely to change the returned double.
 - **Every check proves it can fail:** a flag plants a known fault (a dropped correction term, a
   constant off by one ulp, a branch threshold moved), and the suite must catch it. The flag is
   the system property `vfdlibm.fault`, read once into a `static final` in the main sources'

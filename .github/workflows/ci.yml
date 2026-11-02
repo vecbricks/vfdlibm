@@ -40,3 +40,30 @@ jobs:
         run: >-
           mvn -B --no-transfer-progress verify
           "-Dvfdlibm.test.jvmArgs=${{ matrix.jvm-args }}"
+
+  # A boxed vector body computes the right bits, so the tests pass on it; only its allocation
+  # shows that the Vector API fell back to Java. bench/alloc-check.py runs every vector
+  # benchmark named *256 or *Preferred under JMH's -prof gc, with the body inlined, and fails if
+  # any row allocates 1 B/op or more. It runs at the runner's own flags (an AVX-512 runner, when
+  # GitHub draws one, runs it at full AVX) and as an AVX2 host, where D2L and L2D box. Not on
+  # Arm: its vectors are 128 bits, where this check has not been shown to hold (SKILLS.md).
+  alloc:
+    name: alloc (${{ matrix.name }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: x86 runner flags
+            jvm-args: ""
+          - name: x86 as AVX2
+            jvm-args: -XX:UseAVX=2 -XX:MaxVectorSize=32
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-java@v5
+        with:
+          distribution: zulu
+          java-version: 25
+          cache: maven
+      - name: Check that no vector body allocates
+        run: bench/alloc-check.py --jvm-args "${{ matrix.jvm-args }}"

@@ -49,6 +49,16 @@ negative result belongs here too, since it stops the next port re-trying a settl
   passes on code that runs as a per-lane Java loop. Only the allocation rate tells them apart:
   `gc.alloc.rate.norm` near 0 B/op means the body ran unboxed; a box is kilobytes per op (exp's
   128-bit rows allocate 1.36 to 1.90 MB per 1024 doubles). Read `-prof gc` on every row.
+- **CI checks it.** `bench/alloc-check.py` runs every benchmark method named `*256` or
+  `*Preferred`, on `inputs=common`, one fork under `-prof gc` with the body inlined, and fails if
+  any measured iteration reaches 1 B/op; the `alloc` job of `ci.yml` runs it at the runner's
+  flags and under `-XX:UseAVX=2`. On the laptop, under load, C2 finished exp's body within the
+  first one-second iteration and later ones read about 0.02 B/op, so three warmup seconds leave
+  two to spare; a row that fails only in its first iteration means C2 was late. Left
+  out: 128 bits (masks box at two lanes on x86, below), 512 bits (software on AVX2; the preferred
+  arm covers it where it is real) and `mixed` inputs (the finish arm's fallback allocates its
+  arrays by design). Arm is not checked yet: its preferred species is 128 bits, and no run has
+  shown exp unboxed there.
 - **Ask C2 what it refused.** `-XX:+UnlockDiagnosticVMOptions -XX:+PrintIntrinsics`, or scoped
   to the library, `-XX:CompileCommand=PrintIntrinsics,io.github.vecbricks.vfdlibm.*::*`. Add
   `-Xbatch` when lines must be attributed to one shape: compiles then happen on the calling

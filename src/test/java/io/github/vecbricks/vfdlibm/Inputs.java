@@ -8,13 +8,19 @@
  */
 package io.github.vecbricks.vfdlibm;
 
+import java.io.BufferedReader;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.io.UncheckedIOException;
+import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.SplittableRandom;
 
 /**
  * Input generators for the checks: sampled bit patterns over the whole {@code double} domain,
- * dense sweeps around a threshold, and the special values. All are deterministic, so a failure
- * reproduces from the seed and the parameters in the test.
+ * dense sweeps around a threshold, the special values and the published hard-to-round cases. All
+ * are deterministic, so a failure reproduces from the seed and the parameters in the test.
  */
 final class Inputs {
 
@@ -130,6 +136,46 @@ final class Inputs {
       xs = concat(xs, around(edge, 4));
     }
     return xs;
+  }
+
+  /**
+   * The published hard-to-round inputs for {@code function} ({@code "exp"}, {@code "log"},
+   * {@code "log10"}, {@code "log1p"}), from the test resource {@code hard-cases/<function>.txt},
+   * whose header names the sources. At each the exact result lies very close to a rounding
+   * boundary, where a dropped correction term or a reassociated sum, an error far below one ulp,
+   * is most likely to change the returned double. A port matching fdlibm step for step matches
+   * {@code StrictMath} on them as on any input. For exp's planted faults they caught nothing that
+   * uniform draws miss, and fewer of them flip (the commit adding them has the counts); they are
+   * kept so every port is checked exactly at the boundaries.
+   */
+  static double[] hardCases(String function) {
+    String resource = "hard-cases/" + function + ".txt";
+    InputStream in = Inputs.class.getResourceAsStream(resource);
+    if (in == null) {
+      throw new IllegalArgumentException("no hard cases for " + function + ": " + resource);
+    }
+    try (BufferedReader reader =
+        new BufferedReader(new InputStreamReader(in, StandardCharsets.US_ASCII))) {
+      double[] xs = reader.lines()
+          .map(String::strip)
+          .filter(line -> !line.isEmpty() && !line.startsWith("#"))
+          .mapToDouble(line -> Double.longBitsToDouble(parseBits(line)))
+          .toArray();
+      if (xs.length == 0) {
+        throw new IllegalStateException(resource + " holds no inputs");
+      }
+      return xs;
+    } catch (IOException e) {
+      throw new UncheckedIOException(resource, e);
+    }
+  }
+
+  /** {@code 0x} and sixteen hex digits, the raw bits of a double. */
+  private static long parseBits(String line) {
+    if (!line.matches("0x[0-9a-f]{16}")) {
+      throw new IllegalArgumentException("not 0x and 16 hex digits: " + line);
+    }
+    return Long.parseUnsignedLong(line.substring(2), 16);
   }
 
   /** The arrays one after another. */
