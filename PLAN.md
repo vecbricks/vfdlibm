@@ -13,6 +13,8 @@ function is ported here and in Varka's kernel together, and the two are cross-ch
 1. **Port it here.** Port the function from fdlibm 5.3's C file (`e_exp.c`, `s_expm1.c`, ...) into
    a static method over `DoubleVector`, with that file's Sun notice in the source header. The C
    files are committed unchanged under `reference/fdlibm-5.3/`, and a port cites the one it follows.
+   The port may compute differently from the C where a proof in `PROOFS.md` shows every result
+   equal (section 6).
 2. **Test it here** against `StrictMath`, lane by lane and bit for bit (section 4).
 3. **Build Varka's side.** Varka's kernel emits the same sequence of operations as its own IR
    nodes. A large function body is not inlined by C2, so a call into the library from a kernel
@@ -54,8 +56,9 @@ five are a later, optional set; the large-argument reduction of the trigonometri
     from Lefevre and Muller's worst-case tables (ARITH 15, 2001) and Lefevre's list of
     round-to-nearest hard cases, one resource per function under
     `src/test/resources/.../hard-cases/` (so far `exp`, `log`, `log10` and `log1p`), loaded with
-    `Inputs.hardCases("<function>")`. A port that keeps fdlibm's operations matches `StrictMath`
-    on them by construction; they sit where a dropped correction term or a reassociated sum, an
+    `Inputs.hardCases("<function>")`. A port that keeps fdlibm's operations, or departs from
+    them only where `PROOFS.md` proves the result equal, matches `StrictMath` on them by
+    construction; they sit where a dropped correction term or a reassociated sum, an
     error far below one ulp, is most likely to change the returned double.
 - **Every check proves it can fail:** a flag plants a known fault (a dropped correction term, a
   constant off by one ulp, a branch threshold moved), and the suite must catch it. The flag is
@@ -92,8 +95,17 @@ five are a later, optional set; the large-argument reduction of the trigonometri
 - Port from fdlibm 5.3's C sources only (netlib), as committed in `reference/fdlibm-5.3/`. Never
   copy from or translate OpenJDK's `FdLibm.java`, HotSpot's Intel LIBM stubs or glibc, which are
   GPL or LGPL.
-- No fused multiply-add, no reassociation, no `Math.*` call inside a vector body except the per-lane
-  `StrictMath` fallback.
+- The result must be the same; the implementation may differ. Every lane stays bit-identical to
+  `StrictMath`, and a port may compute differently from the C only where a written proof, formal
+  or informal, shows the result equal for every input. Informal: step by step, citing each IEEE
+  property used and each hinge condition, with the input range where it holds and why the lanes
+  are in it. Formal: machine-checked, following Varka's `sql/varka/proofs/` conventions, or
+  reduced to a finite check by a theorem (for example, monotonicity of correctly rounded
+  operations plus evaluation at the boundary doubles). Proofs live in `PROOFS.md` as numbered
+  lemmas (statement, hypotheses, proof, and the test that checks the hinges, which must fail if a
+  hinge were false), with a short Javadoc pointer at the code.
+- No fused multiply-add, no reassociation, no division by a reciprocal: they change results. No
+  `Math.*` call inside a vector body except the per-lane `StrictMath` fallback.
 - Java 25, the Vector API module, no preview features.
 - Lines at most 100 columns; ASCII only, except for string literals that need it.
 - Commits and pull requests end with `Generated-by: <tool> (<model>)` when AI tooling was used.
