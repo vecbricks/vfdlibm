@@ -396,6 +396,26 @@ class HarnessSelfTest {
         Double.doubleToRawLongBits(Double.NaN), Inputs.QUIET_NAN_BITS[1], "a non-canonical NaN");
   }
 
+  /**
+   * Each function's hard cases load whole and distinct: the counts are the resource headers'
+   * (Lefevre and Muller's table rows, then Lefevre's list less duplicates and non-doubles), and
+   * one row of each paper table, rechecked against the paper when the files were made, is there.
+   */
+  @Test
+  void hardCasesLoadEachFunctionsFile() {
+    Map<String, Integer> counts = Map.of("exp", 2278, "log", 2816, "log10", 1883, "log1p", 7550);
+    counts.forEach((function, count) -> {
+      long[] bits = rawBits(Inputs.hardCases(function));
+      assertEquals(count.intValue(), bits.length, function);
+      long distinct = Arrays.stream(bits).distinct().count();
+      assertEquals(count.longValue(), distinct, function + " repeats an input");
+    });
+    // Table 4's last row, exp(1.1000001111010100...p2), and Table 5's last, log(1.0110001...p678).
+    assertTrue(contains(rawBits(Inputs.hardCases("exp")), 0x40183d4bcdebb3f4L));
+    assertTrue(contains(rawBits(Inputs.hardCases("log")), 0x6a562a88613629b6L));
+    assertThrows(IllegalArgumentException.class, () -> Inputs.hardCases("tgamma"));
+  }
+
   private static long[] rawBits(double[] xs) {
     return Arrays.stream(xs).mapToLong(Double::doubleToRawLongBits).toArray();
   }

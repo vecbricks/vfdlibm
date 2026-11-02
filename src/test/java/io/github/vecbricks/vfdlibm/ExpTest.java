@@ -25,8 +25,8 @@ import org.junit.jupiter.params.provider.EnumSource;
 /**
  * exp against {@code StrictMath.exp}, by raw bits, at every width: the public {@link VFdlibm#exp}
  * (rare lanes finished per lane) and the all-blended arm {@link Exp#expBlended}, unmasked and
- * masked, on e_exp.c's thresholds, the special values, sampled bit patterns over the whole domain
- * and dense draws over the finite-result range.
+ * masked, on e_exp.c's thresholds, the special values, sampled bit patterns over the whole domain,
+ * dense draws over the finite-result range and the published hard-to-round cases.
  */
 class ExpTest {
 
@@ -83,12 +83,20 @@ class ExpTest {
         Inputs.magnitudes(400L + width.ordinal(), 1 << 16, -60, 0)));
   }
 
+  /** The published hard-to-round inputs: see {@link Inputs#hardCases} and the resource header. */
+  @ParameterizedTest
+  @EnumSource(VectorWidth.class)
+  void publishedHardCases(VectorWidth width) {
+    assertExp(width.species(), Inputs.hardCases("exp"));
+  }
+
   @ParameterizedTest
   @EnumSource(VectorWidth.class)
   void masked(VectorWidth width) {
     VectorSpecies<Double> species = width.species();
     double[] xs = Inputs.concat(
-        thresholds(), Inputs.sampled(500L, 4096), Inputs.uniform(501L, 4096, -746.0, 710.0));
+        thresholds(), Inputs.sampled(500L, 4096), Inputs.uniform(501L, 4096, -746.0, 710.0),
+        Inputs.hardCases("exp"));
     Oracle.assertUnaryMasked("VFdlibm.exp", species, VFdlibm::exp, StrictMath::exp, xs, 502L);
     Oracle.assertUnaryMasked(
         "Exp.expBlended", species, Exp::expBlended, StrictMath::exp, xs, 503L);
