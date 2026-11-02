@@ -38,6 +38,7 @@ final class ProofFiles {
     var files = new LinkedHashMap<String, String>();
     files.put("java_check.smt2", javaCheck());
     files.put("exp_highword_compare.smt2", ExpProofFiles.highwordCompare());
+    files.put("exp_half_sign.smt2", ExpProofFiles.halfSign());
     return files;
   }
 

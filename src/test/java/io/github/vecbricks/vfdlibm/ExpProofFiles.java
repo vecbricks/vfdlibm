@@ -159,4 +159,88 @@ final class ExpProofFiles {
                 + " (not (hi.at.least b " + Exp.HX_FILTER + "))))"));
     return out.toString();
   }
+
+  // ---------------------------------------------------------------------------------------------
+  // exp_half_sign.smt2: L5
+
+  /** A 64-bit bit-vector literal of a long. */
+  private static String bv(long v) {
+    return String.format("#x%016x", v);
+  }
+
+  /**
+   * {@code exp_half_sign.smt2}, lemma L5: {@code (bits & Long.MIN_VALUE) | HALF_BITS} is the bits
+   * of {@code halF[xsb]}, e_exp.c's table entry, for every double.
+   */
+  static String halfSign() {
+    long h0 = Double.doubleToRawLongBits(0.5);
+    long h1 = Double.doubleToRawLongBits(-0.5);
+    var out = new StringBuilder(ProofFiles.LICENSE);
+    out.append("""
+        ; exp's halF[xsb] is 0.5 with x's sign bit (PROOFS.md, L5).
+        ;
+        ; e_exp.c (reference/fdlibm-5.3) takes halF[xsb] from its table halF[2] = {0.5, -0.5}, with
+        ; xsb = (hx >> 31) & 1 for the unsigned hx = __HI(x) (lines 112-113). The port (Exp)
+        ; computes the double whose bits are (bits & Long.MIN_VALUE) | HALF_BITS. The claim: for
+        ; every long bits, that is the raw bits of the table's entry at xsb, and they are the
+        ; doubles 0.5 and -0.5.
+        ;
+        ; What is proven: & and | as SMT-LIB's bit-vector operators on the 64-bit two's-complement
+        ; pattern of bits (int2bv), read back as a signed long, so no definition of & or | is
+        ; written here; xsb as the C computes it, over java.smt2's int operators; and the two
+        ; entries' S, M and E as java.smt2 reads raw bits (jdouble.fromBits, pinned to the JVM by
+        ; java_check.smt2), with M * 2^E exactly 1/2. HALF_BITS is rendered from Exp, and the
+        ; table's raw bits from Java's 0.5 and -0.5, the C's literals. What is not: that the port
+        ; reinterprets those bits as the lane's double (DoubleVector's viewAsFloatingLanes) is the
+        ; code's text.
+        """);
+    out.append(ProofFiles.rendered("ALL"));
+    out.append(("""
+
+        ; The port's halF bits: (bits & Long.MIN_VALUE) | HALF_BITS over bit-vectors, read signed.
+        (define-fun port.half ((b Int) (half (_ BitVec 64))) Int
+          (let ((r (bvor (bvand ((_ int2bv 64) b) #x8000000000000000) half)))
+            (- (bv2nat r) (ite (bvslt r #x0000000000000000) 18446744073709551616 0))))
+        ; e_exp.c line 113: xsb = (hx >> 31) & 1, hx = __HI(x) unsigned, so the shift is >>>.
+        (define-fun c.xsb ((b Int)) Int (jint.and.low (jint.ushr (l2i (jlong.shr b 32)) 31) 2))
+        ; The table halF[2] = {0.5, -0.5}, as raw bits, at xsb.
+        (define-fun c.half ((b Int)) Int (ite (= (c.xsb b) 1) %s %s))
+        """).formatted(lit(h1), lit(h0)));
+    check(out, "HALF_BITS = " + hex(Exp.HALF_BITS) + ": the port's bits are halF[xsb]'s, every"
+        + " long", "unsat", body("(declare-const b Int)", "(assert (jlong.in b))",
+            "(assert (not (= (port.half b " + bv(Exp.HALF_BITS) + ") (c.half b))))"));
+    check(out, "the C's xsb is 1 exactly when the bits are negative, the sign bit set", "unsat",
+        body("(declare-const b Int)", "(assert (jlong.in b))",
+            "(assert (not (= (= (c.xsb b) 1) (< b 0))))"));
+    check(out, "halF's entries are the doubles 0.5 and -0.5: S, M, E and M * 2^E = 1 / 2", "unsat",
+        body("(assert (not (and",
+            "  (= (jdouble.fromBits.S " + lit(h0) + ") 1) (= (jdouble.fromBits.S " + lit(h1)
+                + ") (- 1))",
+            "  (= (jdouble.fromBits.M " + lit(h0) + ") " + (1L << 52) + ")"
+                + " (= (jdouble.fromBits.M " + lit(h1) + ") " + (1L << 52) + ")",
+            "  (= (jdouble.fromBits.E " + lit(h0) + ") (- 53))"
+                + " (= (jdouble.fromBits.E " + lit(h1) + ") (- 53))",
+            "  (= (* 2 " + (1L << 52) + ") " + pow2(53) + "))))"));
+    long neg = Double.doubleToRawLongBits(-1.0);
+    long pos = Double.doubleToRawLongBits(1.0);
+    check(out, "not vacuous: -1.0's bits give -0.5's and 1.0's give 0.5's", "sat",
+        body("(assert (and (= (port.half " + lit(neg) + " " + bv(Exp.HALF_BITS) + ") " + lit(h1)
+            + ")", "  (= (port.half " + lit(pos) + " " + bv(Exp.HALF_BITS) + ") " + lit(h0)
+            + ")))"));
+    out.append("""
+
+        ; The constant changed by one, and the sign mask moved to the next bit down: some double
+        ; tells each apart from the table.
+        """);
+    check(out, "refuted: HALF_BITS + 1 = " + hex(Exp.HALF_BITS + 1) + " as the constant", "sat",
+        body("(declare-const b Int)", "(assert (jlong.in b))",
+            "(assert (not (= (port.half b " + bv(Exp.HALF_BITS + 1) + ") (c.half b))))"));
+    check(out, "refuted: the mask 0x40000000_00000000, not the sign bit", "sat",
+        body("(declare-const b Int)", "(assert (jlong.in b))",
+            "(define-fun r () (_ BitVec 64) (bvor (bvand ((_ int2bv 64) b) #x4000000000000000) "
+                + bv(Exp.HALF_BITS) + "))",
+            "(assert (not (= (- (bv2nat r) (ite (bvslt r #x0000000000000000)"
+                + " 18446744073709551616 0)) (c.half b))))"));
+    return out.toString();
+  }
 }
