@@ -33,8 +33,8 @@ The set is the functions Spark computes with fdlibm on every host:
 
 That is thirteen functions, about 1,000 lines of fdlibm code in all; `pow` is the largest. Varka's
 row order decides which comes first. `exp` is the first port and is done (`VFdlibm.exp`, from
-`e_exp.c`); `pow`, `sinh` and `cosh` build on it. `log` is done too (`VFdlibm.log`, from
-`e_log.c`).
+`e_exp.c`); `pow`, `sinh` and `cosh` build on it. `log` and `log1p` are done too (`VFdlibm.log`,
+from `e_log.c`, and `VFdlibm.log1p`, from `s_log1p.c`).
 
 `tan`, `tanh` and `cbrt` are fdlibm on aarch64 but Intel LIBM stubs on x86, so a port of them
 matches the JVM only on Arm. `sin` and `cos` are HotSpot's own stubs on both architectures, so
@@ -81,11 +81,13 @@ five are a later, optional set; the large-argument reduction of the trigonometri
 - **Branches:** fdlibm's branches on the argument's range become lane masks. The common paths are
   computed for every lane and blended. A rare path is finished per lane by `StrictMath`, so the
   vector form never trades exactness for speed. Whether a given branch is blended or finished per
-  lane is decided by measurement and recorded in the function's pull request. For `exp` the
-  question is open again: on the EPYC 7763 the per-lane finish as first merged was 1.57x faster
-  than the blend on common data and 1.64x slower on mixed data, where its fallback allocated;
-  the fallback no longer allocates at 256 and 512 bits (it still boxes at `SPECIES_MAX` on
-  mixed data), and the EPYC run of that change decides (`SKILLS.md`).
+  lane is decided by measurement and recorded in the function's pull request. A rare path that is
+  only a few vector operations can instead be computed and blended only for a vector that holds a
+  rare lane, behind one `anyTrue`, as `log1p` does. For `exp` the question is open again: on the
+  EPYC 7763 the per-lane finish as first merged was 1.57x faster than the blend on common data
+  and 1.64x slower on mixed data, where its fallback allocated; the fallback no longer allocates
+  at 256 and 512 bits (it still boxes at `SPECIES_MAX` on mixed data), and the EPYC run of that
+  change decides (`SKILLS.md`).
 
 ## 6. Rules
 
@@ -102,7 +104,8 @@ five are a later, optional set; the large-argument reduction of the trigonometri
 
 - Benchmarks (JMH under `src/jmh`): `ExpBenchmark` measures `exp`'s two arms against the scalar
   `StrictMath.exp` loop at each vector width, and `LogBenchmark` does the same for `log`; each
-  function adds its own benchmark the same way.
+  function adds its own benchmark the same way. `Log1pBenchmark` does the same for `log1p`, with
+  a third arm that blends the rare paths only when a vector holds a rare lane.
   A function's body is larger than C2 inlines by default, so a call from a loop passes boxed
   vectors; the benchmarks are also run with `-XX:CompileCommand=inline,...` to measure the body
   as Varka emits it, inline.

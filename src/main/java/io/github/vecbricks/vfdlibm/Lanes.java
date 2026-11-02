@@ -28,7 +28,8 @@ import jdk.incubator.vector.VectorSpecies;
  */
 final class Lanes {
 
-  private static final long LOW_WORD = 0xffff_ffffL;
+  /** The low 32 bits of a long lane, fdlibm's {@code __LO} word; Log1p uses it too. */
+  static final long LOW_WORD = 0xffff_ffffL;
 
   private Lanes() {}
 
