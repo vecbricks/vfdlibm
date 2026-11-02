@@ -20,7 +20,7 @@
 package io.github.vecbricks.vfdlibm;
 
 import jdk.incubator.vector.DoubleVector;
-import jdk.incubator.vector.IntVector;
+import jdk.incubator.vector.LongVector;
 import jdk.incubator.vector.VectorMask;
 import jdk.incubator.vector.VectorOperators;
 import jdk.incubator.vector.VectorSpecies;
@@ -37,17 +37,19 @@ import jdk.incubator.vector.VectorSpecies;
  * with no fused multiply-add and no reassociation, except where a lemma of {@code PROOFS.md}
  * (log, L6 on) proves a different computation gives the same bits for every input.
  *
- * <p>The C's {@code int} words stay in int lanes: {@code hx}, {@code k}, {@code i} and {@code j}
- * are computed in an {@link IntVector} with the double vector's lane count at half its bits, as
- * {@link Lanes#intSpecies} gives it. So {@code dk = (double)k} is an {@code I2D}, which every AVX2
- * host lowers, where a {@code k} in long lanes would need {@code L2D}, which boxes there.
+ * <p>The C's {@code int} words {@code hx}, {@code k}, {@code i} and {@code j} are computed in the
+ * long lanes of {@code x}'s bits, where they keep the C's values ({@code PROOFS.md}, L9), so no
+ * lane is narrowed to an int or widened back and every mask is a long mask of the double
+ * vector's shape. {@code dk = (double)k} is then not an {@code L2D}, which boxes on AVX2, but an
+ * exact add and subtract of the bits of {@code 0x1.8p52} (L8).
  *
  * <p>The C's branches become lane masks. Every lane computes the common path (a normal, positive,
  * finite {@code x}): both forms of {@code log(1+f)} for {@code |f| >= 2^-20} (the {@code i > 0}
  * one with {@code hfsq} and the other), the {@code |f| < 2^-20} form and the {@code f == 0}
  * result, each in the C's {@code k != 0} form, which with {@code dk = +0.0} gives the {@code k ==
- * 0} form's bits ({@code PROOFS.md}, L6), and the masks blend them. Two arms differ in the C's rare paths, the lanes with {@code hx < 0x00100000}
- * ({@code x <= 0}, a subnormal, a negative NaN) or {@code hx >= 0x7ff00000} (+inf, a positive NaN):
+ * 0} form's bits ({@code PROOFS.md}, L6), and the masks blend them. Two arms differ in the C's
+ * rare paths, the lanes with {@code hx < 0x00100000} ({@code x <= 0}, a subnormal, a negative
+ * NaN) or {@code hx >= 0x7ff00000} (+inf, a positive NaN):
  *
  * <ul>
  *   <li>{@link #log} finishes those lanes per lane with {@code StrictMath.log} after the vector
@@ -91,6 +93,10 @@ final class Log {
   static final int HX_MIN_NORMAL = 0x00100000;
   /** {@code hx >= 0x7ff00000}: +inf or a NaN. */
   static final int HX_NON_FINITE = 0x7ff00000;
+  /** The bits of {@code Double.MIN_NORMAL}, the lowest common lane: high word 0x00100000. */
+  static final long COMMON_LO = (long) HX_MIN_NORMAL << 32;
+  /** The bits of +inf, above the highest common lane: high word {@code 0x7ff00000}. */
+  static final long COMMON_HI = (long) HX_NON_FINITE << 32;
   /**
    * Line 110's {@code 0x95f64}: added to the significand's high bits, it carries into bit 20 when
    * {@code 1+f >= sqrt(2)} (from {@code hx >= 0x6a09c}), and those lanes are halved.
@@ -100,6 +106,14 @@ final class Log {
   static final int HX_BAND_LO = 0x6147a;
   /** Line 126's {@code 0x6b851}: the highest {@code hx} with {@code i > 0}. */
   static final int HX_BAND_HI = 0x6b851;
+
+  /**
+   * {@code 0x1.8p52}, whose ulp is 1: {@code fromBits(k + DK_MAGIC_BITS) - DK_MAGIC} is {@code
+   * (double)k} exactly for every long {@code k} in {@code [-2^51, 2^51)} (PROOFS.md, L8).
+   */
+  static final double DK_MAGIC = 0x1.8p52;
+  /** The bits of {@link #DK_MAGIC}, {@code 0x43380000_00000000}. */
+  static final long DK_MAGIC_BITS = 0x43380000_00000000L;
 
   // Planted faults (PLAN.md section 4), read through Faults; each folds away when unplanted.
   static final String DROP_CORRECTION = "log.dropCorrection";
@@ -134,51 +148,69 @@ final class Log {
   }
 
   /**
+   * {@code lo <= bits < hi} as signed longs, for {@code lo <= hi}: {@code bits - lo} is below
+   * {@code hi - lo} as unsigned, and adding {@code Long.MIN_VALUE} to both sides makes that a
+   * signed compare, one add and one compare (PROOFS.md, L10). With constant bounds C2 folds the
+   * constants.
+   */
+  private static VectorMask<Long> inRange(LongVector bits, long lo, long hi) {
+    return bits.add(Long.MIN_VALUE - lo).compare(VectorOperators.LT, Long.MIN_VALUE + (hi - lo));
+  }
+
+  /**
    * Both arms in one body, so they share every line but the rare paths; {@code finish} is a
    * constant at each call above, and once inlined the other arm's code folds away.
    */
   private static DoubleVector log(DoubleVector x, VectorMask<Double> live, boolean finish) {
     VectorSpecies<Double> species = x.species();
-    VectorSpecies<Integer> intSpecies = Lanes.intSpecies(species);
-    // Lines 100 and 107: the common lanes have 0x00100000 <= hx < 0x7ff00000, for a signed hx,
-    // which for doubles is MIN_NORMAL <= x < +inf. Both compares are false for a NaN, so every
-    // NaN lane, of either sign, is rare, as in the C.
-    VectorMask<Double> common = x.compare(VectorOperators.GE, Lanes.fromHi(HX_MIN_NORMAL))
-        .and(x.compare(VectorOperators.LT, Lanes.fromHi(HX_NON_FINITE)));
+    // Lines 100 and 107: the common lanes have 0x00100000 <= hx < 0x7ff00000 for the C's signed
+    // hx, which is x's bits in [COMMON_LO, COMMON_HI) as a signed long: every NaN lane, of
+    // either sign, is rare, as in the C. That range is one compare of the bits less its bottom,
+    // as unsigned, which the bias by Long.MIN_VALUE turns into a signed one (PROOFS.md, L10).
+    LongVector bits = Lanes.bits(x);
+    VectorMask<Double> common = inRange(bits, COMMON_LO, COMMON_HI).cast(species);
 
-    // Line 104, blended arm only: a subnormal is scaled by two54, and k starts at -54.
+    // Line 104, blended arm only: a subnormal, hx < 0x00100000 with x neither negative nor +-0,
+    // which is bits in [1, COMMON_LO), is scaled by two54, and k starts at -54.
     DoubleVector xs = x;
     VectorMask<Double> subnormal = null;
     if (!finish) {
-      subnormal = x.compare(VectorOperators.GT, ZERO)
-          .and(x.compare(VectorOperators.LT, Lanes.fromHi(HX_MIN_NORMAL)));
+      subnormal = inRange(bits, 1L, COMMON_LO).cast(species);
       xs = x.blend(x.mul(TWO54), subnormal);
     }
 
-    // The int words, lines 105-112, first: C2 stops inlining calls once a method's graph is
-    // large (NodeCountInliningCutoff), and a refused call boxes its vectors, so the calls into
-    // Lanes come before the arithmetic. hx is the signed high word, as the C's int hx.
-    IntVector hx = Lanes.hiInt(xs, intSpecies);
-    // Line 108: k += (hx>>20)-1023.
-    IntVector k = hx.lanewise(VectorOperators.ASHR, 20).sub(1023);
+    // The C's int words, lines 105-112, in the long lanes of the bits (PROOFS.md, L9): hx is the
+    // high word, bits >>> 32, which on every lane whose result is kept (x positive) is the C's
+    // signed hx; every value below stays far inside 32 bits, so the long arithmetic gives the
+    // C's int values, and no lane is narrowed to int or widened back. The shifts are logical:
+    // hx and i are never negative as longs, so >>> is the C's >>, and AVX2 has no 64-bit
+    // arithmetic shift. The calls into Lanes come before the arithmetic: C2 stops inlining
+    // calls once a method's graph is large (NodeCountInliningCutoff), and a refused call boxes
+    // its vectors.
+    LongVector hx = Lanes.bits(xs).lanewise(VectorOperators.LSHR, 32);
+    // Line 108: k += (hx>>20)-1023, held as k plus the bits of 0x1.8p52, for dk below (L8): the
+    // two constants are added as one.
+    LongVector kBits = hx.lanewise(VectorOperators.LSHR, 20).add(DK_MAGIC_BITS - 1023);
     if (!finish) {
-      k = k.add(-54, subnormal.cast(intSpecies));
+      kBits = kBits.add(-54, subnormal.cast(hx.species()));
     }
     // Lines 109-112: hx &= 0x000fffff; i = (hx+0x95f64)&0x100000; __HI(x) = hx|(i^0x3ff00000);
     // k += (i>>20). The lanes with 1+f >= sqrt(2) carry into bit 20 and are halved.
-    IntVector hxm = hx.and(0x000fffff);
-    IntVector i = hxm.add(SQRT2_SPLIT_USED).and(0x100000);
+    LongVector hxm = hx.and(0x000fffff);
+    LongVector i = hxm.add(SQRT2_SPLIT_USED).and(0x100000);
     DoubleVector xn = Lanes.withHi(xs, hxm.or(i.lanewise(VectorOperators.XOR, 0x3ff00000)));
-    k = k.add(i.lanewise(VectorOperators.ASHR, 20));
+    kBits = kBits.add(i.lanewise(VectorOperators.LSHR, 20));
     // Line 114: (0x000fffff&(2+hx))<3, which holds when |f| < 2**-20.
     VectorMask<Double> small =
         hxm.add(2).and(0x000fffff).compare(VectorOperators.LT, 3).cast(species);
     // Lines 124, 126, 129 and 131: i = hx-0x6147a; j = 0x6b851-hx; i |= j; i > 0.
-    IntVector j = IntVector.broadcast(intSpecies, HX_BAND_HI).sub(hxm);
+    LongVector j = LongVector.broadcast(hx.species(), HX_BAND_HI).sub(hxm);
     VectorMask<Double> band =
         hxm.sub(HX_BAND_LO).or(j).compare(VectorOperators.GT, 0).cast(species);
-    // Lines 115, 118 and 122: dk = (double)k, an exact I2D, +0.0 where k == 0.
-    DoubleVector dk = (DoubleVector) k.convertShape(VectorOperators.I2D, species, 0);
+    // Lines 115, 118 and 122: dk = (double)k, exactly, without L2D, which boxes on AVX2: k plus
+    // the bits of 0x1.8p52 are the bits of the double 0x1.8p52 + k, and subtracting 0x1.8p52
+    // leaves k, +0.0 where k == 0 (PROOFS.md, L8).
+    DoubleVector dk = Lanes.fromBits(kBits).sub(DK_MAGIC);
 
     // Line 113: f = x-1.0.
     DoubleVector f = xn.sub(1.0);
@@ -218,7 +250,7 @@ final class Log {
       // +inf and a positive NaN. Line 103: (x-x)/zero for a set sign bit, which covers -inf and
       // a negative NaN. Line 102: -two54/zero, -inf, for +-0.
       VectorMask<Double> negative =
-          Lanes.bits(x).compare(VectorOperators.LT, 0L).cast(species);
+          bits.compare(VectorOperators.LT, 0L).cast(species);
       VectorMask<Double> positiveNonFinite = common.or(subnormal).or(negative).not();
       result = result.blend(x.add(x), positiveNonFinite);
       result = result.blend(x.sub(x).div(ZERO), negative);
@@ -237,9 +269,9 @@ final class Log {
       // only call is StrictMath.log itself. A finish that took the vectors as arguments would be
       // refused inlining this late in the body (NodeCountInliningCutoff) and receive them boxed.
       if (rare.anyTrue()) {
-        long bits = rare.toLong();
+        long rareLanes = rare.toLong();
         for (int lane = 0; lane < species.length(); lane++) {
-          if ((bits >>> lane & 1L) != 0) {
+          if ((rareLanes >>> lane & 1L) != 0) {
             result = result.withLane(lane, StrictMath.log(x.lane(lane)));
           }
         }
