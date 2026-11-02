@@ -37,6 +37,7 @@ final class ProofFiles {
   static Map<String, String> render() {
     var files = new LinkedHashMap<String, String>();
     files.put("java_check.smt2", javaCheck());
+    files.put("exp_highword_compare.smt2", ExpProofFiles.highwordCompare());
     return files;
   }
 
@@ -112,8 +113,8 @@ final class ProofFiles {
       intUnary.add(eq("jint.neg", lit(a), lit(-a)));
       intUnary.add(eq("jint.not", lit(a), lit(~a)));
       intUnary.add(eq("i2l", lit(a), lit((long) a)));
-      for (int k : new int[] {3, 20, 31}) {
-        intUnary.add(eq("jint.and.low", lit(a) + " " + (1L << k), lit(a & ((1 << k) - 1))));
+      for (int k : new int[] {3, 20, 31, 32}) {
+        intUnary.add(eq("jint.and.low", lit(a) + " " + (1L << k), lit(a & ((1L << k) - 1))));
       }
     }
     equations(out, "jint.neg, jint.not, jint.and.low, i2l are Java's", intUnary);
@@ -136,6 +137,10 @@ final class ProofFiles {
       longUnary.add(eq("jlong.neg", lit(a), lit(-a)));
       longUnary.add(eq("jlong.not", lit(a), lit(~a)));
       longUnary.add(eq("jlong.and.low", lit(a) + " " + P52, lit(a & MANTISSA_52)));
+      // Lanes.absBits's mask, Long.MAX_VALUE, and fromHiBits's, 0xffffffffL.
+      longUnary.add(
+          eq("jlong.and.low", lit(a) + " 9223372036854775808", lit(a & Long.MAX_VALUE)));
+      longUnary.add(eq("jlong.and.low", lit(a) + " 4294967296", lit(a & 0xffff_ffffL)));
     }
     for (long a : new long[] {Long.MIN_VALUE, -(1L << 32) - 5, -(1L << 31) - 1, -(1L << 31), -1,
         0, (1L << 31) - 1, 1L << 31, (1L << 32) + 5, Long.MAX_VALUE}) {
