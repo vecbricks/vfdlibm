@@ -19,11 +19,14 @@ vfdlibm ports fdlibm's double functions to the Java Vector API, each lane bit-id
 - One test: `mvn -q test -Dtest=ExpTest`.
 - Widths: `-Dvfdlibm.test.jvmArgs=-XX:MaxVectorSize=32` skips the 512-bit cases, as GitHub's x86
   runners do; `=16` runs everything at 128 bits, as the Arm runners do.
-- Planted faults: a port asks `Faults.is("<function>.<what>")` where a fault would go wrong. The
-  fault comes from `-Dvfdlibm.fault=<name>`, read once into a `static final`, so `verify` runs the
-  normal suite once and then one forked surefire execution per fault, running only the tests
-  tagged `fault`. A new fault goes in `PlantedFaultTest.CATCHERS` with the check that must catch
-  it, and gets an execution in `pom.xml`; `PlantedFaultTest` fails if either is missing.
+- Planted faults: a port reads each of its faults once, into a `static final` constant of its own
+  class (`static final boolean DROPPING_CORRECTION = Faults.is("exp.dropCorrection")`), and tests
+  that constant where the fault would go wrong. The vector body then holds no call, which C2 could
+  refuse to inline and so box the vectors, and an unplanted fault folds away. The fault comes from
+  `-Dvfdlibm.fault=<name>`, fixed for the JVM's life, so `verify` runs the normal suite once
+  and then one forked surefire execution per fault, running only the tests tagged `fault`.
+  A new fault goes in `PlantedFaultTest.CATCHERS` with the check that must catch it, and gets an
+  execution in `pom.xml`; `PlantedFaultTest` fails if either is missing.
 - The harness is in `src/test/java`: `Oracle` compares lanes with `StrictMath` by raw bits,
   `Inputs` makes the inputs, `VectorWidth` runs a test at 128, 256 and 512 bits and the preferred
   species, and `PlantedFault` plants a fault a check must catch. `HarnessSelfTest` tests them.
