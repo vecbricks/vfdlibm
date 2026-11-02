@@ -184,7 +184,7 @@ negative result belongs here too, since it stops the next port re-trying a settl
   lost once rare lanes were common: on mixed data (one rare input in 16, about a quarter of the
   4-lane vectors holding a rare lane) it was 1.64x slower, 12331 against 7512, while allocating
   52928 B/op. The allocation was the refused call above; with the finish written out inline it is
-  gone at the fixed shapes, and on the laptop under `UseAVX=2` mixed data now reads 2591 against
+  gone at 256 and 512 bits, and on the laptop under `UseAVX=2` mixed data now reads 2591 against
   4639 for the blend, and 1925 against 3199 at 512 bits on the default flags, where the old method
   allocated 44032 B/op (`bench/results/exp-finish-laptop-2026-11-02.txt`, laptop numbers). Which arm
   `VFdlibm.exp` keeps is decided by the EPYC run of that change, not by the laptop. Each port
@@ -214,13 +214,15 @@ negative result belongs here too, since it stops the next port re-trying a settl
   with `result.withLane(lane, StrictMath.log(x.lane(lane)))`, made it ~0 B/op and 2921 ns: the
   256- and 512-bit `lane` and `withLane` switch on the index to a constant lane, which C2
   intrinsifies (`extract`, `insert`), and the only call left is `StrictMath.log` on a double.
-  exp's finish still takes vectors and allocates 52928 B/op on mixed data; its EPYC 7763 run
-  shows the cost the laptop hid (finish 12331 against blend 7512 ns on mixed data, in
-  `bench/results/exp-epyc7763-2026-11-02.txt` of vfdlibm#11).
-- **The laptop understates the finish's cost on mixed data.** Under `UseAVX=2` on the laptop
-  exp's two arms tied on mixed data; on the EPYC 7763 the finish lost by 1.6x. Read the finish
-  arm's `gc.alloc.rate.norm` on mixed data: anything above the arrays a finish makes on purpose is
-  boxing, and its cost grows on the EPYC.
+  exp's finish used to be such a call and boxed: 52928 B/op on mixed data on the EPYC 7763, where
+  it cost 12331 ns against 7512 for the blend (`bench/results/exp-epyc7763-2026-11-02.txt`). The
+  same in-body loop removed that at 256 and 512 bits; at `SPECIES_MAX` exp's finish still boxes
+  on mixed data (above).
+- **The laptop understated the boxed finish's cost on mixed data.** Under `UseAVX=2` on the
+  laptop exp's boxed finish tied the blend on mixed data; on the EPYC 7763 it lost by 1.6x. Read
+  each finish arm's `gc.alloc.rate.norm` on mixed data, where the rare lanes run, not only on
+  common data: an in-body finish allocates nothing at 256 and 512 bits, so anything above zero
+  there is boxing (or arrays the finish makes on purpose), and its cost grows on the EPYC.
 - **The arm choice is per function, and a fix can reverse it.** With the boxed finish the data
   said to blend log; with the finish in registers it is ahead on common data, level on mixed at
   256 bits (1.18x and 1.05x under `UseAVX=2`), and the blend wins at 512 bits on mixed data (1.36x

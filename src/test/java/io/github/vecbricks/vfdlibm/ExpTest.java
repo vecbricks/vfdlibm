@@ -109,10 +109,13 @@ class ExpTest {
 
   /**
    * The subsets of a vector's lanes that {@link #everySubsetOfLanesRare(int)} makes rare, as bit
-   * masks: every subset up to {@link #ALL_SUBSETS_UP_TO_LANES} lanes. Above it (a SPECIES_MAX of
-   * 2048 bits has 32 double lanes, where {@code 1 << lanes} overflows an int) the empty and the
-   * full set, each single lane, each lane alone left common, each adjacent pair, and 4096 seeded
-   * random subsets.
+   * masks: every subset up to {@link #ALL_SUBSETS_UP_TO_LANES} lanes. The cap bounds the test's
+   * size, since the count doubles with each lane (and {@code 1 << lanes} overflows an int from 31
+   * lanes on). Above it, the empty and the full set, each single lane, each lane alone left
+   * common, each adjacent pair, and 4096 seeded random subsets. No exp test reaches that branch:
+   * the widest species exp accepts is 1024 bits, 16 double lanes, since {@link Lanes#intSpecies}
+   * throws above it, so even a 2048-bit SPECIES_MAX (32 lanes) never runs exp here. {@link
+   * #rareLaneSubsetsAboveTheCap} tests the branch directly, ready for a wider species.
    */
   static long[] rareLaneSubsets(int lanes) {
     if (lanes <= ALL_SUBSETS_UP_TO_LANES) {
@@ -174,17 +177,37 @@ class ExpTest {
     assertEverySubsetOfLanesRare(DoubleVector.SPECIES_MAX);
   }
 
-  /** The cap's other branch, which no host's double lane count reaches yet. */
+  /**
+   * The cap's sampled branch, which no exp test reaches: exp accepts at most 1024 bits, 16 double
+   * lanes, the cap itself ({@link #rareLaneSubsets}). The expected masks are checked by their bit
+   * counts and lanes, not rebuilt the way the branch builds them.
+   */
   @Test
   void rareLaneSubsetsAboveTheCap() {
     for (int lanes : new int[] {ALL_SUBSETS_UP_TO_LANES + 1, 32, Long.SIZE}) {
-      long all = lanes == Long.SIZE ? -1L : (1L << lanes) - 1;
       long[] subsets = rareLaneSubsets(lanes);
       assertEquals(2 + 3 * lanes - 1 + 4096, subsets.length);
       assertEquals(0L, subsets[0]);
-      assertEquals(all, subsets[1]);
+      assertEquals(lanes, Long.bitCount(subsets[1]));
+      assertEquals(lanes, Long.SIZE - Long.numberOfLeadingZeros(subsets[1]));
+      int next = 2;
+      for (int lane = 0; lane < lanes; lane++) {
+        long single = subsets[next++];
+        assertEquals(1, Long.bitCount(single), "single at lane " + lane);
+        assertEquals(lane, Long.numberOfTrailingZeros(single), "single at lane " + lane);
+        long complement = subsets[next++];
+        assertEquals(lanes - 1, Long.bitCount(complement), "complement of lane " + lane);
+        assertEquals(0L, complement >>> lane & 1L, "complement of lane " + lane);
+        assertEquals(subsets[1], complement | single, "complement of lane " + lane);
+        if (lane + 1 < lanes) {
+          long pair = subsets[next++];
+          assertEquals(2, Long.bitCount(pair), "pair at lane " + lane);
+          assertEquals(1L, pair >>> lane & 1L, "pair at lane " + lane);
+          assertEquals(1L, pair >>> (lane + 1) & 1L, "pair at lane " + lane);
+        }
+      }
       for (long subset : subsets) {
-        assertEquals(0L, subset & ~all);
+        assertEquals(0L, subset & ~subsets[1]);
       }
     }
   }
