@@ -196,6 +196,7 @@ negative result belongs here too, since it stops the next port re-trying a settl
 - **The arm choice is per function, and a fix can reverse it.** With the boxed finish the data
   said to blend log; with the finish in registers it is ahead on common data, level on mixed at
   256 bits (1.18x and 1.05x under `UseAVX=2`), and the blend wins at 512 bits on mixed data (1.36x
-  on the laptop's AVX-512, `bench/results/log-laptop-2026-11-02.txt`). `VFdlibm.log` uses the
-  finish provisionally; the EPYC 7763 run of the log port decides it. Measure the finish only once
-  it allocates nothing.
+  on the laptop's AVX-512, `bench/results/log-laptop-2026-11-02.txt`). The EPYC 7763 run
+  (`bench/results/log-epyc7763-2026-11-02.txt`) kept the finish for `VFdlibm.log`: level with the
+  blend on mixed data at 256 bits and allocating nothing, where exp's boxed finish had lost by
+  1.6x. Measure the finish only once it allocates nothing.
