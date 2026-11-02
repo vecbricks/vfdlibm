@@ -58,8 +58,9 @@ belongs here too, since it stops the next port re-trying a settled question.
   Left out: 128 bits (masks box at two lanes on x86, below) and 512 bits (software on AVX2; the
   preferred arm covers it where it is real). Mixed inputs were left out too until the per-lane
   finish stopped allocating (below); common data alone never runs a rare path, so it could not
-  see that path box. Arm is not checked yet: its preferred species is 128 bits, and no run has
-  shown exp unboxed there.
+  see that path box. The `*Max` rows are left out by the regex, since the finish still boxes at
+  `SPECIES_MAX` on mixed data (below). Arm is not checked yet: its preferred species is 128 bits,
+  and no run has shown exp unboxed there.
 - **Ask C2 what it refused.** `-XX:+UnlockDiagnosticVMOptions -XX:+PrintIntrinsics`, or scoped
   to the library, `-XX:CompileCommand=PrintIntrinsics,io.github.vecbricks.vfdlibm.*::*`. Add
   `-Xbatch` when lines must be attributed to one shape: compiles then happen on the calling
@@ -85,12 +86,13 @@ belongs here too, since it stops the next port re-trying a settled question.
   boxed on every vector, rare or not: 256 vectors times 168 bytes (two 64-byte `DoubleVector`
   boxes and a 40-byte mask) plus, for the 62 vectors of the mixed data that hold a rare lane,
   160 bytes (two `toArray` copies and the returned box) sum to exactly the 52928 B/op measured;
-  JFR's allocation-by-site names `fromArray0Template`, `blendTemplate`, `Mask.or` and `toArray`.
+  JFR's allocation-by-site named `fromArray0Template`, `blendTemplate`, `Mask.or` and `toArray`.
   On common data the branch never ran, C2 left it as an uncommon trap, and nothing boxed, which
   is why the allocation check, on common data only, never saw it. Written out in the body with
   the Vector API's own `toLong`, `lane` and `withLane`, which C2 inlines late instead of
-  refusing, the finish allocates nothing. Any slow path called from a port's body belongs
-  written out inline, as `Lanes.addExponent` is.
+  refusing, the finish allocates nothing at 256 and 512 bits; at `SPECIES_MAX` it still boxes
+  (below). Any slow path called from a port's body belongs written out inline, as
+  `Lanes.addExponent` is.
 - **A forced inline changes the caller.** When a flag affects inlining, the method whose code
   moves is the one doing the calling; measure it, not only the callee.
 
@@ -106,8 +108,17 @@ belongs here too, since it stops the next port re-trying a settled question.
   species comes from it is not intrinsified (`missing constant ... vlen_to=LoadI`). Return one
   of the `SPECIES_*` constants, chosen by a switch on `vectorBitSize()`, as `Lanes.intSpecies`
   does; once inlined, C2 sees a constant. Not by identity: `SPECIES_MAX` is none of the named
-  species, and exp at `SPECIES_MAX` boxed that way. The same holds for any species loaded from a local or a field C2 cannot fold. `VectorSpecies.of`
-  stays only as the fallback for an unusual shape.
+  species, and exp at `SPECIES_MAX` boxed that way. The same holds for any species loaded from a
+  local or a field C2 cannot fold. `VectorSpecies.of` stays only as the fallback for an unusual
+  shape.
+- **At `SPECIES_MAX`, lane access at a variable index boxes.** `exp`'s finish reads and writes its
+  rare lanes with `x.lane(i)` and `result.withLane(i, v)`, `i` from the rare mask's bits. At the
+  fixed shapes C2 inlines `VectorSupport.extract` and `insert` as intrinsics; at `SPECIES_MAX` (the
+  same 512 or 256 bits on the laptop) `PrintIntrinsics` prints `missing constant: ...
+  idx=CountTrailingZerosL` and both stay calls, so `finishMax` on mixed data allocates 30912 B/op at
+  512 bits and 36992 under `-XX:UseAVX=2`, where `finish512` and `finish256` read under 0.01
+  (`bench/results/exp-finish-laptop-2026-11-02.txt`). Common data never runs that loop and does not
+  allocate. A port meant to run at `SPECIES_MAX` measures its slow path there too.
 - **At two 64-bit lanes x86 C2 lowers no mask.** Compare to mask, blend, mask cast, mask
   broadcast, logic and test are `not supported` at `vlen=2` for double and long masks, and fine
   at four lanes. So on x86 every 128-bit double port that branches through masks runs per lane
@@ -165,22 +176,20 @@ belongs here too, since it stops the next port re-trying a settled question.
   used. The int vector has the same lane count at half the bits, so each conversion is part 0.
   Any port whose C casts a double to an `int`, or an `int` to a double, should do the same.
 - **Per-lane finish against blend.** `exp` has both arms in one body, selected by a constant
-  `boolean`, so they share every line but the rare paths and the unused arm folds away once
-  inlined. The blended arm computes every branch of `e_exp.c` in every lane; the finish arm
-  computes the common path and, when any lane is rare, sends those lanes to `StrictMath.exp`. On
-  the EPYC 7763 (`bench/results/exp-epyc7763-2026-11-02.txt`, minimums in ns per 1024 doubles
-  at 256 bits), the finish arm as first merged was 1.57x faster than the blend on common data,
-  4203 against 6590, and lost once rare lanes were common: on mixed data (one rare input in 16,
-  about a quarter of the 4-lane vectors holding a rare lane) it was 1.64x slower, 12331 against
-  7512, and no faster than scalar `StrictMath` (11752), while allocating 52928 B/op. The laptop
-  had understated that: under `UseAVX=2` the two arms read level on mixed data there.
-  The allocation was the refused call above; with the finish written out inline it is gone, and
-  on the laptop under `UseAVX=2` mixed data now reads 2555 against 4573 for the blend, and 1907
-  against 3303 at 512 bits on the default flags, where the old method allocated 44032 B/op
-  (`bench/results/exp-finish-laptop-2026-11-02.txt`, laptop numbers). Which arm `VFdlibm.exp`
-  keeps is decided by the EPYC run of that change, not by the laptop. Each port measures both
-  on common and mixed data, decides per branch, and records the decision in its pull request
-  (`PLAN.md` section 5).
+  `boolean`, so they share every line but the rare paths and the unused arm folds away once inlined.
+  The blended arm computes every branch of `e_exp.c` in every lane; the finish arm computes the
+  common path and, when any lane is rare, sends those lanes to `StrictMath.exp`. On the EPYC 7763
+  (`bench/results/exp-epyc7763-2026-11-02.txt`, minimums in ns per 1024 doubles at 256 bits), the
+  finish arm as first merged was 1.57x faster than the blend on common data, 4203 against 6590, and
+  lost once rare lanes were common: on mixed data (one rare input in 16, about a quarter of the
+  4-lane vectors holding a rare lane) it was 1.64x slower, 12331 against 7512, while allocating
+  52928 B/op. The allocation was the refused call above; with the finish written out inline it is
+  gone at the fixed shapes, and on the laptop under `UseAVX=2` mixed data now reads 2591 against
+  4639 for the blend, and 1925 against 3199 at 512 bits on the default flags, where the old method
+  allocated 44032 B/op (`bench/results/exp-finish-laptop-2026-11-02.txt`, laptop numbers). Which arm
+  `VFdlibm.exp` keeps is decided by the EPYC run of that change, not by the laptop. Each port
+  measures both on common and mixed data, decides per branch, and records the decision in its pull
+  request (`PLAN.md` section 5).
 - **Laptop first, then the EPYC.** The `D2L` boxing never showed under the laptop's default
   flags, where AVX512DQ is present; it showed only under `-XX:UseAVX=2`. Run a new port's
   benchmark under both before calling it done.
