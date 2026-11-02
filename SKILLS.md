@@ -345,3 +345,52 @@ question.
   paths reduce exactly to `k*ln2_hi + (k*ln2_lo + c)`. A sample of 199,804,321 `hu == 0` inputs
   with `1+x` between 0.5 and 2^1024 showed 0 bit differences against `StrictMath.log1p`; `x` in
   (-1, -0.5) was not sampled, and sampling is not proof. The port keeps the C's operations.
+
+## The nightly sweep and fuzz
+
+- **What runs.** `.github/workflows/nightly.yml` runs `Sweep` and `Fuzz` (in `src/test/java`,
+  `main` programs, not tests) through `dev/nightly.sh`, one JVM per species, since a second
+  species in one JVM makes the shared vector templates bimorphic (above). Each checks every arm
+  (`VFdlibm`'s and the alternatives, `Exp.expCore+expRare` included) unmasked, and masked under
+  one mask per vector drawn from the seed and the vector's position, against `StrictMath` by raw
+  bits; all-true and all-false masks are the unit tests'. The sweep takes each of the 2^32 high
+  words with low words 0, `0xffffffff` and `mix(seed + hi)`, so any of its inputs replays from
+  the seed alone. The fuzz takes random bits and the neighbourhoods of the high words, significand
+  splits and doubles each function branches on (`Fuzz.java` lists them), for a fixed time.
+- **A slice by hand.** After `mvn -B -q test-compile`, `dev/nightly.sh sweep exp 1023/4096 0x5eed
+  256` sweeps the 2^20 high words of `[1, 2)` at 256 bits (a second or two);
+  `dev/nightly.sh sweep log stripe:255/256 0x5eed` sweeps the stripe the sizing below used at
+  every width the host has; `dev/nightly.sh fuzz log1p 30 0x5eed` fuzzes for 30 seconds a species.
+  `NIGHTLY_JVM_ARGS` passes JVM options, `-XX:UseAVX=2 -XX:MaxVectorSize=32` or a planted
+  fault: `NIGHTLY_JVM_ARGS=-Dvfdlibm.fault=exp.dropCorrection dev/nightly.sh sweep exp
+  1023/4096 0x5eed 256` must exit 1 and write the mismatches to
+  `target/nightly/sweep-exp-256.txt`. That file is `Inputs.hardCases`'s form: each mismatch is a
+  `# MISMATCH` line (function, species, seed, arm, masked and the mask, lane, input, expected and
+  actual as raw hex) and then the input alone, so the inputs go into
+  `src/test/resources/.../hard-cases/<function>.txt` as they are. A run stops after 100,000
+  mismatches. On the laptop, take the heavy lock and pin to one core type, for example
+  `flock ~/proj/.varka-locks/heavy.lock taskset -c 0,1,12,13 dev/nightly.sh ...`.
+- **Its cost, measured once (laptop, 2 November 2026), and the schedule.** Stripe `255/256` of
+  each function, 2^24 high words over 16 exponents of both signs, with 4 threads on two Zen 5
+  cores and their SMT siblings (`taskset -c 0,1,12,13`, the shape of a 4-vCPU runner), took in
+  seconds at 128 / 256 / 512 bits / max: exp 10.7 / 1.9 / 1.5 / 1.6, log 11.6 / 1.7 / 1.6 / 1.6,
+  log1p 24.1 / 2.2 / 1.8 / 1.9; stripe `0/256` read within 0.6 s of these. On another 2^24
+  sample, exp at 256 bits swept 4.7 million high words a second on one thread and 9.7 million on
+  the four, 2.1 times as many. Times 256, the
+  whole sweep is 67 minutes for exp, 70 for log and 128 for log1p on those two laptop cores. The
+  128-bit species is 68 to 80% of it: x86 C2 lowers no mask at two 64-bit lanes (above), so that
+  width runs per lane. On a GitHub EPYC 7763 runner (no 512 bits) the laptop figures are 61, 64
+  and 120 minutes; assuming its cores are 1.5 to 2 times slower than the laptop's (not measured),
+  a whole sweep is 1.5 to 2 hours for exp, 1.6 to 2.1 for log and 3 to 4 for log1p, 6 to 8
+  runner-hours a night. So the workflow splits each function into 4 stripes (`--stripe s/S`
+  deals the 4096 chunks of 2^20 high words, one per sign and exponent, round-robin, so stripes
+  cost about the same) run as parallel jobs, at most 8 at a time on the organisation's 20, about
+  23 to 60 minutes each, and sweeps everything every night. The dispatch inputs `nights` and
+  `shards` change that: `nights=2` halves the nightly cost and covers every high word in two
+  nights. The first nights' logs, which print each species' time, replace the assumption.
+- **The Arm job** sweeps one stripe of 64 a night (every high word in 64 nights) at its two
+  species, 128 bits and max, and fuzzes, for each function; its time is not measured yet.
+- **When a night fails,** the `alert` job (the only one with `issues: write`) opens an issue
+  labelled `nightly-failure`, or comments on the open one, with the run's link, the seed, each
+  job's result and the first mismatches of each file; the artifacts `nightly-*` hold the rest. A
+  dispatch with the issue's seed (and `night`) replays the run.

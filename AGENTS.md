@@ -52,6 +52,10 @@ vfdlibm ports fdlibm's double functions to the Java Vector API, each lane bit-id
   instructions at 256 bits, though: to make C2 compile as on an AVX2 host such as the EPYC
   7763, pass `-XX:UseAVX=2`, and check `-prof gc` and `-XX:+PrintIntrinsics` under it.
   Without AVX512DQ, C2 lowers no `D2L`, `L2D`, `L2F` or `F2L`; such a convert boxes there.
+- The nightly correctness run, `.github/workflows/nightly.yml`, is `main` programs in
+  `src/test/java` (`Sweep`, `Fuzz`, run per species by `dev/nightly.sh`), which `verify` does
+  not run beyond `NightlyTest`'s few thousand inputs; a failing night opens an issue labelled
+  `nightly-failure`. How to run a slice by hand is in `SKILLS.md`, "The nightly sweep and fuzz".
 - Benchmarks are JMH, in `src/jmh/java`; `verify` compiles them. Run them with
   `mvn -B -Pjmh test-compile exec:exec`, passing JMH options as `-Djmh.args="..."`, e.g.
   `-Djmh.args="ExpBenchmark.finish256 -p inputs=common"`.

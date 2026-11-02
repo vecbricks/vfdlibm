@@ -47,9 +47,9 @@ numbers count the inserted prelude.
 
 CI (`.github/workflows/ci.yml`, job `proofs`) installs Z3 and runs `--self-test` and `--lint`.
 
-TODO: a nightly run of every proof under both solvers, `dev/prove.sh --install both &&
-dev/prove.sh --solver both`, in the nightly workflow that is planned; until then, run it by hand
-before merging a change to a proof or to the prelude.
+Every proof under both solvers, `dev/prove.sh --install both && dev/prove.sh --solver both`,
+runs nightly (`.github/workflows/nightly.yml`, job `proofs`); a change to a proof or to the
+prelude is still run that way by hand before it merges, since the nightly sees it only after.
 
 ## What a proof looks like
 

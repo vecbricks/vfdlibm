@@ -72,6 +72,10 @@ five are a later, optional set; the large-argument reduction of the trigonometri
   256 bits, and 512 on an AVX-512 draw), on x86 as an AVX2 host (`-XX:UseAVX=2
   -XX:MaxVectorSize=32`, 128 and 256 bits on every draw), on x86 with `-XX:MaxVectorSize=16`
   (all of it at 128 bits) and on Arm (128 bits).
+- **Nightly:** `.github/workflows/nightly.yml` sweeps every high word of exp, log and log1p with
+  three low words each (every branch fdlibm decides on the high word), fuzzes from a fresh seed,
+  and runs every proof under both solvers; a failure opens an issue labelled `nightly-failure`
+  with the mismatching inputs, ready for a `hard-cases` file (`SKILLS.md`).
 - **Masked forms:** a masked form is checked under seeded random masks, all-true and all-false;
   active lanes must equal `StrictMath` and inactive lanes must keep the input's raw bits (for a
   two-argument function, the first argument's).
