@@ -26,6 +26,12 @@
 ; that the double Java computed is not admitted, or another one is, so a jdouble.near that
 ; admitted nothing would make it sat.
 ;
+; The witness moved by one is refuted (4 * 2^-53, above); the constants P1..P5 changed by
+; one are not. The chains evaluate whatever P1..P5 Exp holds and compare the results with
+; no source value, so with a P moved by one ulp the file renders anew and passes as long
+; as one + x and the tail still differ at the witness. ExpTest.constantsAreTheSourcesBits
+; pins P1..P5 to the source's hex, and ProofFilesTest this file to its rendering.
+;
 ; Rendered by ProofFiles (src/test/java). ProofFilesTest fails when this file differs from
 ; its rendering, and mvn -q test -Dtest=ProofFilesTest -Dvfdlibm.proofs.regen=true
 ; rewrites it. Run by dev/prove.sh, which inserts java.smt2 after the set-logic line.

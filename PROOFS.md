@@ -17,7 +17,8 @@ The proofs are informal, or reduced to a finite check by a theorem, and parts of
 machine-checked in `proofs/` under the conventions of Varka's `sql/varka/proofs/` (SMT-LIB over
 integers, a double as `M * 2^E`, rounding as the `jdouble.near` relation to the nearest double in
 a named binade, not SMT's floating-point theory; `unsat` checks are the proofs, `sat` checks show
-the domain is not vacuous and that a constant changed by one is refuted; `proofs/README.md`).
+the domain is not vacuous and that a constant changed by one is refuted, for the constants a claim
+is tight to: not `invln2` and `P1..P5`, as L2's **Encoding** says; `proofs/README.md`).
 Each lemma ends with an **Encoding** paragraph naming its file and saying which steps are
 machine-checked and which stay informal. The files' constants are rendered from `Exp` and
 `Lanes` by `ProofFiles`, so `ProofFilesTest` fails when one moves without its proof; `dev/prove.sh
@@ -114,8 +115,9 @@ rounding evaluated. Step 2 is `proofs/sign_symmetry.smt2`'s, for `c` in `[-2, 1]
 and informal above: H2 and H3, which bound the polynomial's eight roundings and multiply unknowns
 (`x*c`, `T*bracket`), so they are sampled by `ProofsTest`; with them the hypothesis of step 2 and
 the binades of `q` (`2^-59` to `2^-4`) that the check covers; the sign of the zero product
-`fl(+0 * v) = +0` (IEEE 754 6.3; zero is not in the prelude); the casts of `+0.0` and the blend
-that puts it on exactly the unreduced lanes, which are the code's text. The file refutes the
+`fl(+0 * v) = +0` (IEEE 754 6.3; zero is not in the prelude); that a value rounds to no double in
+a binade further off than the next (the arithmetic of rationals); the casts of `+0.0` and the
+blend that puts it on exactly the unreduced lanes, which are the code's text. The file refutes the
 domain's top word changed by one, `0x3fd62e43`, whose lanes the C reduces: there the `k = 0` tail
 first gives a different double at `x = 0x3fd62e43_00000004` (positive) and `x =
 0xbfd62e43_0000001f` (negative), shown by evaluating both computations one rounding at a time
@@ -173,9 +175,19 @@ Step 3's exactness, `+-1 * ln2HI[0]` and `+-1 * ln2LO[0]` rounding to `+-ln2HI[0
 `LN2LO_1`'s bits, are checked too. Not checked: that a value rounds to no double in a binade
 further off than the next (the arithmetic of rationals), `D2I` truncating and `I2D` of `+-1` being
 exact (JLS), and step 4, that both forms then run the same operations, which is the code's text.
-The `sat` checks refute the band widened by a word at either end: at `hx = 0x3fd62e42`, `x =
-0x3fd62e42_00000000` gives `k = 0`; past `0x3ff0a2b1`, `x = 0x3ff0a2b2_ffffffff` gives `k = 2`,
-not the near form's 1; both signs.
+The ends `X1` and `X2` are decoded from their bits (`S = 1`, binades `2^-2` and `2^0`, `M =
+6243314785320960` and `4682485015248895`), so the binades and the bounds on `Mx` are checked, not
+only rendered. The `sat` checks refute the band widened by a word at either end: at `hx =
+0x3fd62e42`, `x = 0x3fd62e42_00000000` gives `k = 0`; past `0x3ff0a2b1`, `x =
+0x3ff0a2b2_ffffffff` gives `k = 2`, not the near form's 1; both signs; and `ln2HI[1]` and
+`ln2LO[1]` with `M` one more. `invln2` changed by one ulp is not refuted, and cannot be: the claim
+holds for a range of `invln2`, since H4's margins (`1.37e-9` and `3.4e-7`) are some `1.8e7` of
+its ulps below it and `1.5e9` above (a scalar search), so with `invln2` moved by one the file
+renders anew and every check still holds. The same goes for `invln2` in L1's section C, and for
+`P1..P5` in the evaluated chains of L1's section D and of L4, which use whatever value `Exp`
+holds and compare their results with no source value. These constants are held by
+`ExpTest.constantsAreTheSourcesBits`, which pins them to the source's hex, and by
+`ProofFilesTest`, which fails when a committed file differs from its rendering.
 
 ### L3. A high-word compare is one signed 64-bit compare of |x|'s bits
 
@@ -205,16 +217,18 @@ that the raw bits of `0xfff8...`, sign set, would miss the filter);
 width, on the specials, sampled patterns and both sides of each word, through the
 `DoubleVector` forms, which now route through these).
 
-**Encoding.** `proofs/exp_highword_compare.smt2`, machine-checked over integers with no lemma
-left informal: for every long `bits` and every `h` in `[0, 0x7fffffff]`, `absBits` is
-non-negative with the C's `hx` as its high word, and `hiAtLeast`, `hiBelow` and `hiAbove` (for `h
-< 0x7fffffff`) are the C's `hx >= h`, `hx < h` and `hx > h`, each Java operator (`&`, `>>`, `<<`,
-`-`, `l2i`) as `java.smt2` defines it; then the same at each of `Exp`'s words, rendered, and that
-every NaN and infinity, either sign, is a filter and non-finite lane. The `sat` checks refute
-the comparand changed by one (`b > h * 2^32` for `hx >= h`; `b = h * 2^32` is a model), `hiBelow`'s
-comparand less one, `hiAbove`'s `+ 1` dropped, and the raw bits of the sign-set NaN
-`0xfff80000_00000000` compared unmasked, which miss the filter. That `Exp` calls these compares
-with these words is the code's text.
+**Encoding.** `proofs/exp_highword_compare.smt2`, machine-checked over integers: for every long
+`bits` and every `h` in `[0, 0x7fffffff]`, `absBits` is non-negative with the C's `hx` as its high
+word, and `hiAtLeast`, `hiBelow` and `hiAbove` (for `h < 0x7fffffff`) are the C's `hx >= h`, `hx <
+h` and `hx > h`, each Java operator (`&`, `>>`, `<<`, `-`, `l2i`) as `java.smt2` defines it; then
+the same at each of `Exp`'s words, rendered, and that every NaN and infinity, either sign, is a
+filter and non-finite lane. The `sat` checks refute the comparand changed by one (`b > h * 2^32`
+for `hx >= h`; `b = h * 2^32` is a model), `hiBelow`'s comparand less one, `hiAbove`'s `+ 1`
+dropped, and the raw bits of the sign-set NaN `0xfff80000_00000000` compared unmasked, which miss
+the filter. Left informal: that the C's compares of the unsigned `hx` with its int-literal words
+are the integer compares the file encodes, since both lie in `[0, 2^31)` (argued in the file's
+header); that `__HI(x)` is the high int of the raw bits (the prelude's reading of fdlibm's
+macro); and that `Lanes` and `Exp` call these compares with these words, the code's text.
 
 ### L4. The tiny lanes cannot be folded (a counter-example, not a fold)
 

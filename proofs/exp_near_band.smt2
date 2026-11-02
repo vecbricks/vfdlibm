@@ -16,7 +16,8 @@
 ;
 ; What is proven, for every double of the band of either sign, with no appeal to
 ; monotonicity: x is S * Mx * 2^(j - 52) in one of the band's binades, with Mx symbolic
-; and bounded by X1 and X2 in the end binades; invln2 * x is the exact rational
+; and bounded by X1 and X2 in the end binades, whose S, binade and M are checked from
+; their bits; invln2 * x is the exact rational
 ; S * M(invln2) * Mx / 2^n, which rounds into the binades listed for it and no other next
 ; to them; then s, the sum with halF[xsb] = S / 2 (exp_half_sign.smt2), rounds into binade
 ; 2^0 with sign S and into no binade next to it, so (int) s = S, the near form's k. Every
@@ -35,6 +36,14 @@
 ; truncating toward zero (JLS 5.1.3, D2I), I2D of +-1 being exact and both forms then
 ; sharing every later operation are the code's text.
 ;
+; Not every constant changed by one is refuted here. The band's words are (the band
+; widened by a word, at the end), and so are ln2HI[1] and ln2LO[1] (M one more); invln2
+; is not. The claim holds for a range of invln2, not for its value alone: H4's margins,
+; s(X1) - 1 = 1.37e-9 and 2 - s(X2) = 3.4e-7, are some 1.8e7 of its ulps below it and
+; 1.5e9 above, so with invln2 moved by one ulp the file renders anew and every check
+; still holds. ExpTest.constantsAreTheSourcesBits pins invln2 to the source's hex, and
+; ProofFilesTest this file to its rendering.
+;
 ; The logic is ALL, not QF_NIA: under QF_NIA cvc5 answers unknown to some checks, and
 ; under ALL both solvers decide the file in well under a second.
 ;
@@ -43,6 +52,25 @@
 ; rewrites it. Run by dev/prove.sh, which inserts java.smt2 after the set-logic line.
 
 (set-logic ALL)
+
+; The band's ends, decoded from their bits: the binades and the bounds on Mx below are
+; these, not only what the rendering says they are.
+
+(echo "X1 = 0x3fd62e43_00000000: S = 1, binade 2^-2, M = 6243314785320960: expect unsat")
+(push 1)
+(assert (not (and (= (jdouble.fromBits.S 4599914934703226880) 1)
+  (= (jdouble.fromBits.E 4599914934703226880) (- 54))
+  (= (jdouble.fromBits.M 4599914934703226880) 6243314785320960))))
+(check-sat)
+(pop 1)
+
+(echo "X2 = 0x3ff0a2b1_ffffffff: S = 1, binade 2^0, M = 4682485015248895: expect unsat")
+(push 1)
+(assert (not (and (= (jdouble.fromBits.S 4607361304187895807) 1)
+  (= (jdouble.fromBits.E 4607361304187895807) (- 52))
+  (= (jdouble.fromBits.M 4607361304187895807) 4682485015248895))))
+(check-sat)
+(pop 1)
 
 ; x > 0 in binade 2^-2: Mx in [6243314785320960, 9007199254740991].
 
@@ -61,7 +89,7 @@
 (check-sat)
 (pop 1)
 
-(echo "x > 0 in 2^-2, invln2 * x in 2^-1: s is in 2^0, sign S, and (int) s = S: expect unsat")
+(echo "x > 0 in 2^-2, invln2 * x in 2^-1: s rounds into 2^0 with sign S, no other: expect unsat")
 (push 1)
 (declare-const Mx Int) (declare-const P Int) (declare-const S2 Int) (declare-const M2 Int)
 (assert (and (<= 6243314785320960 Mx) (<= Mx 9007199254740991)))
@@ -69,9 +97,7 @@
   9007199254740992))
 (assert (or (jdouble.near (+ P 4503599627370496) 9007199254740992 S2 M2 1 9007199254740992)
   (jdouble.near (+ P 4503599627370496) 9007199254740992 S2 M2 1 2251799813685248)
-  (jdouble.near (+ P 4503599627370496) 9007199254740992 (- 1) M2 1 4503599627370496)
-  (and (jdouble.near (+ P 4503599627370496) 9007199254740992 1 M2 1 4503599627370496) (not (= (div
-    M2 4503599627370496) 1)))))
+  (jdouble.near (+ P 4503599627370496) 9007199254740992 (- 1) M2 1 4503599627370496)))
 (check-sat)
 (pop 1)
 
@@ -84,7 +110,7 @@
 (check-sat)
 (pop 1)
 
-(echo "x > 0 in 2^-2, invln2 * x in 2^0: s is in 2^0, sign S, and (int) s = S: expect unsat")
+(echo "x > 0 in 2^-2, invln2 * x in 2^0: s rounds into 2^0 with sign S, no other: expect unsat")
 (push 1)
 (declare-const Mx Int) (declare-const P Int) (declare-const S2 Int) (declare-const M2 Int)
 (assert (and (<= 6243314785320960 Mx) (<= Mx 9007199254740991)))
@@ -92,9 +118,7 @@
   4503599627370496))
 (assert (or (jdouble.near (+ P 2251799813685248) 4503599627370496 S2 M2 1 9007199254740992)
   (jdouble.near (+ P 2251799813685248) 4503599627370496 S2 M2 1 2251799813685248)
-  (jdouble.near (+ P 2251799813685248) 4503599627370496 (- 1) M2 1 4503599627370496)
-  (and (jdouble.near (+ P 2251799813685248) 4503599627370496 1 M2 1 4503599627370496) (not (= (div
-    M2 4503599627370496) 1)))))
+  (jdouble.near (+ P 2251799813685248) 4503599627370496 (- 1) M2 1 4503599627370496)))
 (check-sat)
 (pop 1)
 
@@ -124,7 +148,7 @@
 (check-sat)
 (pop 1)
 
-(echo "x > 0 in 2^-1, invln2 * x in 2^-1: s is in 2^0, sign S, and (int) s = S: expect unsat")
+(echo "x > 0 in 2^-1, invln2 * x in 2^-1: s rounds into 2^0 with sign S, no other: expect unsat")
 (push 1)
 (declare-const Mx Int) (declare-const P Int) (declare-const S2 Int) (declare-const M2 Int)
 (assert (and (<= 4503599627370496 Mx) (<= Mx 9007199254740991)))
@@ -132,9 +156,7 @@
   9007199254740992))
 (assert (or (jdouble.near (+ P 4503599627370496) 9007199254740992 S2 M2 1 9007199254740992)
   (jdouble.near (+ P 4503599627370496) 9007199254740992 S2 M2 1 2251799813685248)
-  (jdouble.near (+ P 4503599627370496) 9007199254740992 (- 1) M2 1 4503599627370496)
-  (and (jdouble.near (+ P 4503599627370496) 9007199254740992 1 M2 1 4503599627370496) (not (= (div
-    M2 4503599627370496) 1)))))
+  (jdouble.near (+ P 4503599627370496) 9007199254740992 (- 1) M2 1 4503599627370496)))
 (check-sat)
 (pop 1)
 
@@ -147,7 +169,7 @@
 (check-sat)
 (pop 1)
 
-(echo "x > 0 in 2^-1, invln2 * x in 2^0: s is in 2^0, sign S, and (int) s = S: expect unsat")
+(echo "x > 0 in 2^-1, invln2 * x in 2^0: s rounds into 2^0 with sign S, no other: expect unsat")
 (push 1)
 (declare-const Mx Int) (declare-const P Int) (declare-const S2 Int) (declare-const M2 Int)
 (assert (and (<= 4503599627370496 Mx) (<= Mx 9007199254740991)))
@@ -155,9 +177,7 @@
   4503599627370496))
 (assert (or (jdouble.near (+ P 2251799813685248) 4503599627370496 S2 M2 1 9007199254740992)
   (jdouble.near (+ P 2251799813685248) 4503599627370496 S2 M2 1 2251799813685248)
-  (jdouble.near (+ P 2251799813685248) 4503599627370496 (- 1) M2 1 4503599627370496)
-  (and (jdouble.near (+ P 2251799813685248) 4503599627370496 1 M2 1 4503599627370496) (not (= (div
-    M2 4503599627370496) 1)))))
+  (jdouble.near (+ P 2251799813685248) 4503599627370496 (- 1) M2 1 4503599627370496)))
 (check-sat)
 (pop 1)
 
@@ -187,7 +207,7 @@
 (check-sat)
 (pop 1)
 
-(echo "x > 0 in 2^0, invln2 * x in 2^-1: s is in 2^0, sign S, and (int) s = S: expect unsat")
+(echo "x > 0 in 2^0, invln2 * x in 2^-1: s rounds into 2^0 with sign S, no other: expect unsat")
 (push 1)
 (declare-const Mx Int) (declare-const P Int) (declare-const S2 Int) (declare-const M2 Int)
 (assert (and (<= 4503599627370496 Mx) (<= Mx 4682485015248895)))
@@ -195,9 +215,7 @@
   9007199254740992))
 (assert (or (jdouble.near (+ P 4503599627370496) 9007199254740992 S2 M2 1 9007199254740992)
   (jdouble.near (+ P 4503599627370496) 9007199254740992 S2 M2 1 2251799813685248)
-  (jdouble.near (+ P 4503599627370496) 9007199254740992 (- 1) M2 1 4503599627370496)
-  (and (jdouble.near (+ P 4503599627370496) 9007199254740992 1 M2 1 4503599627370496) (not (= (div
-    M2 4503599627370496) 1)))))
+  (jdouble.near (+ P 4503599627370496) 9007199254740992 (- 1) M2 1 4503599627370496)))
 (check-sat)
 (pop 1)
 
@@ -210,7 +228,7 @@
 (check-sat)
 (pop 1)
 
-(echo "x > 0 in 2^0, invln2 * x in 2^0: s is in 2^0, sign S, and (int) s = S: expect unsat")
+(echo "x > 0 in 2^0, invln2 * x in 2^0: s rounds into 2^0 with sign S, no other: expect unsat")
 (push 1)
 (declare-const Mx Int) (declare-const P Int) (declare-const S2 Int) (declare-const M2 Int)
 (assert (and (<= 4503599627370496 Mx) (<= Mx 4682485015248895)))
@@ -218,9 +236,7 @@
   4503599627370496))
 (assert (or (jdouble.near (+ P 2251799813685248) 4503599627370496 S2 M2 1 9007199254740992)
   (jdouble.near (+ P 2251799813685248) 4503599627370496 S2 M2 1 2251799813685248)
-  (jdouble.near (+ P 2251799813685248) 4503599627370496 (- 1) M2 1 4503599627370496)
-  (and (jdouble.near (+ P 2251799813685248) 4503599627370496 1 M2 1 4503599627370496) (not (= (div
-    M2 4503599627370496) 1)))))
+  (jdouble.near (+ P 2251799813685248) 4503599627370496 (- 1) M2 1 4503599627370496)))
 (check-sat)
 (pop 1)
 
@@ -250,7 +266,7 @@
 (check-sat)
 (pop 1)
 
-(echo "x < 0 in 2^-2, invln2 * x in 2^-1: s is in 2^0, sign S, and (int) s = S: expect unsat")
+(echo "x < 0 in 2^-2, invln2 * x in 2^-1: s rounds into 2^0 with sign S, no other: expect unsat")
 (push 1)
 (declare-const Mx Int) (declare-const P Int) (declare-const S2 Int) (declare-const M2 Int)
 (assert (and (<= 6243314785320960 Mx) (<= Mx 9007199254740991)))
@@ -258,9 +274,7 @@
   9007199254740992))
 (assert (or (jdouble.near (- (+ P 4503599627370496)) 9007199254740992 S2 M2 1 9007199254740992)
   (jdouble.near (- (+ P 4503599627370496)) 9007199254740992 S2 M2 1 2251799813685248)
-  (jdouble.near (- (+ P 4503599627370496)) 9007199254740992 1 M2 1 4503599627370496)
-  (and (jdouble.near (- (+ P 4503599627370496)) 9007199254740992 (- 1) M2 1 4503599627370496) (not
-    (= (div M2 4503599627370496) 1)))))
+  (jdouble.near (- (+ P 4503599627370496)) 9007199254740992 1 M2 1 4503599627370496)))
 (check-sat)
 (pop 1)
 
@@ -273,7 +287,7 @@
 (check-sat)
 (pop 1)
 
-(echo "x < 0 in 2^-2, invln2 * x in 2^0: s is in 2^0, sign S, and (int) s = S: expect unsat")
+(echo "x < 0 in 2^-2, invln2 * x in 2^0: s rounds into 2^0 with sign S, no other: expect unsat")
 (push 1)
 (declare-const Mx Int) (declare-const P Int) (declare-const S2 Int) (declare-const M2 Int)
 (assert (and (<= 6243314785320960 Mx) (<= Mx 9007199254740991)))
@@ -281,9 +295,7 @@
   4503599627370496))
 (assert (or (jdouble.near (- (+ P 2251799813685248)) 4503599627370496 S2 M2 1 9007199254740992)
   (jdouble.near (- (+ P 2251799813685248)) 4503599627370496 S2 M2 1 2251799813685248)
-  (jdouble.near (- (+ P 2251799813685248)) 4503599627370496 1 M2 1 4503599627370496)
-  (and (jdouble.near (- (+ P 2251799813685248)) 4503599627370496 (- 1) M2 1 4503599627370496) (not
-    (= (div M2 4503599627370496) 1)))))
+  (jdouble.near (- (+ P 2251799813685248)) 4503599627370496 1 M2 1 4503599627370496)))
 (check-sat)
 (pop 1)
 
@@ -313,7 +325,7 @@
 (check-sat)
 (pop 1)
 
-(echo "x < 0 in 2^-1, invln2 * x in 2^-1: s is in 2^0, sign S, and (int) s = S: expect unsat")
+(echo "x < 0 in 2^-1, invln2 * x in 2^-1: s rounds into 2^0 with sign S, no other: expect unsat")
 (push 1)
 (declare-const Mx Int) (declare-const P Int) (declare-const S2 Int) (declare-const M2 Int)
 (assert (and (<= 4503599627370496 Mx) (<= Mx 9007199254740991)))
@@ -321,9 +333,7 @@
   9007199254740992))
 (assert (or (jdouble.near (- (+ P 4503599627370496)) 9007199254740992 S2 M2 1 9007199254740992)
   (jdouble.near (- (+ P 4503599627370496)) 9007199254740992 S2 M2 1 2251799813685248)
-  (jdouble.near (- (+ P 4503599627370496)) 9007199254740992 1 M2 1 4503599627370496)
-  (and (jdouble.near (- (+ P 4503599627370496)) 9007199254740992 (- 1) M2 1 4503599627370496) (not
-    (= (div M2 4503599627370496) 1)))))
+  (jdouble.near (- (+ P 4503599627370496)) 9007199254740992 1 M2 1 4503599627370496)))
 (check-sat)
 (pop 1)
 
@@ -336,7 +346,7 @@
 (check-sat)
 (pop 1)
 
-(echo "x < 0 in 2^-1, invln2 * x in 2^0: s is in 2^0, sign S, and (int) s = S: expect unsat")
+(echo "x < 0 in 2^-1, invln2 * x in 2^0: s rounds into 2^0 with sign S, no other: expect unsat")
 (push 1)
 (declare-const Mx Int) (declare-const P Int) (declare-const S2 Int) (declare-const M2 Int)
 (assert (and (<= 4503599627370496 Mx) (<= Mx 9007199254740991)))
@@ -344,9 +354,7 @@
   4503599627370496))
 (assert (or (jdouble.near (- (+ P 2251799813685248)) 4503599627370496 S2 M2 1 9007199254740992)
   (jdouble.near (- (+ P 2251799813685248)) 4503599627370496 S2 M2 1 2251799813685248)
-  (jdouble.near (- (+ P 2251799813685248)) 4503599627370496 1 M2 1 4503599627370496)
-  (and (jdouble.near (- (+ P 2251799813685248)) 4503599627370496 (- 1) M2 1 4503599627370496) (not
-    (= (div M2 4503599627370496) 1)))))
+  (jdouble.near (- (+ P 2251799813685248)) 4503599627370496 1 M2 1 4503599627370496)))
 (check-sat)
 (pop 1)
 
@@ -376,7 +384,7 @@
 (check-sat)
 (pop 1)
 
-(echo "x < 0 in 2^0, invln2 * x in 2^-1: s is in 2^0, sign S, and (int) s = S: expect unsat")
+(echo "x < 0 in 2^0, invln2 * x in 2^-1: s rounds into 2^0 with sign S, no other: expect unsat")
 (push 1)
 (declare-const Mx Int) (declare-const P Int) (declare-const S2 Int) (declare-const M2 Int)
 (assert (and (<= 4503599627370496 Mx) (<= Mx 4682485015248895)))
@@ -384,9 +392,7 @@
   9007199254740992))
 (assert (or (jdouble.near (- (+ P 4503599627370496)) 9007199254740992 S2 M2 1 9007199254740992)
   (jdouble.near (- (+ P 4503599627370496)) 9007199254740992 S2 M2 1 2251799813685248)
-  (jdouble.near (- (+ P 4503599627370496)) 9007199254740992 1 M2 1 4503599627370496)
-  (and (jdouble.near (- (+ P 4503599627370496)) 9007199254740992 (- 1) M2 1 4503599627370496) (not
-    (= (div M2 4503599627370496) 1)))))
+  (jdouble.near (- (+ P 4503599627370496)) 9007199254740992 1 M2 1 4503599627370496)))
 (check-sat)
 (pop 1)
 
@@ -399,7 +405,7 @@
 (check-sat)
 (pop 1)
 
-(echo "x < 0 in 2^0, invln2 * x in 2^0: s is in 2^0, sign S, and (int) s = S: expect unsat")
+(echo "x < 0 in 2^0, invln2 * x in 2^0: s rounds into 2^0 with sign S, no other: expect unsat")
 (push 1)
 (declare-const Mx Int) (declare-const P Int) (declare-const S2 Int) (declare-const M2 Int)
 (assert (and (<= 4503599627370496 Mx) (<= Mx 4682485015248895)))
@@ -407,9 +413,7 @@
   4503599627370496))
 (assert (or (jdouble.near (- (+ P 2251799813685248)) 4503599627370496 S2 M2 1 9007199254740992)
   (jdouble.near (- (+ P 2251799813685248)) 4503599627370496 S2 M2 1 2251799813685248)
-  (jdouble.near (- (+ P 2251799813685248)) 4503599627370496 1 M2 1 4503599627370496)
-  (and (jdouble.near (- (+ P 2251799813685248)) 4503599627370496 (- 1) M2 1 4503599627370496) (not
-    (= (div M2 4503599627370496) 1)))))
+  (jdouble.near (- (+ P 2251799813685248)) 4503599627370496 1 M2 1 4503599627370496)))
 (check-sat)
 (pop 1)
 

@@ -394,7 +394,8 @@ final class ExpProofFiles {
         ;
         ; What is proven, for every double of the band of either sign, with no appeal to
         ; monotonicity: x is S * Mx * 2^(j - 52) in one of the band's binades, with Mx symbolic
-        ; and bounded by X1 and X2 in the end binades; invln2 * x is the exact rational
+        ; and bounded by X1 and X2 in the end binades, whose S, binade and M are checked from
+        ; their bits; invln2 * x is the exact rational
         ; S * M(invln2) * Mx / 2^n, which rounds into the binades listed for it and no other next
         ; to them; then s, the sum with halF[xsb] = S / 2 (exp_half_sign.smt2), rounds into binade
         ; 2^0 with sign S and into no binade next to it, so (int) s = S, the near form's k. Every
@@ -413,11 +414,33 @@ final class ExpProofFiles {
         ; truncating toward zero (JLS 5.1.3, D2I), I2D of +-1 being exact and both forms then
         ; sharing every later operation are the code's text.
         ;
+        ; Not every constant changed by one is refuted here. The band's words are (the band
+        ; widened by a word, at the end), and so are ln2HI[1] and ln2LO[1] (M one more); invln2
+        ; is not. The claim holds for a range of invln2, not for its value alone: H4's margins,
+        ; s(X1) - 1 = 1.37e-9 and 2 - s(X2) = 3.4e-7, are some 1.8e7 of its ulps below it and
+        ; 1.5e9 above, so with invln2 moved by one ulp the file renders anew and every check
+        ; still holds. ExpTest.constantsAreTheSourcesBits pins invln2 to the source's hex, and
+        ; ProofFilesTest this file to its rendering.
+        ;
         ; The logic is ALL, not QF_NIA: under QF_NIA cvc5 answers unknown to some checks, and
         ; under ALL both solvers decide the file in well under a second.
         """).formatted(Exp.HX_HALF_LN2 + 1, Exp.HX_THREE_HALVES_LN2 - 1, hex(
             Double.doubleToRawLongBits(x1)), hex(Double.doubleToRawLongBits(x2))));
     out.append(ProofFiles.rendered("ALL"));
+
+    out.append("""
+
+        ; The band's ends, decoded from their bits: the binades and the bounds on Mx below are
+        ; these, not only what the rendering says they are.
+        """);
+    for (double e : new double[] {x1, x2}) {
+      long eBits = Double.doubleToRawLongBits(e);
+      check(out, (e == x1 ? "X1 = " : "X2 = ") + hex(eBits) + ": S = 1, binade 2^" + binade(e)
+          + ", M = " + mant(e), "unsat", body(
+              "(assert (not (and (= (jdouble.fromBits.S " + lit(eBits) + ") 1)",
+              "  (= (jdouble.fromBits.E " + lit(eBits) + ") " + lit(binade(e) - 52) + ")",
+              "  (= (jdouble.fromBits.M " + lit(eBits) + ") " + mant(e) + "))))"));
+    }
 
     int jpLo = binade(x1 * Exp.INVLN2);
     int jpHi = binade(x2 * Exp.INVLN2);
@@ -447,15 +470,15 @@ final class ExpProofFiles {
           String sumB = pow2(52 - jp);
           String inP = near(prodA, prodB, sign(s), "P", jp);
           String what = sx + " in 2^" + jx + ", invln2 * x in 2^" + jp;
-          check(out, what + ": s is in 2^0, sign S, and (int) s = S", "unsat", body(
+          // A double of binade 2^0 with sign S truncates to S, since its M is in [2^52, 2^53)
+          // (jdouble.M.in, part of jdouble.near): refuting the other binades and sign suffices.
+          check(out, what + ": s rounds into 2^0 with sign S, no other", "unsat", body(
               "(declare-const Mx Int) (declare-const P Int) (declare-const S2 Int)"
                   + " (declare-const M2 Int)",
               "(assert " + mx + ")", "(assert " + inP + ")",
               "(assert (or " + near(sumA, sumB, "S2", "M2", -1),
               "  " + near(sumA, sumB, "S2", "M2", 1),
-              "  " + near(sumA, sumB, sign(-s), "M2", 0),
-              "  (and " + near(sumA, sumB, sign(s), "M2", 0) + " (not (= (div M2 " + P52
-                  + ") 1)))))"));
+              "  " + near(sumA, sumB, sign(-s), "M2", 0) + "))"));
           double xa = Math.scalb(1.0, jx);
           double xb = Math.nextDown(Math.scalb(1.0, jx + 1));
           xa = Math.max(xa, x1);
@@ -589,6 +612,14 @@ final class ExpProofFiles {
         ;     that the C's steps after these are the port's on the same operands: the code's text.
         ;   - That jdouble.near admits no double in a binade further off than the next one: the
         ;     arithmetic of rationals, as in sign_symmetry.smt2.
+        ;
+        ; Not every constant changed by one is refuted here. The domain's top word is (section
+        ; D); invln2 and P1..P5 are not. Section C holds for a range of invln2: its margin,
+        ; s - 1 = 1.37e-9 at the top double, is millions of invln2's ulps. Section D's chains
+        ; evaluate whatever P1..P5 Exp holds and compare the results with no source value, so
+        ; with a P moved by one ulp the file renders anew and passes as long as the two
+        ; witnesses still differ. ExpTest.constantsAreTheSourcesBits pins these constants to
+        ; the source's hex, and ProofFilesTest this file to its rendering.
         ;
         ; The logic is ALL, not QF_NIA: under QF_NIA cvc5 answers unknown to some of section A's
         ; per-binade checks (2^-58, 2^-55, ...), and under ALL it decides the file in a second.
@@ -750,6 +781,12 @@ final class ExpProofFiles {
         ; rationals, as in sign_symmetry.smt2. Each check carries its own non-vacuity: it asserts
         ; that the double Java computed is not admitted, or another one is, so a jdouble.near that
         ; admitted nothing would make it sat.
+        ;
+        ; The witness moved by one is refuted (4 * 2^-53, above); the constants P1..P5 changed by
+        ; one are not. The chains evaluate whatever P1..P5 Exp holds and compare the results with
+        ; no source value, so with a P moved by one ulp the file renders anew and passes as long
+        ; as one + x and the tail still differ at the witness. ExpTest.constantsAreTheSourcesBits
+        ; pins P1..P5 to the source's hex, and ProofFilesTest this file to its rendering.
         """);
     out.append(ProofFiles.rendered("QF_NIA"));
     long tinyX = Double.doubleToRawLongBits(5 * 0x1p-53);

@@ -47,6 +47,14 @@
 ;   - That jdouble.near admits no double in a binade further off than the next one: the
 ;     arithmetic of rationals, as in sign_symmetry.smt2.
 ;
+; Not every constant changed by one is refuted here. The domain's top word is (section
+; D); invln2 and P1..P5 are not. Section C holds for a range of invln2: its margin,
+; s - 1 = 1.37e-9 at the top double, is millions of invln2's ulps. Section D's chains
+; evaluate whatever P1..P5 Exp holds and compare the results with no source value, so
+; with a P moved by one ulp the file renders anew and passes as long as the two
+; witnesses still differ. ExpTest.constantsAreTheSourcesBits pins these constants to
+; the source's hex, and ProofFilesTest this file to its rendering.
+;
 ; The logic is ALL, not QF_NIA: under QF_NIA cvc5 answers unknown to some of section A's
 ; per-binade checks (2^-58, 2^-55, ...), and under ALL it decides the file in a second.
 ; Section C's and D's checks carry their own non-vacuity: each asserts that the named
