@@ -80,7 +80,7 @@ final class ExpProofFiles {
         ; that __HI(x) is the high int of the raw bits is the prelude's reading of fdlibm's
         ; macro, and that Lanes and Exp call these compares with these words is the code's text.
         """);
-    out.append(ProofFiles.rendered("ALL"));
+    out.append(ProofFiles.rendered("QF_NIA"));
     out.append("""
 
         ; Lanes.absBits: bits & Long.MAX_VALUE, the low 63 bits.
@@ -193,6 +193,8 @@ final class ExpProofFiles {
         ; table's raw bits from Java's 0.5 and -0.5, the C's literals. What is not: that the port
         ; reinterprets those bits as the lane's double (DoubleVector's viewAsFloatingLanes) is the
         ; code's text.
+        ;
+        ; The logic is ALL, not QF_NIA: the file mixes bit-vectors with java.smt2's integers.
         """);
     out.append(ProofFiles.rendered("ALL"));
     out.append(("""
@@ -410,6 +412,9 @@ final class ExpProofFiles {
         ; within half its step of [2^j, 2^(j+1)), and the values here lie in [0.5, 2)); and (int)
         ; truncating toward zero (JLS 5.1.3, D2I), I2D of +-1 being exact and both forms then
         ; sharing every later operation are the code's text.
+        ;
+        ; The logic is ALL, not QF_NIA: under QF_NIA cvc5 answers unknown to some checks, and
+        ; under ALL both solvers decide the file in well under a second.
         """).formatted(Exp.HX_HALF_LN2 + 1, Exp.HX_THREE_HALVES_LN2 - 1, hex(
             Double.doubleToRawLongBits(x1)), hex(Double.doubleToRawLongBits(x2))));
     out.append(ProofFiles.rendered("ALL"));
@@ -584,6 +589,12 @@ final class ExpProofFiles {
         ;     that the C's steps after these are the port's on the same operands: the code's text.
         ;   - That jdouble.near admits no double in a binade further off than the next one: the
         ;     arithmetic of rationals, as in sign_symmetry.smt2.
+        ;
+        ; The logic is ALL, not QF_NIA: under QF_NIA cvc5 answers unknown to some of section A's
+        ; per-binade checks (2^-58, 2^-55, ...), and under ALL it decides the file in a second.
+        ; Section C's and D's checks carry their own non-vacuity: each asserts that the named
+        ; double is not admitted, or another one is, so a jdouble.near that admitted nothing
+        ; would make it sat.
         """).formatted(Exp.HX_TINY, Exp.HX_HALF_LN2,
             hex(Double.doubleToRawLongBits(bottom)), hex(Double.doubleToRawLongBits(top)),
             ZERO_REDUCTION_LOWEST, jTop, jBottom, jTop));
@@ -736,9 +747,11 @@ final class ExpProofFiles {
         ; nonzero q giving exactly -q is the same as any other rounding here, but that
         ; StrictMath.exp is one + x at the witness is ProofsTest's, since the oracle is not in a
         ; solver; and a double further off than the next binade is excluded by the arithmetic of
-        ; rationals, as in sign_symmetry.smt2.
+        ; rationals, as in sign_symmetry.smt2. Each check carries its own non-vacuity: it asserts
+        ; that the double Java computed is not admitted, or another one is, so a jdouble.near that
+        ; admitted nothing would make it sat.
         """);
-    out.append(ProofFiles.rendered("ALL"));
+    out.append(ProofFiles.rendered("QF_NIA"));
     long tinyX = Double.doubleToRawLongBits(5 * 0x1p-53);
     check(out, "x = " + hex(tinyX) + " is a tiny lane: hx < HX_TINY = " + hex(Exp.HX_TINY),
         "unsat", body("(assert (not (< (jint.and.low (l2i (jlong.shr " + lit(tinyX)

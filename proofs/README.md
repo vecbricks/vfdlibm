@@ -40,6 +40,8 @@ way.
   `PROOFS.md`, says which steps are machine-checked and which stay informal: L2, L3, L4 and L5
   are checked whole but for the code's text (that the port calls what the file encodes); of L1
   the IEEE hinges are, and the bounds on the polynomial (H2, H3) are not.
+  `exp_highword_compare.smt2` and `exp_tiny_counterexample.smt2` are `QF_NIA`; the other three
+  are `ALL`, each header saying why.
 
 ## Running them
 

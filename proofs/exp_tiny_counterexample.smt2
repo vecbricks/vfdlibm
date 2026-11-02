@@ -22,13 +22,15 @@
 ; nonzero q giving exactly -q is the same as any other rounding here, but that
 ; StrictMath.exp is one + x at the witness is ProofsTest's, since the oracle is not in a
 ; solver; and a double further off than the next binade is excluded by the arithmetic of
-; rationals, as in sign_symmetry.smt2.
+; rationals, as in sign_symmetry.smt2. Each check carries its own non-vacuity: it asserts
+; that the double Java computed is not admitted, or another one is, so a jdouble.near that
+; admitted nothing would make it sat.
 ;
 ; Rendered by ProofFiles (src/test/java). ProofFilesTest fails when this file differs from
 ; its rendering, and mvn -q test -Dtest=ProofFilesTest -Dvfdlibm.proofs.regen=true
 ; rewrites it. Run by dev/prove.sh, which inserts java.smt2 after the set-logic line.
 
-(set-logic ALL)
+(set-logic QF_NIA)
 
 (echo "x = 0x3cc40000_00000000 is a tiny lane: hx < HX_TINY = 0x3e300000: expect unsat")
 (push 1)

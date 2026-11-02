@@ -28,7 +28,7 @@
 ; its rendering, and mvn -q test -Dtest=ProofFilesTest -Dvfdlibm.proofs.regen=true
 ; rewrites it. Run by dev/prove.sh, which inserts java.smt2 after the set-logic line.
 
-(set-logic ALL)
+(set-logic QF_NIA)
 
 ; Lanes.absBits: bits & Long.MAX_VALUE, the low 63 bits.
 (define-fun abs.bits ((b Int)) Int (jlong.and.low b 9223372036854775808))

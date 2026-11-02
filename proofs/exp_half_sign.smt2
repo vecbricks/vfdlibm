@@ -22,6 +22,8 @@
 ; reinterprets those bits as the lane's double (DoubleVector's viewAsFloatingLanes) is the
 ; code's text.
 ;
+; The logic is ALL, not QF_NIA: the file mixes bit-vectors with java.smt2's integers.
+;
 ; Rendered by ProofFiles (src/test/java). ProofFilesTest fails when this file differs from
 ; its rendering, and mvn -q test -Dtest=ProofFilesTest -Dvfdlibm.proofs.regen=true
 ; rewrites it. Run by dev/prove.sh, which inserts java.smt2 after the set-logic line.

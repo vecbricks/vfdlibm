@@ -35,6 +35,9 @@
 ; truncating toward zero (JLS 5.1.3, D2I), I2D of +-1 being exact and both forms then
 ; sharing every later operation are the code's text.
 ;
+; The logic is ALL, not QF_NIA: under QF_NIA cvc5 answers unknown to some checks, and
+; under ALL both solvers decide the file in well under a second.
+;
 ; Rendered by ProofFiles (src/test/java). ProofFilesTest fails when this file differs from
 ; its rendering, and mvn -q test -Dtest=ProofFilesTest -Dvfdlibm.proofs.regen=true
 ; rewrites it. Run by dev/prove.sh, which inserts java.smt2 after the set-logic line.

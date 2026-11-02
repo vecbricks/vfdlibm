@@ -47,6 +47,12 @@
 ;   - That jdouble.near admits no double in a binade further off than the next one: the
 ;     arithmetic of rationals, as in sign_symmetry.smt2.
 ;
+; The logic is ALL, not QF_NIA: under QF_NIA cvc5 answers unknown to some of section A's
+; per-binade checks (2^-58, 2^-55, ...), and under ALL it decides the file in a second.
+; Section C's and D's checks carry their own non-vacuity: each asserts that the named
+; double is not admitted, or another one is, so a jdouble.near that admitted nothing
+; would make it sat.
+;
 ; Rendered by ProofFiles (src/test/java). ProofFilesTest fails when this file differs from
 ; its rendering, and mvn -q test -Dtest=ProofFilesTest -Dvfdlibm.proofs.regen=true
 ; rewrites it. Run by dev/prove.sh, which inserts java.smt2 after the set-logic line.
