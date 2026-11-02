@@ -10,8 +10,20 @@ vfdlibm ports fdlibm's double functions to the Java Vector API, each lane bit-id
   GPL or LGPL. `StrictMath` is the oracle, called from tests, never a source to copy.
 - **Bit identity.** A function is done when every test compares its lanes with `StrictMath` by
   `Double.doubleToRawLongBits` and passes, at every vector width the host has.
-- **fdlibm's order of operations.** No fused multiply-add, no reassociation, no algebraic
-  shortcuts: the rounding of every step must be fdlibm's.
+- **Same result, proven.** Every lane's result stays bit-identical to `StrictMath`. A port
+  follows fdlibm's C operation by operation, or computes differently where a written proof shows
+  the result equal for every input. The proof goes in `PROOFS.md` as a numbered lemma: its
+  hypotheses (the input domain, each hinge condition with the range where it holds and why the
+  lanes are in it), the IEEE property it rests on, the proof, and the test that checks its
+  hinges, which must fail if a hinge were false; the code carries a short Javadoc pointer to it.
+  A proof is informal (step by step, citing each IEEE property used) or formal: machine-checked,
+  or reduced to a finite check by a theorem, such as monotonicity of correctly rounded operations
+  plus evaluation at the boundary doubles. Machine-checked proofs follow the conventions of
+  Varka's `sql/varka/proofs/` (SMT-LIB over integers, a double as `M * 2^E` with a round-to-nearest
+  relation per binade, `unsat` checks as the proofs and `sat` checks for non-vacuity and for a
+  constant changed by one being refuted). Fused multiply-add, reassociation and division by a
+  reciprocal stay out because they change results in general, so no proof covers them as a
+  rule; a specific use proven equal for every input would follow the proof rule like any other.
 
 ## Build and test
 

@@ -31,14 +31,19 @@ import jdk.incubator.vector.VectorSpecies;
  *
  * <p>The method, from the C: reduce {@code x = k*ln2 + r} with {@code |r| <= 0.5*ln2} (r held as
  * {@code hi - lo}), approximate {@code exp(r)} by the rational form with the degree-5 polynomial
- * {@code P1..P5}, and scale back by {@code 2^k}. Every operation is the C's, in the C's order, with
- * no fused multiply-add and no reassociation.
+ * {@code P1..P5}, and scale back by {@code 2^k}, with no fused multiply-add and no reassociation.
  *
- * <p>The C's branches on {@code |x|} become lane masks. Every lane computes the reduction (the near
- * form for {@code 0.5*ln2 < |x| < 1.5*ln2} and the far form above it), the primary-range formula,
- * the reduced formula and the {@code |x| < 2^-28} result, and the masks blend them. Two arms differ
- * in the C's rare paths, the filter on {@code |x| >= 709.78} (NaN, the infinities, overflow,
- * underflow and the band the filter lets through) and the subnormal scale-back ({@code k < -1021}):
+ * <p>The C's branches on {@code |x|} become lane masks, and where the C has three forms for the
+ * common lanes this body has one, proven to return the same double ({@code PROOFS.md}, exp):
+ * every lane takes the far reduction and the general tail, {@code y = one-((lo-(x*c)/(2.0-c))-hi)}.
+ * In the near band, {@code 0.5*ln2 < |x| < 1.5*ln2}, the far form gives the near form's {@code k},
+ * {@code hi} and {@code lo} exactly (L2); a lane that is not reduced gets {@code k = 0}, forced by
+ * the C's high-word test, so {@code hi = x} and {@code lo = +0}, and the tail is the C's {@code k
+ * == 0} formula (L1). The high-word tests are single 64-bit compares of {@code |x|}'s bits (L3)
+ * and {@code halF[xsb]} is 0.5 with {@code x}'s sign bit (L5). The {@code |x| < 2^-28} lanes keep
+ * the C's {@code one + x}, which no fold reproduces (L4). Two arms differ in the C's rare paths,
+ * the filter on {@code |x| >= 709.78} (NaN, the infinities, overflow, underflow and the band the
+ * filter lets through) and the subnormal scale-back ({@code k < -1021}):
  *
  * <ul>
  *   <li>{@link #exp} finishes those lanes per lane with {@code StrictMath.exp} after the vector
@@ -62,7 +67,13 @@ import jdk.incubator.vector.VectorSpecies;
  * inline and allocates nothing at 256 and 512 bits (laptop numbers in {@code
  * bench/results/exp-finish-laptop-2026-11-02.txt}); the EPYC run of this code decides between
  * the arms again. The second arm is kept so the choice can be re-measured, on other hosts and as
- * the JDK changes.
+ * the JDK changes. Those figures predate the folds above, which cut the common path C2 emits
+ * from 77 instructions with two divisions to 52 with one at 512 bits on AVX-512, and from 107 to
+ * 64 at 256 bits under {@code -XX:UseAVX=2} ({@code bench/asm/README.md}); no timing of the
+ * folded body has been taken yet.
+ *
+ * <p>{@link #expCore} and {@link #expRare} split the finish arm into its branch-free part and its
+ * rare-lane mask, for {@code ExpBenchmark}'s experiment with two vectors per loop iteration.
  */
 final class Exp {
 
@@ -88,7 +99,7 @@ final class Exp {
   static final int HX_FILTER = 0x40862E42;
   /** {@code |x| > 0.5 ln2}: the lanes that are reduced. */
   static final int HX_HALF_LN2 = 0x3fd62e42;
-  /** {@code |x| < 1.5 ln2}: of the reduced lanes, those that take the near form. */
+  /** {@code |x| < 1.5 ln2}: the C's near band, which the far form covers here (PROOFS.md, L2). */
   static final int HX_THREE_HALVES_LN2 = 0x3FF0A2B2;
   /** {@code |x| < 2**-28}: the lanes whose result is {@code one + x}. */
   static final int HX_TINY = 0x3e300000;
@@ -110,6 +121,14 @@ final class Exp {
   private static final int K_MIN_USED =
       Faults.is(THRESHOLD_MOVED) ? K_MIN_NORMAL - 1 : K_MIN_NORMAL;
 
+  /** The raw bits of 0.5, halF[0]; halF[1] is the same with the sign bit set. */
+  private static final long HALF_BITS = 0x3fe00000_00000000L;
+
+  // The arms of the shared body; each call site passes a constant, and the others fold away.
+  private static final int FINISH = 0;
+  private static final int BLENDED = 1;
+  private static final int CORE = 2;
+
   private Exp() {}
 
   /**
@@ -118,7 +137,7 @@ final class Exp {
    * never takes the per-lane finish.
    */
   static DoubleVector exp(DoubleVector x, VectorMask<Double> live) {
-    return exp(x, live, true);
+    return exp(x, live, FINISH);
   }
 
   /**
@@ -126,94 +145,117 @@ final class Exp {
    * {@link #exp(DoubleVector, VectorMask)}.
    */
   static DoubleVector expBlended(DoubleVector x, VectorMask<Double> live) {
-    return exp(x, live, false);
+    return exp(x, live, BLENDED);
   }
 
   /**
-   * Both arms in one body, so they share every line but the rare paths; {@code finish} is a
-   * constant at each call above, and once inlined the other arm's code folds away.
+   * The finish arm's branch-free part, for an experiment in emitting two vectors per loop
+   * iteration ({@code ExpBenchmark.finishPairBoxed256}): {@code StrictMath.exp} in every lane that
+   * {@link #expRare} leaves clear, and an unspecified value in the lanes it sets, which the caller
+   * finishes per lane with {@code StrictMath.exp}.
    */
-  private static DoubleVector exp(DoubleVector x, VectorMask<Double> live, boolean finish) {
+  static DoubleVector expCore(DoubleVector x) {
+    return exp(x, null, CORE);
+  }
+
+  /**
+   * The lanes {@link #expCore} leaves to a per-lane finish: e_exp.c's filter ({@code |x| >=
+   * 709.78}, by the high word) and the subnormal scale-back ({@code k < -1021}). Each expression
+   * is the body's own, so once both are inlined beside {@link #expCore} C2 computes them once.
+   */
+  static VectorMask<Double> expRare(DoubleVector x) {
     VectorSpecies<Double> species = x.species();
     LongVector bits = Lanes.bits(x);
-    // Lines 112-114: xsb, the sign bit, and |x|, whose high word hx the branches compare.
-    VectorMask<Double> negative = bits.compare(VectorOperators.LT, 0L).cast(species);
-    VectorMask<Long> negativeK = negative.cast(bits.species());
-    DoubleVector ax = x.lanewise(VectorOperators.ABS);
+    LongVector absBits = Lanes.absBits(bits);
+    VectorMask<Double> filter = Lanes.hiAtLeast(absBits, HX_FILTER).cast(species);
+    VectorMask<Double> reduced = Lanes.hiAbove(absBits, HX_HALF_LN2).cast(species);
+    VectorSpecies<Integer> intSpecies = Lanes.intSpecies(species);
+    DoubleVector halF = Lanes.fromBits(bits.and(Long.MIN_VALUE).or(HALF_BITS));
+    DoubleVector kArg = DoubleVector.zero(species).blend(x.mul(INVLN2).add(halF), reduced);
+    IntVector kInt = (IntVector) kArg.convertShape(VectorOperators.D2I, intSpecies, 0);
+    LongVector k = (LongVector) kInt.convertShape(VectorOperators.I2L, bits.species(), 0);
+    return filter.or(k.compare(VectorOperators.LT, K_MIN_USED).cast(species));
+  }
+
+  /**
+   * Every arm in one body, so they share every line but the rare paths; {@code arm} is a constant
+   * at each call above, and once inlined the other arms' code folds away.
+   */
+  private static DoubleVector exp(DoubleVector x, VectorMask<Double> live, int arm) {
+    VectorSpecies<Double> species = x.species();
+    LongVector bits = Lanes.bits(x);
+    // Lines 112-114: xsb, the sign bit, and hx, the high word of |x|, here the bits of |x| with
+    // the sign cleared, which the long-form compares read (PROOFS.md, L3).
+    LongVector absBits = Lanes.absBits(bits);
 
     // Every hx compare, first: C2 stops inlining calls once a method's graph is large
     // (NodeCountInliningCutoff), and a refused call boxes its vectors, so the calls into Lanes
-    // come before the arithmetic. Lines 117, 118, 128, 129 and 139, and the int species for k.
-    VectorMask<Double> filter = Lanes.hiAtLeast(ax, HX_FILTER);
-    VectorMask<Double> reduced = Lanes.hiAbove(ax, HX_HALF_LN2);
-    VectorMask<Double> near = Lanes.hiBelow(ax, HX_THREE_HALVES_LN2);
-    VectorMask<Double> isTiny = Lanes.hiBelow(ax, HX_TINY);
-    VectorMask<Double> nonFiniteLane = finish ? null : Lanes.hiAtLeast(ax, HX_NON_FINITE);
+    // come before the arithmetic. Lines 117, 118, 128, 139, and the int species for k. Line 129's
+    // near band needs no test of its own (L2).
+    VectorMask<Double> filter = Lanes.hiAtLeast(absBits, HX_FILTER).cast(species);
+    VectorMask<Double> reduced = Lanes.hiAbove(absBits, HX_HALF_LN2).cast(species);
+    VectorMask<Double> isTiny = Lanes.hiBelow(absBits, HX_TINY).cast(species);
+    VectorMask<Double> nonFiniteLane =
+        arm == BLENDED ? Lanes.hiAtLeast(absBits, HX_NON_FINITE).cast(species) : null;
     VectorSpecies<Integer> intSpecies = Lanes.intSpecies(species);
+    // halF[xsb]: 0.5 with x's sign bit, the same double the C's table gives.
+    DoubleVector halF = Lanes.fromBits(bits.and(Long.MIN_VALUE).or(HALF_BITS));
 
-    // Argument reduction, lines 128-137, for |x| > 0.5 ln2.
-    // Far form: k = (int)(invln2*x+halF[xsb]); t = k; hi = x - t*ln2HI[0]; lo = t*ln2LO[0].
+    // Argument reduction, lines 128-142, in the far form for every lane:
+    // k = (int)(invln2*x+halF[xsb]); t = k; hi = x - t*ln2HI[0]; lo = t*ln2LO[0].
+    // - The near band, 0.5 ln2 < |x| < 1.5 ln2, gets k = +-1 from it, and the near form's hi, lo
+    //   and k exactly (PROOFS.md, L2).
+    // - A lane that is not reduced (line 128's test false) gets k = 0, forced by that test, not
+    //   by the formula: the sum is replaced by 0 before the cast, so t = +0, hi = x, lo = +0 and
+    //   x = hi - lo is x itself, and the general tail below is the C's k == 0 formula (L1).
     // k goes through int lanes, as the C's int k does: x86 C2 lowers D2L and L2D only with
     // AVX512DQ, and without it (on AVX2 hosts) they run in Java and box, while D2I, I2D and I2L
     // are vector instructions on every AVX2 host. D2I truncates toward zero like the C's (int);
     // a NaN gives 0 and a huge |x| saturates, but those are filter lanes, whose k is never used.
     // I2D is exact, so t = k as in the C. The int vector has the same lane count at half the
     // bits, so each conversion is part 0.
-    DoubleVector halF = DoubleVector.broadcast(species, 0.5).blend(-0.5, negative);
-    IntVector kInt =
-        (IntVector) x.mul(INVLN2).add(halF).convertShape(VectorOperators.D2I, intSpecies, 0);
+    DoubleVector kArg = DoubleVector.zero(species).blend(x.mul(INVLN2).add(halF), reduced);
+    IntVector kInt = (IntVector) kArg.convertShape(VectorOperators.D2I, intSpecies, 0);
     DoubleVector t = (DoubleVector) kInt.convertShape(VectorOperators.I2D, species, 0);
-    LongVector kFar = (LongVector) kInt.convertShape(VectorOperators.I2L, bits.species(), 0);
-    DoubleVector hiFar = x.sub(t.mul(LN2HI_0_USED));
-    DoubleVector loFar = t.mul(LN2LO_0);
-    // Near form: hi = x-ln2HI[xsb]; lo = ln2LO[xsb]; k = 1-xsb-xsb.
-    DoubleVector hiNear = x.sub(DoubleVector.broadcast(species, LN2HI_0).blend(LN2HI_1, negative));
-    DoubleVector loNear = DoubleVector.broadcast(species, LN2LO_0).blend(LN2LO_1, negative);
-    LongVector kNear = LongVector.broadcast(bits.species(), 1L).blend(-1L, negativeK);
-    DoubleVector hi = hiFar.blend(hiNear, near);
-    DoubleVector lo = loFar.blend(loNear, near);
-    // k = 0 for the lanes that are not reduced (line 142's else).
-    LongVector k = kFar.blend(kNear, near.cast(bits.species()))
-        .blend(0L, reduced.not().cast(bits.species()));
-    // x = hi - lo for the reduced lanes; the others keep x.
-    DoubleVector r = x.blend(hi.sub(lo), reduced);
+    LongVector k = (LongVector) kInt.convertShape(VectorOperators.I2L, bits.species(), 0);
+    DoubleVector hi = x.sub(t.mul(LN2HI_0_USED));
+    DoubleVector lo = t.mul(LN2LO_0);
+    DoubleVector r = hi.sub(lo);
 
     // Lines 145-146: t = x*x; c = x - t*(P1+t*(P2+t*(P3+t*(P4+t*P5)))).
     DoubleVector tt = r.mul(r);
     DoubleVector c = r.sub(tt.mul(tt.mul(tt.mul(tt.mul(tt.mul(P5).add(P4)).add(P3)).add(P2))
         .add(P1)));
-    DoubleVector rc = r.mul(c);
-    // k == 0: one-((x*c)/(c-2.0)-x).
-    DoubleVector primary = DoubleVector.broadcast(species, ONE).sub(rc.div(c.sub(2.0)).sub(r));
-    // Otherwise: y = one-((lo-(x*c)/(2.0-c))-hi).
+    // Line 148, y = one-((lo-(x*c)/(2.0-c))-hi), for every lane; at k == 0 it is line 147's
+    // one-((x*c)/(c-2.0)-x) (L1).
     DoubleVector loTerm = DROPPING_CORRECTION ? DoubleVector.zero(species) : lo;
     DoubleVector y = DoubleVector.broadcast(species, ONE)
-        .sub(loTerm.sub(rc.div(DoubleVector.broadcast(species, 2.0).sub(c))).sub(hi));
+        .sub(loTerm.sub(r.mul(c).div(DoubleVector.broadcast(species, 2.0).sub(c))).sub(hi));
 
-    VectorMask<Double> kIsZero = k.compare(VectorOperators.EQ, 0L).cast(species);
     VectorMask<Double> kBelowNormal = k.compare(VectorOperators.LT, K_MIN_USED).cast(species);
-    // Lines 139-141: |x| < 2**-28 returns one+x.
+    // Lines 139-141: |x| < 2**-28 returns one+x. Not folded: the tail differs there (L4).
     DoubleVector tiny = DoubleVector.broadcast(species, ONE).add(x);
 
-    // Scale back, lines 149-155: k >= -1021 adds k to y's exponent; below, k + 1000, then the
-    // product with twom1000 (blended), or a per-lane finish.
+    // Scale back, lines 149-155: k >= -1021 adds k to y's exponent (k == 0 adds nothing); below,
+    // k + 1000, then the product with twom1000 (blended), or a per-lane finish.
     // The exponent add is Lanes.addExponent written out, for the reason above.
     LongVector yBits = (LongVector) y.viewAsIntegralLanes();
     DoubleVector result = (DoubleVector) yBits.add(k.lanewise(VectorOperators.LSHL, 52))
         .viewAsFloatingLanes();
-    if (!finish) {
+    if (arm == BLENDED) {
       DoubleVector subnormal = ((DoubleVector) yBits
           .add(k.add(1000).lanewise(VectorOperators.LSHL, 52)).viewAsFloatingLanes())
           .mul(TWOM1000);
       result = result.blend(subnormal, kBelowNormal);
     }
-    result = result.blend(primary, kIsZero).blend(tiny, isTiny);
-    if (!finish) {
+    result = result.blend(tiny, isTiny);
+    if (arm == BLENDED) {
       // The filter, lines 117-125, in the C's order of precedence (the last blend wins).
       result = result.blend(HUGE * HUGE, filter.and(x.compare(VectorOperators.GT, O_THRESHOLD)));
       result = result.blend(
           TWOM1000 * TWOM1000, filter.and(x.compare(VectorOperators.LT, U_THRESHOLD)));
       // Non-finite: x + x for a NaN, x for +inf, 0.0 for -inf.
+      VectorMask<Double> negative = bits.compare(VectorOperators.LT, 0L).cast(species);
       DoubleVector nonFinite =
           x.blend(0.0, negative).blend(x.add(x), x.test(VectorOperators.IS_NAN));
       result = result.blend(nonFinite, nonFiniteLane);
@@ -221,7 +263,7 @@ final class Exp {
     if (live != null) {
       result = x.blend(result, live);
     }
-    if (finish) {
+    if (arm == FINISH) {
       VectorMask<Double> rare = filter.or(kBelowNormal);
       if (live != null) {
         rare = rare.and(live);
