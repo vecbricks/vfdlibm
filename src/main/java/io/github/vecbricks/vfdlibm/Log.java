@@ -64,8 +64,9 @@ import jdk.incubator.vector.VectorSpecies;
  * in 16 is rare; both allocate nothing. With AVX-512 at 512 bits on that mixed data the blend
  * wins, by 1.36x in both runs. The EPYC 7763 run, {@code log-epyc7763-2026-11-02.txt}, keeps
  * the finish: at 256 bits it ties the blend on mixed data, is not behind it on ordinary data,
- * is about 2x faster than scalar there, and allocates nothing. The second arm is kept so it can be
- * re-measured, on other hosts and as the JDK changes.
+ * is about 2x faster than scalar there, and allocates nothing. That settles AVX2 only: the
+ * AVX-512 hosts ({@code HARDWARE.md}) decide at 512 bits, where the laptop had the blend ahead.
+ * The second arm is kept so it can be re-measured, on other hosts and as the JDK changes.
  */
 final class Log {
 
