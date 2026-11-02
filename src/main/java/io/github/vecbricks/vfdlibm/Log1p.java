@@ -22,6 +22,7 @@ package io.github.vecbricks.vfdlibm;
 
 import jdk.incubator.vector.DoubleVector;
 import jdk.incubator.vector.IntVector;
+import jdk.incubator.vector.LongVector;
 import jdk.incubator.vector.VectorMask;
 import jdk.incubator.vector.VectorOperators;
 import jdk.incubator.vector.VectorSpecies;
@@ -40,9 +41,10 @@ import jdk.incubator.vector.VectorSpecies;
  * <p>The C's {@code int} words stay {@code int}: {@code hx}, {@code ax}, {@code hu} and {@code k}
  * are {@link IntVector} lanes, with the double vector's lane count at half its bits, and every
  * branch on them is the C's signed {@code int} compare. A high word comes in through {@code L2I}
- * from the long view ({@code Lanes.hiInt}), goes back through {@code I2L} ({@code Lanes.withHi}),
- * and {@code k} becomes a double through {@code I2D}: all three are vector instructions on every
- * AVX2 host, where {@code L2D} and {@code D2L} are not (SKILLS.md).
+ * from the long view ({@code Lanes.hiInt}), goes back through {@code I2L} (written out, as
+ * {@code Lanes.withHi} would be refused inlining that late in the body), and {@code k} becomes a
+ * double through {@code I2D}: all three are vector instructions on every AVX2 host, where {@code
+ * L2D} and {@code D2L} are not (SKILLS.md).
  *
  * <p>The C's branches become lane masks. Every lane computes the reduction (both forms of {@code
  * u}, both normalisations, the {@code k == 0} lanes' {@code f = x}) and both results of the
@@ -60,10 +62,13 @@ import jdk.incubator.vector.VectorSpecies;
  * </ul>
  *
  * <p>All three are exact. {@link #log1p}, which {@code VFdlibm.log1p} calls, is the guarded arm,
- * chosen by the JMH measurement committed in {@code bench/results/log1p-laptop-avx2-2026-11-02.txt}
- * (under {@code -XX:UseAVX=2}, as C2 compiles for the AVX2 hosts that are the target) and {@code
- * log1p-laptop-2026-11-02.txt} (AVX-512); the pull request that added this port gives the numbers.
- * The other two are kept so the choice can be re-measured, on other hosts and as the JDK changes.
+ * provisionally. On the laptop ({@code bench/results/log1p-laptop-avx2-2026-11-02.txt}, under
+ * {@code -XX:UseAVX=2} as C2 compiles for the AVX2 hosts that are the target, and {@code
+ * log1p-laptop-2026-11-02.txt}, AVX-512) it never allocates, but the blended arm is ahead of it
+ * at 256 bits on mixed data on the AVX-512 build (1.07x and 1.09x), and every gap between the
+ * arms is under 1.3x, which sets no direction, except the finish arm's loss on mixed data, where
+ * its call takes vectors and boxes them (SKILLS.md). The EPYC 7763 run decides. The other two are
+ * kept so the choice can be re-measured, on other hosts and as the JDK changes.
  */
 final class Log1p {
 
@@ -92,7 +97,15 @@ final class Log1p {
   static final int AX_TINY = 0x3e200000;
   /** {@code ax < 0x3c900000}: {@code |x| < 2^-54}, of those the lanes returning x (line 120). */
   static final int AX_TINIEST = 0x3c900000;
-  /** {@code hx <= (int)0xbfd2bec3}: {@code -0.2929 < x < 0}, which take k = 0 (line 125). */
+  /**
+   * {@code hx <= (int)0xbfd2bec3}, a signed compare (line 125): the high words 0x80000000 to
+   * 0xbfd2bec3, which are the negative x, -0.0 included, whose high word without the sign is at
+   * most 0x3fd2bec3, any low word: {@code -0.29289340972900390625 < x <= -0.0}, the bound being
+   * the double with high word 0xbfd2bec4 and low word 0. A negative NaN's high word is above it,
+   * so it is not admitted. In the C the lanes with {@code x <= -1} or {@code |x| < 2^-29} have
+   * returned by line 125, so the lanes that take k = 0 through this test are {@code
+   * -0.29289340972900390625 < x <= -2^-29}; here those other lanes are blended over later.
+   */
   static final int HX_NEGATIVE_K_ZERO = 0xbfd2bec3;
   /** {@code hx >= 0x7ff00000}: {@code +inf} or a NaN with the sign bit clear (line 128). */
   static final int HX_NON_FINITE = 0x7ff00000;
@@ -101,10 +114,13 @@ final class Log1p {
   /** {@code hu < 0x6a09e}: the significand below sqrt(2), normalised to [1, 2) (line 143). */
   static final int HU_SQRT2 = 0x6a09e;
 
+  private static final long LOW_WORD = 0xffff_ffffL;
+
   // Planted faults (PLAN.md section 4), read through Faults; each folds away when unplanted.
   static final String DROP_CORRECTION = "log1p.dropCorrection";
   static final String CONSTANT_OFF_BY_ONE_ULP = "log1p.constantOffByOneUlp";
   static final String THRESHOLD_MOVED = "log1p.thresholdMoved";
+  static final String GUARD_MISSES_NON_FINITE = "log1p.guardMissesNonFinite";
   /** Lp1 one ulp up, for {@link #CONSTANT_OFF_BY_ONE_ULP}. */
   private static final double LP1_UP = Double.longBitsToDouble(0x3FE55555_55555594L);
   // Read once into constants, so the body holds no call and an unplanted fault folds away.
@@ -112,6 +128,12 @@ final class Log1p {
   private static final double LP1_USED = Faults.is(CONSTANT_OFF_BY_ONE_ULP) ? LP1_UP : LP1;
   /** The u = x threshold moved from 2^53 down to 2^52, for {@link #THRESHOLD_MOVED}. */
   private static final int HX_HUGE_USED = Faults.is(THRESHOLD_MOVED) ? 0x43300000 : HX_HUGE;
+  /**
+   * The guarded arm's rare mask without the {@code +inf} and NaN lanes, for {@link
+   * #GUARD_MISSES_NON_FINITE}: a vector whose only rare lanes are positive NaNs then skips the
+   * rare paths and returns the polynomial's finite garbage there. The other arms are unchanged.
+   */
+  private static final boolean GUARD_MISSING_NON_FINITE = Faults.is(GUARD_MISSES_NON_FINITE);
 
   /** How the rare lanes are computed: blended always, blended behind a test, or per lane. */
   private static final int BLEND = 0;
@@ -160,9 +182,10 @@ final class Log1p {
    */
   private static DoubleVector log1p(DoubleVector x, VectorMask<Double> live, int mode) {
     VectorSpecies<Double> species = x.species();
-    // The calls into Lanes come early, before the polynomial, while the graph is small: C2 stops
-    // inlining once a method is large (NodeCountInliningCutoff), and a refused call boxes.
+    // The calls into Lanes come early, while the graph is small: C2 stops inlining once a method
+    // is large (NodeCountInliningCutoff), and a refused call boxes its vectors.
     VectorSpecies<Integer> intSpecies = Lanes.intSpecies(species);
+    VectorSpecies<Long> longSpecies = ((LongVector) x.viewAsIntegralLanes()).species();
     DoubleVector one = DoubleVector.broadcast(species, 1.0);
 
     // Lines 109-110: hx = __HI(x), ax = hx&0x7fffffff, as ints.
@@ -200,7 +223,11 @@ final class Log1p {
     IntVector uHi = hu.or(0x3ff00000).blend(hu.or(0x3fe00000), halve);
     hu = hu.blend(IntVector.broadcast(intSpecies, 0x00100000).sub(hu)
         .lanewise(VectorOperators.ASHR, 2), halve);
-    DoubleVector uNormal = Lanes.withHi(u, uHi);
+    // __HI(u) = uHi, written out: this late in the body C2 refuses to inline Lanes.withHi
+    // (NodeCountInliningCutoff, under PrintInlining) and the whole body boxes, about 45 KB/op.
+    LongVector uHiBits = (LongVector) uHi.convertShape(VectorOperators.I2L, longSpecies, 0);
+    DoubleVector uNormal = (DoubleVector) ((LongVector) u.viewAsIntegralLanes()).and(LOW_WORD)
+        .or(uHiBits.lanewise(VectorOperators.LSHL, 32)).viewAsFloatingLanes();
     // Line 150: f = u-1.0. Line 126: the k = 0 lanes take k = 0, f = x and hu = 1.
     DoubleVector f = uNormal.sub(1.0).blend(x, kZeroPath.cast(species));
     k = k.blend(0, kZeroPath);
@@ -228,7 +255,9 @@ final class Log1p {
 
     // The rare lanes: the early returns and |f| < 2^-20. The blended arm never reads this mask,
     // and its code folds away there.
-    VectorMask<Double> rare = atMostMinusOne.or(tiny).or(nonFinite).or(huIsZero).cast(species);
+    VectorMask<Double> rare = (GUARD_MISSING_NON_FINITE && mode == GUARDED
+        ? atMostMinusOne.or(tiny).or(huIsZero)
+        : atMostMinusOne.or(tiny).or(nonFinite).or(huIsZero)).cast(species);
     if (live != null) {
       rare = rare.and(live);
     }

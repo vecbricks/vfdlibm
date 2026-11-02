@@ -204,11 +204,17 @@ question.
 ## What the log1p port taught
 
 - **The same int pipeline, with `hu` beside `hx`.** `log1p` keeps `hx`, `ax`, `hu` and `k` as
-  int lanes the way log does (above), reading both high words with `Lanes.hiInt` and writing
-  `u`'s back with the int `Lanes.withHi`. Under `-XX:UseAVX=2` every 256-bit arm allocates about
-  0.01 B/op on common data (`bench/results/log1p-laptop-avx2-2026-11-02.txt`). The C's signed
-  compares, such as `hx <= (int)0xbfd2bec3` for a negative `x`, are then written as the C writes
-  them.
+  int lanes the way log does (above), reading both high words with `Lanes.hiInt`. Under
+  `-XX:UseAVX=2` every 256-bit arm allocates about 0.01 B/op on common data
+  (`bench/results/log1p-laptop-avx2-2026-11-02.txt`). The C's signed compares, such as `hx <=
+  (int)0xbfd2bec3` for a negative `x`, are then written as the C writes them.
+- **A helper that inlines in one body can be refused in another.** log calls the int
+  `Lanes.withHi` early in its body and stays unboxed. log1p writes `u`'s high word back after the
+  reduction, and a call to the same helper there was refused (`Lanes::withHi (25 bytes) failed to
+  inline: NodeCountInliningCutoff`, under `-XX:+PrintInlining`): every arm then allocated 32 to
+  45 KB per 1024 doubles in `bench/alloc-check.py` with default flags, short runs not kept. The
+  same `I2L`, shift and `or` written out in the body read ~0 B/op. `Lanes.hiInt`, called before
+  the arithmetic, inlines in both. Run the allocation check after moving any code into a helper.
 - **An invalid operation's NaN is not the hardware's.** For `x < -1` the C returns `(x-x)/(x-x)`.
   x86's `divpd` gives `0xfff8000000000000` there, and a negative NaN `x` comes back quieted with
   its payload, but `StrictMath.log1p` returns `Double.NaN`, `0x7ff8000000000000`, for every such
@@ -223,8 +229,11 @@ question.
   finish allocating 52,928 B/op); it beats blending every lane by 1.15x on common data and
   1.07x on mixed (3185 and 3215). That finish is a call taking vectors, the shape the log port
   found refused inlining and boxed (above), and its 52,928 B/op is exp's boxed figure, so the
-  2.0x is against a boxed finish. `VFdlibm.log1p` uses the guarded arm. A port whose rare paths are
-  cheap in vector form should measure this shape beside the other two.
+  2.0x is against a boxed finish. On the laptop's AVX-512 build the blend is ahead of the guarded
+  arm at 256 bits on mixed data (1.07x and 1.09x, `bench/results/log1p-laptop-2026-11-02.txt`).
+  Every other gap between the arms is under 1.3x on the laptop and sets no direction:
+  `VFdlibm.log1p` uses the guarded arm provisionally, and the EPYC 7763 run decides. A port
+  whose rare paths are cheap in vector form should measure this shape beside the other two.
 - **`lane` and `withLane` in a loop do not avoid the finish's allocation.** A first per-lane
   finish read the rare lanes from `rare.toLong()` and wrote each `StrictMath.log1p` result back
   with `result.withLane(lane, ...)`, looping over the set bits. Under `UseAVX=2` it allocated

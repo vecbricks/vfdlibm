@@ -230,7 +230,31 @@ class Log1pTest {
           PlantedFaultTest.assertCaught(fault, () -> Oracle.assertUnary(
               name, species, x -> arm.apply(x, null), StrictMath::log1p, faultRunInputs())))));
     }
+    // The guarded arm's own fault reaches only that arm, and shows only in a vector whose sole
+    // rare lanes are positive NaNs (an infinity is an hu == 0 lane too, so it stays rare).
+    catchers.put(Log1p.GUARD_MISSES_NON_FINITE, () -> forEachWidth(species ->
+        PlantedFaultTest.assertCaught(Log1p.GUARD_MISSES_NON_FINITE, () -> Oracle.assertUnary(
+            "Log1p.log1pGuarded", species, x -> Log1p.log1pGuarded(x, null), StrictMath::log1p,
+            loneNaNInputs()))));
     return catchers;
+  }
+
+  /**
+   * Common inputs, 1+x in [1.6, 1.9] and so never within 2^-20 of a power of two, with every 16th
+   * replaced by {@code Double.NaN}: at every width some vector's only rare lane is a NaN.
+   */
+  private static double[] loneNaNInputs() {
+    double[] xs = Inputs.uniform(1302L, 1 << 12, 0.6, 0.9);
+    for (int i = 5; i < xs.length; i += 16) {
+      xs[i] = Double.NaN;
+    }
+    return xs;
+  }
+
+  @ParameterizedTest
+  @EnumSource(VectorWidth.class)
+  void loneNaNInputsPass(VectorWidth width) {
+    assertLog1p(width.species(), loneNaNInputs());
   }
 
   private static double[] faultRunInputs() {

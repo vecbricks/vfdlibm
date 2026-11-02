@@ -5,8 +5,15 @@
 # The laptop's own datapath is 256 bits either way. Headline numbers come from the EPYC 7763.
 # The same benchmark with the laptop's default flags (AVX-512) is in log1p-laptop-2026-11-02.txt.
 #
-# Commit:      the commit that adds this file (based on 3bd5e84); Log1p.java, VFdlibm.java,
-#              Lanes.java and Log1pBenchmark.java are byte for byte as they were at the runs
+# Commit:      86b812f (based on 3bd5e84), the commit the runs measured. Since then:
+#              Lanes.intSpecies picks by vectorBitSize() instead of by identity and returns the
+#              same named IntVector species at 128, 256 and 512 bits, so the measured vector
+#              bodies are unchanged; VFdlibm changed only in Javadoc; Faults gained a warning in
+#              its initialiser, which no vector body reaches; Log1p reads its high words with
+#              Lanes.hiInt, the same shift and L2I it wrote out before, so the inlined body is
+#              the same operations (alloc-check still reads ~0 B/op), still writes u's high word
+#              back in the body, and gained a planted fault that folds away unplanted;
+#              Log1pBenchmark is unchanged. Not re-measured.
 # JDK:         OpenJDK 64-Bit Server VM (build 25.0.4.1+1-1-26.04.4-Ubuntu, mixed mode, sharing)
 # CPU:         AMD Ryzen AI 9 HX PRO 370 w/ Radeon 890M (24 logical cores)
 # Vector:      -XX:UseAVX=2 -XX:MaxVectorSize=32 (preferred species 256 bits)
