@@ -63,6 +63,24 @@ final class Lanes {
     return fromBits(bits(x).and(~LOW_WORD).or(lo.and(LOW_WORD)));
   }
 
+  /**
+   * {@code __HI(x)} as an {@code int} lane, signed as fdlibm's {@code int hx} is, in {@code
+   * intSpecies}, the species {@link #intSpecies} gives for {@code x}'s. The long lane's high word
+   * is narrowed by {@code L2I}, which keeps its low 32 bits.
+   */
+  static IntVector hiInt(DoubleVector x, VectorSpecies<Integer> intSpecies) {
+    return (IntVector) hi(x).convertShape(VectorOperators.L2I, intSpecies, 0);
+  }
+
+  /**
+   * {@code __HI(x) = hi} for an {@code int} high word: {@code x} with its high word replaced by
+   * {@code hi}'s lane, widened by {@code I2L}, whose sign extension the shift drops.
+   */
+  static DoubleVector withHi(DoubleVector x, IntVector hi) {
+    LongVector wide = (LongVector) hi.convertShape(VectorOperators.I2L, bits(x).species(), 0);
+    return withHi(x, wide);
+  }
+
   /** The doubles whose high and low words are the low 32 bits of {@code hi} and {@code lo}. */
   static DoubleVector fromHiLo(LongVector hi, LongVector lo) {
     return fromBits(hi.lanewise(VectorOperators.LSHL, 32).or(lo.and(LOW_WORD)));

@@ -13,7 +13,7 @@ DoubleVector y = VFdlibm.exp(DoubleVector.fromArray(DoubleVector.SPECIES_PREFERR
 DoubleVector z = VFdlibm.exp(y, live); // only the lanes set in live; the others keep y's bits
 ```
 
-Each method takes a vector of any species of 128 bits or more. Ported so far: `exp`.
+Each method takes a vector of any species of 128 bits or more. Ported so far: `exp` and `log`.
 
 ## Why
 
@@ -30,8 +30,9 @@ fdlibm's own sequence of operations, lane by lane. That is this library.
   compared by `Double.doubleToRawLongBits`. NaN payloads and signed zeros are included.
 - **fdlibm's operations, in fdlibm's order.** Only IEEE `+ - * /`, `sqrt` and bit operations. There
   is no fused multiply-add and no reassociation, so the rounding of every step is fdlibm's.
-- **Rare paths, finished exactly.** Lanes on a path the vector form does not take (huge arguments,
-  subnormals, special cases) are computed by `StrictMath` per lane, so the result stays exact.
+- **Rare paths, exact too.** Lanes on a rare path (huge arguments, subnormals, special cases) are
+  either computed in the vector, every branch blended, or finished by `StrictMath` per lane,
+  whichever measured faster for that function; the result is exact either way.
 
 ## Testing
 
