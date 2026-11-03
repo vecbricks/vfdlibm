@@ -297,6 +297,22 @@ question.
   blend on mixed data at 256 bits and allocating nothing, where exp's boxed finish had lost by
   1.6x. Measure the finish only once it allocates nothing.
 
+- **Int words can live in long lanes, with an exact dk.** log first kept its words in int lanes
+  for the `I2D`; moving them to the long lanes of the bits drops `L2I`, `I2L`, `I2D` and the
+  int-to-double mask casts, and `dk` comes from `fromBits(k + bits(0x1.8p52)) - 0x1.8p52`,
+  exact for `|k| < 2^51` (`PROOFS.md`, L7, L8). With AVX-512 at 512 bits the long form tied the
+  int form by count (89 each: three fewer operations, three more constant reloads), and 88 with
+  the range compares as one biased signed compare of the bits (L9). Under `UseAVX=2` there is
+  no 64-bit arithmetic shift, so a long `ASHR` costs three instructions: the count rose from 116
+  to 123 until the shifts were `LSHR`, equal where the value is non-negative, as `hx` and `i`
+  are; then 112, and 110 with the biased compares (`bench/asm/README.md`). Count both widths
+  before choosing a lane type.
+- **A `k == 0` form is the `k != 0` form with `dk = +0`.** fdlibm writes several returns twice,
+  as `f - B` for `k == 0` and `dk*ln2_hi - ((B - dk*ln2_lo) - f)` otherwise; with `dk = +0` the
+  second gives the first's bits whenever `f` is not `-0` (`PROOFS.md`, L6), which removed log's
+  `k == 0` compare and four blends. Look for the hinge in signed zeros: the one counter-case is
+  `f = -0, B = +0`.
+
 ## What the log1p port taught
 
 - **The same int pipeline, with `hu` beside `hx`.** `log1p` keeps `hx`, `ax`, `hu` and `k` as

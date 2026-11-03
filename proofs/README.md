@@ -20,6 +20,10 @@ way.
 | `exp_highword_compare.smt2` | exp's L3: high-word compares on 64 bits | `ExpProofFiles` |
 | `exp_tiny_counterexample.smt2` | exp's L4: the tiny lanes' fold refuted | `ExpProofFiles` |
 | `exp_half_sign.smt2` | exp's L5: halF[xsb] from the sign bit | `ExpProofFiles` |
+| `log_zero_dk.smt2` | log's L6: the k == 0 forms as k != 0 forms, dk = +0 | `LogProofFiles` |
+| `log_exact_dk.smt2` | log's L7: dk = (double)k without L2D | `LogProofFiles` |
+| `log_long_words.smt2` | log's L8: the C's int words in long lanes | `LogProofFiles` |
+| `log_range_compare.smt2` | log's L9: common and subnormal lanes by one compare | `LogProofFiles` |
 
 - `java.smt2`: Java's `int` and `long` operators over SMT-LIB's integers, each as the JLS
   defines it, and doubles as `S * M * 2^E`, with round to nearest stated on the number line for
@@ -52,9 +56,18 @@ way.
   - L4: that `StrictMath.exp` is `one + x` at the witness (`ProofsTest`'s, the oracle being in
     no solver); the binades further off than the next, by the arithmetic of rationals.
   - L5: nothing more.
+- `log_*.smt2`: log's lemmas, rendered from `Log` by `LogProofFiles` the same way. Besides the
+  code's text they leave informal:
+  - L6: Sterbenz's lemma for `f = xn - 1.0`; the binades of `B` and `v` (bounds on the
+    polynomial, sampled); a nonzero product's sign; the binades further off than the next.
+  - L7: that the double named is Java's `(double) k` (JLS 5.1.2) and the `+0` at `k = 0`.
+  - L8 and L9: the reading of `__HI` and `__LO`. These two files are over SMT-LIB's bit-vectors,
+    each Java operator its two's-complement counterpart, pinned to the JVM at sampled bit
+    patterns; over integers with `int2bv`, as `exp_half_sign.smt2` is, both solvers answered
+    `unknown` after a minute.
 
   `exp_highword_compare.smt2` and `exp_tiny_counterexample.smt2` are `QF_NIA`; the other three
-  are `ALL`, each header saying why.
+  exp files and the four log files are `ALL`, each header saying why.
 
 ## Running them
 
@@ -79,21 +92,22 @@ prelude is still run that way by hand before it merges, since the nightly sees i
 
 ## What a proof looks like
 
-A file opens with a header naming the C or the Java it encodes, what it proves and what it
-leaves out, then its `set-logic` line: `QF_NIA`, or `ALL` where cvc5 decides the checks only
-under it. Every check is an `(echo "<what it shows>: expect sat|unsat")` followed by its
-`(check-sat)` between `push` and `pop`, and the echo stays on one line of at most 100 columns,
-since the runner matches it whole. An `unsat` check is a proof: the negation of the claim has no
-model. A `sat` check shows the statement is not vacuous: the domain admits its boundary inputs
-and every binade the proof names is reached, and the claim with a constant changed by one is
-refuted, where the claim is tight to that constant. Where it holds for a range of values the
-constant is not refuted, and the header says so and names what pins it: exp's `invln2` (L1's
-section C, L2), whose margins are millions of its ulps, and `P1..P5` (L1's section D, L4), whose
-evaluated chains use whatever `Exp` holds. `ExpTest.constantsAreTheSourcesBits` pins those to the
-source's hex, and `ProofFilesTest` the files to their rendering. The script holds every verdict
-to the expectation before it, and fails on `unknown`, on a check past its time limit, and on any
-other output, since Z3 goes on answering after an error, and an assertion it dropped can turn a
-refutation into `sat`.
+A file opens with a header naming the C or the Java it encodes, what it proves and what it leaves
+out, then its `set-logic` line: `QF_NIA`, or `ALL` where cvc5 decides the checks only under it.
+Every check is an `(echo "<what it shows>: expect sat|unsat")` followed by its `(check-sat)` between
+`push` and `pop`, and the echo stays on one line of at most 100 columns, since the runner matches it
+whole. An `unsat` check is a proof: the negation of the claim has no model. A `sat` check shows the
+statement is not vacuous: the domain admits its boundary inputs and every binade the proof names is
+reached, and the claim with a constant changed by one is refuted, where the claim is tight to that
+constant. Where it holds for a range of values the constant is not refuted, and the header says so
+and names what pins it: exp's `invln2` (L1's section C, L2), whose margins are millions of its ulps,
+and `P1..P5` (L1's section D, L4), whose evaluated chains use whatever `Exp` holds.
+`ExpTest.constantsAreTheSourcesBits` pins those to the source's hex; the int words that exp's L3 and
+log's L8 and L9 render on the C's side, from `Exp` and `Log`, are pinned to the C's literals by
+`ExpTest.intWordsAreTheSources` and `LogTest.intWordsAreTheSources`; and `ProofFilesTest` pins the
+files to their rendering. The script holds every verdict to the expectation before it, and fails on
+`unknown`, on a check past its time limit, and on any other output, since Z3 goes on answering after
+an error, and an assertion it dropped can turn a refutation into `sat`.
 
 A refutation is worth writing against the part of the definition a claim rests on, not only
 against a constant: `sign_symmetry.smt2` also shows its claim false under a rounding that drops

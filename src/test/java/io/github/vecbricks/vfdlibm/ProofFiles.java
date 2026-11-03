@@ -20,9 +20,10 @@ import java.util.function.LongBinaryOperator;
 
 /**
  * The rendered files under {@code proofs/}: the check of the prelude, {@code java.smt2}, against
- * the JVM, and exp's proofs ({@link ExpProofFiles}), whose constants come from the code. {@link
- * ProofFilesTest} fails when a committed file differs from what this renders, so a definition and
- * the JVM results that pin it, or a constant and the proof that uses it, cannot drift apart.
+ * the JVM, and exp's and log's proofs ({@link ExpProofFiles}, {@link LogProofFiles}), whose
+ * constants come from the code. {@link ProofFilesTest} fails when a committed file differs from
+ * what this renders, so a definition and the JVM results that pin it, or a constant and the proof
+ * that uses it, cannot drift apart.
  * {@code java.smt2} itself, and the proofs whose constants are fdlibm's rather than computed, are
  * written by hand.
  *
@@ -44,6 +45,10 @@ final class ProofFiles {
     files.put("exp_near_band.smt2", ExpProofFiles.nearBand());
     files.put("exp_zero_reduction.smt2", ExpProofFiles.zeroReduction());
     files.put("exp_tiny_counterexample.smt2", ExpProofFiles.tinyCounterexample());
+    files.put("log_zero_dk.smt2", LogProofFiles.zeroDk());
+    files.put("log_exact_dk.smt2", LogProofFiles.exactDk());
+    files.put("log_long_words.smt2", LogProofFiles.longWords());
+    files.put("log_range_compare.smt2", LogProofFiles.rangeCompare());
     return files;
   }
 

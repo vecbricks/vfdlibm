@@ -28,21 +28,21 @@ final class ExpProofFiles {
   }
 
   /** 2^k as an SMT-LIB literal. */
-  private static String pow2(int k) {
+  static String pow2(int k) {
     return lit(BigInteger.ONE.shiftLeft(k));
   }
 
   /** A hex literal of a long, for comments and echo lines. */
-  private static String hex(long v) {
+  static String hex(long v) {
     return String.format("0x%08x_%08x", v >>> 32, v & Lanes.LOW_WORD);
   }
 
-  private static String hex(int v) {
+  static String hex(int v) {
     return String.format("0x%08x", v);
   }
 
   /** The body lines of a check, each wrapped to the column limit. */
-  private static List<String> body(String... lines) {
+  static List<String> body(String... lines) {
     var out = new ArrayList<String>();
     for (String l : lines) {
       out.addAll(wrap(l));
@@ -252,12 +252,12 @@ final class ExpProofFiles {
   private static final long P52 = 1L << 52;
 
   /** The M of a normal double: its 52 stored bits under the implicit 2^52. */
-  private static long mant(double d) {
+  static long mant(double d) {
     return (Double.doubleToRawLongBits(d) & (P52 - 1)) | P52;
   }
 
   /** The binade of a normal double: j with 2^j <= |d| < 2^(j+1). */
-  private static int binade(double d) {
+  static int binade(double d) {
     return Math.getExponent(d);
   }
 
@@ -265,7 +265,7 @@ final class ExpProofFiles {
    * {@code (jdouble.near a b S M sn sd)}: {@code a / b} rounds to {@code S * M * 2^(j - 52)}, the
    * double of binade {@code j} with sign {@code s} and significand {@code m}, each a term.
    */
-  private static String near(String a, String b, String s, String m, int j) {
+  static String near(String a, String b, String s, String m, int j) {
     int unit = j - 52;
     String scale = pow2(Math.abs(unit));
     return "(jdouble.near " + a + " " + b + " " + s + " " + m + " " + (unit >= 0 ? scale : "1")
@@ -277,7 +277,7 @@ final class ExpProofFiles {
     return sign > 0 ? t : "(- " + t + ")";
   }
 
-  private static String sign(int sign) {
+  static String sign(int sign) {
     return sign > 0 ? "1" : "(- 1)";
   }
 
@@ -286,7 +286,7 @@ final class ExpProofFiles {
    * to no double but itself in its binade and in the binades on either side, either sign: the
    * disjunction an {@code unsat} check refutes, over declared {@code S2} and {@code M2}.
    */
-  private static String roundsToOther(String a, String b, int s, String m, int j) {
+  static String roundsToOther(String a, String b, int s, String m, int j) {
     return "(or (and " + near(a, b, "S2", "M2", j) + " (not (and (= S2 " + sign(s) + ") (= M2 "
         + m + "))))\n  " + near(a, b, "S2", "M2", j - 1) + "\n  " + near(a, b, "S2", "M2", j + 1)
         + ")";
