@@ -390,6 +390,21 @@ class ExpTest {
     assertBits(0x3E663769_72BEA4D0L, Exp.P5);
   }
 
+  /**
+   * Exp's int constants are e_exp.c's literals: the high words |x| is compared with (lines 117,
+   * 118, 128, 129 and 139) and the k of line 149. PROOFS.md's L3 renders the C's side of its
+   * proof at each high word from these constants, so this test is what ties that side to the C.
+   */
+  @Test
+  void intWordsAreTheSources() {
+    assertEquals(0x40862E42, Exp.HX_FILTER);
+    assertEquals(0x7ff00000, Exp.HX_NON_FINITE);
+    assertEquals(0x3fd62e42, Exp.HX_HALF_LN2);
+    assertEquals(0x3FF0A2B2, Exp.HX_THREE_HALVES_LN2);
+    assertEquals(0x3e300000, Exp.HX_TINY);
+    assertEquals(-1021, Exp.K_MIN_NORMAL);
+  }
+
   private static void assertBits(long want, double got) {
     assertEquals(Long.toHexString(want), Long.toHexString(Double.doubleToRawLongBits(got)));
   }

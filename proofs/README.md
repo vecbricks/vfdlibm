@@ -92,21 +92,22 @@ prelude is still run that way by hand before it merges, since the nightly sees i
 
 ## What a proof looks like
 
-A file opens with a header naming the C or the Java it encodes, what it proves and what it
-leaves out, then its `set-logic` line: `QF_NIA`, or `ALL` where cvc5 decides the checks only
-under it. Every check is an `(echo "<what it shows>: expect sat|unsat")` followed by its
-`(check-sat)` between `push` and `pop`, and the echo stays on one line of at most 100 columns,
-since the runner matches it whole. An `unsat` check is a proof: the negation of the claim has no
-model. A `sat` check shows the statement is not vacuous: the domain admits its boundary inputs
-and every binade the proof names is reached, and the claim with a constant changed by one is
-refuted, where the claim is tight to that constant. Where it holds for a range of values the
-constant is not refuted, and the header says so and names what pins it: exp's `invln2` (L1's
-section C, L2), whose margins are millions of its ulps, and `P1..P5` (L1's section D, L4), whose
-evaluated chains use whatever `Exp` holds. `ExpTest.constantsAreTheSourcesBits` pins those to the
-source's hex, and `ProofFilesTest` the files to their rendering. The script holds every verdict
-to the expectation before it, and fails on `unknown`, on a check past its time limit, and on any
-other output, since Z3 goes on answering after an error, and an assertion it dropped can turn a
-refutation into `sat`.
+A file opens with a header naming the C or the Java it encodes, what it proves and what it leaves
+out, then its `set-logic` line: `QF_NIA`, or `ALL` where cvc5 decides the checks only under it.
+Every check is an `(echo "<what it shows>: expect sat|unsat")` followed by its `(check-sat)` between
+`push` and `pop`, and the echo stays on one line of at most 100 columns, since the runner matches it
+whole. An `unsat` check is a proof: the negation of the claim has no model. A `sat` check shows the
+statement is not vacuous: the domain admits its boundary inputs and every binade the proof names is
+reached, and the claim with a constant changed by one is refuted, where the claim is tight to that
+constant. Where it holds for a range of values the constant is not refuted, and the header says so
+and names what pins it: exp's `invln2` (L1's section C, L2), whose margins are millions of its ulps,
+and `P1..P5` (L1's section D, L4), whose evaluated chains use whatever `Exp` holds.
+`ExpTest.constantsAreTheSourcesBits` pins those to the source's hex; the int words that exp's L3 and
+log's L8 and L9 render on the C's side, from `Exp` and `Log`, are pinned to the C's literals by
+`ExpTest.intWordsAreTheSources` and `LogTest.intWordsAreTheSources`; and `ProofFilesTest` pins the
+files to their rendering. The script holds every verdict to the expectation before it, and fails on
+`unknown`, on a check past its time limit, and on any other output, since Z3 goes on answering after
+an error, and an assertion it dropped can turn a refutation into `sat`.
 
 A refutation is worth writing against the part of the definition a claim rests on, not only
 against a constant: `sign_symmetry.smt2` also shows its claim false under a rounding that drops

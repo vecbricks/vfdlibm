@@ -389,8 +389,9 @@ class ProofsTest {
   /**
    * L6: on the k == 0 lanes every k != 0 form with dk = +0 gives the k == 0 form's bits, each
    * form on every lane (not only the lanes that keep it), so the identity is checked wherever
-   * the vector body computes it; the f == 0 lane's {@code +0 + +0} is the C's zero. And the
-   * band's {@code s*(hfsq+R)} is never -0 there, nor is any lane's hfsq (H10).
+   * the vector body computes it; form (d)'s {@code +0 + +0} is the C's zero on every lane, the
+   * f == 0 ones and the rest. And the band's {@code s*(hfsq+R)} is never -0 there, nor is any
+   * lane's hfsq (H10).
    */
   @Test
   void l6FoldedFormsAreTheKZeroForms() {
@@ -406,9 +407,6 @@ class ProofsTest {
       double[] folded = kNonZeroForms(f, 0.0);
       double[] c = kZeroForms(f);
       for (int form = 0; form < c.length; form++) {
-        if (form == 3 && f != 0.0) {
-          continue;
-        }
         assertEquals(bits(c[form]), bits(folded[form]), at + " form " + form);
       }
       double hfsq = 0.5 * f * f;
@@ -499,8 +497,9 @@ class ProofsTest {
         long newhi = hxm | (i ^ 0x3ff00000);
         long kBits = ((hx >>> 20) + (Log.DK_MAGIC_BITS - 1023)) + (i >>> 20);
         long k = kBits - Log.DK_MAGIC_BITS;
+        // The blended arm's subnormal lanes subtract 54 more, so its k is at least -1077, L7's
+        // lower end.
         assertTrue(k >= -1023 && k <= 3073, at);
-        assertTrue(k - 54 >= -1077, at);
         int chx = (int) (b >> 32);
         if (b < 0) {
           assertNotEquals((long) chx, hx, at);

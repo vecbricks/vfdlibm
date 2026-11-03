@@ -215,7 +215,8 @@ on the specials, sign-set NaNs among them, and sampled patterns; H7 for each exp
 that the raw bits of `0xfff8...`, sign set, would miss the filter);
 `LanesTest.highWordCompares` (the three compares against the C's integer compare, at every
 width, on the specials, sampled patterns and both sides of each word, through the
-`DoubleVector` forms, which now route through these).
+`DoubleVector` forms, which now route through these); `ExpTest.intWordsAreTheSources` (each of
+`Exp`'s words, rendered into the file's C side below, is e_exp.c's literal).
 
 **Encoding.** `proofs/exp_highword_compare.smt2`, machine-checked over integers: for every long
 `bits` and every `h` in `[0, 0x7fffffff]`, `absBits` is non-negative with the C's `hx` as its high
@@ -344,14 +345,14 @@ The planted faults `log.dropCorrection` and `log.constantOffByOneUlp` change `dk
 as before; `log.thresholdMoved` moves the sqrt(2) split. All three are still caught.
 
 **Hinge tests (scalar).** `ProofsTest.l6ZeroDkIsPositiveZero` (H8, and that `dk = -0` would give
-`-0` for (d)); `ProofsTest.l6FIsNeverNegativeZero` (H9 over the specials, sampled bit patterns,
-the subnormals and the `k == 0` domain: `xn` in `[0.5, 2)`, `f` finite and not `-0`, zero
-exactly at `xn = 1`, and `f = xn - 1` exactly, by `BigDecimal`);
-`ProofsTest.l6FoldedFormsAreTheKZeroForms` (all four forms over the `k == 0` domain's ends, the
-neighbours of 1.0 and 65536 draws, each form on every lane, not only its own; H10, and `shr` not
-`-0`); `ProofsTest.l6HingesRefuted` (at `f = -0, B = +0` the fold is not the C, and with `hfsq =
-shr = -0`, H10 false, `shr + (+0)` changes the difference). **Vector tie.** `LogTest.foldBoundaries`
-and `foldBoundariesAtMaxSpecies` run both arms (`VFdlibm.log` and `Log.logBlended`), unmasked and
+`-0` for (d)); `ProofsTest.l6FIsNeverNegativeZero` (H9 over the specials, sampled bit patterns, the
+subnormals and the `k == 0` domain: `xn` in `[0.5, 2)`, `f` finite and not `-0`, zero exactly at `xn
+= 1`, and `f = xn - 1` exactly, by `BigDecimal`); `ProofsTest.l6FoldedFormsAreTheKZeroForms` (all
+four forms over the `k == 0` domain's ends, the neighbours of 1.0 and 65536 draws, each form on
+every lane, not only its own, so (d)'s `+0` is the C's `zero` on every lane too; H10, and `shr` not
+`-0`); `ProofsTest.l6HingesRefuted` (at `f = -0, B = +0` the fold is not the C, and with `hfsq = shr
+= -0`, H10 false, `shr + (+0)` changes the difference). **Vector tie.** `LogTest.foldBoundaries` and
+`foldBoundariesAtMaxSpecies` run both arms (`VFdlibm.log` and `Log.logBlended`), unmasked and
 masked, against `StrictMath` at the high words of the sqrt(2) split on both `k == 0` binades
 (`0x3fe6a09b`, `0x3fe6a09c`, `0x3ff6a09b`, `0x3ff6a09c`), the band's edges inside them
 (`0x3ff61479`, `0x3ff6147a`, `0x3fe6b851`, `0x3fe6b852`) and the `|f| < 2^-20` words around 1.0
@@ -449,11 +450,13 @@ The port so drops `L2I` (`vpmovqd`), `I2L` (`vpmovsxdq`), `I2D` and the int-to-d
 casts; and since AVX2 has no 64-bit arithmetic shift, writing the C's `>>` as `>>>` keeps each
 shift one instruction there.
 
-**Hinge tests (scalar).** `ProofsTest.l8LongWordsAreTheCsInts`: over the specials, sampled
-patterns of every kind, the `k == 0` domain and the subnormals, each also scaled by `2^54`, the
-port's words against the C's ints and the bound on `k` for every pattern; for a negative pattern
-the high words differ (H12 refuted). **Vector tie.** Every `LogTest` case runs the vector words;
-`LogTest.foldBoundaries` and `insideTheBranchWords` sit on the split's and the band's edges.
+**Hinge tests (scalar).** `ProofsTest.l8LongWordsAreTheCsInts`: over the specials, sampled patterns
+of every kind, the `k == 0` domain and the subnormals, each also scaled by `2^54`, the port's words
+against the C's ints and the bound on `k` for every pattern; for a negative pattern the high words
+differ (H12 refuted); `LogTest.intWordsAreTheSources` (`0x95f64`, `0x6147a` and `0x6b851`, which the
+file's C side takes from `Log`, are e_log.c's literals). **Vector tie.** Every `LogTest` case runs
+the vector words; `LogTest.foldBoundaries` and `insideTheBranchWords` sit on the split's and the
+band's edges.
 
 **Encoding.** `proofs/log_long_words.smt2`, machine-checked over SMT-LIB's bit-vectors, Java's
 int and long operators being two's-complement bit-vector operators (the header lists each), every
@@ -486,10 +489,12 @@ property is used: every NaN, of either sign, falls outside both ranges as in the
 compares this replaces were two per range and an `and`; this is an add and one compare, both
 integer, on bits the body reads anyway.
 
-**Hinge tests (scalar).** `ProofsTest.l9RangeComparesAreTheCs`: the specials, sampled patterns
-and both sides of each bound against the C's tests; without the bias `-1.0` would pass as
-common. **Vector tie.** `LogTest.thresholdsAndSpecials` and `nearOneAndSubnormals` (the
-specials, every power of two down to the subnormals, the neighbours of `MIN_NORMAL`, both arms).
+**Hinge tests (scalar).** `ProofsTest.l9RangeComparesAreTheCs`: the specials, sampled patterns and
+both sides of each bound against the C's tests; without the bias `-1.0` would pass as common.
+`LogTest.intWordsAreTheSources` pins `0x00100000` and `0x7ff00000`, which the file's C side takes
+from `Log`, and the bounds built from them. **Vector tie.** `LogTest.thresholdsAndSpecials` and
+`nearOneAndSubnormals` (the specials, every power of two down to the subnormals, the neighbours of
+`MIN_NORMAL`, both arms).
 
 **Encoding.** `proofs/log_range_compare.smt2`, machine-checked over bit-vectors as L8's file is,
 the definitions pinned to Java at sampled patterns: the biased compare is `lo <= b < hi` for

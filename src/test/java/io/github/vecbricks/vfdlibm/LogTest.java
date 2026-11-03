@@ -239,6 +239,22 @@ class LogTest {
     assertBits(0x3fd55555_55555555L, Log.THIRD);
   }
 
+  /**
+   * The int words Log compares and adds are e_log.c's literals (lines 100, 107, 110, 124 and
+   * 126), as are the bounds L9 builds from them. PROOFS.md's L8 and L9 render the C's side of
+   * their proofs from these constants, so this test is what ties that side to the C.
+   */
+  @Test
+  void intWordsAreTheSources() {
+    assertEquals(0x00100000, Log.HX_MIN_NORMAL);
+    assertEquals(0x7ff00000, Log.HX_NON_FINITE);
+    assertEquals(0x95f64, Log.SQRT2_SPLIT);
+    assertEquals(0x6147a, Log.HX_BAND_LO);
+    assertEquals(0x6b851, Log.HX_BAND_HI);
+    assertEquals(0x00100000_00000000L, Log.COMMON_LO);
+    assertEquals(0x7ff00000_00000000L, Log.COMMON_HI);
+  }
+
   private static void assertBits(long want, double got) {
     assertEquals(Long.toHexString(want), Long.toHexString(Double.doubleToRawLongBits(got)));
   }
