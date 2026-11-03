@@ -378,12 +378,21 @@ question.
   `MaxTrivialSize` (6 bytes) there is written out. The allocation check covers the nesting, since
   it runs the outer port's rows; a change to the inner body is checked through both.
 - **A planted threshold must sit where the result changes.** Moving log10's `hx < 0x00100000`
-  test by a word is invisible to both arms: the finish arm sends the extra normal lanes to
+  test up by a word is invisible to both arms: the finish arm sends the extra normal lanes to
   `StrictMath.log10`, and the blended arm scales them by `2^54` and subtracts 54 from `k`, which
   rescales to the same `x` and the same `y`. So `log10.thresholdMoved` moves line 85's split
   from `k < 0` to `k < 1` instead: the lanes of `[1, 2)` are rescaled to `[0.5, 1)` with `y = 1`,
   where the sum cancels, and the suite and the fuzz catch it at every width. Before planting a
   threshold, check that some lane's result depends on it.
+- **Moved down, the same test does change results, but only far from the edge.** At
+  `hx < 0x000fffff` the subnormals of high word 0x000fffff are rescaled as if normal, and
+  `0x000fffff00000000` gives `0xc0733a71472ec139` for `0xc0733a7147665832`. Near the largest
+  subnormal the wrong rescale rounds to the same double, so the 64 neighbours of
+  `fromHi(0x00100000)` passed with the fault planted in both arms. `Log10Test.thresholds()` now
+  adds high word 0x000fffff with low words 0, 1 and seeded random ones, and
+  `log10.subnormalThresholdMoved` plants the move in both arms (the finish arm's `common` test
+  and the blended arm's subnormal mask), caught at every width. A threshold's neighbours by ulp
+  are not its neighbours by word: test the far end of the word on the other side too.
 - **The invalid operation's NaN is the hardware's here, as in log.** For a negative `x`, -inf
   and a negative NaN of any payload, `StrictMath.log10` returns the bits of `(x-x)/zero`, so the
   blended arm keeps the C's expression, unlike log1p (above).
@@ -437,8 +446,9 @@ question.
   many. Times 256, the whole sweep at every width is 67 minutes for exp, 70 for log and 128 for
   log1p on those two laptop cores, 6 to 8 runner-hours a night on GitHub's x86 runners. log10,
   added later and timed the same way on its port's branch (one run, while other work shared the
-  laptop), took 13.6 / 2.0 / 1.7 / 1.8, about 81 minutes whole, a little above log, whose body it
-  holds; the projection below is for the first three functions.
+  laptop, so a laptop cost estimate, not a committed result), took 13.6 / 2.0 / 1.7 / 1.8, about
+  81 minutes whole, a little above log, whose body it holds; the projection below is for the
+  first three functions.
 - **Why x86 sweeps 128 bits by a slice (Max, 2 November 2026).** The 128-bit species is 68 to
   80% of that cost: x86 C2 lowers no mask at two 64-bit lanes (above), so that width runs lane
   by lane in Java, and Varka declines 128-bit doubles on x86, so no user of the port runs it

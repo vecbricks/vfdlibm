@@ -86,7 +86,10 @@ class Log10Test {
    * binades, every power of two, normal and subnormal, the neighbours of 1, 0 and the smallest
    * subnormal, and the specials), e_log10.c's own words with 64 neighbours each way ({@code hx}
    * at 0x00100000 and 0x7ff00000, the split of line 85 at 1.0, between the high words 0x3fefffff
-   * and 0x3ff00000, the largest finite double), and the powers of ten.
+   * and 0x3ff00000, the largest finite double), the largest subnormals' high word 0x000fffff with
+   * low words 0, 1 and seeded random ones (near the largest subnormal a lane rescaled as if normal
+   * rounds to the right result, so the neighbours of 0x00100000 miss a moved line 76), and the
+   * powers of ten.
    */
   static double[] thresholds() {
     double[] xs = Inputs.concat(LogTest.thresholds(), powersOfTen());
@@ -98,7 +101,15 @@ class Log10Test {
     for (double edge : edges) {
       xs = Inputs.concat(xs, Inputs.around(edge, 64), Inputs.around(-edge, 4));
     }
-    return xs;
+    long hi = Lanes.fromHiBits(Log10.HX_MIN_NORMAL - 1);
+    SplittableRandom random = new SplittableRandom(1650L);
+    double[] lastSubnormalWord = new double[10];
+    lastSubnormalWord[0] = Double.longBitsToDouble(hi);
+    lastSubnormalWord[1] = Double.longBitsToDouble(hi | 1L);
+    for (int j = 2; j < lastSubnormalWord.length; j++) {
+      lastSubnormalWord[j] = Double.longBitsToDouble(hi | (random.nextLong() & Lanes.LOW_WORD));
+    }
+    return Inputs.concat(xs, lastSubnormalWord);
   }
 
   @ParameterizedTest
@@ -265,7 +276,8 @@ class Log10Test {
   static Map<String, Executable> faultCatchers() {
     Map<String, Executable> catchers = new LinkedHashMap<>();
     for (String fault : new String[] {
-        Log10.DROP_CORRECTION, Log10.CONSTANT_OFF_BY_ONE_ULP, Log10.THRESHOLD_MOVED}) {
+        Log10.DROP_CORRECTION, Log10.CONSTANT_OFF_BY_ONE_ULP, Log10.THRESHOLD_MOVED,
+        Log10.SUBNORMAL_THRESHOLD_MOVED}) {
       catchers.put(fault, () -> forEachWidth(species -> ARMS.forEach((name, arm) ->
           PlantedFaultTest.assertCaught(fault, () -> Oracle.assertUnary(
               name, species, x -> arm.apply(x, null), StrictMath::log10, faultRunInputs())))));
