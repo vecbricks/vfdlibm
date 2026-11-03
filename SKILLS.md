@@ -344,7 +344,10 @@ question.
   same way at 256 and 512 bits (`bench/results/log1p-laptop-2026-11-02.txt`). In both files the
   arms are within 1.3x of each other on every row, and no direction is read: `VFdlibm.log1p` uses
   the guarded arm provisionally. The EPYC 7763 run (`bench/results/log1p-epyc7763-2026-11-02.txt`)
-  keeps them within 1.3x at 256 bits too, so the AVX-512 hosts decide (`HARDWARE.md`). A port whose
+  keeps them within 1.3x at 256 bits too, so the AVX-512 hosts decide (`HARDWARE.md`). The first,
+  the Xeon Platinum 8573C (`bench/results/log1p-xeon8573c-2026-11-03.txt`), puts the guarded arm
+  ahead on every row, 4% and 9% at 512 bits, still within 1.3x from one run, so the guarded arm
+  stays and the Xeon 6973P-C run is owed. A port whose
   rare paths are cheap in vector form should measure this shape beside the other two.
 - **The in-body finish allocates nothing in log1p too.** log1p's finish was first a call,
   `finishPerLane(x, result, rare)`, and boxed: 52,928 B/op on mixed data at 256 bits under
