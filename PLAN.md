@@ -35,8 +35,9 @@ The set is the functions Spark computes with fdlibm on every host:
 
 That is thirteen functions, about 1,000 lines of fdlibm code in all; `pow` is the largest. Varka's
 row order decides which comes first. `exp` is the first port and is done (`VFdlibm.exp`, from
-`e_exp.c`); `pow`, `sinh` and `cosh` build on it. `log` and `log1p` are done too (`VFdlibm.log`,
-from `e_log.c`, and `VFdlibm.log1p`, from `s_log1p.c`).
+`e_exp.c`); `pow`, `sinh` and `cosh` build on it. `log`, `log10` and `log1p` are done too
+(`VFdlibm.log`, from `e_log.c`, `VFdlibm.log10`, from `e_log10.c`, which computes through log's
+common path, and `VFdlibm.log1p`, from `s_log1p.c`).
 
 `tan`, `tanh` and `cbrt` are fdlibm on aarch64 but Intel LIBM stubs on x86, so a port of them
 matches the JVM only on Arm. `sin` and `cos` are HotSpot's own stubs on both architectures, so
@@ -72,12 +73,12 @@ five are a later, optional set; the large-argument reduction of the trigonometri
   256 bits, and 512 on an AVX-512 draw), on x86 as an AVX2 host (`-XX:UseAVX=2
   -XX:MaxVectorSize=32`, 128 and 256 bits on every draw), on x86 with `-XX:MaxVectorSize=16`
   (all of it at 128 bits) and on Arm (128 bits).
-- **Nightly:** `.github/workflows/nightly.yml` sweeps every high word of exp, log and log1p with
-  three low words each (every branch fdlibm decides on the high word) at every width but 128
-  bits on x86, where a rotating 1/32 slice a night covers it in 32 nights, and at 128 bits on
-  Arm every night; it fuzzes from a fresh seed at every width, and runs every proof under both
-  solvers; a failure opens an issue labelled `nightly-failure` with the mismatching inputs, ready
-  for a `hard-cases` file (`SKILLS.md`).
+- **Nightly:** `.github/workflows/nightly.yml` sweeps every high word of exp, log, log10 and
+  log1p with three low words each (every branch fdlibm decides on the high word) at every width
+  but 128 bits on x86, where a rotating 1/32 slice a night covers it in 32 nights, and at 128
+  bits on Arm every night; it fuzzes from a fresh seed at every width, and runs every proof
+  under both solvers; a failure opens an issue labelled `nightly-failure` with the mismatching
+  inputs, ready for a `hard-cases` file (`SKILLS.md`).
 - **Masked forms:** a masked form is checked under seeded random masks, all-true and all-false;
   active lanes must equal `StrictMath` and inactive lanes must keep the input's raw bits (for a
   two-argument function, the first argument's).
@@ -125,8 +126,9 @@ five are a later, optional set; the large-argument reduction of the trigonometri
 
 - Benchmarks (JMH under `src/jmh`): `ExpBenchmark` measures `exp`'s two arms against the scalar
   `StrictMath.exp` loop at each vector width, and `LogBenchmark` does the same for `log`; each
-  function adds its own benchmark the same way. `Log1pBenchmark` does the same for `log1p`, with
-  a third arm that blends the rare paths only when a vector holds a rare lane.
+  function adds its own benchmark the same way. `Log10Benchmark` does the same for `log10`, at
+  256 and 512 bits, the preferred species and `SPECIES_MAX`. `Log1pBenchmark` does the same for
+  `log1p`, with a third arm that blends the rare paths only when a vector holds a rare lane.
   A function's body is larger than C2 inlines by default, so a call from a loop passes boxed
   vectors; the benchmarks are also run with `-XX:CompileCommand=inline,...` to measure the body
   as Varka emits it, inline.

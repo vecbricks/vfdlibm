@@ -21,6 +21,7 @@ package io.github.vecbricks.vfdlibm;
 
 import jdk.incubator.vector.DoubleVector;
 import jdk.incubator.vector.IntVector;
+import jdk.incubator.vector.LongVector;
 import jdk.incubator.vector.VectorMask;
 import jdk.incubator.vector.VectorOperators;
 import jdk.incubator.vector.VectorSpecies;
@@ -67,6 +68,9 @@ import jdk.incubator.vector.VectorSpecies;
  * is about 2x faster than scalar there, and allocates nothing. That settles AVX2 only: the
  * AVX-512 hosts ({@code HARDWARE.md}) decide at 512 bits, where the laptop had the blend ahead.
  * The second arm is kept so it can be re-measured, on other hosts and as the JDK changes.
+ *
+ * <p>{@link #logCore} is the common path alone, with no rare lanes and no finish: {@code Log10}
+ * computes its {@code __ieee754_log} through it, the only entry it uses.
  */
 final class Log {
 
@@ -113,6 +117,11 @@ final class Log {
   private static final int SQRT2_SPLIT_USED =
       Faults.is(THRESHOLD_MOVED) ? SQRT2_SPLIT + 1 : SQRT2_SPLIT;
 
+  /** How the rare lanes are computed: finished per lane, blended, or left to the caller. */
+  private static final int FINISH = 0;
+  private static final int BLENDED = 1;
+  private static final int CORE = 2;
+
   private Log() {}
 
   /**
@@ -121,7 +130,7 @@ final class Log {
    * never takes the per-lane finish.
    */
   static DoubleVector log(DoubleVector x, VectorMask<Double> live) {
-    return log(x, live, true);
+    return log(x, live, FINISH);
   }
 
   /**
@@ -129,14 +138,26 @@ final class Log {
    * {@link #log(DoubleVector, VectorMask)}.
    */
   static DoubleVector logBlended(DoubleVector x, VectorMask<Double> live) {
-    return log(x, live, false);
+    return log(x, live, BLENDED);
   }
 
   /**
-   * Both arms in one body, so they share every line but the rare paths; {@code finish} is a
-   * constant at each call above, and once inlined the other arm's code folds away.
+   * e_log.c's common path in every lane: {@code __ieee754_log(x)} for each lane holding a
+   * positive normal finite {@code x} ({@code 0x00100000 <= hx < 0x7ff00000}), and an unspecified
+   * value in every other lane, with no rare path and no per-lane finish (the rare-lane mask the
+   * body computes is unused here and folds away). This is the narrow entry {@code Log10} computes
+   * through: it rescales every lane to {@code [0.5, 2)} first, so each lane it passes is such an
+   * {@code x}.
    */
-  private static DoubleVector log(DoubleVector x, VectorMask<Double> live, boolean finish) {
+  static DoubleVector logCore(DoubleVector x) {
+    return log(x, null, CORE);
+  }
+
+  /**
+   * Both arms, and the core, in one body, so they share every line but the rare paths; {@code
+   * arm} is a constant at each call above, and once inlined the other arms' code folds away.
+   */
+  private static DoubleVector log(DoubleVector x, VectorMask<Double> live, int arm) {
     VectorSpecies<Double> species = x.species();
     VectorSpecies<Integer> intSpecies = Lanes.intSpecies(species);
     // Lines 100 and 107: the common lanes have 0x00100000 <= hx < 0x7ff00000, for a signed hx,
@@ -148,7 +169,7 @@ final class Log {
     // Line 104, blended arm only: a subnormal is scaled by two54, and k starts at -54.
     DoubleVector xs = x;
     VectorMask<Double> subnormal = null;
-    if (!finish) {
+    if (arm == BLENDED) {
       subnormal = x.compare(VectorOperators.GT, ZERO)
           .and(x.compare(VectorOperators.LT, Lanes.fromHi(HX_MIN_NORMAL)));
       xs = x.blend(x.mul(TWO54), subnormal);
@@ -160,14 +181,20 @@ final class Log {
     IntVector hx = Lanes.hiInt(xs, intSpecies);
     // Line 108: k += (hx>>20)-1023.
     IntVector k = hx.lanewise(VectorOperators.ASHR, 20).sub(1023);
-    if (!finish) {
+    if (arm == BLENDED) {
       k = k.add(-54, subnormal.cast(intSpecies));
     }
     // Lines 109-112: hx &= 0x000fffff; i = (hx+0x95f64)&0x100000; __HI(x) = hx|(i^0x3ff00000);
     // k += (i>>20). The lanes with 1+f >= sqrt(2) carry into bit 20 and are halved.
     IntVector hxm = hx.and(0x000fffff);
     IntVector i = hxm.add(SQRT2_SPLIT_USED).and(0x100000);
-    DoubleVector xn = Lanes.withHi(xs, hxm.or(i.lanewise(VectorOperators.XOR, 0x3ff00000)));
+    // __HI(x) = ..., Lanes.withHi written out: when Log10 inlines this body after its own
+    // rescaling, C2 refuses a call here (NodeCountInliningCutoff) and the vectors box (SKILLS.md).
+    LongVector xsBits = (LongVector) xs.viewAsIntegralLanes();
+    LongVector hiBits = (LongVector) hxm.or(i.lanewise(VectorOperators.XOR, 0x3ff00000))
+        .convertShape(VectorOperators.I2L, xsBits.species(), 0);
+    DoubleVector xn = (DoubleVector) xsBits.and(Lanes.LOW_WORD)
+        .or(hiBits.lanewise(VectorOperators.LSHL, 32)).viewAsFloatingLanes();
     k = k.add(i.lanewise(VectorOperators.ASHR, 20));
     // Line 114: (0x000fffff&(2+hx))<3, which holds when |f| < 2**-20.
     VectorMask<Double> small =
@@ -214,7 +241,7 @@ final class Log {
     DoubleVector exact = dkHi.add(dkLo).blend(ZERO, kIsZero);
     result = result.blend(smallResult, small).blend(exact, fIsZero);
 
-    if (!finish) {
+    if (arm == BLENDED) {
       // The rare paths, in the C's order of precedence (the last blend wins). Line 107: x+x for
       // +inf and a positive NaN. Line 103: (x-x)/zero for a set sign bit, which covers -inf and
       // a negative NaN. Line 102: -two54/zero, -inf, for +-0.
@@ -228,7 +255,7 @@ final class Log {
     if (live != null) {
       result = x.blend(result, live);
     }
-    if (finish) {
+    if (arm == FINISH) {
       VectorMask<Double> rare = common.not();
       if (live != null) {
         rare = rare.and(live);
