@@ -3,9 +3,10 @@
 #
 # Produced by .github/workflows/benchmark.yml, dispatched by bench/dispatch-bench.sh --host
 # xeon8573c on main at 44c899e. From there to bc63895 (#25), Log1p.java, Lanes.java and
-# Log1pBenchmark are unchanged, and VFdlibm.log1p changes only in its Javadoc. The lines from
-# "Host" to "Command" are the workflow's own header; "Array" describes the benchmark; the
-# min/avg/max table is taken from JMH's "Result" blocks in the raw output below.
+# Log1pBenchmark are unchanged, and VFdlibm changes only by adding log10 and naming it in the
+# class Javadoc. The lines from "Host" to "Command" are the workflow's own header; "Array"
+# describes the benchmark; the min/avg/max table is taken from JMH's "Result" blocks in the raw
+# output below.
 #
 # Host:        xeon8573c (expected CPU 'INTEL(R) XEON(R) PLATINUM 8573C')
 # Commit:      44c899ea4275ec48d800e36ff3e1ee9a726fe01c (main)
@@ -18,8 +19,9 @@
 # Datapath:    41.5 / 82.7 / 113.0 lane-ops/ns at 128 / 256 / 512 bits; 256:128 = 1.99 (control), 512:256 = 1.37
 #              (bench/datapath.sh, at the machine's own JVM flags)
 # Kernel:      7.0.0-1017-azure
-# Load:        0.86 0.25 0.08 at start (4 cores)
-# JMH:         -f 2 -wi 3 -w 2s -i 5 -r 2s -prof gc -jvmArgsAppend "-XX:CompileCommand=inline,io.github.vecbricks.vfdlibm.*::*"
+# Load:        0.86 0.25 0.08 at start, 1.09 1.08 0.67 at end (4 cores)
+# JMH:         -f 2 -wi 3 -w 2s -i 5 -r 2s -prof gc
+#              -jvmArgsAppend "-XX:CompileCommand=inline,io.github.vecbricks.vfdlibm.*::*"
 # Command:     mvn -B -Pjmh test-compile exec:exec -Djmh.args="<the above>"
 # Array:       1024 doubles; common = uniform [-0.9, 20); mixed = each input replaced with
 #              probability 1/16 by NaN, -1, -2, 2^-40 or 1.0
@@ -31,12 +33,14 @@
 # - At 512 bits the guarded arm is 3.6x faster than scalar on common data and 3.3x on mixed. It
 #   is 1.44 to 1.47x faster than the same arm at 256 bits (3,008 common, 3,157 mixed); the
 #   datapath probe reads 512:256 = 1.37 on this host.
-# - The guarded arm has the lowest minimum on every 256-bit, 512-bit and preferred row, but within
-#   1.3x of the other arms, from one run: at 512 bits it is 4% ahead of the next arm on common
-#   data (finish) and 9% ahead on mixed (blended). VFdlibm.log1p keeps the guarded arm; the Xeon
-#   6973P-C run is still owed.
+# - The guarded arm has the lowest minimum on every 256-bit, 512-bit and preferred row, but every
+#   arm is within 1.3x of the others, from one run, so no direction is read: at 512 bits the
+#   guarded arm is 4% ahead of the next arm on common data (finish) and 9% on mixed (blended),
+#   and the 4% is inside the 5% between guarded512 and guardedPreferred on mixed data, the same
+#   code at 512 bits on this host. VFdlibm.log1p keeps the guarded arm; a second 8573C run and
+#   the Xeon 6973P-C run are owed.
 # - No row allocates (gc.alloc.rate.norm): every vector row reads 0.013 B/op or less, and the
-#   scalar rows 0.026.
+#   scalar rows 0.025 and 0.026.
 #
 # Row                              inputs           min          avg          max   (ns/op)
 # Log1pBenchmark.blended256        common           3601.9       3621.6       3653.3
