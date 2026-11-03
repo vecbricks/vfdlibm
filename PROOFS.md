@@ -359,25 +359,25 @@ masked, against `StrictMath` at the high words of the sqrt(2) split on both `k =
 (`0x3feffffd` to `0x3ff00002`), low words 0, `0xffffffff` and 1024 seeded, plus the 4096 doubles
 each side of 1.0 and 64 each side of sqrt(2) and sqrt(2)/2, at every width and `SPECIES_MAX`.
 
-**Encoding.** `proofs/log_zero_dk.smt2`, partly machine-checked. Checked: the signs of exact
-zeros (R5) as three functions of the operands' sign bits, each pinned to the JVM over all four
-pairs of signed zeros and over `+-0 * ln2_hi`, `+-0 * ln2_lo`; over them, step 2's zero cases
-(every combination of `B` and `f` zeros with `f` not `-0`, and `B = f` nonzero), with a `sat`
-check that allowing `f = -0` gives the counter-case `B = +0, f = -0`; H10's zero case and step
-4's `shr + (+0)` with a `sat` refutation at `hfsq = -0`; step 5's `+0 + (+0) = +0`; the nonzero
-steps 1 and 2's `B - (+0) = B` and `+0 - v = -v` (the exact value is the double or its negation,
-which `jdouble.near` admits in every binade at once, and admits no other double in its binade or
-the ones next to it, either sign, for every binade from `2^-110` to `2^-1`); H9's first half,
-that `xn`'s bits built from any 20-bit `hx`, either `i` and any low word have sign 0 and biased
-exponent `0x3fe` or `0x3ff` (over bit-vectors) and so are a double in `[0.5, 2)` (over the
-prelude's integers), equal to 1.0 at one pattern only; and that `ln2_hi` and `ln2_lo` are
-positive and finite. Step 2's `fl(B - f) = -fl(f - B)` is `proofs/sign_symmetry.smt2`'s section
-A. Not checked, and informal above: Sterbenz's lemma for `f = xn - 1.0` (sampled exactly by
-`BigDecimal` in `ProofsTest`); that `B` and `v` lie in the binades checked (on the `k == 0`
-lanes `|f|` is in `[2^-53, 0.415)` or zero, `B` about `f^2/2` or smaller than `|f|`, `v` about
-`log(1+f)`: bounds on the polynomial, sampled, as exp's H2); a nonzero product's sign (H10 for
-nonzero `f`); that a value rounds to no double in a binade further off than the next (the
-arithmetic of rationals); and that the port computes these forms, the code's text.
+**Encoding.** `proofs/log_zero_dk.smt2`, partly machine-checked. Checked: the signs of exact zeros
+(R5) as three functions of the operands' sign bits, each pinned to the JVM over all four pairs of
+signed zeros and over `+-0 * ln2_hi`, `+-0 * ln2_lo`; over them, step 2's zero cases (every
+combination of `B` and `f` zeros with `f` not `-0`, and `B = f` nonzero), with a `sat` check that
+allowing `f = -0` gives the counter-case `B = +0, f = -0`; H10's zero case and step 4's `shr + (+0)`
+with a `sat` refutation at `hfsq = -0`; step 5's `+0 + (+0) = +0`; the nonzero steps 1 and 2's `B -
+(+0) = B` and `+0 - v = -v` (the exact value is the double or its negation, which `jdouble.near`
+admits in every binade at once, and admits no other double in its binade or the ones next to it,
+either sign, every normal binade at once, the lowest one's next below being the subnormals); H9's
+first half, that `xn`'s bits built from any 20-bit `hx`, either `i` and any low word have sign 0 and
+biased exponent `0x3fe` or `0x3ff` (over bit-vectors) and so are a double in `[0.5, 2)` (over the
+prelude's integers), equal to 1.0 at one pattern only; and that `ln2_hi` and `ln2_lo` are positive
+and finite. Step 2's `fl(B - f) = -fl(f - B)` is `proofs/sign_symmetry.smt2`'s section A. Not
+checked, and informal above: Sterbenz's lemma for `f = xn - 1.0` (sampled exactly by `BigDecimal` in
+`ProofsTest`); that `B` and `v`, where nonzero, are normal (on the `k == 0` lanes `|f|` is in
+`[2^-53, 0.415)` or zero, `B` about `f^2/2` or smaller than `|f|`, `v` about `log(1+f)`, all far
+above `2^-1022`: bounds on the polynomial, sampled, as exp's H2); a nonzero product's sign (H10 for
+nonzero `f`); that a value rounds to no double in a binade further off than the next (the arithmetic
+of rationals); and that the port computes these forms, the code's text.
 
 ### L7. dk = (double)k without L2D
 

@@ -35,11 +35,6 @@ final class LogProofFiles {
   // ---------------------------------------------------------------------------------------------
   // log_zero_dk.smt2: L6
 
-  /** The lowest binade log_zero_dk.smt2 proves "B - (+0) is B, +0 - v is -v" in. */
-  private static final int ZERO_DK_LOWEST = -110;
-  /** And the highest. */
-  private static final int ZERO_DK_HIGHEST = -1;
-
   /** An SMT-LIB boolean literal. */
   private static String bool(boolean b) {
     return b ? "true" : "false";
@@ -54,7 +49,7 @@ final class LogProofFiles {
    * {@code log_zero_dk.smt2}, lemma L6: the k != 0 forms with dk = +0 are the k == 0 forms. The
    * signs of exact zeros, pinned to the JVM over every pair of signed zeros, carry the zero cases;
    * the nonzero case is round to nearest's sign symmetry (sign_symmetry.smt2) and the exactness
-   * of B - (+0) and +0 - v, checked here per binade.
+   * of B - (+0) and +0 - v, checked here for every normal binade at once.
    */
   static String zeroDk() {
     var out = new StringBuilder(ProofFiles.LICENSE);
@@ -83,8 +78,9 @@ final class LogProofFiles {
         ;   - Section B: the nonzero case. That fl(B - f) = -fl(f - B) is sign_symmetry.smt2's
         ;     section A, for every rational and every binade. Here: a nonzero double, either sign,
         ;     is admitted by jdouble.near for itself in any binade at once, and rounds to no other
-        ;     double in its own binade or the next ones, for every binade from 2^%d to 2^%d, so
-        ;     B - (+0) = B and +0 - v = -v for every such B and v.
+        ;     double in its own binade or the next ones, every normal binade at once, the lowest
+        ;     one's next below being the subnormals; so B - (+0) = B and +0 - v = -v for every
+        ;     normal B and v.
         ;   - Section C: xn, whose high word is hx|(i^0x3ff00000) for hx < 2^20 and i either 0 or
         ;     0x100000 (lines 109-111), has sign 1 and binade 2^-1 or 2^0, for every low word: so
         ;     xn is in [0.5, 2), and xn = 1 exactly at one pattern. Its bits are built over
@@ -96,9 +92,9 @@ final class LogProofFiles {
         ;   - That f = xn - 1.0 is exact (Sterbenz's lemma, R6) and zero only at xn = 1, where it
         ;     is +0: the steps from section C to H9. ProofsTest.l6FIsNeverNegativeZero checks the
         ;     difference exactly, by BigDecimal, over sampled patterns of every kind.
-        ;   - That the values of B and v lie in the binades of section B: on the k == 0 lanes |f|
-        ;     is in [2^-53, 0.415) or zero, B is about f^2/2 or smaller than f, and v is about
-        ;     log(1+f); these bounds, like exp's H2, rest on the polynomial and are sampled.
+        ;   - That B and v, where nonzero, are normal: on the k == 0 lanes |f| is in [2^-53,
+        ;     0.415) or zero, B is about f^2/2 or smaller than f, and v is about log(1+f), all far
+        ;     above 2^-1022; these bounds, like exp's H2, rest on the polynomial and are sampled.
         ;   - That the sign of a nonzero product of like signs is positive (hfsq not -0 for f
         ;     nonzero), and that a rounding of a nonzero value gives a nonzero double where the
         ;     values are normal: zero is not in the prelude.
@@ -112,8 +108,9 @@ final class LogProofFiles {
         ; LogTest.constantsAreTheSourcesBits pins them to the source's hex, and ProofFilesTest
         ; this file to its rendering.
         ;
-        ; The logic is ALL, as for exp_zero_reduction.smt2's per-binade checks.
-        """).formatted(ZERO_DK_LOWEST, ZERO_DK_HIGHEST));
+        ; The logic is ALL: section B's products S * M * sn are nonlinear, and section C's
+        ; bit-vectors sit beside java.smt2's integers.
+        """));
     out.append(ProofFiles.rendered("ALL"));
 
     out.append("""
@@ -190,18 +187,32 @@ final class LogProofFiles {
             "(declare-const sn Int) (declare-const sd Int)",
             "(assert (and (< 0 sn) (< 0 sd) (jdouble.S.in S) (jdouble.M.in M)))",
             "(assert (not (jdouble.near (* S M sn) sd S M sn sd)))"));
-    for (int j = ZERO_DK_LOWEST; j <= ZERO_DK_HIGHEST; j++) {
-      String a = "(ite (= S 1) M (- M))";
-      String b = pow2(52 - j);
-      check(out, "a double of binade 2^" + j + ", either sign, rounds to no other double",
-          "unsat", body("(declare-const S Int) (declare-const M Int)",
-              "(declare-const S2 Int) (declare-const M2 Int)",
-              "(assert (and (jdouble.S.in S) (jdouble.M.in M)))",
-              "(assert (or (and " + near(a, b, "S2", "M2", j)
-                  + " (not (and (= S2 S) (= M2 M))))",
-              "  " + near(a, b, "S2", "M2", j - 1),
-              "  " + near(a, b, "S2", "M2", j + 1) + "))"));
-    }
+    // A binade is the scale sn / sd with one side 1, as java.smt2 passes it. Any such scale
+    // down to the lowest normal binade's, 2^-1074, is admitted: more than the binades, which
+    // only makes an unsat stronger. Each neighbour is its own check, which both solvers decide
+    // at once; one disjunction of the three took cvc5 a minute.
+    String nearVars = "(declare-const S Int) (declare-const M Int) (declare-const S2 Int)"
+        + " (declare-const M2 Int) (declare-const sn Int) (declare-const sd Int)";
+    String scale = "(< 0 sn) (< 0 sd) (or (= sn 1) (= sd 1))";
+    String dbl = "(jdouble.S.in S) (jdouble.M.in M)";
+    String atLowest = "(<= sd (* jdouble.SUB sn))";
+    check(out, "a double, either sign, rounds to no other double of its binade, every binade",
+        "unsat", body(nearVars, "(assert (and " + scale + " " + atLowest + " " + dbl + "))",
+            "(assert (and (jdouble.near (* S M sn) sd S2 M2 sn sd)"
+                + " (not (and (= S2 S) (= M2 M)))))"));
+    check(out, "nor to one of the binade above it, every binade", "unsat", body(nearVars,
+        "(assert (and " + scale + " " + atLowest + " " + dbl + "))",
+        "(assert (jdouble.near (* S M sn) sd S2 M2 (* 2 sn) sd))"));
+    String aboveLowest = "(<= (* 2 sd) (* jdouble.SUB sn))";
+    check(out, "nor to one of the binade below it, every binade above the lowest", "unsat",
+        body(nearVars, "(assert (and " + scale + " " + aboveLowest + " " + dbl + "))",
+            "(assert (jdouble.near (* S M sn) sd S2 M2 sn (* 2 sd)))"));
+    check(out, "nor, in the lowest binade, to a subnormal", "unsat", body(nearVars,
+        "(assert (and (= sn 1) (= sd jdouble.SUB) " + dbl + "))",
+        "(assert (jdouble.near.sub (* S M sn) sd S2 M2))"));
+    check(out, "not vacuous: the lowest binade's doubles are admitted for themselves", "sat",
+        body(nearVars, "(assert (and (= sn 1) (= sd jdouble.SUB) " + dbl + "))",
+            "(assert (jdouble.near (* S M sn) sd S M sn sd))"));
     check(out, "refuted: a double less one step of its binade 2^-1 is itself", "sat", body(
         "(declare-const M Int) (declare-const M2 Int)", "(assert (jdouble.M.in M))",
         "(assert " + near("(- M 1)", pow2(53), "1", "M2", -1) + ")",
