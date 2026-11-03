@@ -392,8 +392,9 @@ class ExpTest {
 
   /**
    * Exp's int constants are e_exp.c's literals: the high words |x| is compared with (lines 117,
-   * 118, 128, 129 and 139) and the k of line 149. PROOFS.md's L3 renders the C's side of its
-   * proof at each high word from these constants, so this test is what ties that side to the C.
+   * 118, 128, 129 and 139) and the k of line 149. The proof files render the C's side from these
+   * constants - L3's from the four high words it compares, L2's from HX_THREE_HALVES_LN2 and
+   * L1's from K_MIN_NORMAL - so this test is what ties that side to the C.
    */
   @Test
   void intWordsAreTheSources() {

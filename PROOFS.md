@@ -216,7 +216,8 @@ that the raw bits of `0xfff8...`, sign set, would miss the filter);
 `LanesTest.highWordCompares` (the three compares against the C's integer compare, at every
 width, on the specials, sampled patterns and both sides of each word, through the
 `DoubleVector` forms, which now route through these); `ExpTest.intWordsAreTheSources` (each of
-`Exp`'s words, rendered into the file's C side below, is e_exp.c's literal).
+the four high words rendered into the file's C side below is e_exp.c's literal; the same test
+pins L2's `HX_THREE_HALVES_LN2` and L1's `K_MIN_NORMAL`).
 
 **Encoding.** `proofs/exp_highword_compare.smt2`, machine-checked over integers: for every long
 `bits` and every `h` in `[0, 0x7fffffff]`, `absBits` is non-negative with the C's `hx` as its high
