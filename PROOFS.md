@@ -519,19 +519,22 @@ port's signed `int` compares are the C's (the integers are the same, and so is t
 
 ### L10. expm1's reduction is exp's, with L1, L2 and L5
 
-**Statement.** For every double `x` with `hx < 0x7ff00000`, let the port compute `k = (int)
+**Statement.** For every double `x` that lines 146-158 do not return early (`hx < 0x7ff00000`,
+`x <= o_threshold`, and `x > 0` or `hx < 0x4043687A`), let the port compute `k = (int)
 fl(fl(x*invln2) + h)` with `h` the double of bits `(bits(x) & 0x80000000_00000000) |
 0x3fe00000_00000000` when `hx > 0x3fd62e42`, and `k = (int) +0.0 = 0` otherwise; `t = k`, `hi =
 x - fl(t*ln2_hi)`, `lo = fl(t*ln2_lo)`, `r = hi - lo` and `c = (hi - r) - lo`. Then (a) on the
 C's near band, `0x3fd62e42 < hx < 0x3FF0A2B2`, `k`, `hi`, `lo`, `r` and `c` are lines 164-167's
 and 174-175's, bit for bit; (b) on `hx <= 0x3fd62e42`, `k = 0`, `r = x` and `c = +0`; (c) above
-the band they are lines 169-175's.
+the band, up to `o_threshold`, they are lines 169-175's. (Lanes the C returns early from may get
+any `k`, `D2I` saturating for `|x| >= 2^31`; their results are replaced.)
 
 **Hypotheses.**
 - (H13) s_expm1.c's `invln2`, `ln2_hi` and `ln2_lo` are e_exp.c's `invln2`, `ln2HI[0]` and
   `ln2LO[0]`, bit for bit, and its band words `0x3fd62e42` and `0x3FF0A2B2` are e_exp.c's (lines
-  119-121 against e_exp.c's tables; `Expm1Test.constantsAreTheSourcesBits` pins both files to
-  the hex, `ProofsTest.l10ReductionIsExps` pins one to the other). So L2 and L5, which use
+  119-121 against e_exp.c's tables; `Expm1Test.constantsAreTheSourcesBits` and
+  `ExpTest.constantsAreTheSourcesBits` pin each to its file's hex, and
+  `ProofsTest.l10ReductionIsExps` pins one to the other). So L2 and L5, which use
   nothing but those values and words, hold for expm1's lanes as written.
 - (H14) `k` is forced to 0 on the unreduced lanes by line 162's own test, as in L1's H1: at the
   top of word `0x3fd62e42` the formula gives `k = +-1`, and the C reduced with that `k` returns

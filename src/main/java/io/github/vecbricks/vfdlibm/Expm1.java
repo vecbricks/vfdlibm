@@ -220,8 +220,9 @@ final class Expm1 {
     // - A lane that is not reduced (line 162's test false) gets k = 0, forced by that test: the
     //   sum is replaced by 0 before the cast, so t = +0, hi = x, lo = +0, and then x = hi - lo is
     //   x itself and c = (hi-x)-lo is +0 (exp's L1, step 1). The C leaves k = 0 and x there.
-    // D2I truncates toward zero like the C's int cast, and I2D is exact; a NaN gives 0 and a
-    // huge |x| saturates, but those are the filter's lanes, whose k is never kept.
+    // D2I truncates toward zero like the C's int cast, and I2D is exact. A NaN gives 0 and an
+    // |x| of 2^31 or more saturates, but those lanes are rare, returned early by the C, and their
+    // k is never kept; a positive x up to o_threshold is kept, with k up to 1024.
     DoubleVector halF = (DoubleVector) bits.and(Long.MIN_VALUE).or(HALF_BITS)
         .viewAsFloatingLanes();
     DoubleVector kArg = DoubleVector.zero(species).blend(x.mul(INVLN2).add(halF), reduced);

@@ -412,8 +412,9 @@ question.
   without the forcing.
 - **A scalar transcription of the C in the test sources pays for itself.** `Expm1Test.cExpm1`
   is s_expm1.c line by line in Java, checked against `StrictMath.expm1`; with one switch it is
-  the C reduced without the forcing, which finds the hinge witnesses, and the same code, edited
-  in a scratch copy, sized each candidate fault before it was planted (below).
+  the C reduced without the forcing, which finds the hinge witnesses. An earlier scratch
+  transcription of the same C, with a switch per candidate fault, sized each fault before it
+  was planted (below).
 - **A planted fault must change results, measured before it is wired.** On 2^22 scalar draws
   each, with the transcription edited: `Q1` one ulp up changed 8 results in (-3, 3), so
   `expm1.constantOffByOneUlp` moves `ln2_hi` instead (2782337 of the same draws); line 203's
@@ -426,7 +427,7 @@ question.
   `1-2^-k`, and line 208 needs `2^-k`: one int word per lane, picked by the masks of `k` and
   widened once, gives all three `t`, and the three exponent adds are one long add of `k << 52`.
   Each form is computed in every lane and blended, in the int pipeline of log1p (`L2I`, `D2I`,
-  `I2D`, `I2L` and int-lane shifts by `k`); every arm reads at most 0.062 B/op in
+  `I2D`, `I2L` and int-lane shifts by `k`); every arm reads at most 0.061 B/op in
   `bench/alloc-check.py` at 256 bits and the preferred species, on common and mixed data, with
   the laptop's default flags and under `-XX:UseAVX=2 -XX:MaxVectorSize=32`.
 - **Lefevre's direction bit is the 54th bit of the exact |result|.** testlibm-data's last field
