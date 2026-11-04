@@ -2,10 +2,10 @@
 
 Lessons about benchmarking, the JIT and the Vector API that every port follows. Most were learned
 in Varka (github.com/vecbricks/varka, its `sql/varka/skills/`) and are rewritten here for a vector
-math library; the last sections are what the `exp`, `log`, `log1p` and `log10` ports taught.
-Each entry says where its numbers come from. A new lesson goes in the section it belongs to, as a
-short entry; a negative result belongs here too, since it stops the next port re-trying a settled
-question.
+math library; the last sections are what the `exp`, `log`, `log1p`, `log10` and `expm1` ports
+taught. Each entry says where its numbers come from. A new lesson goes in the section it belongs
+to, as a short entry; a negative result belongs here too, since it stops the next port re-trying
+a settled question.
 
 ## Benchmarking with JMH
 
@@ -427,9 +427,10 @@ question.
   `1-2^-k`, and line 208 needs `2^-k`: one int word per lane, picked by the masks of `k` and
   widened once, gives all three `t`, and the three exponent adds are one long add of `k << 52`.
   Each form is computed in every lane and blended, in the int pipeline of log1p (`L2I`, `D2I`,
-  `I2D`, `I2L` and int-lane shifts by `k`); every arm reads at most 0.061 B/op in
-  `bench/alloc-check.py` at 256 bits and the preferred species, on common and mixed data, with
-  the laptop's default flags and under `-XX:UseAVX=2 -XX:MaxVectorSize=32`.
+  `I2D`, `I2L` and int-lane shifts by `k`); every arm passes `bench/alloc-check.py` (no
+  measured iteration at 1 B/op, above) at 256 bits and the preferred species, on common and
+  mixed data, with the laptop's default flags and under `-XX:UseAVX=2 -XX:MaxVectorSize=32`; no
+  results file records its readings.
 - **Lefevre's direction bit is the 54th bit of the exact |result|.** testlibm-data's last field
   agreed with that for all 7578 `em1` lines (3836 ones, 3742 zeros), not with "the exact
   result is above the rounded one", which splits about evenly.
@@ -464,7 +465,9 @@ question.
   is named in the output (`512: not on this host`). `NIGHTLY_JVM_ARGS` passes JVM options,
   `-XX:UseAVX=2 -XX:MaxVectorSize=32` or a planted fault:
   `NIGHTLY_JVM_ARGS=-Dvfdlibm.fault=exp.dropCorrection dev/nightly.sh sweep exp 1023/4096 0x5eed
-  256` must exit 1 and write the mismatches to `target/nightly/sweep-exp-256.txt`. That file is
+  256` must exit 1 and write the mismatches to `target/nightly/sweep-exp-256.txt`; it sweeps the
+  same 2^20 high words of `[1, 2)` as above, each with `Sweep`'s three low words, so 3 * 2^20
+  inputs per arm, at 256 bits only (no committed record gives its mismatch count). That file is
   `Inputs.hardCases`'s form: each mismatch is a `# MISMATCH` line (function, species, seed, arm,
   masked and the mask, lane, input, expected and actual as raw hex) and then the input alone, so
   the inputs go into `src/test/resources/.../hard-cases/<function>.txt` as they are. Each is
@@ -484,7 +487,8 @@ question.
   log1p on those two laptop cores, 6 to 8 runner-hours a night on GitHub's x86 runners. log10,
   added later and timed the same way on its port's branch (one run, while other work shared the
   laptop, so a laptop cost estimate, not a committed result), took 13.6 / 2.0 / 1.7 / 1.8, about
-  81 minutes whole, a little above log, whose body it holds; the projection below is for the
+  81 minutes whole, a little above log, whose body it holds. expm1, swept and fuzzed nightly
+  since its port, has not been timed, so its cost is not known; the projection below is for the
   first three functions.
 - **Why x86 sweeps 128 bits by a slice (Max, 2 November 2026).** The 128-bit species is 68 to
   80% of that cost: x86 C2 lowers no mask at two 64-bit lanes (above), so that width runs lane

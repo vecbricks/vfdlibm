@@ -527,7 +527,8 @@ x - fl(t*ln2_hi)`, `lo = fl(t*ln2_lo)`, `r = hi - lo` and `c = (hi - r) - lo`. T
 C's near band, `0x3fd62e42 < hx < 0x3FF0A2B2`, `k`, `hi`, `lo`, `r` and `c` are lines 164-167's
 and 174-175's, bit for bit; (b) on `hx <= 0x3fd62e42`, `k = 0`, `r = x` and `c = +0`; (c) above
 the band, up to `o_threshold`, they are lines 169-175's. (Lanes the C returns early from may get
-any `k`, `D2I` saturating for `|x| >= 2^31`; their results are replaced.)
+any `k`, `D2I` saturating when `fl(fl(x*invln2) + h)` truncates outside `int`'s range, about
+`|x| >= 2^31 ln2`; their results are replaced.)
 
 **Hypotheses.**
 - (H13) s_expm1.c's `invln2`, `ln2_hi` and `ln2_lo` are e_exp.c's `invln2`, `ln2HI[0]` and

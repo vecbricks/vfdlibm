@@ -220,9 +220,10 @@ final class Expm1 {
     // - A lane that is not reduced (line 162's test false) gets k = 0, forced by that test: the
     //   sum is replaced by 0 before the cast, so t = +0, hi = x, lo = +0, and then x = hi - lo is
     //   x itself and c = (hi-x)-lo is +0 (exp's L1, step 1). The C leaves k = 0 and x there.
-    // D2I truncates toward zero like the C's int cast, and I2D is exact. A NaN gives 0 and an
-    // |x| of 2^31 or more saturates, but those lanes are rare, returned early by the C, and their
-    // k is never kept; a positive x up to o_threshold is kept, with k up to 1024.
+    // D2I truncates toward zero like the C's int cast, and I2D is exact. A NaN gives 0, and the
+    // cast saturates when the sum it converts, x*invln2 +- 0.5, truncates outside int's range
+    // (about |x| >= 2^31 ln2), but those lanes are rare, returned early by the C, and their k is
+    // never kept; a positive x up to o_threshold is kept, with k up to 1024.
     DoubleVector halF = (DoubleVector) bits.and(Long.MIN_VALUE).or(HALF_BITS)
         .viewAsFloatingLanes();
     DoubleVector kArg = DoubleVector.zero(species).blend(x.mul(INVLN2).add(halF), reduced);
@@ -274,9 +275,10 @@ final class Expm1 {
     // picked per lane by tWord. Lines 209-210: y = x-(e+t); y += one.
     VectorMask<Double> highLanes = high.cast(species);
     DoubleVector y = tv.sub(em.sub(r)).blend(r.sub(em.add(tv)).add(one), highLanes);
-    // Lines 199, 206 and 211: __HI(y) += (k<<20), as the long add of k << 52 to y's bits, whose
-    // low word is zero, so the high word is the C's int sum modulo 2^32 (Lanes.addExponent,
-    // written out). Line 200: the far lanes return y-one.
+    // Lines 199, 206 and 211: __HI(y) += (k<<20), as the long add of k << 52 to y's bits
+    // (Lanes.addExponent, written out). The addend's low word is zero, so y's low word is kept
+    // and nothing carries out of it: the high word becomes __HI(y) + (k<<20) modulo 2^32, the
+    // C's int add. Line 200: the far lanes return y-one.
     LongVector yBits = (LongVector) y.viewAsIntegralLanes();
     DoubleVector scaled = (DoubleVector) yBits.add(kLong.lanewise(VectorOperators.LSHL, 52))
         .viewAsFloatingLanes();
