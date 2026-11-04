@@ -487,9 +487,9 @@ a settled question.
   log1p on those two laptop cores, 6 to 8 runner-hours a night on GitHub's x86 runners. log10,
   added later and timed the same way on its port's branch (one run, while other work shared the
   laptop, so a laptop cost estimate, not a committed result), took 13.6 / 2.0 / 1.7 / 1.8, about
-  81 minutes whole, a little above log, whose body it holds. expm1, swept and fuzzed nightly
-  since its port, has not been timed, so its cost is not known; the projection below is for the
-  first three functions.
+  81 minutes whole, a little above log, whose body it holds. expm1, which the nightly sweeps
+  and fuzzes once its port merges, has not been timed, so its cost is not known; the projection
+  below is for the first three functions.
 - **Why x86 sweeps 128 bits by a slice (Max, 2 November 2026).** The 128-bit species is 68 to
   80% of that cost: x86 C2 lowers no mask at two 64-bit lanes (above), so that width runs lane
   by lane in Java, and Varka declines 128-bit doubles on x86, so no user of the port runs it
