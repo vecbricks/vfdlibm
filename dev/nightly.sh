@@ -12,13 +12,13 @@
 #   dev/nightly.sh sweep <function> <parts> <seed> [<species>...]
 #   dev/nightly.sh fuzz <function> <seconds> <seed> [<species>...]
 #
-# <function> is exp, log, log10 or log1p. A sweep checks the high words of <parts>: comma-separated
-# parts i/N of the 2^32, or stripe:s/S for the stripe Sweep.java's --stripe takes. A fuzz runs
-# <seconds> at each species (Fuzz.java). <seed> is decimal or 0x hex. The species default to the
-# host's: 128, 256 and 512 bits up to the preferred species, and max (`Nightly species`), less
-# the one NIGHTLY_EXCEPT names (the nightly sweeps x86 at 128 bits, and Arm at max, by a
-# separate slice); a width the host lacks gets a line in the output saying so. For example, a
-# slice of exp at 256 bits:
+# <function> is exp, expm1, log, log10 or log1p. A sweep checks the high words of <parts>:
+# comma-separated parts i/N of the 2^32, or stripe:s/S for the stripe Sweep.java's --stripe takes. A
+# fuzz runs <seconds> at each species (Fuzz.java). <seed> is decimal or 0x hex. The species default
+# to the host's: 128, 256 and 512 bits up to the preferred species, and max (`Nightly species`),
+# less the one NIGHTLY_EXCEPT names (the nightly sweeps x86 at 128 bits, and Arm at max, by a
+# separate slice); a width the host lacks gets a line in the output saying so. For example, a slice
+# of exp at 256 bits:
 #
 #   mvn -B -q test-compile && dev/nightly.sh sweep exp 1023/4096 0x1234 256
 #

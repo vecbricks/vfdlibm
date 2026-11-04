@@ -21,8 +21,8 @@ import jdk.incubator.vector.VectorSpecies;
  * The exhaustive sweep of the high word: every one of the 2^32 high words, both signs, each with
  * three low words, 0, 0xffffffff and one drawn per high word from the seed, checked for one
  * function at one species by {@link Nightly.Checker}, every arm unmasked and masked. fdlibm
- * decides its branches on the high word (exp's filter, its reduction and tiny tests; log's
- * subnormal, non-finite and significand tests, which log10 shares; log1p's), so every such
+ * decides its branches on the high word (exp's and expm1's filters, reductions and tiny tests;
+ * log's subnormal, non-finite and significand tests, which log10 shares; log1p's), so every such
  * decision is taken by some input here. The low word of the third input is {@code mix(seed + hi
  * * 0x9e3779b97f4a7c15L)}, so any input of any part is reproducible from the seed alone, whatever
  * the parts and threads.

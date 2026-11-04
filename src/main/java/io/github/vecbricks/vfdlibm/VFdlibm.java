@@ -16,9 +16,9 @@ import jdk.incubator.vector.VectorMask;
  * fdlibm's double functions over {@link DoubleVector} lanes, each lane bit-identical to the
  * {@link StrictMath} method of the same name, NaN payloads and signed zeros included.
  *
- * <p>Every method works on a vector of any species of 128 bits or more (exp, log, log10 and
- * log1p hold fdlibm's {@code int} words in int lanes of half the vector's size). Each comes in two
- * forms: one computes every lane, and a masked form computes only the lanes set in {@code live}
+ * <p>Every method works on a vector of any species of 128 bits or more (exp, expm1, log, log10
+ * and log1p hold fdlibm's {@code int} words in int lanes of half the vector's size). Each comes in
+ * two forms: one computes every lane, and a masked form computes only the lanes set in {@code live}
  * and returns every other lane of its argument untouched, raw bits and all. An inactive lane
  * never sends the vector down a slow path.
  *
@@ -54,6 +54,28 @@ public final class VFdlibm {
    */
   public static DoubleVector exp(DoubleVector x, VectorMask<Double> live) {
     return Exp.exp(x, Objects.requireNonNull(live, "live"));
+  }
+
+  /**
+   * {@code StrictMath.expm1} in every lane. Ported from fdlibm 5.3's {@code s_expm1.c}.
+   *
+   * @param x the arguments
+   * @return {@code e} raised to each lane of {@code x}, less one
+   */
+  public static DoubleVector expm1(DoubleVector x) {
+    return Expm1.expm1(x, null);
+  }
+
+  /**
+   * {@code StrictMath.expm1} in the lanes set in {@code live}; every other lane is {@code x}'s,
+   * untouched.
+   *
+   * @param x the arguments
+   * @param live the lanes to compute, of {@code x}'s species
+   * @return {@code e} raised to each live lane of {@code x}, less one, and {@code x} in the others
+   */
+  public static DoubleVector expm1(DoubleVector x, VectorMask<Double> live) {
+    return Expm1.expm1(x, Objects.requireNonNull(live, "live"));
   }
 
   /**

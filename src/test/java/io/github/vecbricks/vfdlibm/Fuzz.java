@@ -70,6 +70,20 @@ final class Fuzz {
       false,
       expPoints());
 
+  /**
+   * expm1: s_expm1.c's high-word tests, its overflow threshold and 56 ln2, the doubles where its
+   * k steps (and so, at -1/-2, 1/2, 19/20 and 56/57, its return form changes), and the x whose
+   * reduced r is near the k == 1 form's -0.25 split.
+   */
+  static final Edges EXPM1 = new Edges(
+      new int[] {
+        Expm1.HX_56_LN2, Expm1.HX_FILTER, Expm1.HX_HALF_LN2, Expm1.HX_THREE_HALVES_LN2,
+        Expm1.HX_TINY, Expm1.HX_NON_FINITE, 0
+      },
+      new int[0],
+      false,
+      expm1Points());
+
   /** log: e_log.c's high-word tests, and the significand splits of lines 110 to 131. */
   static final Edges LOG = new Edges(
       new int[] {Log.HX_MIN_NORMAL, Log.HX_NON_FINITE, 0x3ff00000, 0x7fefffff, 0},
@@ -115,9 +129,21 @@ final class Fuzz {
     return points.stream().mapToDouble(Double::doubleValue).toArray();
   }
 
+  /** expm1's limits, 0.5 ln2, 1.5 ln2, ln2_hi - 0.25 and {@code (k + 1/2) ln2} for its k. */
+  private static double[] expm1Points() {
+    double ln2 = StrictMath.log(2.0);
+    List<Double> points = new ArrayList<>(List.of(Expm1.O_THRESHOLD, 56.0 * ln2, 0.5 * ln2,
+        1.5 * ln2, Expm1.LN2_HI - 0.25));
+    for (int k = -58; k <= 1025; k++) {
+      points.add((k + 0.5) * ln2);
+    }
+    return points.stream().mapToDouble(Double::doubleValue).toArray();
+  }
+
   static Edges edges(Nightly.Function function) {
     return switch (function) {
       case EXP -> EXP;
+      case EXPM1 -> EXPM1;
       case LOG -> LOG;
       case LOG10 -> LOG10;
       case LOG1P -> LOG1P;
