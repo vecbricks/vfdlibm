@@ -32,7 +32,7 @@ import org.junit.jupiter.params.provider.EnumSource;
  * masked, on s_expm1.c's high-word tests, the doubles where its {@code k} steps and so its
  * return form changes, the special values, sampled bit patterns over the whole domain, dense
  * draws over each range the C treats differently, the fold boundaries of {@code PROOFS.md}'s
- * L10 and L11, and every subset of a vector's lanes rare.
+ * L10 and L11, every subset of a vector's lanes rare, and the published hard-to-round cases.
  */
 class Expm1Test {
 
@@ -249,6 +249,13 @@ class Expm1Test {
         Inputs.uniform(seed + 3, 1 << 16, 0.5 * LN2, 3.0 * LN2)));
   }
 
+  /** The published hard-to-round inputs: see {@link Inputs#hardCases} and the resource header. */
+  @ParameterizedTest
+  @EnumSource(VectorWidth.class)
+  void publishedHardCases(VectorWidth width) {
+    assertExpm1(width.species(), Inputs.hardCases("expm1"));
+  }
+
   /** The high words where PROOFS.md's L10 and L11 hinge: the tiny, k == 0 and near-band edges. */
   static final int[] FOLD_WORDS = {
     Expm1.HX_TINY - 1, Expm1.HX_TINY, Expm1.HX_HALF_LN2, Expm1.HX_HALF_LN2 + 1,
@@ -298,7 +305,8 @@ class Expm1Test {
 
   private static double[] maskedInputs() {
     return Inputs.concat(thresholds(), Inputs.sampled(3600L, 4096),
-        Inputs.uniform(3601L, 4096, -45.0, 45.0), Inputs.magnitudes(3602L, 4096, -60, 10));
+        Inputs.uniform(3601L, 4096, -45.0, 45.0), Inputs.magnitudes(3602L, 4096, -60, 10),
+        Inputs.hardCases("expm1"));
   }
 
   @ParameterizedTest
@@ -314,7 +322,8 @@ class Expm1Test {
   @Test
   void maxSpecies() {
     double[] xs = Inputs.concat(thresholds(), Inputs.sampled(3700L, 1 << 14),
-        Inputs.uniform(3701L, 1 << 14, -45.0, 45.0), Inputs.magnitudes(3702L, 1 << 14, -60, 10));
+        Inputs.uniform(3701L, 1 << 14, -45.0, 45.0), Inputs.magnitudes(3702L, 1 << 14, -60, 10),
+        Inputs.hardCases("expm1"));
     assertExpm1(DoubleVector.SPECIES_MAX, xs);
     assertExpm1Masked(DoubleVector.SPECIES_MAX, xs, 3703L);
   }

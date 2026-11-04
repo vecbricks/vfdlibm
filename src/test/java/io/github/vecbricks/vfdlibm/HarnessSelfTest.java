@@ -403,7 +403,8 @@ class HarnessSelfTest {
    */
   @Test
   void hardCasesLoadEachFunctionsFile() {
-    Map<String, Integer> counts = Map.of("exp", 2278, "log", 2816, "log10", 1883, "log1p", 7550);
+    Map<String, Integer> counts = Map.of(
+        "exp", 2278, "expm1", 7578, "log", 2816, "log10", 1883, "log1p", 7550);
     counts.forEach((function, count) -> {
       long[] bits = rawBits(Inputs.hardCases(function));
       assertEquals(count.intValue(), bits.length, function);

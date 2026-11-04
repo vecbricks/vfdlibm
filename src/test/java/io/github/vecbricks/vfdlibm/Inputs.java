@@ -139,8 +139,8 @@ final class Inputs {
   }
 
   /**
-   * The published hard-to-round inputs for {@code function} ({@code "exp"}, {@code "log"},
-   * {@code "log10"}, {@code "log1p"}), from the test resource {@code hard-cases/<function>.txt},
+   * The published hard-to-round inputs for {@code function} ({@code "exp"}, {@code "expm1"},
+   * {@code "log"}, {@code "log10"}, {@code "log1p"}), from the test resource {@code hard-cases/<function>.txt},
    * whose header names the sources. At each the exact result lies very close to a rounding
    * boundary, where a dropped correction term or a reassociated sum, an error far below one ulp,
    * is most likely to change the returned double. A port matching fdlibm step for step matches

@@ -400,6 +400,39 @@ question.
   and a negative NaN of any payload, `StrictMath.log10` returns the bits of `(x-x)/zero`, so the
   blended arm keeps the C's expression, unlike log1p (above).
 
+## What the expm1 port taught
+
+- **A reduction shared with another port inherits its proofs through a pinned hinge.**
+  s_expm1.c reduces exactly as e_exp.c does, with the same `invln2`, `ln2_hi`, `ln2_lo` and band
+  words, so exp's far-form fold (L2), its forced `k = 0` (L1, step 1) and its sign-bit `halF`
+  (L5) hold for expm1 once a test pins the five values to exp's (`PROOFS.md`, L10, H13); the
+  SMT files rendered from `Exp` then check expm1's steps too. The forcing still needs its own
+  witness: the C reduced with the formula's `k` first differs from `StrictMath.expm1` at
+  `0x3fd62e42_ffffffec`, not at the word's top double, so a test of the top alone would pass
+  without the forcing.
+- **A scalar transcription of the C in the test sources pays for itself.** `Expm1Test.cExpm1`
+  is s_expm1.c line by line in Java, checked against `StrictMath.expm1`; with one switch it is
+  the C reduced without the forcing, which finds the hinge witnesses, and the same code, edited
+  in a scratch copy, sized each candidate fault before it was planted (below).
+- **A planted fault must change results, measured before it is wired.** On 2^22 scalar draws
+  each, with the transcription edited: `Q1` one ulp up changed 8 results in (-3, 3), so
+  `expm1.constantOffByOneUlp` moves `ln2_hi` instead (2782337 of the same draws); line 203's
+  `k < 20` moved to `k < 21` changed 3 results in (19.4, 20.6) ln2 and to `k < 19` none, so
+  `expm1.thresholdMoved` moves line 197's `k > 56` to `k > 55` (178903 of 2^22 draws in (55.4,
+  57.6) ln2). The guarded arm's fault leaves out the filter's finite lanes: far past either limit
+  `k` saturates and the common path returns garbage there (`Expm1Test.loneFilterInputs`, with
+  `-1e300` and `1e300`).
+- **Seven return forms, one exponent add.** Lines 198 and 205 are `t - (e-x)` with `t` = one or
+  `1-2^-k`, and line 208 needs `2^-k`: one int word per lane, picked by the masks of `k` and
+  widened once, gives all three `t`, and the three exponent adds are one long add of `k << 52`.
+  Each form is computed in every lane and blended, in the int pipeline of log1p (`L2I`, `D2I`,
+  `I2D`, `I2L` and int-lane shifts by `k`); every arm reads at most 0.062 B/op in
+  `bench/alloc-check.py` at 256 bits and the preferred species, on common and mixed data, with
+  the laptop's default flags and under `-XX:UseAVX=2 -XX:MaxVectorSize=32`.
+- **Lefevre's direction bit is the 54th bit of the exact |result|.** testlibm-data's last field
+  agreed with that for all 7578 `em1` lines (3836 ones, 3742 zeros), not with "the exact
+  result is above the rounded one", which splits about evenly.
+
 ## The nightly sweep and fuzz
 
 - **What runs.** `.github/workflows/nightly.yml` runs `Sweep` and `Fuzz` (in `src/test/java`,
