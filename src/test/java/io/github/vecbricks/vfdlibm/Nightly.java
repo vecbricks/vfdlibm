@@ -99,6 +99,11 @@ final class Nightly {
         // It catches expRare missing a lane the core gets wrong, never expRare marking too many:
         // an extra lane is finished by StrictMath here and so matches.
         new Arm("Exp.expCore+expRare", Nightly::expCoreAndRare, null))),
+    EXPM1("expm1", StrictMath::expm1, List.of(
+        // VFdlibm.expm1 is Expm1.expm1Guarded, so the guarded arm is checked under that name.
+        new Arm("VFdlibm.expm1", VFdlibm::expm1, VFdlibm::expm1),
+        new Arm("Expm1.expm1Blended", x -> Expm1.expm1Blended(x, null), Expm1::expm1Blended),
+        new Arm("Expm1.expm1Finish", x -> Expm1.expm1Finish(x, null), Expm1::expm1Finish))),
     LOG("log", StrictMath::log, List.of(
         new Arm("VFdlibm.log", VFdlibm::log, VFdlibm::log),
         new Arm("Log.logBlended", x -> Log.logBlended(x, null), Log::logBlended))),
@@ -128,7 +133,7 @@ final class Nightly {
         }
       }
       throw new IllegalArgumentException(
-          "unknown function '" + id + "'; known: exp, log, log10, log1p");
+          "unknown function '" + id + "'; known: exp, expm1, log, log10, log1p");
     }
   }
 

@@ -554,4 +554,131 @@ class ProofsTest {
     assertTrue(negative - Log.COMMON_LO < Log.COMMON_HI - Log.COMMON_LO);
     assertFalse(biased(negative, Log.COMMON_LO, Log.COMMON_HI));
   }
+
+  // L10: expm1's reduction is exp's, with exp's folds.
+
+  /**
+   * expm1's k == 0 domain sampled, 2^-54 <= |x| <= the top of word 0x3fd62e42: both ends, the
+   * neighbours of each, and seeded draws over every binade between, both signs.
+   */
+  private static double[] expm1KZeroDomain() {
+    double lowEnd = Lanes.fromHi(Expm1.HX_TINY);
+    double hiEnd = Math.nextDown(Lanes.fromHi(Expm1.HX_HALF_LN2 + 1));
+    double[] ends = Inputs.concat(Inputs.around(lowEnd, 8), Inputs.around(hiEnd, 8));
+    SplittableRandom random = new SplittableRandom(900L);
+    double[] xs = new double[ends.length + (1 << 16)];
+    System.arraycopy(ends, 0, xs, 0, ends.length);
+    for (int i = ends.length; i < xs.length; i++) {
+      xs[i] = Math.scalb(1.0 + random.nextDouble(), random.nextInt(-54, -1));
+    }
+    double[] both = new double[2 * xs.length];
+    int next = 0;
+    for (double x : xs) {
+      if (Math.abs(x) >= lowEnd && Math.abs(x) <= hiEnd) {
+        both[next++] = x;
+        both[next++] = -x;
+      }
+    }
+    return Arrays.copyOf(both, next);
+  }
+
+  /**
+   * L10 (a), the hinge that carries exp's L2 and L5 over: expm1's invln2, ln2_hi, ln2_lo, the
+   * bits of 0.5 and the two words of its reduction are exp's, bit for bit; and the C's near form
+   * for a negative x, {@code x + ln2_hi} and {@code -ln2_lo}, is exp's {@code x - ln2HI[1]} and
+   * {@code ln2LO[1]}, over the band's ends and seeded draws.
+   */
+  @Test
+  void l10ReductionIsExps() {
+    assertEquals(bits(Exp.INVLN2), bits(Expm1.INVLN2));
+    assertEquals(bits(Exp.LN2HI_0), bits(Expm1.LN2_HI));
+    assertEquals(bits(Exp.LN2LO_0), bits(Expm1.LN2_LO));
+    assertEquals(Exp.HALF_BITS, Expm1.HALF_BITS);
+    assertEquals(Exp.HX_HALF_LN2, Expm1.HX_HALF_LN2);
+    assertEquals(Exp.HX_THREE_HALVES_LN2, Expm1.HX_THREE_HALVES_LN2);
+    assertEquals(bits(Exp.LN2LO_1), bits(-Expm1.LN2_LO));
+    double[] xs = Inputs.concat(Inputs.around(REDUCED_MIN, 8), Inputs.around(NEAR_MAX, 8),
+        Inputs.uniform(901L, 1 << 16, REDUCED_MIN, NEAR_MAX));
+    for (double ax : xs) {
+      if (ax < REDUCED_MIN || ax > NEAR_MAX) {
+        continue;
+      }
+      double x = -ax;
+      int k = (int) kArg(x);
+      assertEquals(-1, k, Oracle.hex(x));
+      double t = k;
+      assertEquals(bits(x + Expm1.LN2_HI), bits(x - t * Expm1.LN2_HI), Oracle.hex(x));
+      assertEquals(bits(-Expm1.LN2_LO), bits(t * Expm1.LN2_LO), Oracle.hex(x));
+    }
+  }
+
+  /**
+   * L10 (b): with k forced to 0, t = +0, so hi = x, lo = +0, r = hi - lo = x and c = (hi-r)-lo
+   * = +0, bit for bit, over expm1's k == 0 domain, both signs.
+   */
+  @Test
+  void l10UnreducedLanesKeepXWithZeroCorrection() {
+    double t = 0.0;
+    for (double x : expm1KZeroDomain()) {
+      String at = Oracle.hex(x);
+      double hi = x - t * Expm1.LN2_HI;
+      double lo = t * Expm1.LN2_LO;
+      double r = hi - lo;
+      assertEquals(bits(x), bits(hi), at);
+      assertEquals(bits(0.0), bits(lo), at);
+      assertEquals(bits(x), bits(r), at);
+      assertEquals(bits(0.0), bits((hi - r) - lo), at);
+    }
+  }
+
+  /**
+   * L10 (c): k must be forced to 0 by the high-word test. At the top of word 0x3fd62e42 the
+   * formula gives k = +-1, and at the first such doubles from the top whose result it changes,
+   * {@code 0x3fd62e42_ffffffec} and {@code 0xbfd62e42_fffffff3}, the C reduced with that k is not
+   * StrictMath.expm1, while the C as written is.
+   */
+  @Test
+  void l10KIsForcedByTheHighWordTest() {
+    for (long b : new long[] {0x3fd62e42_ffffffecL, 0xbfd62e42_fffffff3L}) {
+      double x = Double.longBitsToDouble(b);
+      String at = Oracle.hex(x);
+      assertEquals(x > 0 ? 1 : -1, (int) kArg(x), at);
+      assertEquals(bits(StrictMath.expm1(x)), bits(Expm1Test.cExpm1(x, false)), at);
+      assertNotEquals(bits(StrictMath.expm1(x)), bits(Expm1Test.cExpm1(x, true)), at);
+    }
+    // Above them, to the top of the word, the unforced k still gives the right double: these
+    // are the first witnesses, so the test of the word's top doubles alone would miss them.
+    for (long low = 0xffffffffL; low > 0xffffffecL; low--) {
+      double x = Double.longBitsToDouble(0x3fd62e42_00000000L | low);
+      assertEquals(bits(StrictMath.expm1(x)), bits(Expm1Test.cExpm1(x, true)), Oracle.hex(x));
+    }
+  }
+
+  // L11: expm1's k == 0 return through the k != 0 inner term.
+
+  /**
+   * L11: on the k == 0 domain, with c = +0 (L10 (b)), the inner term (r*(e-c)-c)-hxs is line
+   * 189's r*e-hxs bit for bit, so r minus it is the C's k == 0 return; and e - (+0) and v - (+0)
+   * are e and v, -0 included.
+   */
+  @Test
+  void l11KZeroReturnIsTheInnerTermsForm() {
+    double c = 0.0;
+    assertEquals(bits(-0.0), bits(-0.0 - c));
+    for (double r : expm1KZeroDomain()) {
+      String at = Oracle.hex(r);
+      double hfx = 0.5 * r;
+      double hxs = r * hfx;
+      double r1 = 1.0 + hxs * (Expm1.Q1 + hxs * (Expm1.Q2 + hxs * (Expm1.Q3 + hxs
+          * (Expm1.Q4 + hxs * Expm1.Q5))));
+      double t = 3.0 - r1 * hfx;
+      double e = hxs * ((r1 - t) / (6.0 - r * t));
+      assertEquals(bits(e), bits(e - c), at);
+      assertEquals(bits(r * e), bits(r * (e - c) - c), at);
+      double inner = (r * (e - c) - c) - hxs;
+      assertEquals(bits(r * e - hxs), bits(inner), at);
+      assertEquals(bits(r - (r * e - hxs)), bits(r - inner), at);
+      assertEquals(bits(StrictMath.expm1(r)), bits(r - inner), at);
+    }
+  }
 }

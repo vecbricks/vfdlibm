@@ -1,7 +1,7 @@
 name: Nightly
 
-# The nightly correctness run (SKILLS.md, "The nightly sweep and fuzz"): every arm of exp, log,
-# log10 and log1p, unmasked and masked, compared with StrictMath by raw bits.
+# The nightly correctness run (SKILLS.md, "The nightly sweep and fuzz"): every arm of exp,
+# expm1, log, log10 and log1p, unmasked and masked, compared with StrictMath by raw bits.
 #
 # - sweep (x86): every one of the 2^32 high words with three low words each (Sweep.java) at
 #   every width the drawn runner has except 128 bits: 256 and max on every draw, 512 on an
@@ -40,11 +40,11 @@ on:
         required: false
         default: '1'
       shards:
-        description: 'Sweep (x86): parallel jobs per function and night, a power of two to 64'
+        description: 'Sweep (x86): parallel jobs per function and night, a power of two to 32'
         required: false
         default: '2'
       arm-shards:
-        description: 'Sweep (Arm): parallel jobs per function and night, a power of two to 64'
+        description: 'Sweep (Arm): parallel jobs per function and night, a power of two to 32'
         required: false
         default: '4'
       night:
@@ -101,13 +101,14 @@ jobs:
           elif ! [[ $SEED =~ ^0x[0-9a-fA-F]{1,16}$ ]]; then
             echo "::error::seed takes 0x and up to 16 hex digits, not '$SEED'"; exit 1
           fi
-          # A matrix holds at most 256 jobs: 4 functions times 64 shards is 256, the cap. A stripe
-          # count (nights or slice-nights times shards) is at most Sweep's 4096 chunks.
+          # A matrix holds at most 256 jobs: 5 functions times 32 shards is 160, and 64 shards
+          # would be 320, past the cap. A stripe count (nights or slice-nights times shards) is at
+          # most Sweep's 4096 chunks.
           for n in "$NIGHTS" "$SLICE_NIGHTS"; do
             for s in "$SHARDS" "$ARM_SHARDS"; do
-              if ! pow2 "$n" || ! pow2 "$s" || [ "$s" -gt 64 ] || [ $((n * s)) -gt 4096 ]; then
+              if ! pow2 "$n" || ! pow2 "$s" || [ "$s" -gt 32 ] || [ $((n * s)) -gt 4096 ]; then
                 echo "::error::nights, slice-nights and the shards take powers of two, the" \
-                  "shards at most 64, a nights count times a shard count at most 4096"
+                  "shards at most 32, a nights count times a shard count at most 4096"
                 exit 1
               fi
             done
@@ -131,7 +132,7 @@ jobs:
           # and the species the slice takes; on Arm the first shard also fuzzes.
           matrix() {
             local shards="$1" slice_species="$2" json='{"include":[' sep='' f j fuzz
-            for f in exp log log10 log1p; do
+            for f in exp expm1 log log10 log1p; do
               for ((j = 0; j < shards; j++)); do
                 if [ "$j" = 0 ]; then fuzz=true; else fuzz=false; fi
                 json="$json$sep{\"function\":\"$f\",\"shard\":$j"
@@ -219,7 +220,7 @@ jobs:
       fail-fast: false
       max-parallel: 3
       matrix:
-        function: [exp, log, log10, log1p]
+        function: [exp, expm1, log, log10, log1p]
         name: [runner flags, as AVX2]
         include:
           - name: runner flags

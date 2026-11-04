@@ -503,3 +503,106 @@ every `b` and every `lo <= hi`, and the two ranges are the C's tests for every `
 checks refute the compare without the bias and each bound moved by one. Not checked: that
 `__HI(x)` and `__LO(x)` are the bits' high int and low word, and that the port compares with
 these bounds, the code's text.
+
+## expm1 (`Expm1.java`, from `s_expm1.c`)
+
+s_expm1.c reduces `|x| > 0.5 ln2` the way e_exp.c does, in a near form for `|x| < 1.5 ln2`
+(lines 163-167) and the far form above it (169-172), and leaves `|x| <= 0.5 ln2` unreduced with
+`k = 0` (line 181); after the polynomial it returns `x - (x*e-hxs)` for `k == 0` (line 189) and
+one of six forms of `e = (x*(e-c)-c)-hxs` otherwise (191-212). The port computes the far form
+on every lane and lets `k == 0` lanes through it (L10), and returns the `k == 0` lanes' result
+from the shared `e` (L11). Everything else is the C's operations in the C's order; the six
+`k != 0` forms are each computed and blended. Line numbers in this section are
+`reference/fdlibm-5.3/s_expm1.c`'s, and `hx` is the C's high word of `|x|`. In the C `hx` is
+`unsigned`; every compare follows `hx &= 0x7fffffff`, so both sides lie in `[0, 2^31)` and the
+port's signed `int` compares are the C's (the integers are the same, and so is their order).
+
+### L10. expm1's reduction is exp's, with L1, L2 and L5
+
+**Statement.** For every double `x` with `hx < 0x7ff00000`, let the port compute `k = (int)
+fl(fl(x*invln2) + h)` with `h` the double of bits `(bits(x) & 0x80000000_00000000) |
+0x3fe00000_00000000` when `hx > 0x3fd62e42`, and `k = (int) +0.0 = 0` otherwise; `t = k`, `hi =
+x - fl(t*ln2_hi)`, `lo = fl(t*ln2_lo)`, `r = hi - lo` and `c = (hi - r) - lo`. Then (a) on the
+C's near band, `0x3fd62e42 < hx < 0x3FF0A2B2`, `k`, `hi`, `lo`, `r` and `c` are lines 164-167's
+and 174-175's, bit for bit; (b) on `hx <= 0x3fd62e42`, `k = 0`, `r = x` and `c = +0`; (c) above
+the band they are lines 169-175's.
+
+**Hypotheses.**
+- (H13) s_expm1.c's `invln2`, `ln2_hi` and `ln2_lo` are e_exp.c's `invln2`, `ln2HI[0]` and
+  `ln2LO[0]`, bit for bit, and its band words `0x3fd62e42` and `0x3FF0A2B2` are e_exp.c's (lines
+  119-121 against e_exp.c's tables; `Expm1Test.constantsAreTheSourcesBits` pins both files to
+  the hex, `ProofsTest.l10ReductionIsExps` pins one to the other). So L2 and L5, which use
+  nothing but those values and words, hold for expm1's lanes as written.
+- (H14) `k` is forced to 0 on the unreduced lanes by line 162's own test, as in L1's H1: at the
+  top of word `0x3fd62e42` the formula gives `k = +-1`, and the C reduced with that `k` returns
+  a different double first at `0x3fd62e42_ffffffec` and `0xbfd62e42_fffffff3` (scanning down
+  from the word's top double; 80272 positive and 118783 negative doubles of the word's top
+  2^20 differ, an exhaustive scalar run of a transcription of the C).
+
+**Proof.**
+1. (c) is the C's far form, operation by operation, with `h` for `(xsb==0)?0.5:-0.5` by L5
+   (line 141's `xsb` is line 113's of e_exp.c, the sign bit; the C's ternary and e_exp.c's
+   `halF[xsb]` are the same two doubles) and `x*invln2` for `invln2*x`, the same rounding of the
+   same exact product.
+2. (a): L2 gives `k = 1 - 2*xsb`, `hi = x - ln2HI[xsb]` and `lo = ln2LO[xsb]` (H13). For `xsb =
+   0` that is line 165, `hi = x - ln2_hi, lo = ln2_lo, k = 1`. For `xsb = 1`, `ln2HI[1] =
+   -ln2_hi` bit for bit (L2's H5), and `fl(x - (-ln2_hi)) = fl(x + ln2_hi)` by (R4), both being
+   the rounding of the same real `x + ln2_hi`: line 167's `hi`; `lo = ln2LO[1] = -ln2_lo` is line
+   167's `lo`, the negation exact (IEEE 754 sign-magnitude). From there `r` and `c` are lines
+   174-175 on the same operands.
+3. (b): `k = 0` by H14, `t = +0` (`I2D` of 0, JLS 5.1.2), `fl(+0 * ln2_hi) = +0` and `fl(+0 *
+   ln2_lo) = +0` (R3, both constants positive and finite), so `hi = x - (+0) = x` and `lo = +0`
+   and `r = x - (+0) = x` (R3, `-0` included). Then `hi - r = x - x = +0`, an exact zero
+   difference of like signs (R5; `x` is finite, `|x| < 0.35`), and `+0 - (+0) = +0` (R5). The C
+   keeps `x` and `k = 0` there and never reads `c`; the port reads `c` only in L11.
+
+The tiny lanes, `hx < 0x3c900000`, also get `k = 0` and `r = x` and are then replaced by line
+179's `x - (t-(huge+x))`, computed as the C writes it. The planted fault
+`expm1.constantOffByOneUlp` (`ln2_hi` one ulp up) reaches every reduced lane through
+`t*ln2_hi`, the band's lanes included, and is caught.
+
+**Hinge tests (scalar).** `ProofsTest.l10ReductionIsExps` (H13, and the C's negative near form
+against the far form's `hi` and `lo`, at both ends of the band and 65536 seeded draws);
+`ProofsTest.l10UnreducedLanesKeepXWithZeroCorrection` (step 3's `hi`, `lo`, `r` and `c`, by bits,
+over both ends of `2^-54 <= |x| < 0.5 ln2`, their neighbours and 65536 draws over every binade,
+both signs); `ProofsTest.l10KIsForcedByTheHighWordTest` (H14: `k = +-1` from the formula at the
+two witnesses, where the C reduced with it, `Expm1Test.cExpm1(x, true)`, is not
+`StrictMath.expm1`, the C as written is, and the doubles above the positive witness, where the
+unforced `k` happens to give the same double, are checked to be so). The transcription
+`Expm1Test.cExpm1` is itself checked against `StrictMath.expm1`
+(`Expm1Test.scalarTranscriptionIsStrictMath`). **Vector tie.** `Expm1Test.foldBoundaries` and
+`foldBoundariesAtMaxSpecies` run every arm, unmasked and masked, against `StrictMath` at the
+words `0x3c900000 +- 1`, `0x3fd62e42`, `0x3fd62e43`, `0x3ff0a2b1` and `0x3ff0a2b2`, both signs,
+low words 0, `0xffffffff` and 1024 seeded, plus the 4096 doubles each side of `+-0.5 ln2`, at
+every width and `SPECIES_MAX`.
+
+**Encoding.** No file of its own. The machine-checked parts of L2 (`proofs/exp_near_band.smt2`),
+L1's step 1 (`proofs/exp_zero_reduction.smt2`) and L5 (`proofs/exp_half_sign.smt2`) are rendered
+from `Exp`'s constants and words, which H13 makes expm1's, so they check these steps for expm1 as
+they stand. Informal above: H13's equality itself (a test), H14's witnesses (a scalar run of the
+C's transcription, not a solver), `fl(x - (-a)) = fl(x + a)` (R4), `c = +0` (R5, as L6's zero
+cases, not encoded here), and that the port computes these steps, the code's text.
+
+### L11. The k == 0 return is x - e with e = (x*(e-c)-c)-hxs and c = +0
+
+**Statement.** On the lanes with `k == 0` and `hx >= 0x3c900000`, where L10 gives `r = x` and
+`c = +0`, let `e` be line 188's and `E = fl(fl(fl(r*fl(e - c)) - c) - hxs)`, lines 191-192. Then
+`E = fl(fl(r*e) - hxs)`, and `fl(r - E)` is line 189's `x - (x*e-hxs)`, bit for bit.
+
+**Hypotheses.**
+- (H15) `c = +0` on those lanes (L10, step 3).
+
+**Proof.** `fl(e - (+0)) = e` for every `e`, `-0` included (R3), so `fl(r*fl(e - c)) = fl(r*e)`;
+`fl(fl(r*e) - (+0)) = fl(r*e)` (R3 again); so `E` is `fl(fl(r*e) - hxs)`, line 189's inner
+term computed from the same `r = x`, `e` and `hxs`, and `fl(r - E)` is its last operation. No
+other property is used. The port so computes line 189's result as the same `r - E` that lines
+193 and 196 start from (`x-e`), dropping a product and a difference.
+
+**Hinge tests (scalar).** `ProofsTest.l11KZeroReturnIsTheInnerTermsForm`, over the `k == 0`
+domain as L10's: `e - c` and `r*(e-c) - c` against `e` and `r*e` by bits, `E` against `r*e -
+hxs`, `r - E` against line 189's return and against `StrictMath.expm1`; with L10's step-3 test
+for H15. **Vector tie.** As L10's: every `Expm1Test` case of a `k == 0` lane, and the fold
+boundaries.
+
+**Encoding.** None; the two steps are (R3), stated, as L1's `x - (+0) = x`, which
+`proofs/exp_zero_reduction.smt2` checks per binade for the nonzero case.
