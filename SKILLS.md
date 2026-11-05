@@ -429,8 +429,17 @@ a settled question.
   Each form is computed in every lane and blended, in the int pipeline of log1p (`L2I`, `D2I`,
   `I2D`, `I2L` and int-lane shifts by `k`); every arm passes `bench/alloc-check.py` (no
   measured iteration at 1 B/op, above) at 256 bits and the preferred species, on common and
-  mixed data, with the laptop's default flags and under `-XX:UseAVX=2 -XX:MaxVectorSize=32`; no
-  results file records its readings.
+  mixed data, with the laptop's default flags and under `-XX:UseAVX=2 -XX:MaxVectorSize=32`; the
+  two runner files record `gc.alloc.rate.norm`: no vector row on the native species reads over
+  0.035 B/op.
+- **expm1 on the benchmark hosts, 4 November 2026.** On the Xeon Platinum 8573C
+  (`bench/results/expm1-xeon8573c-2026-11-04.txt`) the guarded arm has the lowest minimum on the
+  preferred rows, 5% ahead of finish on common data and 3% ahead of blended on mixed; on the EPYC
+  7763 (`bench/results/expm1-epyc7763-2026-11-04.txt`) finish is ahead of guarded, by 14% and 8%.
+  Every arm is within 1.3x of the others on every native row of both, from one run each, so no
+  direction is read and `VFdlibm.expm1` keeps the guarded arm; a second 8573C run and the Xeon
+  6973P-C run are owed. The EPYC file's 512-bit rows run in the Java fallback and measure no
+  expm1.
 - **Lefevre's direction bit is the 54th bit of the exact |result|.** testlibm-data's last field
   agreed with that for all 7578 `em1` lines (3836 ones, 3742 zeros), not with "the exact
   result is above the rounded one", which splits about evenly.
