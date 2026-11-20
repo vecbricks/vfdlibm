@@ -77,6 +77,10 @@ WHOLE = 2 ** 32   # the high words of a whole sweep
 TIME = "%Y-%m-%dT%H:%M:%SZ"
 
 
+# The seconds a gh call may take before it counts as failed, so one stalled download does not
+# hold the whole fetch.
+CALL_SECONDS = 120
+
 # What gh said the first time a call that may fail did, for the message that counts them.
 FIRST_FAILURE = []
 
@@ -84,7 +88,11 @@ FIRST_FAILURE = []
 def gh(args, repo, check=True, remember=True):
     """Runs gh on the repository; its output, or None when it fails and check is off."""
     cmd = ["gh"] + args + (["--repo", repo] if repo else [])
-    done = subprocess.run(cmd, capture_output=True, text=True, errors="replace")
+    try:
+        done = subprocess.run(cmd, capture_output=True, text=True, errors="replace",
+                              timeout=CALL_SECONDS)
+    except subprocess.TimeoutExpired:
+        done = subprocess.CompletedProcess(cmd, 1, "", "no answer in %d s" % CALL_SECONDS)
     if done.returncode != 0:
         said = "%s failed: %s" % (" ".join(cmd), done.stderr.strip())
         if check:
@@ -183,9 +191,9 @@ def nights(repo, since, until):
     gh lists it), oldest first. A run's date is the UTC day it was created on."""
     runs = json.loads(gh(["run", "list", "--workflow", WORKFLOW, "--limit", "1000", "--json",
                           "databaseId,createdAt,status,attempt,event,headSha"], repo))
-    kept = [(r["createdAt"][:10], r["databaseId"], r) for r in runs
-            if r["status"] == "completed"]
-    return sorted((n for n in kept
+    completed = [(r["createdAt"][:10], r["databaseId"], r) for r in runs
+                 if r["status"] == "completed"]
+    return sorted((n for n in completed
                    if (not since or n[0] >= since) and (not until or n[0] <= until)),
                   key=lambda n: n[:2])
 
@@ -356,6 +364,10 @@ def fetch(args):
                  " jobs' rows without them."
                  % (unlogged, len(todo), FIRST_FAILURE[0] if FIRST_FAILURE else "none said"))
     rows = sorted(row(date, run, job, f or {}) for (date, run, job), f in zip(todo, found))
+    for path in (args.cost, args.out):
+        # Both files or neither: a path that cannot be written is found before either is.
+        if path and not os.access(os.path.dirname(os.path.abspath(path)), os.W_OK):
+            sys.exit("%s cannot be written; no file was written" % path)
     if args.cost:
         read_of = {job["databaseId"]: f or {} for (_, _, job), f in zip(todo, found)}
         every.sort(key=lambda t: (t[0], t[1], t[2]["databaseId"]))
@@ -481,7 +493,10 @@ def machine(r):
     size = re.search(r"MaxVectorSize=(\d+)", r["jvm"])
     if not size:
         return "-"
-    return "%s, %d bits" % ("Arm" if "UseSVE" in r["jvm"] else "x86", 8 * int(size.group(1)))
+    # A job's CPU is "-" on Arm, which /proc/cpuinfo gives no model name; its JVM line says SVE
+    # or NEON.
+    arm = r["cpu"] == "-" or "UseSVE" in r["jvm"]
+    return "%s, %d bits" % ("Arm" if arm else "x86", 8 * int(size.group(1)))
 
 
 def median(values):
@@ -662,7 +677,8 @@ def cost(args):
         print("| %s | %s | %s | %s | %d | %s |" % (f, place, flags, label, len(values),
                                                   low_mid_high(values)))
 
-    odd = sum(1 for r in rows if r["mode"] != "-" and r not in done)
+    kept_ids = {id(r) for r in done}
+    odd = sum(1 for r in rows if r["mode"] != "-" and id(r) not in kept_ids)
     if odd:
         print()
         print("%d species runs did not exit 0, or lack their seconds, bits or count, and are"

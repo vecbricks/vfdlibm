@@ -37,8 +37,9 @@ when the logs are gone.
   build, and a later step prints the CPU again.
 - A night's date is the UTC day its run was created on. Every completed run of the workflow
   counts as a night, a dispatched one too.
-- A job whose log is gone, or whose probe printed no line, keeps its row, with `-` in the cells
-  it lacks; `table` counts it as "without a reading".
+- A job whose probe printed no line keeps its row, with `-` in the cells it lacks; `table`
+  counts it as "without a reading". A job whose log cannot be read stops the fetch, unless
+  `--without-logs` is given (see "What a night costs").
 
 ## The files
 
@@ -125,13 +126,15 @@ What the 17 nights say:
 - By function, a night costs 62 minutes for log, 68 for log10, 69 for exp, 79 for log1p and 84
   for expm1.
 - The 128-bit slice is 15% of the x86 sweep jobs' time, 17 minutes a night, for 1/32 of the
-  high words. Swept whole at 128 bits on a 256-bit machine, a function would take 67.5 (log)
-  to 262 (expm1) minutes by the median, against 6.6 to 13.2 at 256 bits. On Arm the same
-  species takes 7.2 to 13.4.
-- An x86 draw with 512-bit vectors is not one speed. exp's whole sweep at 512 bits reads 3.5 to
-  7.1 minutes over 22 runs, and at 256 bits on those machines 5.0 to 10.2, against 9.2 to 9.6
-  on the 256-bit machines. `--by-cpu` shows which CPU reads which, and keeps the EPYC 9V74's
-  draws without AVX-512 apart from those with it.
+  high words. Scaled to every high word, the sweeps' own seconds are, by the median of each
+  group in the fourth table, 67.5 (log) to 262 (expm1) minutes at 128 bits on a 256-bit
+  machine, 6.6 to 13.2 at 256 bits there, and 7.2 to 13.4 at 128 bits on Arm. These are what
+  the nightly's jobs took, to size the night with; they say nothing about one body being
+  faster than another.
+- An x86 draw with 512-bit vectors is not one machine to size by. The fourth table gives exp
+  at 512 bits 3.5 to 7.1 minutes over 22 runs, against 9.2 to 9.6 at 256 bits on the 256-bit
+  machines. `--by-cpu` shows which CPU reads which, and keeps the EPYC 9V74's draws without
+  AVX-512 apart from those with it.
 
 ## Adding nights
 
