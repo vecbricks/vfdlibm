@@ -58,8 +58,8 @@ vfdlibm ports fdlibm's double functions to the Java Vector API, each lane bit-id
   `nightly-failure`. How to run a slice by hand is in `SKILLS.md`, "The nightly sweep and fuzz".
 - The jar is checked from outside by `dev/jar-check.sh`, which CI runs after `verify`: it must
   hold `LICENSE` and `NOTICE` under `META-INF/`, its module name, the library's classes and
-  nothing else, and a consumer compiled against it alone, on the class path and on the module
-  path, must get `StrictMath`'s bits. A new public function goes in that consumer too, which
+  nothing else but the manifest and Maven's metadata, and a consumer compiled against it alone,
+  on the class path and on the module path, must get `StrictMath`'s bits. A new public function goes in that consumer too, which
   fails until it is there; `--self-test` shows the checks of the jar's contents failing, each
   on a copy of the jar with one defect.
 - Benchmarks are JMH, in `src/jmh/java`; `verify` compiles them. Run them with
