@@ -119,6 +119,11 @@ port teaches.
   host, dispatch it with `bench/dispatch-bench.sh --host <host> --base <base ref> <head ref>`;
   the pair's results file goes to `bench/results/` like any other. An A/A pair (`--base HEAD`)
   gives the machine's own spread to read a real pair against.
+- A host run becomes a results file with `bench/record.py write --run <run id>`, which writes
+  the header, the min/avg/max tables and the raw section from the run's artifact, one file per
+  benchmark class, and leaves marked lines for the title, the reason and the reading. Before
+  committing, `bench/record.py check <file> --run <run id>` must pass: no figure of those parts
+  is copied by hand.
 - When a change moves committed numbers, measure again and commit the new file, then requote
   every document from it, rather than patching quoted figures one by one.
 
