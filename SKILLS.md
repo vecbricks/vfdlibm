@@ -478,7 +478,7 @@ a settled question.
   check those steps for expm1 too; `proofs/expm1_reduction.smt2` holds the values to exp's
   under the solvers as well, and checks the unreduced lanes' step (`c = +0`) and, at four
   doubles, that the formula's `k` would be wrong there; the forcing over the whole word is the
-  port's blend and a hinge test. The forcing still needs its own
+  port's blend, which `Expm1Test.foldBoundaries` samples. The forcing still needs its own
   witness: the C reduced with the formula's `k` first differs from `StrictMath.expm1` at
   `0x3fd62e42_ffffffec`, and for negative x at `0xbfd62e42_fffffff3`, not at the word's top
   double, so a test of the top alone would pass without the forcing.

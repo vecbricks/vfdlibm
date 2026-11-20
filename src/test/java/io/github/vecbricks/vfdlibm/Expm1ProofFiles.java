@@ -248,7 +248,8 @@ final class Expm1ProofFiles {
         ;   - That k is forced to 0 on every lane of word 0x3fd62e42 and below: section C shows
         ;     at four doubles that the formula's k would be wrong there and that the C as
         ;     written is the oracle's; that the port's blend takes k = 0 on those lanes is the
-        ;     code's text, with the hinge test over the whole word.
+        ;     code's text, which Expm1Test.foldBoundaries samples (1026 low words per sign at
+        ;     each of its words, 4096 doubles each side of 0.5 ln2).
         ;   - That StrictMath.expm1 is the k = 0 computation at the witnesses: the oracle is in
         ;     no solver (ProofsTest.l10KIsForcedByTheHighWordTest).
         ;   - That the witnesses are the first from the word's top, and how many doubles of the
