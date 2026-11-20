@@ -16,7 +16,9 @@
 # from Central is checked by naming it. The checks:
 #
 #   1. The jar holds META-INF/LICENSE and META-INF/NOTICE, byte for byte the files at the root of
-#      this checkout, and NOTICE names Sun Microsystems: compiled classes carry no notice.
+#      this checkout, and NOTICE names Sun Microsystems: compiled classes carry no notice. A
+#      sources jar or a Javadoc jar beside the jar (<name>-sources.jar, <name>-javadoc.jar, as
+#      the release profile builds them) must hold the same two files.
 #   2. Its manifest names the module, Automatic-Module-Name: io.github.vecbricks.vfdlibm, and the
 #      jar has no module-info.class beside that name.
 #   3. Its classes are the ones of this checkout's src/main/java, each source file's class and
@@ -28,15 +30,17 @@
 #      META-INF/maven/.
 #   4. A consumer compiled against the jar alone, with the module jdk.incubator.vector, runs and
 #      finds every lane of every public function equal to StrictMath's by raw bits, in the plain
-#      and the masked form, at the preferred species; it fails if VFdlibm has a public method,
-#      by name and number of parameters, that it does not check. It is compiled and run twice:
-#      with the jar on the class path, and as a module that requires
+#      and the masked form, at the preferred species. It finds the functions by name through
+#      reflection, and fails if VFdlibm has a public method, by name and number of parameters,
+#      that it did not call, or if the jar has another public class. It is compiled and run
+#      twice: with the jar on the class path, and as a module that requires
 #      io.github.vecbricks.vfdlibm with the jar on the module path.
 #
 # The consumer is no test of a function: the suite is. It shows that the jar loads and links for
 # somebody who has nothing else of this project. It needs a JDK that compiles --release 25 (jar,
 # javac and java: all three from JAVA_HOME if that is set, else from PATH) and cmp, and writes
-# under a temporary directory it removes; a JDK that is too old is "could not run". Exit
+# under a temporary directory it removes; a JDK that is too old is "could not run". The JVM's
+# own options variables (JAVA_TOOL_OPTIONS and the like) apply to the consumer as to any JVM. Exit
 # status: 0 when every check passed, 1 when one failed (each failure is printed, and every check
 # runs), 2 when it could not run.
 set -uo pipefail
@@ -67,8 +71,14 @@ tool() {
 JAR="$(tool jar)" || exit 2
 JAVAC="$(tool javac)" || exit 2
 JAVA="$(tool java)" || exit 2
+# The line of -version that holds the version: JAVA_TOOL_OPTIONS puts a notice before it.
+version_of() { "$1" -version 2>&1 | grep -m 1 -E '^(javac|openjdk|java) ' ; }
 "$JAVAC" --release "$RELEASE" -version > /dev/null 2>&1 \
-  || die "$JAVAC does not compile --release $RELEASE: $("$JAVAC" -version 2>&1 | head -1)"
+  || die "$JAVAC does not compile --release $RELEASE: $(version_of "$JAVAC")"
+feature="$("$JAVA" -XshowSettings:properties -version 2>&1 \
+  | sed -n 's/^ *java\.specification\.version = \([0-9]*\).*/\1/p' | head -1)"
+[ -n "$feature" ] && [ "$feature" -ge "$RELEASE" ] \
+  || die "$JAVA does not run Java $RELEASE classes: $(version_of "$JAVA")"
 
 if [ $# -eq 1 ]; then
   jar="$1"
@@ -99,7 +109,7 @@ fail() { echo "FAIL  $*"; failures=$((failures + 1)); }
 ok() { echo "ok    $*"; }
 
 echo "jar-check: $jar"
-"$JAVA" -version 2>&1 | sed -n '1s/^/jar-check: /p'
+echo "jar-check: $(version_of "$JAVA")"
 
 "$JAR" tf "$jar" > "$work/listing" || die "cannot list $jar"
 mkdir "$work/unpacked" || die "cannot unpack"
@@ -115,17 +125,34 @@ for name in LICENSE NOTICE; do
     ok "META-INF/$name is this checkout's $name"
   fi
 done
-if grep -q "Sun Microsystems" "$work/unpacked/META-INF/NOTICE" 2>/dev/null; then
-  ok "META-INF/NOTICE carries Sun's notice"
-else
-  fail "META-INF/NOTICE does not name Sun Microsystems"
+if [ -f "$work/unpacked/META-INF/NOTICE" ]; then
+  if grep -q "Sun Microsystems" "$work/unpacked/META-INF/NOTICE"; then
+    ok "META-INF/NOTICE carries Sun's notice"
+  else
+    fail "META-INF/NOTICE does not name Sun Microsystems"
+  fi
 fi
+for kind in sources javadoc; do
+  sibling="${jar%.jar}-$kind.jar"
+  [ -f "$sibling" ] || continue
+  mkdir "$work/$kind" || die "cannot unpack"
+  (cd "$work/$kind" && "$JAR" xf "$sibling" META-INF/LICENSE META-INF/NOTICE) \
+    || die "cannot unpack $sibling"
+  for name in LICENSE NOTICE; do
+    if cmp -s "$root/$name" "$work/$kind/META-INF/$name"; then
+      ok "the $kind jar's META-INF/$name is this checkout's $name"
+    else
+      fail "the $kind jar has no META-INF/$name, or not this checkout's"
+    fi
+  done
+done
 
 # 2. The module's name. A manifest line ends in CR LF.
 manifest="$work/unpacked/META-INF/MANIFEST.MF"
 if [ ! -f "$manifest" ]; then
   fail "the jar has no META-INF/MANIFEST.MF"
-elif tr -d '\r' < "$manifest" | grep -qxF "Automatic-Module-Name: $MODULE"; then
+elif tr -d '\r' < "$manifest" > "$work/manifest" \
+    && grep -qxF "Automatic-Module-Name: $MODULE" "$work/manifest"; then
   ok "the manifest says Automatic-Module-Name: $MODULE"
 else
   fail "the manifest has no line Automatic-Module-Name: $MODULE"
@@ -152,7 +179,7 @@ while IFS= read -r class; do
   name="${name%.class}"
   top="${name%%\$*}"
   known=0
-  if [ "$class" = "$PACKAGE_DIR/$name.class" ]; then
+  if [ "$class" = "$PACKAGE_DIR/$name.class" ] && [ "${name#*/}" = "$name" ]; then
     for source in "${sources[@]}"; do
       [ "$top" = "$source" ] && known=1
     done
@@ -211,31 +238,30 @@ public final class Consumer {
     Double.POSITIVE_INFINITY, Double.NEGATIVE_INFINITY, 0.6931471805599453,
   };
 
-  private interface Plain {
-    DoubleVector apply(DoubleVector x);
-  }
-
-  private interface Masked {
-    DoubleVector apply(DoubleVector x, VectorMask<Double> live);
-  }
-
-  private static final Set<String> CHECKED = new TreeSet<>();
+  private static final Set<String> CALLED = new TreeSet<>();
   private static int lanes;
   private static int wrong;
 
-  private static void check(String name, Plain plain, Masked masked, DoubleUnaryOperator oracle) {
+  /** VFdlibm's public static method of that name and those parameters, noted as called. */
+  private static Method function(String name, Class<?>... parameters) throws Exception {
+    Method method = VFdlibm.class.getMethod(name, parameters);
+    CALLED.add(name + "/" + parameters.length);
+    return method;
+  }
+
+  /** Checks f(x) and f(x, live), found by name, against the oracle. */
+  private static void check(String name, DoubleUnaryOperator oracle) throws Exception {
+    Method plain = function(name, DoubleVector.class);
+    Method masked = function(name, DoubleVector.class, VectorMask.class);
     int length = SPECIES.length();
     double[] in = new double[length];
     boolean[] live = new boolean[length];
-    // Both unary forms: f(x) and f(x, live).
-    CHECKED.add(name + "/1");
-    CHECKED.add(name + "/2");
     for (int from = 0; from < INPUTS.length; from += length) {
       for (int i = 0; i < length; i++) {
         in[i] = INPUTS[(from + i) % INPUTS.length];
       }
       DoubleVector x = DoubleVector.fromArray(SPECIES, in, 0);
-      double[] got = plain.apply(x).toArray();
+      double[] got = ((DoubleVector) plain.invoke(null, x)).toArray();
       for (int i = 0; i < length; i++) {
         same(name, in[i], got[i], oracle.applyAsDouble(in[i]));
       }
@@ -245,7 +271,8 @@ public final class Consumer {
         for (int i = 0; i < length; i++) {
           live[i] = (from + i) % 3 != out;
         }
-        double[] gotMasked = masked.apply(x, VectorMask.fromArray(SPECIES, live, 0)).toArray();
+        VectorMask<Double> mask = VectorMask.fromArray(SPECIES, live, 0);
+        double[] gotMasked = ((DoubleVector) masked.invoke(null, x, mask)).toArray();
         for (int i = 0; i < length; i++) {
           // Only the live lanes: what a lane that is not live holds is the suite's to check.
           if (live[i]) {
@@ -256,8 +283,8 @@ public final class Consumer {
     }
   }
 
-  /** The public static methods of VFdlibm no check above ran, as name/number of parameters. */
-  private static Set<String> unchecked() {
+  /** The public static methods of VFdlibm that were not called, as name/number of parameters. */
+  private static Set<String> uncalled() {
     Set<String> names = new TreeSet<>();
     for (Method method : VFdlibm.class.getDeclaredMethods()) {
       int modifiers = method.getModifiers();
@@ -265,7 +292,19 @@ public final class Consumer {
         names.add(method.getName() + "/" + method.getParameterCount());
       }
     }
-    names.removeAll(CHECKED);
+    names.removeAll(CALLED);
+    return names;
+  }
+
+  /** The jar's public classes other than VFdlibm, from the class names in the arguments. */
+  private static Set<String> otherPublicClasses(String[] args) throws Exception {
+    Set<String> names = new TreeSet<>();
+    for (int i = 1; i < args.length; i++) {
+      Class<?> type = Class.forName(args[i], false, VFdlibm.class.getClassLoader());
+      if (Modifier.isPublic(type.getModifiers()) && type != VFdlibm.class) {
+        names.add(args[i]);
+      }
+    }
     return names;
   }
 
@@ -278,13 +317,16 @@ public final class Consumer {
     }
   }
 
-  /** The one argument is the module the library must be in, empty for the unnamed module. */
-  public static void main(String[] args) {
-    check("exp", VFdlibm::exp, VFdlibm::exp, StrictMath::exp);
-    check("expm1", VFdlibm::expm1, VFdlibm::expm1, StrictMath::expm1);
-    check("log", VFdlibm::log, VFdlibm::log, StrictMath::log);
-    check("log10", VFdlibm::log10, VFdlibm::log10, StrictMath::log10);
-    check("log1p", VFdlibm::log1p, VFdlibm::log1p, StrictMath::log1p);
+  /**
+   * The first argument is the module the library must be in, empty for the unnamed module; the
+   * rest are the names of the jar's classes.
+   */
+  public static void main(String[] args) throws Exception {
+    check("exp", StrictMath::exp);
+    check("expm1", StrictMath::expm1);
+    check("log", StrictMath::log);
+    check("log10", StrictMath::log10);
+    check("log1p", StrictMath::log1p);
     Module module = VFdlibm.class.getModule();
     String in = module.isNamed() ? module.getName() : "";
     System.out.printf("%d lanes at %d bits, %d wrong; the library is in %s%n", lanes,
@@ -293,9 +335,14 @@ public final class Consumer {
       System.out.printf("expected the library in module \"%s\"%n", args[0]);
       System.exit(1);
     }
-    if (!unchecked().isEmpty()) {
-      System.out.printf("VFdlibm has public methods this consumer does not check: %s; "
-          + "add them to dev/jar-check.sh%n", unchecked());
+    if (!uncalled().isEmpty()) {
+      System.out.printf("VFdlibm has public methods this consumer does not call: %s; "
+          + "add them to dev/jar-check.sh%n", uncalled());
+      System.exit(1);
+    }
+    Set<String> others = otherPublicClasses(args);
+    if (!others.isEmpty()) {
+      System.out.printf("public classes this consumer does not know: %s%n", others);
       System.exit(1);
     }
     System.exit(wrong == 0 && lanes > 0 ? 0 : 1);
@@ -311,6 +358,13 @@ module consumer {
 }
 JAVA
 
+# The jar's classes as Java names, for the consumer to ask each whether it is public.
+names=()
+while IFS= read -r class; do
+  class="${class%.class}"
+  names+=("${class//\//.}")
+done < "$work/classes"
+
 # What javac and java print, less their warning that an incubating module is in use: those
 # lines whole and no other, so that an error which names the module is still shown.
 show() {
@@ -324,7 +378,7 @@ show() {
 if "$JAVAC" --release "$RELEASE" --add-modules "$VECTOR_MODULE" -cp "$jar" -d "$work/classpath" \
     "$work/src/consumer/Consumer.java" > "$work/log" 2>&1 \
   && "$JAVA" --add-modules "$VECTOR_MODULE" -cp "$jar:$work/classpath" consumer.Consumer "" \
-    >> "$work/log" 2>&1; then
+    "${names[@]}" >> "$work/log" 2>&1; then
   ok "a consumer on the class path gets StrictMath's bits"
 else
   fail "the consumer on the class path:"
@@ -334,7 +388,7 @@ show
 if "$JAVAC" --release "$RELEASE" --module-path "$jar" -d "$work/modulepath" \
     "$work/src/module-info.java" "$work/src/consumer/Consumer.java" > "$work/log" 2>&1 \
   && "$JAVA" --module-path "$jar:$work/modulepath" -m consumer/consumer.Consumer "$MODULE" \
-    >> "$work/log" 2>&1; then
+    "${names[@]}" >> "$work/log" 2>&1; then
   ok "a consumer module that requires $MODULE gets StrictMath's bits"
 else
   fail "the consumer on the module path:"

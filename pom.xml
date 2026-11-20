@@ -90,7 +90,8 @@
   <build>
     <resources>
       <!-- The licence and the notice travel with the classes, in the jar's META-INF/ (and in the
-           sources jar, which packs the same resources). NOTICE carries Sun's fdlibm notice, which
+           sources jar, which packs the same resources; the release profile puts them in the
+           Javadoc jar). NOTICE carries Sun's fdlibm notice, which
            the ported sources keep in their headers and compiled classes do not.
            dev/jar-check.sh requires both. Naming any resource replaces Maven's default, so
            src/main/resources is named too: there is none today, and one added later is packed
@@ -460,6 +461,10 @@
          cut from tags; Varka pins a released version and never a snapshot. -->
     <profile>
       <id>release</id>
+      <properties>
+        <!-- Where maven-javadoc-plugin's jar goal writes the pages it then packs. -->
+        <vfdlibm.apidocs>${project.build.directory}/reports/apidocs</vfdlibm.apidocs>
+      </properties>
       <build>
         <plugins>
           <plugin>
@@ -470,6 +475,32 @@
               <execution>
                 <id>attach-sources</id>
                 <goals><goal>jar-no-fork</goal></goals>
+              </execution>
+            </executions>
+          </plugin>
+          <!-- The Javadoc jar packs the directory the pages are written to and no resources, so
+               the licence and the notice are put there before the pages are. -->
+          <plugin>
+            <groupId>org.apache.maven.plugins</groupId>
+            <artifactId>maven-resources-plugin</artifactId>
+            <version>3.3.1</version>
+            <executions>
+              <execution>
+                <id>licence-into-javadoc</id>
+                <phase>prepare-package</phase>
+                <goals><goal>copy-resources</goal></goals>
+                <configuration>
+                  <outputDirectory>${vfdlibm.apidocs}/META-INF</outputDirectory>
+                  <resources>
+                    <resource>
+                      <directory>${project.basedir}</directory>
+                      <includes>
+                        <include>LICENSE</include>
+                        <include>NOTICE</include>
+                      </includes>
+                    </resource>
+                  </resources>
+                </configuration>
               </execution>
             </executions>
           </plugin>
