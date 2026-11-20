@@ -146,3 +146,45 @@ Changes go through pull requests on branches, never straight to `main`. Each fun
 own PR, paired with the Varka PR that emits it. Commit messages and PR descriptions end with
 `Generated-by: <tool> (<model and version>)` when AI tooling was used (Apache's convention); no
 `Co-Authored-By`.
+
+## Releases
+
+vfdlibm is released to Maven Central as `io.github.vecbricks:vfdlibm`, the way vecbricks/jegg is.
+`CHANGELOG.md` is kept in the form of Keep a Changelog: each pull request adds its line under
+`Unreleased`.
+
+**The promise, while the version is 0.x.** A minor version may break the public API and a patch
+may not. Adding a function is a patch. Changing an arm (how a function reaches its result: the
+blend, the per-lane finish, the order of a branch) is a patch too, because every arm gives the
+same bits. What no version may change is the contract: **each lane of each function equals
+`StrictMath`'s result on that input, by `Double.doubleToRawLongBits`**. A result that differs
+from `StrictMath`'s is a bug and a fix, never a breaking change. A breaking change has a
+changelog line that starts with `**Breaking:**` and says what a client must do, and its pull
+request says the same. 1.0.0 promises that the surface stays; it is not scheduled.
+
+**The release is owner-run, from a tag.** `.github/workflows/release.yml` is a dry run only: it
+publishes nothing and holds no secret; it shows on GitHub's runners that a tag would build, sign
+and pass `dev/jar-check.sh --release`. The steps:
+
+1. In a pull request, move the `Unreleased` lines under a `## [<version>]` heading of
+   `CHANGELOG.md`, and add its `[<version>]:` link line.
+2. On an up-to-date `main`, `dev/release.sh <version>` checks the tree, sets the pom's version,
+   its `<scm><tag>` and `project.build.outputTimestamp` (so that the jars are reproducible), runs
+   `mvn -B -Prelease -Dgpg.skip=true clean verify` with every test and `dev/jar-check.sh
+   --release` on the jars, commits "Release <version>", tags `v<version>` and commits the next
+   `-SNAPSHOT`. It pushes nothing; `dev/release.sh --check <version>` only checks, and
+   `dev/release.sh --self-test` runs the script's own checks in scratch repositories (CI runs
+   it in `release.yml`'s `version` job).
+3. `git checkout v<version> && mvn -B -Prelease deploy` builds the sources and Javadoc jars,
+   signs them with the owner's key and uploads them to Central's portal; publish the deployment
+   there. Then `git checkout main && git push origin main v<version>`; the push of the tag runs
+   the dry run, which checks that the tag is `v<version>`, the pom says `<version>` and the
+   tagged commit is on `main` (`dev/release-version.sh`).
+
+What the owner needs once, on the machine that releases: the namespace `io.github.vecbricks`
+verified at the Central portal, a user token in `~/.m2/settings.xml` as the server `central`
+(`pom.xml`'s `publishingServerId`), and a GPG key whose public half is on a key server and whose
+passphrase is cached in the agent (`export GPG_TTY=$(tty)` and sign something once). The same
+setup serves jegg's releases.
+
+Varka pins a released version and never a snapshot.
