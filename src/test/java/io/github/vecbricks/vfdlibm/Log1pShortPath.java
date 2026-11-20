@@ -33,7 +33,7 @@ import java.util.stream.LongStream;
  * {@code range from to threads} runs every double whose raw bits are in {@code [from, to)}.
  *
  * <p>The {@code hu == 0} path runs only for x with {@code 1+x} within a few units of 2^-20
- * (relative) of a power of two, {@code 1+x} in [2^m - 3*2^(m-20), 2^m * (1 + 2^-20)): a window
+ * (relative) of a power of two, {@code 1+x} in [2^m - 3*2^(m-21), 2^m * (1 + 2^-20)): a window
  * of 2^33 to 2^35 doubles for each m (the C leaves {@code x} in (-0.2929, 0.41422) with {@code
  * hu = 1}, so m = 0 has none). {@link #K1_FROM} to {@link #K1_TO} is the window of m = 1, where
  * {@code k = 1}, and {@link #KM1_FROM} to {@link #KM1_TO} that of m = -1, where {@code k = -1}.

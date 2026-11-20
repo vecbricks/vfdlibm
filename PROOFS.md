@@ -575,14 +575,16 @@ The tiny lanes, `hx < 0x3c900000`, also get `k = 0` and `r = x` and are then rep
 against the far form's `hi` and `lo`, at both ends of the band and 65536 seeded draws);
 `ProofsTest.l10UnreducedLanesKeepXWithZeroCorrection` (step 3's `hi`, `lo`, `r` and `c`, by bits,
 over both ends of `2^-54 <= |x| <= 0x3fd62e42_ffffffff`, the whole word of `0.5 ln2` (about
-`0.3466`), their neighbours and 65536 draws over the binades `2^-54` to `2^-2`, those above that
-top dropped, both signs); `ProofsTest.l10KIsForcedByTheHighWordTest` (H14: `k = +-1` from the
+`0.3466`), their neighbours inside that range and 65536 draws over the binades `2^-54` to
+`2^-2`, those above that top dropped, both signs); `ProofsTest.l10KIsForcedByTheHighWordTest` (H14: `k = +-1` from the
 formula at the two witnesses, where the C reduced with it, `Expm1Test.cExpm1(x, true)`, is not
 `StrictMath.expm1`, the C as written is, and the doubles above each witness to the word's top
 double, where the unforced `k` happens to give the same double, are checked to be so). The
 transcription `Expm1Test.cExpm1` is itself checked against `StrictMath.expm1`
 (`Expm1Test.scalarTranscriptionIsStrictMath`). Statement (c) has no scalar test of its own: it
-is step 1, the C's far form operation by operation, and the vector tie runs its lanes.
+is step 1, the C's far form operation by operation, and the vector tie runs its lanes
+(`Expm1Test.magnitudes`, `formSplits`, `sampledBitPatterns` and the hard cases, up to
+`o_threshold`).
 **Vector tie.** `Expm1Test.foldBoundaries` and
 `foldBoundariesAtMaxSpecies` run every arm, unmasked and masked, against `StrictMath` at the
 words `0x3c8fffff`, `0x3c900000`, `0x3fd62e42`, `0x3fd62e43`, `0x3ff0a2b1` and `0x3ff0a2b2`,
@@ -611,9 +613,10 @@ that a value rounds to no double in a binade further off than the next (the arit
 rationals); the casts of `+0.0` and of a double in binade 2^0; that `k` is forced to 0 on every
 lane of the word `0x3fd62e42` and below, of which section C checks four doubles (the formula's
 `k` would be wrong at the witnesses, the C as written is the oracle's) and the rest is the code's
-blend, which `Expm1Test.foldBoundaries` samples (1026 low words per sign at each of its words
-and 4096 doubles each side of `+-0.5 ln2`) and `l10KIsForcedByTheHighWordTest` scans from each
-witness to the word's top; and that the port computes these steps, the code's text.
+blend, which only `Expm1Test.foldBoundaries` runs (1026 low words per sign at each of its words
+and 4096 doubles each side of `+-0.5 ln2`; `l10KIsForcedByTheHighWordTest` scans the scalar
+transcription from each witness to the word's top and finds the forcing not needed there, which
+says nothing of the port); and that the port computes these steps, the code's text.
 
 ### L11. The k == 0 return is x - e with e = (x*(e-c)-c)-hxs and c = +0
 
