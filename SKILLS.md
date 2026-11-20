@@ -553,9 +553,9 @@ a settled question.
   log1p on those two laptop cores, 6 to 8 runner-hours a night on GitHub's x86 runners. log10,
   added later and timed the same way on its port's branch (one run, while other work shared the
   laptop, so a laptop cost estimate, not a committed result), took 13.6 / 2.0 / 1.7 / 1.8, about
-  81 minutes whole, a little above log, whose body it holds. expm1, which the nightly sweeps
-  and fuzzes once its port merges, has not been timed, so its cost is not known; the projection
-  below is for the first three functions.
+  81 minutes whole, a little above log, whose body it holds. expm1 was not timed on the
+  laptop; what it costs a night is measured ("What the logs say", below). The projection below
+  is for the first three functions.
 - **Why x86 sweeps 128 bits by a slice (Max, 2 November 2026).** The 128-bit species is 68 to
   80% of that cost: x86 C2 lowers no mask at two 64-bit lanes (above), so that width runs lane
   by lane in Java, and Varka declines 128-bit doubles on x86, so no user of the port runs it
@@ -569,9 +569,11 @@ a settled question.
 - **The Arm job** sweeps every high word at 128 bits every night, in 4 stripes per function
   (`arm-shards`), the same rotating 1/32 slice at max (128 bits wide on Arm too, a second
   species of the same width), and fuzzes both species once per function, in shard 0's job. Its
-  time is not measured yet. It is sized by the laptop's x86 128-bit time as an upper bound: that
-  path runs per lane, where Arm lowers the masks natively, and the bound assumes a Neoverse N2
-  core is not slower than a Zen 5 core with its SMT sibling, which nobody has measured. Under it
+  time was not measured when it was sized; it is now, at 105 minutes a night for its 20 jobs
+  by the median ("What the logs say", below). It was sized by the laptop's x86 128-bit time as
+  an upper bound: that path runs per lane, where Arm lowers the masks natively, and the bound
+  assumes a Neoverse N2 core is not slower than a Zen 5 core with its SMT sibling, which
+  nobody has measured. Under it
   a log1p stripe sweeps for 26 minutes and an exp or log stripe for 12, plus the slice (under 2)
   and 8 minutes of fuzz in shard 0 (30 at the 900-second cap), against a 120-minute timeout.
 - **The projection, in runner-hours a night (the first nights' logs, which print each species'
@@ -588,6 +590,16 @@ a settled question.
   slower than the laptop's, 2 to 2.5. The target is 2 to 3 runner-hours a night:
   the sweep is within it; the whole night is above it until the logs say otherwise, mostly from
   the fuzz, which this schedule does not change.
+- **What the logs say.** `bench/pool/pool.py cost` tabulates the nights' measured cost from
+  `bench/pool/nightly-cost-2026-11-03-to-2026-11-19.tsv`, one row per job and species run
+  (`bench/pool/README.md`, "What a night costs"). The 15 nights of five functions, 5 to 19
+  November 2026, cost 5.8 to 6.2 runner-hours each, above the target. As means over all 17
+  nights, fuzzing is 168 minutes a night (129 in the fuzz jobs, 39 in the Arm jobs), sweeping
+  162 (109 on x86, 53 on Arm) and setup and build 21: the fuzz is the largest part. The x86
+  fuzz jobs' 129 minutes, for five functions on 15 nights and four on 2, stand against the
+  72 to 84 projected for three; a species still fuzzes for the 240 seconds asked, so the
+  difference is the functions added. The projection and the laptop timings above have not
+  been requoted from the table yet.
 - **When a night fails,** the `alert` job (the only one with `issues: write`) opens an issue
   labelled `nightly-failure`, or comments on the open one, with the run's link, the seed, each
   job's result, the dispatch inputs that replay the run (seed, `nights`, `shards`, `arm-shards`,
