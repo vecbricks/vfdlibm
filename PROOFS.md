@@ -18,8 +18,8 @@ machine-checked in `proofs/` under the conventions of Varka's `sql/varka/proofs/
 integers, a double as `M * 2^E`, rounding as the `jdouble.near` relation to the nearest double in
 a named binade, not SMT's floating-point theory; `unsat` checks are the proofs, `sat` checks show
 the domain is not vacuous and that a constant changed by one is refuted, for the constants a claim
-is tight to: not `invln2` and `P1..P5`, as L2's **Encoding** says, nor expm1's `Q1..Q5`;
-`proofs/README.md`).
+is tight to: not `invln2` and `P1..P5`, as L2's **Encoding** says, nor expm1's `Q1..Q5`, and
+not L10's section A, a ground comparison of two rendered constants; `proofs/README.md`).
 Each lemma ends with an **Encoding** paragraph naming its file and saying which steps are
 machine-checked and which stay informal. The files' constants are rendered from `Exp`, `Lanes`,
 `Log` and `Expm1` by `ProofFiles`, so `ProofFilesTest` fails when one moves without its proof;
@@ -599,8 +599,10 @@ while rendering, as in L6's file; that `StrictMath.expm1` is the forced computat
 witnesses (a test, the oracle being in no solver), that they are the first from the word's top
 and how many doubles differ (a scalar run); a subnormal `x` less `+0`, which no lane reads;
 that a value rounds to no double in a binade further off than the next (the arithmetic of
-rationals); the casts of `+0.0` and of a double in binade 2^0, and that the port computes these
-steps, the code's text.
+rationals); the casts of `+0.0` and of a double in binade 2^0; that `k` is forced to 0 on every
+lane of the word `0x3fd62e42` and below, of which section C checks four doubles (the formula's
+`k` would be wrong at the witnesses, the C as written is the oracle's) and the rest is the code's
+blend and the hinge test; and that the port computes these steps, the code's text.
 
 ### L11. The k == 0 return is x - e with e = (x*(e-c)-c)-hxs and c = +0
 
@@ -627,7 +629,8 @@ boundaries.
 there: both (R3) steps, `e - (+0) = e` and `v - (+0) = v`, for a zero of either sign and for
 every nonzero normal double, every binade at once; that the zero product `r*fl(e - c)` has the
 sign `r*e` has; and H15 as a hinge: a double less one step of its binade is another double
-(checked in binade 2^-1), so with a `c` of one step of `e`'s binade the first step fails. With
+(checked in binade 2^-1, and alike in the lanes' binades by the arithmetic of rationals), so
+with a `c` of one step of `e`'s binade the first step fails. With
 `c = -0` the step fails only at `e = -0`, which no lane has, so that check refutes (R3) as
 stated for every `e`, not the lemma on its lanes. The lemma itself needs no bound on `e` or
 `fl(r*e)`: (R3) holds for every double. The solver's "a double less +0 is itself" check covers

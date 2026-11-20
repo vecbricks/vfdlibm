@@ -46,6 +46,10 @@
 ; What is not machine-checked:
 ;   - fl(x - (-ln2_hi)) = fl(x + ln2_hi), step 2's use of (R4): both are the rounding of
 ;     one rational in this encoding, so there is no check to write.
+;   - That k is forced to 0 on every lane of word 0x3fd62e42 and below: section C shows
+;     at four doubles that the formula's k would be wrong there and that the C as
+;     written is the oracle's; that the port's blend takes k = 0 on those lanes is the
+;     code's text, with the hinge test over the whole word.
 ;   - That StrictMath.expm1 is the k = 0 computation at the witnesses: the oracle is in
 ;     no solver (ProofsTest.l10KIsForcedByTheHighWordTest).
 ;   - That the witnesses are the first from the word's top, and how many doubles of the
@@ -68,7 +72,10 @@
 ; Expm1Test.constantsAreTheSourcesBits pins them all to the source's hex, and
 ; ProofFilesTest this file to its rendering. The chains are a second transcription of
 ; the C: while rendering, the k = 0 chain's result is held to StrictMath.expm1 and the
-; free k's to Expm1Test.cExpm1(x, true), which the scalar tests hold to the oracle.
+; free k's to Expm1Test.cExpm1(x, true). That variant is the oracle's only where the
+; tests show it equal (above the witnesses, the controls), and differs at the
+; witnesses; its other lines are those of cExpm1(x, false), which the scalar tests
+; hold to the oracle.
 ;
 ; The logic is ALL: section B's products S * M * sn are nonlinear. Section C's chain
 ; checks carry their own non-vacuity: each asserts that the named double is not

@@ -446,10 +446,11 @@ final class ProofFiles {
   }
 
   /**
-   * The checks that a nonzero normal double less {@code +0} is itself, and {@code +0} less it its
-   * negation: the exact difference is the double, which {@code jdouble.near} admits for itself in
-   * any binade at once, and which rounds to no other double of its own binade or the ones next to
-   * it, every normal binade at once, the lowest one's next below being the subnormals.
+   * The checks that a nonzero normal double, either sign, less {@code +0} is itself: the exact
+   * difference is the double, which {@code jdouble.near} admits for itself in any binade at once,
+   * and which rounds to no other double of its own binade or the ones next to it, every normal
+   * binade at once, the lowest one's next below being the subnormals. That {@code +0} less a
+   * double is its negation is the same check at the negated double, and not a check of its own.
    */
   static void nonzeroLessZero(StringBuilder out) {
     check(out, "a double, either sign, is a double jdouble.near admits for itself, any binade",

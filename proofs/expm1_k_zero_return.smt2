@@ -29,6 +29,9 @@
 ;     the first step fails.
 ;
 ; What is not machine-checked:
+;   - That a c of one step of e's binade breaks the first step: the check is in binade
+;     2^-1, and e lies near 2^-111 and below; the binades are alike by the arithmetic
+;     of rationals.
 ;   - That e and v = fl(r*e) are nonzero and normal on the lanes: for
 ;     2^-54 <= |x| < 0.35, hxs is at least 2^-109 and e and r*e are of the order of x^2
 ;     and x^3 times constants near one, far above 2^-1022. Those bounds rest on the
