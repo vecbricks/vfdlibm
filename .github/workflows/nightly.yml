@@ -17,9 +17,9 @@ name: Nightly
 #   night (`arm-shards` stripes per function, the same `nights` rotation), the rotating slice
 #   at max, and the fuzz at both.
 # - proofs: every SMT proof under both solvers (proofs/README.md).
-# - alert: when any of them fails, opens a GitHub issue labelled nightly-failure, or comments on
-#   the open one, with the run's link, the dispatch inputs that replay it, and the mismatches. It
-#   is the only job that may write.
+# - alert: when any of them fails, opens a GitHub issue labelled nightly-failure (or, for a run
+#   with a planted fault, nightly-fault-test), or comments on the open one, with the run's link,
+#   the dispatch inputs that replay it, and the mismatches. It is the only job that may write.
 #
 # The seed is fresh each night; the plan job prints it with the night and slice night, and a
 # dispatch with those inputs (as the issue lists them) replays every job of the run, Arm's too.
@@ -121,6 +121,12 @@ jobs:
           # Every function of the night: each matrix and each check below reads this list, so a
           # new port is added here (and in `reach`, if it computes through another port).
           all='exp expm1 log log10 log1p'
+          # A dispatch's text is echoed in errors below: a line break in it would let a line of
+          # the dispatcher's be read as a workflow command, so line breaks become spaces (which
+          # every check below then refuses).
+          SEED="${SEED//[$'\r\n']/ }"
+          FUNCTIONS="${FUNCTIONS//[$'\r\n']/ }"
+          FAULT="${FAULT//[$'\r\n']/ }"
           # A number here has no leading zero, which bash's arithmetic would read as octal, and
           # at most five digits, more than any limit below.
           number() { [[ $1 =~ ^(0|[1-9][0-9]{0,4})$ ]]; }
@@ -193,9 +199,10 @@ jobs:
           for n in "$NIGHTS" "$SLICE_NIGHTS"; do
             for s in "$SHARDS" "$ARM_SHARDS"; do
               if ! pow2 "$n" || ! pow2 "$s" || [ "$s" -gt 32 ] || [ $((n * s)) -gt 4096 ]; then
+                why="$(hint "$n")"; why="${why:-$(hint "$s")}"
                 echo "::error::nights, slice-nights and the shards take powers of two, the" \
-                  "shards at most 32, a nights count times a shard count at most" \
-                  "4096$(hint "$n")$(hint "$s")"
+                  "shards at most 32, a nights count times a shard count at most 4096; not" \
+                  "'$n' with '$s'$why"
                 exit 1
               fi
               if [ $((count * s)) -gt 256 ]; then
@@ -267,7 +274,7 @@ jobs:
           echo "functions: $functions"
           if [ -n "$FAULT" ]; then
             echo "::warning::the fault $FAULT is planted in every sweep and fuzz: this run tests" \
-              "the alert on $functions only, and its mismatches are not the library's"
+              "the alert on $functions only, and its mismatches are expected from the fault"
           fi
           {
             echo "seed=$SEED"
@@ -524,8 +531,10 @@ jobs:
             if [ -n "$FAULT" ]; then
               echo "**A test of the alert job, not a night's failure.** The run was dispatched"
               echo "with the fault \`$FAULT\` planted (\`-Dvfdlibm.fault=$FAULT\`) in every"
-              echo "sweep and fuzz, and it checked only the functions that fault reaches, so a"
-              echo "mismatch below is the planted fault's and not the library's."
+              echo "sweep and fuzz, and it checked only the functions that fault reaches. The"
+              echo "mismatches below are expected from the fault; a real bug in the same"
+              echo "functions would be among them and cannot be told apart, so only a clean"
+              echo "night clears them."
               echo
               if [ "$FAULT_CAUGHT" = failure ]; then
                 echo "**The planted fault was not caught**: every sweep and fuzz passed (the"
@@ -588,7 +597,9 @@ jobs:
             printf '\n(cut at 60000 characters; the artifacts hold the rest)\n' >> body.cut
             mv body.cut "$body"
           fi
-          gh label create "$label" --color B60205 --force --description "$about"
+          color=B60205
+          if [ -n "$FAULT" ]; then color=C5DEF5; fi
+          gh label create "$label" --color "$color" --force --description "$about"
           open="$(gh issue list --label "$label" --state open --limit 1 \
             --json number --jq '.[0].number // empty')"
           if [ -n "$open" ]; then

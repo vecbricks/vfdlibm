@@ -80,7 +80,8 @@ five are a later, optional set; the large-argument reduction of the trigonometri
   128 bits on x86, where a rotating 1/32 slice a night covers it in 32 nights, and at 128 bits on
   Arm every night; it fuzzes from a fresh seed at every width, and runs every proof under both
   solvers; a failure opens an issue labelled `nightly-failure` with the mismatching inputs, ready
-  for a `hard-cases` file (`SKILLS.md`).
+  for a `hard-cases` file (`SKILLS.md`), and a dispatch that plants a fault, to test that alert,
+  opens one labelled `nightly-fault-test`.
 - **Masked forms:** a masked form is checked under seeded random masks, all-true and all-false;
   active lanes must equal `StrictMath` and inactive lanes must keep the input's raw bits (for a
   two-argument function, the first argument's).
