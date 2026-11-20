@@ -564,11 +564,15 @@ a settled question.
   through another adds a line to it. The job `fault-caught` reads the run's mismatch files and
   fails when none records a mismatch in a function the fault reaches, so a missed fault is a
   red run with an issue and not a green one, and a job that failed for another reason is not
-  taken for a catch; a run that was cancelled decides nothing. A
+  taken for a catch; a run that was cancelled, or where no JVM of those functions ran to its
+  end, decides nothing. A
   run with a fault has its own label, `nightly-fault-test`: its issue, or its comment on the
   open issue of that label, opens by saying that the fault was planted and in which functions
   mismatches are expected, and is never mixed with a night's `nightly-failure` issue; whatever
-  else fails in such a run is in that same issue, so read past the expected mismatches. The
+  else fails in such a run is in that same issue: another function's mismatches come first and
+  in full, the expected files last, one line each. A job that failed there without a mismatch
+  shows only on the run's page, since the sweep, the fuzz and Arm fail under the fault by
+  design. The
   scheduled nights, the dispatches and the dispatches with a fault each have a concurrency
   group, so a dispatch never cancels a waiting night, and can run beside one, outside the
   night's count of at most 16 jobs at once: narrow it with `functions`, or dispatch it away
