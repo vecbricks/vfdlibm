@@ -18,6 +18,7 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.Set;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -27,7 +28,8 @@ import org.junit.jupiter.params.provider.EnumSource;
 /**
  * Keeps the nightly runs, {@link Sweep} and {@link Fuzz}, working between nights: each runs on a
  * few thousand inputs and must pass, their mismatch file must be in {@code Inputs.hardCases}
- * form, and in each fault run the fuzz must catch the planted fault, so the nightly can fail.
+ * form, and in each fault run but {@link #NOT_FOR_THE_FUZZ}'s the fuzz must catch the planted
+ * fault, so the nightly can fail.
  */
 class NightlyTest {
 
@@ -58,12 +60,22 @@ class NightlyTest {
     assertEquals(Nightly.OK, status);
   }
 
-  /** The fuzz finds each planted fault of the five functions in a second at most. */
+  /**
+   * Faults the fuzz cannot be asked to find: the inputs where they change a result are about one
+   * in 2^29 of a window of 2^35 doubles, and only {@code Log1pTest}'s witnesses reach them.
+   */
+  private static final Set<String> NOT_FOR_THE_FUZZ = Set.of(Log1p.FOLD_SHORT_PATH);
+
+  /**
+   * The fuzz finds each planted fault of the five functions in a second at most, but those of
+   * {@link #NOT_FOR_THE_FUZZ}.
+   */
   @Test
   @Tag("fault")
   void fuzzCatchesThePlantedFault() {
     String fault = Faults.planted();
     assumeTrue(fault != null && !fault.startsWith("selftest."), "not a function's fault");
+    assumeTrue(!NOT_FOR_THE_FUZZ.contains(fault), "a fault the fuzz is not asked to find");
     String function = fault.substring(0, fault.indexOf('.'));
     int status = Fuzz.run(new String[] {
       "--function", function, "--seed", "0x5eed", "--seconds", "1", "--threads", "2",
