@@ -10,7 +10,7 @@ name: Nightly
 #   n*shards+shards-1 of nights*shards. With the defaults, 1 night and 2 shards, all of it every
 #   night. At 128 bits the same jobs sweep a rotating slice, 1/`slice-nights` of the high words
 #   (default 32, all of them in 32 nights): x86 C2 lowers no two-lane mask, so 128 bits runs per
-#   lane in Java and was 68 to 80% of a whole sweep's cost.
+#   lane in Java and is 80 to 91% of a whole sweep's cost.
 # - fuzz (x86): a fixed time per species, 128 bits included, from a fresh seed (Fuzz.java), at
 #   the runner's own flags and compiled as an AVX2 host, as ci.yml's rows are.
 # - arm: on an Arm runner, where 128 bits runs natively, every high word at 128 bits every
@@ -293,13 +293,16 @@ jobs:
     name: sweep (${{ matrix.function }}, stripe ${{ matrix.stripe }})
     needs: plan
     runs-on: ubuntu-latest
-    # A job of log1p, the slowest, is projected at 15 to 30 minutes with 2 shards (SKILLS.md).
+    # A sweep job took 10.9 minutes by the median and 19.8 at most with 2 shards (SKILLS.md, "Its
+    # cost, measured"): the timeout only stops a hung one.
     timeout-minutes: 90
     strategy:
       fail-fast: false
-      # The free organisation plan runs 20 jobs at once across vecbricks: with fuzz's 3, arm's 4
-      # and proofs, this run takes at most 16, leaving room for CI.
-      max-parallel: 8
+      # The free organisation plan runs 20 jobs at once across vecbricks: with fuzz's 6, arm's 4
+      # and proofs, this run takes at most 16, leaving 4 for CI. The slots split 15 by each
+      # kind's minutes, so that the night's span stays under 90 minutes at 13 functions
+      # (SKILLS.md, "The budget").
+      max-parallel: 5
       matrix: ${{ fromJSON(needs.plan.outputs.sweep) }}
     steps:
       - uses: actions/checkout@v5
@@ -343,11 +346,12 @@ jobs:
     name: fuzz (${{ matrix.function }}, ${{ matrix.name }})
     needs: plan
     runs-on: ubuntu-latest
-    # Up to 4 species times fuzz-seconds: 16 minutes by default, 60 at the cap of 900.
+    # Up to 4 species times fuzz-seconds: 16 minutes by default, 60 at the cap of 900. A fuzz
+    # job took 12.6 minutes by the median and 17.0 at most.
     timeout-minutes: 90
     strategy:
       fail-fast: false
-      max-parallel: 3
+      max-parallel: 6
       matrix: ${{ fromJSON(needs.plan.outputs.fuzz) }}
     steps:
       - uses: actions/checkout@v5
@@ -384,9 +388,8 @@ jobs:
     name: arm (${{ matrix.function }}, stripe ${{ matrix.stripe }})
     needs: plan
     runs-on: ubuntu-24.04-arm
-    # Bounded by the laptop's x86 per-lane 128-bit time, a job of log1p sweeps for at most 26
-    # minutes with 4 shards, and the first shard fuzzes for 2 species times fuzz-seconds, 30
-    # minutes at the cap (SKILLS.md).
+    # An Arm job took 3.8 minutes by the median and 12.1 at most with 4 shards; the first shard
+    # fuzzes for 2 species times fuzz-seconds, 30 minutes at the cap (SKILLS.md).
     timeout-minutes: 120
     strategy:
       fail-fast: false

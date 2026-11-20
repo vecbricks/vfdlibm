@@ -97,19 +97,22 @@ first time. Where the logs are gone for good, as after their 90 days, `--without
 the rows all the same, with the jobs' times and without their species runs, and `cost` says
 how many jobs have none.
 
-`cost` prints five tables. A night is a run, so a night replayed by a dispatch counts as a
+`cost` prints six tables. A night is a run, so a night replayed by a dispatch counts as a
 night of its own. A run in which no sweep, fuzz or Arm job started is left out and named, and
 so is a run that planted a fault (a dispatch with the input `fault`, a test of the alert job,
 whose JVM options hold `-Dvfdlibm.fault=`): `fetch` leaves it out of both files, and `cost`
 of a file that holds one does the same. It knows such a run by its logs, so with
-`--without-logs` a run whose logs are gone stays in. `--by-cpu` splits the last two tables by
-CPU model and its widest vector.
+`--without-logs` a run whose logs are gone stays in. `--since` and
+`--until` pick the nights to count, as the nights of five functions, from 2026-11-05, apart
+from the two of four. `--by-cpu` splits the last two tables by CPU model and its widest vector.
 
 - **Runner-minutes a night by job kind.** A job's cost is its seconds from start to end; a
   night's is their sum over 60, beside the minutes the jobs started (each job's seconds
   rounded up to a minute) and the night's span, from the first job's start to the last job's
   end, which holds the wait for a runner.
 - **Runner-minutes a night by function**, the mean over the nights that ran the function.
+- **Minutes one job takes**, by job kind: the least, median and most. With the slots a kind
+  has (`max-parallel` in `nightly.yml`), they bound the night's span.
 - **Runner-minutes a night by job kind and what the job was doing**: the seconds its sweeps
   and fuzzes report, by species, and the rest of the job's time, which is its setup, build,
   probe and JVM starts. An Arm job sweeps and fuzzes, so this table, not the first, says what
