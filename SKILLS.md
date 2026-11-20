@@ -557,13 +557,13 @@ a settled question.
   sweep and fuzz JVM, so a dispatch can show the night catching it and the alert job at work
   without a real failure: `gh workflow run nightly.yml -f fault=exp.dropCorrection -f
   fuzz-seconds=5`. A fault that changes most inputs, as every `dropCorrection` and
-  `constantOffByOneUlp` does, ends each JVM early; a narrow one (a `thresholdMoved`,
-  `log10.subnormalThresholdMoved`, `log1p.guardMissesNonFinite`) lets every stripe that misses it
-  sweep to its end, a night's cost for its functions, so give it a larger `nights` and the
-  `night` whose stripes hold it. The plan job refuses a fault that `pom.xml` gives no fault run,
-  since a mistyped name would plant nothing and be reported as a fault the night missed. A run
-  with a fault checks only the functions the fault reaches, of those asked for, and leaves the
-  proofs out, so every mismatch it reports is expected from the fault (a real bug in the same
+  `constantOffByOneUlp` does, ends each JVM early; a narrow one (the `thresholdMoved` ones,
+  `log10.subnormalThresholdMoved`, the `guardMisses` ones, for example) lets every stripe that
+  misses it sweep to its end, a night's cost for its functions, so give it a larger `nights` and
+  the `night` whose stripes hold it. The plan job refuses a fault that `pom.xml` gives no fault
+  run, since a mistyped name would plant nothing and be reported as a fault the night missed. A
+  run with a fault checks only the functions the fault reaches, of those asked for, and leaves
+  the proofs out, so every mismatch it reports is expected from the fault (a real bug in the same
   functions would be among them, so only a clean night clears them): its own function and those
   that compute through it. log's three faults also fail log10, which calls `Log.logCore` (on the
   laptop, a two-second fuzz at 256 bits of each function under each function's `dropCorrection`

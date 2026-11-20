@@ -195,9 +195,9 @@ jobs:
             fault_args="-Dvfdlibm.fault=$FAULT"
           fi
           # A matrix holds at most 256 jobs, one per function and shard of the run: with all of
-          # today's 5 functions 32 shards are 160, so the second check below starts to refuse
-          # only when the list is longer. A stripe count (nights or slice-nights times shards) is
-          # at most Sweep's 4096 chunks.
+          # today's 5 functions 32 shards are 160, so the 256-job check in the loop below starts
+          # to refuse only when the list is longer. A stripe count (nights or slice-nights times
+          # shards) is at most Sweep's 4096 chunks.
           count="$(wc -w <<< "$functions")"
           for n in "$NIGHTS" "$SLICE_NIGHTS"; do
             for s in "$SHARDS" "$ARM_SHARDS"; do
@@ -542,9 +542,9 @@ jobs:
               echo "with the fault \`$FAULT\` planted (\`-Dvfdlibm.fault=$FAULT\`) in every"
               echo "sweep and fuzz, and it checked only the functions that fault reaches."
               if [ "$FAULT_MISSED" != true ]; then
-                echo "The mismatches below are expected from the fault; a real bug in the same"
+                echo "A mismatch below is expected from the fault; a real bug in the same"
                 echo "functions would be among them and cannot be told apart, so only a clean"
-                echo "night clears them."
+                echo "night clears them. When none is listed, nothing here shows the fault caught."
               fi
               echo
               if [ "$FAULT_MISSED" = true ]; then
