@@ -43,28 +43,34 @@ name (`P1+ulp`, `hx>0x3fd62e42-1`, `drop:x=hi-lo`), its kind, the count in each 
 `caught_by`, the first of `suite`, `fuzz`, `sweep` and `search` with a count above zero, or
 `none`, with one input from that set as raw bits.
 
-Made on 20 November 2026, on the laptop, seed `0x5eed`:
+Made on 20 November 2026, on the laptop, seed `0x5eed`. The `commit` in each table's header is a
+commit of this pull request's branch before it was squashed (log10's "local changes" were the
+tables and documents being written, not sources); `Mutants.java` and the counting in
+`Survey.java` were then as they are in the merged commit, which changes only how a run is written
+out and taken up again. The `example` of a fuzz or search row may differ in a run made after
+that change: it now takes the least position over the streams, ties broken by stream, where the
+tables here took whichever stream's thread reported first.
 
 | function | mutants | suite | fuzz only | sweep only | search only | on no input |
 |---|---|---|---|---|---|---|
 | exp | 45 | 27 | 5 | 0 | 0 | 13 |
 | expm1 | 57 | 31 | 2 | 0 | 3 | 21 |
-| log | 45 | 30 | 4 | 0 | 0 | 11 (second pass: 7 of 13 run) |
-| log10 | 58 | 35 | 2 | 0 | 0 | 21 (second pass running) |
+| log | 45 | 30 | 4 | 0 | 0 | 11 |
+| log10 | 58 | 35 | 3 | 0 | 0 | 20 |
 
-"fuzz only" and "search only" count both passes. log's second pass was still running when
-this was written: `log-uncaught.tsv` holds the mutants it has finished, and log's last cell
-counts the 6 it had not yet run as found on no input. log10's second pass is smaller than the
-others' (2^28 fuzz draws, sweep stripe `0/8` and 2^29 search draws a mutant) and its table
-comes in a later commit.
+"fuzz only" and "search only" count both passes. log10's second pass is smaller than the
+others' (2^28 fuzz draws, sweep stripe `0/8` and 2^29 search draws a mutant). Rows written
+before a run's settings were put on a `# run:` line above it (log's and log10's) used the
+settings in their table's header.
 
 ## What it shows
 
 - **Every dropped term is caught by the suite**, the least seen on 27,658 of its function's
   10.4 million inputs (log10's `drop:log.0.333*f`, the near path's cubic term).
-- **The sweep adds nothing here.** No mutant is found by the sweep and by nothing before it,
-  in a stripe or in all 2^32 high words. Three low words per high word is not where a constant
-  one ulp off shows.
+- **The sweep adds nothing here.** No mutant is found by the sweep and by nothing before it:
+  in stripe `0/64` for every mutant, and in all 2^32 high words for the second passes of exp
+  and expm1 and log, and in stripe `0/8` for log10's. Three low words per high word is not where a
+  constant one ulp off shows.
 - **A coefficient one ulp off is close to invisible to inputs.** The suite sees `P1` and `P2` of exp
   (4,480 and 7 of 9.1 million inputs for `P1+ulp` and `P2+ulp`) and nothing of `P3` to `P5`; of
   expm1's `Q2` to `Q5` it sees nothing, and of log's `Lg3` to `Lg7` one input, for `Lg3+ulp`. The
@@ -95,10 +101,11 @@ comes in a later commit.
   | log | `Lg4-ulp` | fuzz, 3 of 2^30 | `0x3ff6a0995fd5e385` |
   | log10 | `log.Lg3+ulp` | fuzz, 12 of 2^26 | `0x3fe6a09e667f6b7d` |
   | log10 | `log.Lg3-ulp` | fuzz, 9 of 2^26 | `0x3fe6a09e66b789a6` |
+  | log10 | `log.Lg4-ulp` | fuzz, 1 of 2^28 | `0x3fe6a09e65d9ba3e` |
 
-  log's `hx<0x00100000-1` moves the subnormal test down a word, so the largest subnormals
-  (high word `0x000fffff`) skip the scaling; the fuzz finds it at its first draw, and no
-  input of the suite shows it.
+  log's `hx<0x00100000-1` moves the subnormal test down a word, so the largest subnormals (high word
+  `0x000fffff`) skip the scaling; the fuzz finds it at the second draw of a stream (`fuzz_first`
+  counts from 0), and no input of the suite shows it.
   exp's `invln2` is the one the suite should not miss: one ulp either way changes `k` near the
   doubles `(k + 1/2) ln2`, the fuzz finds it within 250 draws, and `ExpTest` takes the neighbours of
   three of them only (`0.5 ln2`, `1.5 ln2`, `-1021.5 ln2`). expm1's suite has the 16 neighbours of
@@ -116,7 +123,9 @@ comes in a later commit.
     band), exp's `k>=-1021+1`, expm1's `hx>=0x4043687A` and `hx<0x3c900000` a word either way
     and `k<20+1`, log's and log10's `hx<0x00100000+1`. Each is a fold a lemma could state;
   - `hx>=0x7ff00000+1`, which sends a NaN whose high word is `0x7ff00000` down the arithmetic.
-    The result kept the input's payload on this host, which Java does not promise;
+    The transcription is Java, where `(int)` of a NaN is 0, as it is in the ports' conversions;
+    in C that conversion is undefined, so the mutant says nothing about the C itself. In Java
+    the result is a NaN that kept the input's payload on this host, which Java does not promise;
   - constants whose change is below what any sampling here resolves: the coefficients above,
     exp's `halF`, expm1's `-0.25`, log's `ln2_lo` and `0.33333333333333333`, log10's
     `log10_2lo`. The 64 neighbours of every `(k + 1/2) ln2` show nothing for `halF`, and the
@@ -138,6 +147,5 @@ in the repository, so which is right is open.
     dev/survey.sh exp            # one function
     SURVEY_DEEP_FUZZ=0 dev/survey.sh exp    # the first pass only
 
-The first pass of one function is one to three minutes on four threads; a mutant of the second
-pass is about four. A new port adds its transcription to `Mutants`, its name to this script and
+A new port adds its transcription to `Mutants`, its name to this script and
 its tables here in its own pull request.

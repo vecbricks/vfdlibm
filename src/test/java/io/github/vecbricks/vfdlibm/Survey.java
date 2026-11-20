@@ -14,6 +14,7 @@ import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
 import java.io.PrintWriter;
+import java.io.StringWriter;
 import java.io.UncheckedIOException;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
@@ -138,6 +139,8 @@ final class Survey {
         bytes.putLong(Double.doubleToRawLongBits(x));
       }
       out.write(bytes.array());
+      // Flushed at once: a write that fails fails the test that made it, not a shutdown hook.
+      out.flush();
     } catch (IOException e) {
       throw new UncheckedIOException(e);
     }
@@ -326,17 +329,22 @@ final class Survey {
     return tasks;
   }
 
-  /** {@code draws} inputs of the fuzz, dealt evenly to {@link #STREAMS} streams. */
+  /**
+   * {@code draws} inputs of the fuzz, dealt evenly to {@link #STREAMS} streams. An input's
+   * position is {@code i * STREAMS + t} for draw i of stream t, so the first input a mutant
+   * differs on, and so its example, is the same whatever the threads.
+   */
   static List<Task> fuzzTasks(Nightly.Function function, long seed, long draws) {
     Fuzz.Edges edges = Fuzz.edges(function);
     List<Task> tasks = new ArrayList<>();
     for (int t = 0; t < STREAMS; t++) {
       long stream = Nightly.mix(seed + t);
+      int index = t;
       long n = draws / STREAMS + (t < draws % STREAMS ? 1 : 0);
       tasks.add(counter -> {
         SplittableRandom random = new SplittableRandom(stream);
         for (long i = 0; i < n; i++) {
-          counter.count(Fuzz.draw(random, edges), i);
+          counter.count(Fuzz.draw(random, edges), i * STREAMS + index);
         }
       });
     }
@@ -353,6 +361,7 @@ final class Survey {
     List<Task> tasks = new ArrayList<>();
     for (int t = 0; t < STREAMS; t++) {
       long stream = Nightly.mix(seed + 0x5ea5c4L * (t + 1));
+      int index = t;
       long n = draws / STREAMS + (t < draws % STREAMS ? 1 : 0);
       tasks.add(counter -> {
         SplittableRandom random = new SplittableRandom(stream);
@@ -363,7 +372,7 @@ final class Survey {
             default -> Double.longBitsToDouble(
                 random.nextLong(0x0010_0000_0000_0000L, 0x7ff0_0000_0000_0000L));
           };
-          counter.count(x, i);
+          counter.count(x, i * STREAMS + index);
         }
       });
     }
@@ -400,7 +409,8 @@ final class Survey {
       w.println("# " + note);
     }
     if (append) {
-      w.println("# each mutant from a run of its own with these settings (--only, --append)");
+      w.println("# each mutant from a run of its own (--only, --append); each run's settings"
+          + " are on its '# run:' line, and rows with no such line above them used these");
     } else if (count != port.mutants().size()) {
       w.printf("# only %d of the %d mutants (--only)%n", count, port.mutants().size());
     }
@@ -480,35 +490,6 @@ final class Survey {
 
       long unchanged = inSuite.unchangedDiffers + inHard.unchangedDiffers
           + inFuzz.unchangedDiffers + inSweep.unchangedDiffers + inSearch.unchangedDiffers;
-      int[] caughtBy = new int[5];
-      if (out.getParent() != null) {
-        Files.createDirectories(out.getParent());
-      }
-      boolean rowsOnly = append && Files.exists(out) && Files.size(out) > 0;
-      try (PrintWriter w = new PrintWriter(rowsOnly
-          ? Files.newBufferedWriter(out, StandardCharsets.US_ASCII, StandardOpenOption.APPEND)
-          : Files.newBufferedWriter(out, StandardCharsets.US_ASCII))) {
-        if (!rowsOnly) {
-          header(w, port, note, append, mutants.length, seed, stripe,
-              new Tally[] {inSuite, inHard, inFuzz, inSweep, inSearch}, unchanged);
-        }
-        for (int m = 0; m < mutants.length; m++) {
-          int layer = inSuite.count[m] > 0 ? 0 : inFuzz.count[m] > 0 ? 1
-              : inSweep.count[m] > 0 ? 2 : inSearch.count[m] > 0 ? 3 : 4;
-          caughtBy[layer]++;
-          long example = layer == 0 ? inSuite.example[m] : layer == 1 ? inFuzz.example[m]
-              : layer == 2 ? inSweep.example[m] : inSearch.example[m];
-          w.printf("%s\t%s\t%d\t%d\t%d\t%s\t%d\t%d\t%s\t%s%n",
-              mutants[m].name(), mutants[m].kind(), inSuite.count[m], inHard.count[m],
-              inFuzz.count[m], inFuzz.count[m] > 0 ? "" + inFuzz.firstAt[m] : "-",
-              inSweep.count[m], inSearch.count[m], LAYERS[layer],
-              layer == 4 ? "-" : String.format("0x%016x", example));
-        }
-      }
-      System.out.printf("%s: %d mutants in %.0f s: %d caught by the suite, %d only by the fuzz,"
-          + " %d only by the sweep, %d only by the search, %d by nothing; %s%n", port.id(),
-          mutants.length, seconds, caughtBy[0], caughtBy[1], caughtBy[2], caughtBy[3],
-          caughtBy[4], out);
       if (unchanged != 0) {
         System.err.printf("Survey: the unchanged transcription of %s differs from StrictMath"
             + " on %d inputs, such as 0x%016x%n", port.id(), unchanged,
@@ -519,6 +500,48 @@ final class Survey {
                 : inSearch.unchangedExample);
         return Nightly.ERROR;
       }
+      int[] caughtBy = new int[5];
+      if (out.getParent() != null) {
+        Files.createDirectories(out.getParent());
+      }
+      // The whole text is made first and written in one call, which throws if it fails, so a
+      // table holds whole runs: a resumed run trusts any row it finds.
+      boolean rowsOnly = append && Files.exists(out) && Files.size(out) > 0;
+      StringWriter text = new StringWriter();
+      try (PrintWriter w = new PrintWriter(text)) {
+        if (!rowsOnly) {
+          header(w, port, note, append, mutants.length, seed, stripe,
+              new Tally[] {inSuite, inHard, inFuzz, inSweep, inSearch}, unchanged);
+        }
+        if (append) {
+          // Each appended run says what it ran, since a resumed run may differ from the header.
+          w.printf("# run: %s; seed %s; suite %d, fuzz %d, sweep %s (%d), search %d%n", note,
+              Nightly.seedText(seed), inSuite.inputs, inFuzz.inputs, stripe, inSweep.inputs,
+              inSearch.inputs);
+        }
+        for (int m = 0; m < mutants.length; m++) {
+          int layer = inSuite.count[m] > 0 ? 0 : inFuzz.count[m] > 0 ? 1
+              : inSweep.count[m] > 0 ? 2 : inSearch.count[m] > 0 ? 3 : 4;
+          caughtBy[layer]++;
+          long example = layer == 0 ? inSuite.example[m] : layer == 1 ? inFuzz.example[m]
+              : layer == 2 ? inSweep.example[m] : inSearch.example[m];
+          w.printf("%s\t%s\t%d\t%d\t%d\t%s\t%d\t%d\t%s\t%s%n",
+              mutants[m].name(), mutants[m].kind(), inSuite.count[m], inHard.count[m],
+              inFuzz.count[m], inFuzz.count[m] > 0 ? "" + inFuzz.firstAt[m] / STREAMS : "-",
+              inSweep.count[m], inSearch.count[m], LAYERS[layer],
+              layer == 4 ? "-" : String.format("0x%016x", example));
+        }
+      }
+      if (rowsOnly) {
+        Files.writeString(out, text.toString(), StandardCharsets.US_ASCII,
+            StandardOpenOption.APPEND);
+      } else {
+        Files.writeString(out, text.toString(), StandardCharsets.US_ASCII);
+      }
+      System.out.printf("%s: %d mutants in %.0f s: %d caught by the suite, %d only by the fuzz,"
+          + " %d only by the sweep, %d only by the search, %d by nothing; %s%n", port.id(),
+          mutants.length, seconds, caughtBy[0], caughtBy[1], caughtBy[2], caughtBy[3],
+          caughtBy[4], out);
       return Nightly.OK;
     } catch (IOException | RuntimeException e) {
       System.err.println("Survey: " + e);

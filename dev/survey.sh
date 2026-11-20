@@ -24,6 +24,8 @@
 # JVM runs at a time, with a 2 GB heap. From the environment:
 #
 #   SURVEY_MVN          the mvn to run (default mvn)
+#   SURVEY_JAVA         the java to run the survey with (default $JAVA_HOME/bin/java, or
+#                       java), which should be the JDK mvn compiles and tests with
 #   SURVEY_OUT          where the tables go (default dev/survey)
 #   SURVEY_SEED         the seed of the fuzz, the sweep's low words and the search (0x5eed)
 #   SURVEY_THREADS      threads of the one JVM (default 2)
@@ -37,14 +39,19 @@
 #   SURVEY_DEEP_SEARCH  second pass: search draws (default 4294967296, 2^32)
 #   SURVEY_INPUTS       a directory of inputs recorded before, to skip the test run
 #
+# SURVEY_OUT and SURVEY_INPUTS may be relative to the directory the script is run from.
+#
 # Exit status: 0 when every table was written, 2 otherwise, also when a transcription with
 # nothing changed differs from StrictMath, since no count means anything then.
 set -uo pipefail
 
 root="$(cd "$(dirname "$0")/.." && pwd)"
+absolute() { case "$1" in /*) echo "$1" ;; *) echo "$PWD/$1" ;; esac; }
+out="$(absolute "${SURVEY_OUT:-$root/dev/survey}")"
+[ -z "${SURVEY_INPUTS:-}" ] || SURVEY_INPUTS="$(absolute "$SURVEY_INPUTS")"
 cd "$root" || exit 2
 mvn="${SURVEY_MVN:-mvn}"
-out="${SURVEY_OUT:-dev/survey}"
+java="${SURVEY_JAVA:-${JAVA_HOME:+$JAVA_HOME/bin/}java}"
 seed="${SURVEY_SEED:-0x5eed}"
 threads="${SURVEY_THREADS:-2}"
 draws="${SURVEY_FUZZ:-67108864}"
@@ -81,11 +88,14 @@ else
 fi
 
 commit="$(git rev-parse --short HEAD 2>/dev/null || echo unknown)"
-if [ -n "$(git status --porcelain 2>/dev/null)" ]; then commit="$commit with local changes"; fi
-note="commit $commit; $(date -u +%Y-%m-%d); $(java -version 2>&1 | head -1)"
+# Only the sources and the build change a count; the tables being written do not.
+if [ -n "$(git status --porcelain -- src pom.xml 2>/dev/null)" ]; then
+  commit="$commit with local changes to src or pom.xml"
+fi
+note="commit $commit; $(date -u +%Y-%m-%d); $("$java" -version 2>&1 | head -1)"
 
 survey() {
-  "${lock[@]}" java -Xmx2g --add-modules jdk.incubator.vector \
+  "${lock[@]}" "$java" -Xmx2g --add-modules jdk.incubator.vector \
     -cp target/classes:target/test-classes io.github.vecbricks.vfdlibm.Survey \
     --suite "$inputs" --seed "$seed" --threads "$threads" --note "$note" "$@"
 }
@@ -101,7 +111,8 @@ for f in "${functions[@]}"; do
   [ "$deep_draws" != 0 ] || continue
   # Each mutant whose caught_by column reads "none", unless the second table has its row.
   while IFS= read -r name; do
-    if [ -s "$out/$f-uncaught.tsv" ] && cut -f1 "$out/$f-uncaught.tsv" | grep -qxF -- "$name"
+    if [ -s "$out/$f-uncaught.tsv" ] && awk -F'\t' -v n="$name" \
+        '$1 == n && NF == 10 { found = 1 } END { exit !found }' "$out/$f-uncaught.tsv"
     then
       continue
     fi

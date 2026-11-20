@@ -142,6 +142,37 @@ class MutantsTest {
     assertNull(Survey.functionOf("Harness.sqrt"));
   }
 
+  /**
+   * Appended runs, as the second pass makes them: the header once, a {@code # run:} line per
+   * run, and the same rows whatever the threads, examples included.
+   */
+  @Test
+  void appendedRunsAgreeAtAnyThreadCount() throws IOException {
+    double[] xs = inputs("exp");
+    ByteBuffer bytes = ByteBuffer.allocate(8 * xs.length);
+    for (double x : xs) {
+      bytes.putLong(Double.doubleToRawLongBits(x));
+    }
+    Files.write(dir.resolve("exp-1.bin"), bytes.array());
+    Path out = dir.resolve("exp-uncaught.tsv");
+    for (String threads : new String[] {"1", "3"}) {
+      assertEquals(Nightly.OK, Survey.run(new String[] {
+        "--function", "exp", "--suite", dir.toString(), "--fuzz", "100000", "--stripe",
+        "0/4096", "--search", "100000", "--seed", "0x5eed", "--threads", threads,
+        "--only", "\\QP2+ulp\\E|\\Qinvln2-ulp\\E", "--append", "true", "--out", out.toString()}));
+    }
+    List<String> lines = Files.readAllLines(out);
+    assertEquals(1, lines.stream().filter(line -> line.startsWith("# Survey of")).count());
+    assertEquals(2, lines.stream().filter(line -> line.startsWith("# run:")).count());
+    List<String> rows = lines.stream()
+        .filter(line -> !line.startsWith("#") && !line.startsWith("mutant\t")).toList();
+    assertEquals(4, rows.size(), rows.toString());
+    assertEquals(rows.subList(0, 2), rows.subList(2, 4));
+    // invln2 one ulp down moves k near (k + 1/2) ln2, which the fuzz draws.
+    assertTrue(rows.stream().anyMatch(row -> row.startsWith("invln2-ulp\t")
+        && !row.split("\t")[8].equals("none")), rows.toString());
+  }
+
   /** The program end to end on a small suite file: a line per mutant, exit status 0. */
   @Test
   void theSurveyWritesALinePerMutant() throws IOException {

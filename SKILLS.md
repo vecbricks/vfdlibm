@@ -655,7 +655,7 @@ a settled question.
   that shows the mutant shows the same change in the vector code.
 - **Inputs do not hold the coefficients.** One ulp on a polynomial coefficient late in its
   series changed no result in 1.8 * 10^10 inputs for exp's `P4` and `P5`, expm1's `Q3` to `Q5`
-  and log's `Lg5` (log's second pass was still running), and the suite saw none of exp's
+  and log's `Lg5` to `Lg7`, and the suite saw none of exp's
   `P3`, expm1's `Q2` or log's `Lg4` either. The test that pins every constant to the C's hex
   (`ExpTest.constantsAreTheSourcesBits` and its like) is what guards them, so a new port names
   every constant in such a test.
@@ -664,9 +664,9 @@ a settled question.
   neighbours of. Picking a fault from a survey row whose `caught_by` is `suite` is quicker than
   sizing it on draws by hand.
 - **The sweep caught nothing the fuzz and the suite did not.** No mutant showed on the sweep's
-  inputs and on none of the suite's or the fuzz's: stripe `0/64` for every mutant, all 2^32 high
-  words (three low words each) for those nothing else had found. The sweep is for bands of wrong
-  results, not for a constant one ulp off.
+  inputs and on none of the suite's or the fuzz's: stripe `0/64` for every mutant, and all 2^32 high
+  words (three low words each) for those nothing else had found in exp, expm1 and log (stripe `0/8`
+  in log10). The sweep is for bands of wrong results, not for a constant one ulp off.
 - **The suite misses exp's `invln2` one ulp off**, which the fuzz finds within 250 draws: it moves
   `k` at the doubles `(k + 1/2) ln2`, and `ExpTest` takes the neighbours of three of them only,
   where expm1's has 16 of each and catches it. The README lists every such input.
