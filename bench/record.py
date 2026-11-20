@@ -22,29 +22,34 @@ number by hand, and checks them in a file that is about to be committed.
 
 `write` gives one file per benchmark class of a plain run, <function>-<host>-<date>.txt, each
 with its own class's blocks and rows only, and one file for a pair, <function>-pair-<host>-
-<date>.txt; --name replaces the <function> part. It never overwrites a file without --force.
+<date>.txt; --name gives the part before <host> (exp-onediv, for a pair in place of
+<function>-pair). It never overwrites a file without --force.
 What it writes:
 
 - the workflow's header lines, "Host" to "Command", with the load at the end of the run moved up
   beside the load at the start, and a line longer than 100 columns continued on the next;
-- the table of each row's minimum, average and maximum: for a plain run from the "Result" blocks
-  of JMH's output, for a pair from every measured iteration in pair/<side>-<round>.json, one
-  table a side;
+- the table of each row's minimum, average and maximum, to one decimal with a tie to the even
+  digit: for a plain run from the "Result" blocks of JMH's output, for a pair from every
+  measured iteration in pair/<side>-<round>.json, one table a side under a line that names the
+  side's commit and its count of iterations;
 - the raw section: for a plain run, the artifact from its first JMH line with Maven's lines
   dropped; for a pair, bench/pair.sh's results file whole. JMH's plus-minus and approximately
-  signs are written in ASCII, and anything else that is not ASCII is an error.
+  signs and its powers of ten are written in ASCII (+/-, ~, 10^-4), and anything else that is
+  not ASCII in what is kept is an error.
 
 The hand-written parts are left as lines that hold MARKER, each saying what belongs there.
 
 `check` reads a results file's header lines, tables and raw section and compares them with what
 `write` makes from the artifact, and fails if they differ or if a marker line is still there.
+It checks a file of one run: a file that keeps two runs is not checked by this script yet.
 It compares values, not layout: a header line may be wrapped another way, a table's columns may
 be wider, and the file may hold header lines the workflow did not write (such as "Array").
-Exit status 1 lists the differences; 2 is an error (no artifact, no result in it).
+Exit status 1 lists the differences; 2 is an error (no artifact, no result in it, a file that
+cannot be read or written).
 """
 
 import argparse
-import datetime
+import decimal
 import glob
 import json
 import os
@@ -58,14 +63,21 @@ MARKER = "[bench/record.py]"
 WIDTH = 100
 PACKAGE = "io.github.vecbricks.vfdlibm."
 # A header line of the workflow or of bench/pair.sh, and a line that continues one.
-FIELD = re.compile(r"^# ([A-Z][A-Za-z0-9-]*(?: [a-z]+)?): +(\S.*?)\s*$")
+FIELD = re.compile(r"^# ([A-Z][A-Za-z0-9-]*(?: [a-z]+)?):(?: +(\S.*?))?\s*$")
 CONTINUED = re.compile(r"^# {14}(\S.*?)\s*$")
 MAVEN = re.compile(r"^\[(INFO|WARNING|ERROR)\]")
-TABLE_ROW = re.compile(r"^# (\S+\.\S+)\s+(\S+)\s+(-?[\d.]+)\s+(-?[\d.]+)\s+(-?[\d.]+)$")
+TABLE_ROW = re.compile(r"^# (\S+\.\S+)\s+(\S.*?)\s+(-?[\d.]+)\s+(-?[\d.]+)\s+(-?[\d.]+)$")
+SIDE_LINE = re.compile(r"^# The (base|head), \S*: minimum, average and maximum of its .*"
+                       r" measured iterations\.$")
 LOAD = re.compile(r"(\d+\.\d+ \d+\.\d+ \d+\.\d+) at (start|end)")
+CORES = re.compile(r" ?\(\d+ cores\)")
+PAIR_TITLE = re.compile(r"^# Pair: \S.*, base against head, \d{4}-\d{2}-\d{2} ")
+NAME_END = re.compile(r"-[^-]+-\d{4}-\d{2}-\d{2}\.txt$")
+TABLE_HEAD = re.compile(r"^# Row\s+\S+\s+min\s+avg\s+max\s+\(ns/op\)$")
 RAW_NOTE = ["# Raw output of the run follows: the workflow's artifact from its first JMH line,"
             " with Maven's",
-            "# lines dropped and JMH's plus-minus and approximately signs written in ASCII."]
+            "# lines dropped and JMH's plus-minus and approximately signs and powers of ten in"
+            " ASCII."]
 PAIR_NOTE = "# bench/pair.sh's results file follows."
 
 
@@ -73,14 +85,25 @@ class Problem(Exception):
     """The artifact or the file cannot be read as what it should be: exit status 2."""
 
 
-def ascii_lines(text, what):
+SUPERSCRIPTS = {0x207b: "-", 0x2070: "0", 0xb9: "1", 0xb2: "2", 0xb3: "3", 0x2074: "4",
+                0x2075: "5", 0x2076: "6", 0x2077: "7", 0x2078: "8", 0x2079: "9"}
+POWER = re.compile("10([%s]+)" % "".join(map(chr, SUPERSCRIPTS)))
+
+
+def ascii_lines(text):
+    """The text's lines with JMH's signs in ASCII: plus-minus as +/-, approximately as ~, and
+    the power of ten it prints for a value under 0.0005 (10 and a superscript) as 10^-4."""
     text = text.replace("\u00b1", "+/-").replace("\u2248", "~")
-    try:
-        text.encode("ascii")
-    except UnicodeEncodeError as e:
-        raise Problem("%s holds a non-ASCII character other than JMH's two signs: %r"
-                      % (what, text[e.start:e.start + 20]))
+    text = POWER.sub(lambda m: "10^" + m.group(1).translate(SUPERSCRIPTS), text)
     return [line.rstrip() for line in text.split("\n")]
+
+
+def require_ascii(lines, what):
+    """Only what is written must be ASCII: Maven's lines, which are dropped, may hold more."""
+    for line in lines:
+        if not line.isascii():
+            raise Problem("%s holds a non-ASCII character other than JMH's signs: %s"
+                          % (what, ascii(line)))
 
 
 def find_artifact(path):
@@ -92,8 +115,7 @@ def find_artifact(path):
     raise Problem("no bench-results.txt in %s or in its bench-results/" % path)
 
 
-def download(run, repo):
-    d = tempfile.mkdtemp(prefix="bench-record-%s-" % run)
+def download(run, repo, d):
     cmd = ["gh", "run", "download", str(run), "--name", "bench-results", "--dir", d]
     done = subprocess.run(cmd + (["--repo", repo] if repo else []), capture_output=True, text=True)
     if done.returncode != 0:
@@ -108,7 +130,7 @@ def fields(lines):
     for line in lines:
         m = FIELD.match(line)
         if m:
-            open_field = [m.group(1), m.group(2)]
+            open_field = [m.group(1), m.group(2) or ""]
             out.append(open_field)
             continue
         m = CONTINUED.match(line)
@@ -119,10 +141,21 @@ def fields(lines):
     return out
 
 
+def header_block(lines):
+    """The lines of the workflow's header: from "# Host:" to the bare "#" that ends it, a
+    hand-added line of any form included. A sentence elsewhere that starts like a field is
+    not in it."""
+    start = next((i for i, l in enumerate(lines) if l.startswith("# Host:")), len(lines))
+    end = next((i for i in range(start, len(lines)) if lines[i] == "#"), len(lines))
+    return lines[start:end]
+
+
 def same_field(key, a, b):
-    if key == "Load":
-        return LOAD.findall(a) == LOAD.findall(b)
-    return a.split() == b.split()
+    a, b = " ".join(a.split()), " ".join(b.split())
+    if key == "Load" and not CORES.search(a):
+        # The files written before this script name no core count; one that is there counts.
+        b = CORES.sub("", b).strip()
+    return a == b
 
 
 def header_lines(pairs):
@@ -136,18 +169,27 @@ def header_lines(pairs):
                     out.append(line)
                     line, words = "#" + " " * 13, 0
                 line, words = line + " " + word, words + 1
-            out.append(line)
+            out.append(line.rstrip())
             line = "#" + " " * 13
     return out
 
 
+def tenth(x):
+    """A figure to one decimal, a tie going to the even digit: from JMH's three decimals as
+    printed (a string) or from a float of its JSON, never through a float's binary tie."""
+    exact = decimal.Decimal(x if isinstance(x, str) else repr(x))
+    return str(exact.quantize(decimal.Decimal("0.1"), rounding=decimal.ROUND_HALF_EVEN))
+
+
 def table(rows, column):
-    """rows: (benchmark, parameters, minimum, average, maximum), sorted."""
+    """rows: (benchmark, parameters, minimum, average, maximum), sorted. A row with no
+    parameter has "-" there, so that every row has five fields."""
+    rows = [(r[0], r[1] or "-") + tuple(tenth(x) for x in r[2:]) for r in rows]
     w = max(len(r[0]) for r in rows) + 1
     p = max([len(column)] + [len(r[1]) for r in rows])
     out = ["# %-*s %-*s %12s %12s %12s   (ns/op)" % (w, "Row", p, column, "min", "avg", "max")]
     for name, params, lo, avg, hi in rows:
-        out.append("# %-*s %-*s %12.1f %12.1f %12.1f" % (w, name, p, params, lo, avg, hi))
+        out.append("# %-*s %-*s %12s %12s %12s" % (w, name, p, params, lo, avg, hi))
     return out
 
 
@@ -160,13 +202,14 @@ def column_name(names):
 BENCHMARK = re.compile(r"^# Benchmark: (\S+)$")
 PARAMETERS = re.compile(r"^# Parameters: \((.*)\)$")
 RESULT = re.compile(r'^Result "(\S+)":$')
-MIN_AVG_MAX = re.compile(r"^\s*\(min, avg, max\) = \(([^,]+), ([^,]+), ([^)]+)\)")
+MIN_AVG_MAX = re.compile(r"^\s*\(min, avg, max\) = \((-?[\d.]+), (-?[\d.]+), (-?[\d.]+)\)")
 UNIT = re.compile(r"^\s*\S+ \+/-\(99\.9%\) \S+ (\S+) \[Average\]$")
 SUMMARY_ROW = re.compile(r"^(\w+)\.\w+(:\S+)?\s")
 
 
 def short(benchmark):
-    return benchmark[len(PACKAGE):] if benchmark.startswith(PACKAGE) else benchmark
+    """Class.method, as JMH's summary table and bench/pair.py name a benchmark."""
+    return ".".join(benchmark.split(".")[-2:])
 
 
 def plain_raw(lines):
@@ -177,6 +220,11 @@ def plain_raw(lines):
     raw = [l for l in lines[start:] if not MAVEN.match(l) and not l.startswith("# Load:")]
     while raw and not raw[-1]:
         raw.pop()
+    # A run that was cancelled or crashed has its finished rows and no summary table, and
+    # would read as a results file of fewer rows.
+    if not any(l.startswith("# Run complete.") for l in raw):
+        raise Problem("the run did not finish (JMH printed no '# Run complete' line): it is"
+                      " not a results file")
     return raw
 
 
@@ -203,15 +251,25 @@ def plain_parts(raw):
     return parts
 
 
-def plain_rows(raw):
+def plain_rows(raw, cls):
     """(benchmark, parameters, min, avg, max) from each Result block, and the column's name."""
-    rows, names, params = [], set(), ""
+    rows, names, params, owed = [], set(), "", None
     for i, line in enumerate(raw):
+        m = BENCHMARK.match(line)
+        if m or line.startswith("# Run complete."):
+            # JMH goes on to the next benchmark when one fails, and still ends the run.
+            if owed:
+                raise Problem("%s has no Result block: it failed in the run, and the file"
+                              " would lack its row" % owed)
+            owed = m and short(m.group(1))
         m = PARAMETERS.match(line)
         if m:
-            pairs = [p.split(" = ", 1) for p in m.group(1).split(", ")]
-            names.add(",".join(k for k, _ in pairs))
-            params = ",".join(v for _, v in pairs)
+            pairs = [p.partition(" = ") for p in m.group(1).split(", ")]
+            if not all(sep for _, sep, _ in pairs):
+                raise Problem("a parameter value holds ', ' and cannot be told from two"
+                              " parameters: %s" % line)
+            names.add(",".join(k for k, _, _ in pairs))
+            params = ",".join(v for _, _, v in pairs)
         m = RESULT.match(line)
         if m:
             following = raw[i + 1:i + 3] + ["", ""]
@@ -221,17 +279,22 @@ def plain_rows(raw):
             if unit.group(1) != "ns/op":
                 raise Problem("%s is in %s, and the table is in ns/op"
                               % (m.group(1), unit.group(1)))
-            rows.append((short(m.group(1)), params) + tuple(float(n.group(j)) for j in (1, 2, 3)))
+            rows.append((short(m.group(1)), params) + tuple(n.group(j) for j in (1, 2, 3)))
+            owed = None
         if line.startswith("# JMH version:"):
             params = ""
-    if not rows:
-        raise Problem("no Result block in JMH's output")
+    if owed or not rows:
+        raise Problem("no Result block of %s in JMH's output" % (owed or cls))
     return sorted(rows), column_name(names) if names else "params"
 
 
 def plain_header(lines):
     """The workflow's header fields, the end's load beside the start's."""
     head = lines[:next(i for i, l in enumerate(lines) if not l.startswith("#"))]
+    for line in head[1:]:
+        if line != "#" and not FIELD.match(line) and not CONTINUED.match(line):
+            raise Problem("a header line of the workflow that this script does not know, and"
+                          " would drop: %s" % line)
     out = fields(head[1:])
     end = [l for l in lines if l.startswith("# Load:") and l.endswith("at end")]
     for f in out:
@@ -250,9 +313,15 @@ def function_of(cls):
 
 
 def host_and_date(title, header):
-    host = dict((k, v) for k, v in header).get("Host", "unknown").split()[0]
+    host = dict((k, v) for k, v in header).get("Host", "").split()
     m = re.search(r"(\d{4}-\d{2}-\d{2}) \d{2}:\d{2} UTC", title)
-    return host, m.group(1) if m else datetime.date.today().isoformat()
+    if not host or not m:
+        raise Problem("the artifact's header has no Host line or its title no date: the file's"
+                      " name is <function>-<host>-<date>.txt, of the run's host and date")
+    if host[0] == "local":
+        raise Problem("a local run is not a host's: its file is named by hand, laptop with a"
+                      " suffix for its flags (AGENTS.md)")
+    return host[0], m.group(1)
 
 
 def mark(text):
@@ -272,7 +341,9 @@ def plain_files(lines, name):
     files = {}
     for cls in classes:
         own = [l for c, part in parts if c in (cls, None) for l in part]
-        rows, column = plain_rows(own)
+        while own and not own[-1]:
+            own.pop()
+        rows, column = plain_rows(own, cls)
         out = [title,
                mark("Replace the line above with the title: the class, the CPU, the date, and"),
                mark("why the run was made. Then say what dispatched it and at which commit,"),
@@ -286,7 +357,10 @@ def plain_files(lines, name):
                 mark("from the table below or from JMH's table at the end, and delete these"),
                 mark("lines."), "#"]
         out += table(rows, column) + ["#"] + RAW_NOTE + ["#"] + own
-        files["%s-%s-%s.txt" % (name or function_of(cls), host, date)] = out
+        file_name = "%s-%s-%s.txt" % (name or function_of(cls), host, date)
+        if file_name in files:
+            raise Problem("two classes of the run give one file name, %s" % file_name)
+        files[file_name] = out
     return files
 
 
@@ -294,7 +368,7 @@ def plain_files(lines, name):
 
 def pair_sides(directory):
     """{side: {(benchmark, parameters): [each measured iteration]}} from pair/*.json."""
-    sides, names = {}, set()
+    sides, names, modes = {}, set(), set()
     for side in ("base", "head"):
         paths = sorted(glob.glob(os.path.join(directory, "pair", side + "-*.json")))
         if not paths:
@@ -309,7 +383,17 @@ def pair_sides(directory):
                     raise Problem("%s is in %s, and the table is in ns/op"
                                   % (e["benchmark"], metric["scoreUnit"]))
                 params = e.get("params") or {}
-                names.add(",".join(sorted(params)))
+                if params:
+                    names.add(",".join(sorted(params)))
+                modes.add(e.get("mode"))
+                if len(modes) > 1 or "rawData" not in metric:
+                    # Two modes of one method are two rows (bench/pair.py), and a mode that
+                    # keeps no iterations has no minimum to give.
+                    raise Problem("%s: the table takes one benchmark mode with its measured"
+                                  " iterations, and %s has %s" % (
+                                      path, e["benchmark"],
+                                      "no rawData" if "rawData" not in metric else
+                                      "another mode than the rows before it"))
                 key = (short(e["benchmark"]), ",".join(params[k] for k in sorted(params)))
                 rows.setdefault(key, []).extend(x for fork in metric["rawData"] for x in fork)
     return sides, column_name(names) if names else "params"
@@ -335,6 +419,9 @@ def pair_tables(directory, header):
 def pair_files(lines, directory, name):
     while lines and not lines[-1]:
         lines = lines[:-1]
+    # A commit's subject is the author's text: what is not ASCII in it is written escaped.
+    lines = [l.encode("ascii", "backslashreplace").decode("ascii")
+             if re.match(r"# (Base|Head): ", l) else l for l in lines]
     head = lines[:next((i for i, l in enumerate(lines) if not l.startswith("#")), len(lines))]
     header = fields(head[1:])
     host, date = host_and_date(lines[0], header)
@@ -355,14 +442,23 @@ def pair_files(lines, directory, name):
     return {"%s-%s-%s.txt" % (name, host, date): out}
 
 
-def files_of(directory, name=None):
-    with open(os.path.join(directory, "bench-results.txt"), encoding="utf-8") as f:
-        lines = ascii_lines(f.read(), "bench-results.txt")
+def artifact_lines(directory):
+    """bench-results.txt's lines and whether it is a pair's, which its title says. A byte that
+    is not UTF-8 (bench/pair.sh cuts a commit's subject by bytes) reads as U+FFFD."""
+    path = os.path.join(directory, "bench-results.txt")
+    with open(path, encoding="utf-8", errors="replace") as f:
+        lines = ascii_lines(f.read())
     if not lines or not lines[0].startswith("# "):
         raise Problem("bench-results.txt does not start with a header")
-    if lines[0].startswith("# Pair:"):
-        return pair_files(lines, directory, name)
-    return plain_files(lines, name)
+    return lines, bool(PAIR_TITLE.match(lines[0]))
+
+
+def files_of(directory, name=None):
+    lines, pair = artifact_lines(directory)
+    files = pair_files(lines, directory, name) if pair else plain_files(lines, name)
+    for file_name, written in files.items():
+        require_ascii(written, "the artifact, in what goes to " + file_name)
+    return files
 
 
 # Checking a file.
@@ -371,7 +467,7 @@ def tables_of(lines):
     """The min/avg/max tables of some lines, each a list of (name, parameters, 'min', ...)."""
     out = []
     for line in lines:
-        if re.match(r"^# Row\s", line):
+        if TABLE_HEAD.match(line):
             out.append([])
         m = TABLE_ROW.match(line)
         if m and out:
@@ -387,7 +483,7 @@ def split_file(lines):
     """A results file as (the lines above the raw section, the raw section). A pair's raw
     section is bench/pair.sh's file, from its title, the last line of that form; a plain
     run's starts at JMH's first line."""
-    pair = [i for i, line in enumerate(lines) if re.match(r"# Pair: \S", line)]
+    pair = [i for i, line in enumerate(lines) if PAIR_TITLE.match(line)]
     jmh = [i for i, line in enumerate(lines) if line.startswith("# JMH version:")]
     for i in pair[-1:] + jmh[:1]:
         return lines[:i], lines[i:]
@@ -407,37 +503,60 @@ def check(path, directory):
     while actual and not actual[-1]:
         actual.pop()
     top, raw = split_file(actual)
-    made = list(files_of(directory, name=None if raw[0].startswith("# JMH") else "x").values())
+    pair = artifact_lines(directory)[1]
+    if pair != bool(PAIR_TITLE.match(raw[0])):
+        return ["the file is of a %s and the artifact of a %s: is it the file's run?"
+                % (("plain run", "pair") if pair else ("pair", "plain run"))]
+    made = list(files_of(directory, name="x" if pair else None).items())
     if len(made) > 1:
         # A run of several classes: the file is checked against the class its raw section has.
         mine = classes_of(raw)
-        made = [lines for lines in made if classes_of(lines) == mine]
+        made = [(name, lines) for name, lines in made if classes_of(lines) == mine]
         if len(made) != 1:
             return ["the file's raw section is of %s, and the artifact has no file of that"
                     % (", ".join(sorted(mine)) or "no benchmark")]
-    expected = made[0]
+    expected = made[0][1]
     e_top, e_raw = split_file([l for l in expected if MARKER not in l])
     diffs = ["line %d is a marker still to be replaced: %s" % (i + 1, l)
              for i, l in enumerate(actual) if MARKER in l]
+    if actual[0] == expected[0]:
+        diffs.append("line 1 is still the workflow's title, and the file has none of its own")
+    suffix = NAME_END.search(made[0][0]).group(0)
+    if not os.path.basename(path).endswith(suffix):
+        diffs.append("the file's name does not end in %s, the run's host and date" % suffix)
     have = {}
-    for key, value in fields(top):
-        have.setdefault(key, value)
-    for key, value in fields(e_top[1:]):
+    for key, value in fields(header_block(top)):
+        have.setdefault(key, []).append(value)
+    for key, value in fields(header_block(e_top)):
         if key not in have:
             diffs.append("header: no '%s' line; the artifact gives: %s" % (key, value))
-        elif not same_field(key, have[key], value):
-            diffs.append("header: %s is '%s'; the artifact gives '%s'" % (key, have[key], value))
+        for mine in have.get(key, []):
+            # Every line of that name, so that a second one cannot say otherwise.
+            if not same_field(key, mine, value):
+                diffs.append("header: %s is '%s'; the artifact gives '%s'"
+                             % (key, " ".join(mine.split()), " ".join(value.split())))
     a_tables, e_tables = tables_of(top), tables_of(e_top)
+    if not e_tables or not all(e_tables):
+        raise Problem("no min/avg/max table can be read back from what the artifact gives")
     if len(a_tables) != len(e_tables):
         diffs.append("%d min/avg/max tables; the artifact gives %d"
                      % (len(a_tables), len(e_tables)))
     for n, (a, e) in enumerate(zip(a_tables, e_tables), 1):
         a_rows, e_rows = {r[:2]: r[2:] for r in a}, {r[:2]: r[2:] for r in e}
+        if not a:
+            diffs.append("table %d: no row of it can be read" % n)
+        keys = [r[:2] for r in a]
+        for key in sorted({k for k in keys if keys.count(k) > 1}):
+            diffs.append("table %d: %s %s is there more than once" % (n, key[0], key[1]))
         for key in sorted(set(a_rows) | set(e_rows)):
             if a_rows.get(key) != e_rows.get(key):
                 diffs.append("table %d: %s %s is %s; the artifact gives %s"
                              % (n, key[0], key[1], " ".join(a_rows.get(key, ["absent"])),
                                 " ".join(e_rows.get(key, ["no such row"]))))
+    a_sides, e_sides = ([l for l in t if SIDE_LINE.match(l)] for t in (top, e_top))
+    if a_sides != e_sides:
+        diffs.append("the lines above a pair's tables are %s; the artifact gives %s"
+                     % (a_sides or "absent", e_sides))
     if raw != e_raw:
         at = next((i for i, (a, e) in enumerate(zip(raw, e_raw)) if a != e),
                   min(len(raw), len(e_raw)))
@@ -469,15 +588,20 @@ def fake_plain(directory):
              "# Datapath:    34.8 / 69.2 / 94.1 lane-ops/ns at 128 / 256 / 512 bits",
              "#              (bench/datapath.sh, at the machine's own JVM flags)",
              "# Load:        0.56 0.24 0.09 at start (4 cores)",
+             "# Vector:      ",
              "# Command:     mvn -B -Pjmh test-compile exec:exec", "#",
-             "[INFO] Scanning for projects..."]
+             "[INFO] Scanning for projects...", "[WARNING] a source line: caf\u00e9"]
     lines += block("ExpBenchmark", "finish256", "common", [10.04, 12.0, 11.0])
     lines += block("ExpBenchmark", "finish256", "mixed", [20.0, 22.0, 21.0])
     lines += block("Log1pBenchmark", "guarded256", "common", [30.0, 32.0, 31.0])
+    # A benchmark with no @Param has no Parameters line.
+    lines += [l for l in block("Log1pBenchmark", "plain", "", [40.0, 42.0, 40.05])
+              if not l.startswith("# Parameters")]
     lines += ["# Run complete. Total time: 00:00:09", "",
               "Benchmark                    (inputs)  Mode  Cnt   Score   Error  Units",
               "ExpBenchmark.finish256         common  avgt    3  11.013 \u00b1 1.000  ns/op",
               "ExpBenchmark.finish256:gc.count common avgt    3  \u2248 0          counts",
+              "ExpBenchmark.finish256:gc.alloc common avgt    3  \u2248 10\u207b\u2074    B/op",
               "ExpBenchmark.finish256          mixed  avgt    3  21.000 \u00b1 1.000  ns/op",
               "Log1pBenchmark.guarded256      common  avgt    3  31.000 \u00b1 1.000  ns/op",
               "[INFO] BUILD SUCCESS", "# Load:        1.11 1.09 0.69 at end", ""]
@@ -510,10 +634,13 @@ def fake_pair(directory):
 
 
 def selftest():
-    def written(directory, lines, change=lambda l: l):
-        path = os.path.join(directory, "file.txt")
+    def written(directory, lines, change=lambda l: l, name="exp-xeon8573c-2026-11-20.txt",
+                title="# A title of its own"):
+        # A file as it would be committed: the markers gone, the title written.
+        path = os.path.join(directory, name)
         with open(path, "w", encoding="ascii") as f:
-            f.write("\n".join(change(l) for l in lines if MARKER not in l) + "\n")
+            f.write("\n".join([title] + [change(l) for l in lines[1:] if MARKER not in l])
+                    + "\n")
         return path
 
     with tempfile.TemporaryDirectory() as d:
@@ -536,14 +663,40 @@ def selftest():
         assert not any(MAVEN.match(l) for l in exp) and text.isascii()
         assert "ExpBenchmark.finish256:gc.count common avgt    3  ~ 0          counts" in exp
         assert not any("Log1p" in l for l in exp[8:])
+        # A value under 0.0005, which JMH prints as a power of ten, is ASCII too.
+        assert "ExpBenchmark.finish256:gc.alloc common avgt    3  ~ 10^-4    B/op" in exp
+        # A row with no parameter holds "-", and a tie rounds to the even digit: 40.05 is 40.0.
+        assert "# Log1pBenchmark.plain       -              40.0         40.7         42.0" \
+            in log1p, "\n".join(log1p)
+        assert [tenth(x) for x in ("10.050", "10.150", "10.250", 10.35, 0.04)] == [
+            "10.0", "10.2", "10.2", "10.4", "0.0"]
+        found = check(written(d, log1p, lambda l: l.replace("  40.7  ", "  40.8  ")), d)
+        assert len(found) == 1 and found[0].startswith("table 1: Log1pBenchmark.plain -"), found
         assert not any("ExpBenchmark." in l for l in log1p)
         assert exp[-1].startswith("ExpBenchmark.finish256          mixed"), exp[-1]
         assert sum(MARKER in l for l in exp) == 6
+        # A header line with no value is kept, and a value typed into it is found.
+        assert "# Vector:" in exp
+        found = check(written(d, exp, lambda l: l.replace("# Vector:", "# Vector: UseAVX=3")), d)
+        assert len(found) == 1 and found[0].startswith("header: Vector"), found
         # A file as written still has its markers; without them it checks.
         with open(os.path.join(d, "kept.txt"), "w") as f:
             f.write("\n".join(exp) + "\n")
         kept = check(os.path.join(d, "kept.txt"), d)
-        assert len(kept) == 6 and all("marker" in x for x in kept), kept
+        assert len(kept) == 8 and sum("marker" in x for x in kept) == 6, kept
+        # With the markers deleted and no title written, or under another host's name, it
+        # still does not check.
+        found = check(written(d, exp, title=exp[0]), d)
+        assert found == ["line 1 is still the workflow's title, and the file has none of its"
+                         " own"], found
+        found = check(written(d, exp, name="exp-epyc7763-2026-11-20.txt"), d)
+        assert found == ["the file's name does not end in -xeon8573c-2026-11-20.txt, the run's"
+                         " host and date"], found
+        assert check(written(d, exp, name="exp-finish-xeon8573c-2026-11-20.txt"), d) == []
+        # A hand-added header line of any form does not end the header.
+        odd = [x for l in exp for x in ([l, "# CPU MHz:     3000"]
+                                        if l.startswith("# Commit:") else [l])]
+        assert check(written(d, odd), d) == []
         assert check(written(d, exp), d) == []
         assert check(written(d, log1p), d) == []
         # Another wrapping and a hand-added header line are the same file.
@@ -559,11 +712,40 @@ def selftest():
             found = check(written(d, exp, lambda l: l.replace(old, new)), d)
             assert len([x for x in found if not x.startswith("  ")]) == 1 \
                 and found[0].startswith(where), (old, found)
+        # A row there twice is found, whichever copy is the artifact's.
+        twice = [x for l in exp for x in (
+            [l.replace("  10.0  ", "  77.7  "), l] if l.startswith("# ExpBenchmark.finish256  c")
+            else [l])]
+        found = check(written(d, twice), d)
+        assert found == ["table 1: ExpBenchmark.finish256 common is there more than once"], found
+        # A table none of whose rows can be read is not an empty comparison.
+        found = check(written(d, [l for l in exp if not TABLE_ROW.match(l)]), d)
+        assert "table 1: no row of it can be read" in found, found
+        # A sentence of the reading that starts like a machine-made line is not one.
+        prose = exp[:1] + ["# Row by row, the finish arm leads.",
+                           "# Pair: none; this is one run.",
+                           "# Commit: main, dispatched by hand.",
+                           "# The head, which has it, is ahead.", "#"] + exp[1:]
+        assert check(written(d, prose), d) == []
+        found = check(written(d, exp, lambda l: l.replace("(4 cores)", "(64 cores)")), d)
+        assert len(found) == 1 and found[0].startswith("header: Load"), found
+        assert check(written(d, exp, lambda l: l.replace(" (4 cores)", "")), d) == []
+        # The Load line is compared whole, however it is wrapped.
+        rewrapped = "\n".join(l for l in exp if MARKER not in l).replace(
+            "at end (4 cores)", "at\n#              end (4 cores)").split("\n")
+        assert check(written(d, rewrapped), d) == []
+        found = check(written(d, exp, lambda l: l.replace("at end (4", "at end, 7.0 (4")), d)
+        assert len(found) == 1 and found[0].startswith("header: Load"), found
+        # A second line of one name is compared too.
+        second = [x for l in exp for x in ([l, l.replace("0123", "ffff")]
+                                           if l.startswith("# Commit:") else [l])]
+        found = check(written(d, second), d)
+        assert len(found) == 1 and found[0].startswith("header: Commit is 'ffff"), found
         missing = check(written(d, [l for l in exp if not l.startswith("# Commit:")]), d)
         assert missing and missing[0].startswith("header: no 'Commit' line"), missing
         try:
             plain_files(ascii_lines(open(os.path.join(d, "bench-results.txt"),
-                                         encoding="utf-8").read(), "x"), "one-name")
+                                         encoding="utf-8").read()), "one-name")
             raise AssertionError("one name for two classes")
         except Problem:
             pass
@@ -571,6 +753,13 @@ def selftest():
         fake_pair(d)
         files = files_of(d)
         assert list(files) == ["exp-pair-epyc7763-2026-11-20.txt"], list(files)
+        plain_written = written
+
+        def written(directory, lines, change=lambda l: l):
+            if PAIR_TITLE.match(lines[0]):
+                return plain_written(directory, lines, change, "exp-x-epyc7763-2026-11-20.txt")
+            return plain_written(directory, lines, change)
+
         pair = files["exp-pair-epyc7763-2026-11-20.txt"]
         text = "\n".join(pair)
         # Each side's table is over every measured iteration of its rounds: 2 rounds of 2 x 2.
@@ -588,8 +777,57 @@ def selftest():
         found = check(written(d, pair, lambda l: l.replace("  21.2  ", "  21.3  ")), d)
         # Both of the base's rows hold that average.
         assert len(found) == 2 and all(x.startswith("table 1") for x in found), found
+        # The line above a side's table, its commit and its count, is checked too.
+        for old, new in (("The base, aaaaaaa", "The base, bbbbbbb"), ("its 8 m", "its 9 m")):
+            found = check(written(d, pair, lambda l: l.replace(old, new)), d)
+            assert len(found) == 1 and found[0].startswith("the lines above"), found
         found = check(written(d, pair, lambda l: l.replace("+100.0%  +", "+100.1%  +")), d)
         assert found and found[0].startswith("raw section"), found
+        # A pair's file against a plain run's artifact, and the other way, is said so.
+        with tempfile.TemporaryDirectory() as plain:
+            fake_plain(plain)
+            found = check(written(d, pair), plain)
+            assert len(found) == 1 and "pair and the artifact of a plain run" in found[0], found
+            found = check(written(plain, list(files_of(plain).values())[0]), d)
+            assert len(found) == 1 and "plain run and the artifact of a pair" in found[0], found
+        # A commit subject that is not ASCII is written escaped, and the file checks.
+        with open(os.path.join(d, "bench-results.txt"), encoding="utf-8") as f:
+            whole = f.read()
+        with open(os.path.join(d, "bench-results.txt"), "w", encoding="utf-8") as f:
+            f.write(whole.replace("(Before)", "(Fix caf\u00e9 rounding)"))
+        accent = list(files_of(d).values())[0]
+        assert "# Base:        aaaaaaabbbbbbb (Fix caf\\xe9 rounding)" in accent, accent[:12]
+        assert check(written(d, accent), d) == []
+        # A pair's artifact without its pair/ is an error, not a plain run.
+        os.rename(os.path.join(d, "pair"), os.path.join(d, "elsewhere"))
+        try:
+            check(written(d, accent), d)
+            raise AssertionError("a pair with no pair/")
+        except Problem as e:
+            assert "no pair/base-*.json" in str(e), e
+        os.rename(os.path.join(d, "elsewhere"), os.path.join(d, "pair"))
+        # With no @Param the column is "params" and each row holds "-"; two modes are refused.
+        for r in (1, 2):
+            for side in ("base", "head"):
+                path = os.path.join(d, "pair", "%s-%d.json" % (side, r))
+                with open(path) as f:
+                    entries = json.load(f)
+                for e in entries:
+                    del e["params"]
+                with open(path, "w") as f:
+                    json.dump(entries, f)
+        bare = files_of(d)["exp-pair-epyc7763-2026-11-20.txt"]
+        assert [len(t) for t in tables_of(bare)] == [1, 2], "\n".join(bare[:14])
+        found = check(written(d, bare, lambda l: l.replace("  18.0  ", "  99.9  ")), d)
+        assert len(found) == 1 and found[0].startswith("table 1"), found
+        entries[0]["mode"] = "ss"
+        with open(path, "w") as f:
+            json.dump(entries, f)
+        try:
+            files_of(d)
+            raise AssertionError("two modes in one table")
+        except Problem:
+            pass
     with tempfile.TemporaryDirectory() as d:
         with open(os.path.join(d, "bench-results.txt"), "w", encoding="utf-8") as f:
             f.write("# X on a GitHub runner, 2026-11-20 01:02 UTC\n#\n[ERROR] no build\n")
@@ -598,7 +836,74 @@ def selftest():
             raise AssertionError("an artifact with no JMH output")
         except Problem:
             pass
+        # A run that stopped before its end is not a results file.
+        fake_plain(d)
+        with open(os.path.join(d, "bench-results.txt"), encoding="utf-8") as f:
+            cut = f.read().split("# Run complete.")[0]
+        with open(os.path.join(d, "bench-results.txt"), "w", encoding="utf-8") as f:
+            f.write(cut + "[ERROR] Failed to execute goal\n")
+        try:
+            files_of(d)
+            raise AssertionError("a run that did not finish")
+        except Problem as e:
+            assert "did not finish" in str(e), e
+        # Nor a run with no host or no date to name the file by.
+        fake_plain(d)
+        with open(os.path.join(d, "bench-results.txt"), encoding="utf-8") as f:
+            whole = f.read()
+        for old in ("# Host:        xeon8573c (expected CPU 'INTEL(R) XEON(R) PLATINUM 8573C')",
+                    ", 2026-11-20 01:02 UTC"):
+            with open(os.path.join(d, "bench-results.txt"), "w", encoding="utf-8") as f:
+                f.write(whole.replace(old, "# Host:" if old.startswith("#") else ""))
+            try:
+                files_of(d)
+                raise AssertionError("no host or no date")
+            except Problem as e:
+                assert "no Host line" in str(e), e
+        # A header line of a form the script does not know is not dropped silently.
+        with open(os.path.join(d, "bench-results.txt"), "w", encoding="utf-8") as f:
+            f.write(whole.replace("# Command:", "# Turbo/boost: off\n# Command:"))
+        try:
+            files_of(d)
+            raise AssertionError("an unknown header line")
+        except Problem as e:
+            assert "does not know" in str(e), e
+        # A benchmark of another package is its class's all the same.
+        with open(os.path.join(d, "bench-results.txt"), "w", encoding="utf-8") as f:
+            f.write(whole.replace(PACKAGE, "org.example.inner."))
+        assert sorted(files_of(d)) == ["exp-xeon8573c-2026-11-20.txt",
+                                       "log1p-xeon8573c-2026-11-20.txt"]
+        # A parameter value that reads as two parameters is refused.
+        with open(os.path.join(d, "bench-results.txt"), "w", encoding="utf-8") as f:
+            f.write(whole.replace("(inputs = mixed)", "(inputs = a, b)"))
+        try:
+            files_of(d)
+            raise AssertionError("a parameter value with a comma")
+        except Problem as e:
+            assert "cannot be told" in str(e), e
+        # Nor is a run in which one benchmark failed: its row would be missing.
+        fake_plain(d)
+        with open(os.path.join(d, "bench-results.txt"), encoding="utf-8") as f:
+            whole = f.read()
+        at = whole.index("Result", whole.index("(inputs = mixed)"))
+        with open(os.path.join(d, "bench-results.txt"), "w", encoding="utf-8") as f:
+            f.write(whole[:at] + "<failure>\n\n" + whole[whole.index("# JMH version", at):])
+        try:
+            files_of(d)
+            raise AssertionError("a benchmark with no Result block")
+        except Problem as e:
+            assert "ExpBenchmark.finish256 has no Result block" in str(e), e
+        # Only JMH's own signs are rewritten: another character in a kept line is an error.
+        with open(os.path.join(d, "bench-results.txt"), "w", encoding="utf-8") as f:
+            f.write("# X on a GitHub runner, 2026-11-20 01:02 UTC\n#\n# JMH version: 1.37\n"
+                    "# Benchmark: %sXBenchmark.a\ncaf\u00e9\n# Run complete.\n" % PACKAGE)
+        try:
+            files_of(d)
+            raise AssertionError("a non-ASCII character in a kept line")
+        except Problem:
+            pass
     print("bench/record.py: self-test passed")
+    return 0
 
 
 def main():
@@ -611,20 +916,26 @@ def main():
             p.add_argument("file", help="the results file to check")
         p.add_argument("artifact", nargs="?", help="the downloaded artifact's directory")
         p.add_argument("--run", help="the run to download the artifact of, with gh")
-        p.add_argument("--repo", help="the repository of --run, if not the checkout's")
+        p.add_argument("--repo", default="vecbricks/vfdlibm",
+                       help="the repository of --run (default: %(default)s)")
         if command == "write":
-            p.add_argument("--out-dir", default="bench/results")
-            p.add_argument("--name", help="the file's <function> part, such as exp-onediv")
+            p.add_argument("--out-dir", default=os.path.join(
+                os.path.dirname(os.path.abspath(__file__)), "results"),
+                help="where the files go (default: bench/results of this checkout)")
+            p.add_argument("--name", help="the file's name before <host>, such as exp-onediv")
             p.add_argument("--force", action="store_true", help="overwrite an existing file")
     args = parser.parse_args()
     if args.selftest:
-        selftest()
-        return 0
+        return selftest()
     if not args.command:
         parser.error("write, check or --selftest")
     if bool(args.artifact) == bool(args.run):
         parser.error("give the artifact's directory or --run, one of them")
-    directory = find_artifact(args.artifact or download(args.run, args.repo))
+    with tempfile.TemporaryDirectory(prefix="bench-record-") as scratch:
+        return act(args, find_artifact(args.artifact or download(args.run, args.repo, scratch)))
+
+
+def act(args, directory):
     if args.command == "check":
         diffs = check(args.file, directory)
         for line in diffs:
@@ -632,10 +943,13 @@ def main():
         print("%s: %s" % (args.file, "differs from the artifact" if diffs
                           else "its header, tables and raw section are the artifact's"))
         return 1 if diffs else 0
-    for name, lines in files_of(directory, args.name).items():
-        path = os.path.join(args.out_dir, name)
-        if os.path.exists(path) and not args.force:
-            raise Problem("%s exists; pass --force to overwrite it, or --name" % path)
+    files = {os.path.join(args.out_dir, name): lines
+             for name, lines in files_of(directory, args.name).items()}
+    there = [path for path in files if os.path.exists(path)]
+    if there and not args.force:
+        raise Problem("%s: there already, and nothing was written; pass --force to overwrite,"
+                      " or --name" % ", ".join(there))
+    for path, lines in files.items():
         with open(path, "w", encoding="ascii", newline="\n") as f:
             f.write("\n".join(lines) + "\n")
         print("wrote %s: %d lines, %d of them markers to replace by hand"
@@ -646,6 +960,10 @@ def main():
 if __name__ == "__main__":
     try:
         sys.exit(main())
-    except Problem as e:
-        print("bench/record.py: error: %s" % e, file=sys.stderr)
+    except AssertionError:
+        raise  # the self-test's
+    except Exception as e:
+        # An unreadable file or a malformed artifact is an error, never "differs" (status 1).
+        kind = "" if isinstance(e, Problem) else type(e).__name__ + ": "
+        print("bench/record.py: error: %s%s" % (kind, e), file=sys.stderr)
         sys.exit(2)

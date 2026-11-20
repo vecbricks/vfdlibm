@@ -37,7 +37,9 @@
 # file (--result, default <out>/pair.txt) opens with the provenance header of bench/results/
 # (AGENTS.md, "Measurements, not adjectives"), both commits and the datapath reading included,
 # then the comparison, then each round's JMH summary; the out directory keeps every round's JSON
-# and log. Copy the results file to bench/results/<function>-<comparison>-<host>-<date>.txt.
+# and log. The results file goes to bench/results/<function>-<comparison>-<host>-<date>.txt:
+# from a host's run, bench/record.py write --run <run id> --name <function>-<comparison> makes
+# it with each side's min/avg/max table; from a local pair, copy it there.
 #
 #   --base REF        the base: a commit, a branch or HEAD; default the merge base of HEAD and
 #                     origin/main (main when there is no origin/main).
@@ -59,7 +61,7 @@
 # on one side only or could not be compared (bench/pair.py), 64 on a usage error.
 
 set -uo pipefail
-usage() { sed -n '10,59p' "$0" >&2; exit 64; }
+usage() { sed -n '10,61p' "$0" >&2; exit 64; }
 base_ref=""; rounds=5; threshold=10; within=3; keep=0; out=""; result=""; mvn=mvn
 jmh="-f 2 -wi 3 -w 2s -i 5 -r 2s -prof gc"; jvm_args=""; host="local"; datapath=""; run=""
 while [ $# -gt 0 ]; do
