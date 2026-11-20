@@ -575,5 +575,6 @@ a settled question.
   the sweep, the fuzz and Arm fail under the fault by design. The scheduled nights, the
   dispatches and the dispatches with a fault each have a concurrency group, so a dispatch never
   cancels a waiting night, and can run beside one, outside the night's count of at most 16 jobs
-  at once: narrow it with `functions`, or dispatch it away from the night's hours. No such
-  dispatch has been made yet.
+  at once: narrow it with `functions`, or dispatch it away from the night's hours. Send such
+  dispatches one at a time: of two runs waiting in a group GitHub keeps the newer and cancels the
+  other, with no issue. No such dispatch has been made yet.

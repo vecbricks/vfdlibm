@@ -85,7 +85,9 @@ permissions:
 # The scheduled nights, the dispatches and the dispatches that plant a fault each have a group:
 # in one group, a second dispatch would cancel a scheduled night that was waiting behind the
 # first. A dispatch can then run beside a night, which the jobs' max-parallel does not count:
-# narrow it with `functions`, or keep it clear of the night's hours.
+# narrow it with `functions`, or keep it clear of the night's hours. Within a group the rule
+# is the same, so wait for one dispatch's jobs to start before sending a third: of two that
+# wait, GitHub keeps the newer.
 concurrency:
   group: nightly-${{ github.event_name }}${{ inputs.fault && '-fault' || '' }}
   cancel-in-progress: false
@@ -292,7 +294,8 @@ jobs:
     strategy:
       fail-fast: false
       # The free organisation plan runs 20 jobs at once across vecbricks: with fuzz's 3, arm's 4
-      # and proofs, this run takes at most 16, leaving room for CI.
+      # and proofs, this run takes at most 16, leaving room for CI. That is one run's count: a
+      # dispatch is in another concurrency group and can run beside a night (see `concurrency`).
       max-parallel: 8
       matrix: ${{ fromJSON(needs.plan.outputs.sweep) }}
     steps:
@@ -491,8 +494,9 @@ jobs:
           # many of them did not pass. Another function's job that failed says nothing here.
           ran=0
           not_passed=0
+          # A list that failed part of the way is not used: it could lack the job that failed.
           list="$(gh api "repos/$GH_REPO/actions/runs/$RUN_ID/jobs?per_page=100" --paginate \
-            --jq '.jobs[] | [.name, .conclusion // "none"] | @tsv' || true)"
+            --jq '.jobs[] | [.name, .conclusion // "none"] | @tsv')" || list=''
           while IFS=$'\t' read -r name conclusion; do
             for f in $FAULT_FUNCTIONS; do
               case "$name" in
@@ -506,8 +510,12 @@ jobs:
             done
           done <<< "$list"
           echo "$ran jobs of $FAULT_FUNCTIONS, $not_passed not passed"
-          # Without the list, the three results stand in: every function's jobs.
-          if [ "$ran" = 0 ] && [ "$RESULTS" != "sweep=success fuzz=success arm=success" ]; then
+          # The three results cover every function's jobs. When all passed, every job of the
+          # fault's functions passed, whatever the list says (a conclusion can reach it late);
+          # without the list, they stand in for it.
+          if [ "$RESULTS" = "sweep=success fuzz=success arm=success" ]; then
+            not_passed=0
+          elif [ "$ran" = 0 ]; then
             not_passed=1
           fi
           caught=0
@@ -713,6 +721,9 @@ jobs:
             if [ "$found" = 0 ] && [ "$expected" = 0 ] && [ "$verdict" = missed ]; then
               echo "No mismatch file records a mismatch: the planted fault was not caught. See"
               echo "the run's logs for whether anything else failed."
+            elif [ "$found" = 0 ] && [ "$expected" = 0 ] && [ "$verdict" = caught ]; then
+              echo "The fault-caught job read the mismatch files that hold the catch; this job"
+              echo "could not download them. The run's artifacts hold them."
             elif [ "$found" = 0 ] && [ "$expected" = 0 ]; then
               echo "No mismatch file records a mismatch: a job failed for another reason (a"
               echo "build, a timeout, a proof). See the run's logs."
