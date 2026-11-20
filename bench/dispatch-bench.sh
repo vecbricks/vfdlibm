@@ -31,7 +31,8 @@
 # about a day, which draws it at least once with a chance of about 64%, each miss costing a
 # minute of runner time, since the check comes first in the job, after only the fetch of its
 # script and that script's own test. --attempts 1 is a single opportunistic try. Running out
-# of attempts is exit status 3, not a failure of the run.
+# of attempts on a CPU miss is exit status 3, not a failure of the run; when the last attempt
+# failed before the CPU check, it is 1.
 #
 # --base <base> makes each run a pair (bench/pair.sh in the workflow): the benchmarks on <base>
 # and on the dispatched <ref> as head, alternating, on one machine. <base> is a branch or tag of

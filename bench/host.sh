@@ -40,8 +40,9 @@ export LC_ALL=C
 # them "end" would be a change to the check, which is the owner's. The last field is
 # a list of words of /proc/cpuinfo's flags line, separated by spaces, all of which the machine
 # must have; no host of today's needs one, since each model name has come with one set of
-# flags. A row can only require a flag, not forbid one, so of a model name that comes both with
-# and without a flag only the kind with it can be a row.
+# flags. A row that requires a flag outside the self-test's AVX-512 list also needs its census
+# cases there updated. A row can only require a flag, not forbid one, so of a model name that
+# comes both with and without a flag only the kind with it can be a row.
 HOSTS=(
   "epyc7763|end|AMD EPYC 7763 64-Core Processor|"
   "xeon8573c|any|INTEL(R) XEON(R) PLATINUM 8573C|"
@@ -58,6 +59,10 @@ row_of() {
     if [ "${row%%|*}" = "$1" ]; then printf '%s\n' "$row"; return 0; fi
   done
   return 1; }
+
+# The flags a row requires.
+need_of() { local key where string need; IFS='|' read -r key where string need <<<"$1"
+  printf '%s\n' "$need"; }
 
 # The CPU string of a row.
 string_of() { local key where string need; IFS='|' read -r key where string need <<<"$1"
@@ -236,7 +241,8 @@ self_test() {
   # On every machine, the success path with each host's own name: status 0 and the one line.
   for key in $(keys); do
     n=$((n + 1)); : > "$env"
-    GITHUB_ENV="$env" expect_and_record "$key" "$(string_of "$(row_of "$key")")" "$avx512" \
+    GITHUB_ENV="$env" expect_and_record "$key" "$(string_of "$(row_of "$key")")" \
+      "$avx512 $(need_of "$(row_of "$key")")" \
       > /dev/null; got=$?
     line="$(cat "$env")"; want="EXPECTED_CPU=$(string_of "$(row_of "$key")")"
     if [ "$got" != 0 ] || [ "$line" != "$want" ]; then
@@ -247,7 +253,8 @@ self_test() {
     # as two hosts.
     n=$((n + 1)); local other matched=""
     for other in $(keys); do
-      if matches "$(row_of "$other")" "$(string_of "$(row_of "$key")")" "$avx512"; then
+      if matches "$(row_of "$other")" "$(string_of "$(row_of "$key")")" \
+          "$avx512 $(need_of "$(row_of "$key")")"; then
         matched+="${matched:+ }$other"
       fi
     done
