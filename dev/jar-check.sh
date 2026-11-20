@@ -21,23 +21,28 @@
 #      jar has no module-info.class beside that name.
 #   3. Its classes are the ones of this checkout's src/main/java, each source file's class and
 #      the classes nested in it, all of them and no other; a benchmark, a test or a dependency's
-#      class in the jar fails here, though the tests and benchmarks share the package. Nothing
-#      else is in it but the manifest, the two licence files and Maven's META-INF/maven/.
+#      class in the jar fails here, though the tests and benchmarks share the package. The
+#      main sources are taken to be what they are today, one package with one top-level type a
+#      file; a second package or a second type in a file fails here until this check learns it.
+#      Nothing else is in the jar but the manifest, the two licence files and Maven's
+#      META-INF/maven/.
 #   4. A consumer compiled against the jar alone, with the module jdk.incubator.vector, runs and
 #      finds every lane of every public function equal to StrictMath's by raw bits, in the plain
-#      and the masked form, at the preferred species; it fails if VFdlibm has a public method it
-#      does not check. It is compiled and run twice: with the jar on the class path, and as a
-#      module that requires io.github.vecbricks.vfdlibm with the jar on the module path.
+#      and the masked form, at the preferred species; it fails if VFdlibm has a public method,
+#      by name and number of parameters, that it does not check. It is compiled and run twice:
+#      with the jar on the class path, and as a module that requires
+#      io.github.vecbricks.vfdlibm with the jar on the module path.
 #
 # The consumer is no test of a function: the suite is. It shows that the jar loads and links for
-# somebody who has nothing else of this project. It needs a JDK (jar, javac and java: all three
-# from JAVA_HOME if that is set, else from PATH) and cmp, and writes under a temporary directory
-# it removes. Exit
+# somebody who has nothing else of this project. It needs a JDK that compiles --release 25 (jar,
+# javac and java: all three from JAVA_HOME if that is set, else from PATH) and cmp, and writes
+# under a temporary directory it removes; a JDK that is too old is "could not run". Exit
 # status: 0 when every check passed, 1 when one failed (each failure is printed, and every check
 # runs), 2 when it could not run.
 set -uo pipefail
 
 MODULE=io.github.vecbricks.vfdlibm
+RELEASE=25
 PACKAGE_DIR=io/github/vecbricks/vfdlibm
 VECTOR_MODULE=jdk.incubator.vector
 
@@ -62,6 +67,8 @@ tool() {
 JAR="$(tool jar)" || exit 2
 JAVAC="$(tool javac)" || exit 2
 JAVA="$(tool java)" || exit 2
+"$JAVAC" --release "$RELEASE" -version > /dev/null 2>&1 \
+  || die "$JAVAC does not compile --release $RELEASE: $("$JAVAC" -version 2>&1 | head -1)"
 
 if [ $# -eq 1 ]; then
   jar="$1"
@@ -82,6 +89,10 @@ jar="$(cd "$(dirname "$jar")" && pwd)/$(basename "$jar")"
 
 work="$(mktemp -d)" || die "cannot make a temporary directory"
 trap 'rm -rf "$work"' EXIT
+# Both go on a class path and a module path, which a colon would split.
+case "$jar$work" in
+  *:*) die "a colon in the jar's path or the temporary directory's: $jar, $work" ;;
+esac
 
 failures=0
 fail() { echo "FAIL  $*"; failures=$((failures + 1)); }
@@ -112,7 +123,9 @@ fi
 
 # 2. The module's name. A manifest line ends in CR LF.
 manifest="$work/unpacked/META-INF/MANIFEST.MF"
-if tr -d '\r' < "$manifest" 2>/dev/null | grep -qx "Automatic-Module-Name: $MODULE"; then
+if [ ! -f "$manifest" ]; then
+  fail "the jar has no META-INF/MANIFEST.MF"
+elif tr -d '\r' < "$manifest" | grep -qxF "Automatic-Module-Name: $MODULE"; then
   ok "the manifest says Automatic-Module-Name: $MODULE"
 else
   fail "the manifest has no line Automatic-Module-Name: $MODULE"
@@ -214,7 +227,9 @@ public final class Consumer {
     int length = SPECIES.length();
     double[] in = new double[length];
     boolean[] live = new boolean[length];
-    CHECKED.add(name);
+    // Both unary forms: f(x) and f(x, live).
+    CHECKED.add(name + "/1");
+    CHECKED.add(name + "/2");
     for (int from = 0; from < INPUTS.length; from += length) {
       for (int i = 0; i < length; i++) {
         in[i] = INPUTS[(from + i) % INPUTS.length];
@@ -241,13 +256,13 @@ public final class Consumer {
     }
   }
 
-  /** The public static methods of VFdlibm that no check above named, by name. */
+  /** The public static methods of VFdlibm no check above ran, as name/number of parameters. */
   private static Set<String> unchecked() {
     Set<String> names = new TreeSet<>();
     for (Method method : VFdlibm.class.getDeclaredMethods()) {
       int modifiers = method.getModifiers();
       if (Modifier.isPublic(modifiers) && Modifier.isStatic(modifiers)) {
-        names.add(method.getName());
+        names.add(method.getName() + "/" + method.getParameterCount());
       }
     }
     names.removeAll(CHECKED);
@@ -300,13 +315,13 @@ JAVA
 # lines whole and no other, so that an error which names the module is still shown.
 show() {
   grep -v -x \
-      -e "warning: using incubating module(s): $VECTOR_MODULE" \
+      -e "warning: \(\[incubating\] \)\?using incubating module(s): $VECTOR_MODULE" \
       -e "1 warning" \
       -e "WARNING: Using incubator modules: $VECTOR_MODULE" "$work/log" \
     | sed 's/^/        /'
 }
 
-if "$JAVAC" --release 25 --add-modules "$VECTOR_MODULE" -cp "$jar" -d "$work/classpath" \
+if "$JAVAC" --release "$RELEASE" --add-modules "$VECTOR_MODULE" -cp "$jar" -d "$work/classpath" \
     "$work/src/consumer/Consumer.java" > "$work/log" 2>&1 \
   && "$JAVA" --add-modules "$VECTOR_MODULE" -cp "$jar:$work/classpath" consumer.Consumer "" \
     >> "$work/log" 2>&1; then
@@ -316,7 +331,7 @@ else
 fi
 show
 
-if "$JAVAC" --release 25 --module-path "$jar" -d "$work/modulepath" \
+if "$JAVAC" --release "$RELEASE" --module-path "$jar" -d "$work/modulepath" \
     "$work/src/module-info.java" "$work/src/consumer/Consumer.java" > "$work/log" 2>&1 \
   && "$JAVA" --module-path "$jar:$work/modulepath" -m consumer/consumer.Consumer "$MODULE" \
     >> "$work/log" 2>&1; then
