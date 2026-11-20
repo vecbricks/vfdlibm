@@ -555,9 +555,17 @@ a settled question.
   of their faults, as `-Dvfdlibm.fault=<name>` in every sweep and fuzz JVM, so a dispatch can
   show the night catching it and the alert job at work without a real failure:
   `gh workflow run nightly.yml -f fault=exp.dropCorrection -f functions=exp -f fuzz-seconds=5`.
-  The plan job refuses a fault that `pom.xml` gives no fault run, or whose function the run
-  leaves out, since either would plant nothing a job could catch and pass; a dispatch whose
-  inputs the plan job refuses opens no issue. A run with a fault has its own concurrency group
-  and its own label, `nightly-fault-test`: its issue, or its comment on the open issue of that
-  label, opens by saying that the fault was planted, and is never mixed with a
-  `nightly-failure` issue. No such dispatch has been made yet.
+  The plan job refuses a fault that `pom.xml` gives no fault run, or that reaches no function
+  of the run, since no job could catch either; a dispatch whose inputs the plan job refuses
+  opens no issue. A fault reaches its own function and those that compute through it: log's
+  three also fail log10, which calls `Log.logCore` (a two-second fuzz of each function under
+  each function's `dropCorrection` on the laptop failed its own function, and log10 under
+  log's, and nothing else); the plan job's `reach` holds that map, and a port that computes
+  through another adds a line to it. When every sweep and fuzz passes under the fault, the job
+  `fault-caught` fails, so a missed fault is a red run with an issue and not a green one. A
+  run with a fault has its own label, `nightly-fault-test`: its issue, or its comment on the
+  open issue of that label, opens by saying that the fault was planted and in which functions
+  mismatches are expected, and is never mixed with a `nightly-failure` issue. It also has its
+  own concurrency group, so it can run beside a night, outside the night's count of at most 16
+  jobs at once: narrow it with `functions` and dispatch it away from the night's hours. No such
+  dispatch has been made yet.

@@ -83,7 +83,9 @@ permissions:
   contents: read
 
 # A dispatch that plants a fault has a group of its own: in one group, a second such dispatch
-# would cancel a scheduled night that was waiting behind the first.
+# would cancel a scheduled night that was waiting behind the first. It can then run beside a
+# night, which the jobs' max-parallel does not count: narrow it with `functions`, and keep it
+# clear of the night's hours.
 concurrency:
   group: nightly${{ inputs.fault && '-fault' || '' }}
   cancel-in-progress: false
@@ -101,6 +103,7 @@ jobs:
       fuzz-seconds: ${{ steps.plan.outputs.fuzz-seconds }}
       fault: ${{ steps.plan.outputs.fault }}
       fault-args: ${{ steps.plan.outputs.fault-args }}
+      fault-functions: ${{ steps.plan.outputs.fault-functions }}
       replay: ${{ steps.plan.outputs.replay }}
     steps:
       # Only to check that a fault to plant is one pom.xml names.
@@ -129,11 +132,28 @@ jobs:
           elif ! [[ $SEED =~ ^0x[0-9a-fA-F]{1,16}$ ]]; then
             echo "::error::seed takes 0x and up to 16 hex digits, not '$SEED'"; exit 1
           fi
-          # A matrix holds at most 256 jobs, one per function and shard: with 5 functions 32
-          # shards are 160 and 64 would be 320, past the cap. The check counts `all`, so it holds
-          # as the list grows. A stripe count (nights or slice-nights times shards) is at most
-          # Sweep's 4096 chunks.
-          count="$(wc -w <<< "$all")"
+          # The functions input narrows the night; the night's order stays `all`'s.
+          functions="$all"
+          if [ -n "$FUNCTIONS" ]; then
+            if ! [[ $FUNCTIONS =~ ^[a-z0-9]+(,[a-z0-9]+)*$ ]]; then
+              echo "::error::functions takes names separated by commas, not '$FUNCTIONS'"; exit 1
+            fi
+            for f in ${FUNCTIONS//,/ }; do
+              case " $all " in
+                *" $f "*) ;;
+                *) echo "::error::functions takes some of: $all; not '$f'"; exit 1 ;;
+              esac
+            done
+            functions=''
+            for f in $all; do
+              case ",$FUNCTIONS," in *",$f,"*) functions="$functions${functions:+ }$f" ;; esac
+            done
+          fi
+          # A matrix holds at most 256 jobs, one per function and shard of the run: with all of
+          # today's 5 functions 32 shards are 160, so the second check below starts to refuse
+          # only when the list is longer. A stripe count (nights or slice-nights times shards) is
+          # at most Sweep's 4096 chunks.
+          count="$(wc -w <<< "$functions")"
           for n in "$NIGHTS" "$SLICE_NIGHTS"; do
             for s in "$SHARDS" "$ARM_SHARDS"; do
               if ! pow2 "$n" || ! pow2 "$s" || [ "$s" -gt 32 ] || [ $((n * s)) -gt 4096 ]; then
@@ -163,39 +183,37 @@ jobs:
               || [ "$FUZZ_SECONDS" -gt 900 ]; then
             echo "::error::fuzz-seconds takes 1 to 900, not '$FUZZ_SECONDS'"; exit 1
           fi
-          # The functions input narrows the night; the night's order stays `all`'s.
-          functions="$all"
-          if [ -n "$FUNCTIONS" ]; then
-            if ! [[ $FUNCTIONS =~ ^[a-z0-9]+(,[a-z0-9]+)*$ ]]; then
-              echo "::error::functions takes names separated by commas, not '$FUNCTIONS'"; exit 1
-            fi
-            for f in ${FUNCTIONS//,/ }; do
-              case " $all " in
-                *" $f "*) ;;
-                *) echo "::error::functions takes some of: $all; not '$f'"; exit 1 ;;
-              esac
-            done
-            functions=''
-            for f in $all; do
-              case ",$FUNCTIONS," in *",$f,"*) functions="$functions${functions:+ }$f" ;; esac
-            done
-          fi
-          # A planted fault is <function>.<what>, of a function this run checks, and one of those
-          # pom.xml gives a fault run (PlantedFaultTest holds that list to the ports' faults). A
-          # mistyped name would plant nothing, and a fault of a function left out would be
-          # planted where no job looks: either run would pass as if the night had missed it.
+          # A planted fault is <function>.<what>, one of those pom.xml gives a fault run
+          # (PlantedFaultTest holds that list to the ports' faults), and it must reach a function
+          # this run checks. A mistyped name would plant nothing, and a fault that reaches no
+          # function of the run would be planted where no job looks.
+          # The functions a port's faults reach: its own, and every function that computes
+          # through it. log10 computes through Log.logCore, where log's faults are.
+          reach() {
+            case "$1" in
+              log) echo 'log log10' ;;
+              *) echo "$1" ;;
+            esac
+          }
           fault_args=''
+          fault_functions=''
           if [ -n "$FAULT" ]; then
             if ! [[ $FAULT =~ ^[a-z][a-z0-9]*\.[A-Za-z][A-Za-z0-9]*$ ]]; then
               echo "::error::fault takes <function>.<what>, not '$FAULT'"; exit 1
             fi
-            case " $functions " in
+            case " $all " in
               *" ${FAULT%%.*} "*) ;;
-              *)
-                echo "::error::fault takes a fault of a function of this run ($functions)," \
-                  "not '$FAULT'"
-                exit 1 ;;
+              *) echo "::error::fault takes a fault of one of: $all; not '$FAULT'"; exit 1 ;;
             esac
+            for f in $(reach "${FAULT%%.*}"); do
+              case " $functions " in
+                *" $f "*) fault_functions="$fault_functions${fault_functions:+ }$f" ;;
+              esac
+            done
+            if [ -z "$fault_functions" ]; then
+              echo "::error::the fault '$FAULT' reaches no function of this run ($functions)"
+              exit 1
+            fi
             if ! grep -qF -- "-Dvfdlibm.fault=$FAULT</argLine>" pom.xml; then
               echo "::error::pom.xml has no fault run for '$FAULT'"; exit 1
             fi
@@ -245,7 +263,7 @@ jobs:
           echo "functions: $functions"
           if [ -n "$FAULT" ]; then
             echo "::warning::the fault $FAULT is planted in every sweep and fuzz: this run tests" \
-              "the alert, and its mismatches are not the library's"
+              "the alert, and its mismatches of $fault_functions are not the library's"
           fi
           {
             echo "seed=$SEED"
@@ -255,6 +273,7 @@ jobs:
             echo "fuzz-seconds=$FUZZ_SECONDS"
             echo "fault=$FAULT"
             echo "fault-args=$fault_args"
+            echo "fault-functions=$fault_functions"
             echo "replay=$replay"
           } >> "$GITHUB_OUTPUT"
 
@@ -424,8 +443,29 @@ jobs:
       - name: Check the proofs under both solvers
         run: dev/prove.sh --solver both
 
+  # A run with a planted fault whose sweeps and fuzzes all pass has missed the fault: this job
+  # fails then, so the run is red and the alert job says so.
+  fault-caught:
+    needs: [plan, sweep, fuzz, arm]
+    if: always() && needs.plan.outputs.fault != ''
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require a sweep or a fuzz to have failed
+        env:
+          FAULT: ${{ needs.plan.outputs.fault }}
+          RESULTS: >-
+            sweep=${{ needs.sweep.result }} fuzz=${{ needs.fuzz.result }}
+            arm=${{ needs.arm.result }}
+        run: |
+          echo "$RESULTS"
+          case "$RESULTS" in
+            *=failure*) echo "a job failed under the planted fault $FAULT, as it must" ;;
+            *) echo "::error::no sweep or fuzz job failed: the fault $FAULT was not caught"
+               exit 1 ;;
+          esac
+
   alert:
-    needs: [plan, sweep, fuzz, arm, proofs]
+    needs: [plan, sweep, fuzz, arm, proofs, fault-caught]
     # A job past its timeout fails; a cancelled one is reported too, since nothing here cancels
     # a nightly by itself (cancel-in-progress is off).
     # A dispatch whose plan job failed opens no issue: its inputs were refused, which the
@@ -454,10 +494,12 @@ jobs:
           SEED: ${{ needs.plan.outputs.seed }}
           REPLAY: ${{ needs.plan.outputs.replay }}
           FAULT: ${{ needs.plan.outputs.fault }}
+          FAULT_FUNCTIONS: ${{ needs.plan.outputs.fault-functions }}
           RESULTS: >-
             plan=${{ needs.plan.result }} sweep=${{ needs.sweep.result }}
             fuzz=${{ needs.fuzz.result }} arm=${{ needs.arm.result }}
             proofs=${{ needs.proofs.result }}
+            fault-caught=${{ needs.fault-caught.result }}
         run: |
           body=body.md
           run_url="$SERVER/$GH_REPO/actions/runs/$RUN_ID"
@@ -476,9 +518,9 @@ jobs:
             if [ -n "$FAULT" ]; then
               echo "**A test of the alert job.** The run was dispatched with the fault"
               echo "\`$FAULT\` planted (\`-Dvfdlibm.fault=$FAULT\`) in every sweep and fuzz."
-              echo "Mismatches of \`${FAULT%%.*}\` below are expected and are not the library's;"
-              echo "anything else that failed, and a run that lists no such mismatch, is to be"
-              echo "read as a failure."
+              echo "Mismatches of ${FAULT_FUNCTIONS// / and } below are expected and are not the"
+              echo "library's. Anything else that failed is to be read as a failure, and so is"
+              echo "\`fault-caught=failure\`: no sweep or fuzz caught the fault."
               echo
             fi
             echo "The nightly correctness run failed: $run_url"
