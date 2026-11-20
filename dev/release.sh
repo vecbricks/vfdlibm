@@ -69,6 +69,7 @@ PY
 # checks <version> <next>: everything a release needs to be true before it starts.
 checks() {
   local version="$1" next="$2" tag="v$1" current
+  local dotted="${1//./\\.}"   # the version as a regular expression: its dots are dots
   [ "$(git branch --show-current)" = main ] || fail "not on main"
   [ -z "$(git status --porcelain)" ] || fail "the working tree is not clean"
   git fetch -q origin main
@@ -77,9 +78,9 @@ checks() {
   ! git rev-parse -q --verify "refs/tags/$tag" > /dev/null || fail "the tag $tag exists"
   ! git ls-remote --exit-code --tags origin "$tag" > /dev/null 2>&1 \
     || fail "$tag exists on origin"
-  grep -q "^## \[$version\]" CHANGELOG.md \
+  grep -q "^## \[$dotted\]" CHANGELOG.md \
     || fail "CHANGELOG.md has no '## [$version]' section: move the Unreleased lines under it"
-  grep -q "^\[$version\]: " CHANGELOG.md || fail "CHANGELOG.md has no [$version] link line"
+  grep -q "^\[$dotted\]: " CHANGELOG.md || fail "CHANGELOG.md has no [$version] link line"
   current="$(dev/release-version.sh --version)"
   [ "$current" = "$version-SNAPSHOT" ] \
     || fail "the pom is at $current; a release of $version starts from $version-SNAPSHOT"
@@ -94,10 +95,15 @@ release() {
   command -v mvn > /dev/null || usage_error "mvn is not on the PATH (Java 25 and Maven are needed)"
   # From here on a failure puts the tree back, so a half-made release never stays behind.
   start="$(git rev-parse HEAD)"
+  # An interrupt puts the tree back too, not only a failing command.
   trap 'git tag -d "$tag" > /dev/null 2>&1 || true; git reset -q --hard "$start"' ERR
+  trap 'trap - ERR; git tag -d "$tag" > /dev/null 2>&1 || true; git reset -q --hard "$start"
+        exit 1' INT TERM HUP
 
   edit_pom "$version" "$tag" "$(date -u +%FT%TZ)"
-  sed -i -E "s/^## \[$version\].*/## [$version] - $(date -u +%F)/" CHANGELOG.md
+  # -i.bak and the removal below work in GNU and BSD sed alike.
+  sed -i.bak -E "s/^## \[${version//./\\.}\].*/## [$version] - $(date -u +%F)/" CHANGELOG.md
+  rm -f CHANGELOG.md.bak
   dev/release-version.sh "$tag" > /dev/null || {
     dev/release-version.sh "$tag" || true
     false
@@ -111,7 +117,7 @@ release() {
 
   edit_pom "$next" HEAD
   commit "Start $next"
-  trap - ERR
+  trap - ERR INT TERM HUP
 
   cat <<EOF
 
@@ -135,7 +141,9 @@ self_test() {
   export GIT_COMMITTER_NAME=test GIT_COMMITTER_EMAIL=test@example.com
   # A stub mvn and jar check: this tests the script's flow, not a build.
   mkdir "$tmp/bin"
-  printf '#!/bin/sh\n[ "${STUB_MVN_FAILS:-}" != 1 ]\n' > "$tmp/bin/mvn"
+  printf '#!/bin/sh\n[ "${STUB_MVN_TERM:-}" != 1 ] || { kill -TERM "$PPID"; sleep 2; }\n' \
+    > "$tmp/bin/mvn"
+  printf '[ "${STUB_MVN_FAILS:-}" != 1 ]\n' >> "$tmp/bin/mvn"
   chmod +x "$tmp/bin/mvn"
 
   # scratch <name>: a bare origin and a clone of it on main, holding the scripts, a minimal pom
@@ -213,6 +221,10 @@ POM
   scratch nolink;     (cd "$here" && sed -i 's/^\[0.1.0\]: .*//' CHANGELOG.md \
                         && git commit -q -am x && git push -q origin main 2> /dev/null)
                       expect "no changelog link line" 1 "no [0.1.0] link line" --check 0.1.0
+  scratch dots;       (cd "$here" && sed -i 's/^## \[0.1.0\].*/## [0x1x0] - x/' CHANGELOG.md \
+                        && git commit -q -am x && git push -q origin main 2> /dev/null)
+                      expect "a heading that matches only if dots are any character" 1 \
+                        "no '## [0.1.0]' section" --check 0.1.0
   scratch pomver;     (cd "$here" && sed -i 's/>0.1.0-SNAPSHOT</>0.9.9-SNAPSHOT</' pom.xml \
                         && git commit -q -am x && git push -q origin main 2> /dev/null)
                       expect "a pom at another version" 1 "the pom is at 0.9.9-SNAPSHOT" \
@@ -245,6 +257,16 @@ POM
     echo "ok    a failing build leaves the tree, the branch and the tags as they were"
   else
     echo "FAIL  a failing build left something behind"
+    failed=$((failed + 1))
+  fi
+
+  scratch term;       STUB_MVN_TERM=1 expect "an interrupted build" 1 "" 0.1.0
+  if [ -z "$(cd "$here" && git status --porcelain)" ] \
+      && [ "$(cd "$here" && git rev-parse HEAD)" = "$(cd "$here" && git rev-parse origin/main)" ] \
+      && ! (cd "$here" && git rev-parse -q --verify refs/tags/v0.1.0 > /dev/null); then
+    echo "ok    an interrupted build leaves the tree, the branch and the tags as they were"
+  else
+    echo "FAIL  an interrupted build left something behind"
     failed=$((failed + 1))
   fi
 

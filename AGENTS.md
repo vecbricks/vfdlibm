@@ -168,7 +168,9 @@ and pass `dev/jar-check.sh --release`. The steps:
 
 1. In a pull request, move the `Unreleased` lines under a `## [<version>]` heading of
    `CHANGELOG.md`, and add its `[<version>]:` link line.
-2. On an up-to-date `main`, `dev/release.sh <version>` checks the tree, sets the pom's version,
+2. On an up-to-date `main`, `dev/release.sh <version>` (its two commits, "Release" and "Start",
+   are the one thing that goes to `main` without a pull request, and only the owner's) checks the
+   tree, sets the pom's version,
    its `<scm><tag>` and `project.build.outputTimestamp` (so that the jars are reproducible), runs
    `mvn -B -Prelease -Dgpg.skip=true clean verify` with every test and `dev/jar-check.sh
    --release` on the jars, commits "Release <version>", tags `v<version>` and commits the next

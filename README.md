@@ -3,12 +3,15 @@
 fdlibm on the Java Vector API: math functions over `DoubleVector` lanes whose every lane is
 bit-identical to `java.lang.StrictMath`.
 
-**Status: 0.x.** `exp`, `expm1`, `log`, `log1p` and `log10` are ported and released from 0.1.0.
-Functions are added one at a time, as [Varka](https://github.com/vecbricks/varka) needs them.
+**Status: 0.x.** `exp`, `expm1`, `log`, `log1p` and `log10` are ported; 0.1.0, the first
+release, is being prepared (`CHANGELOG.md`). Functions are added one at a time, as
+[Varka](https://github.com/vecbricks/varka) needs them.
 A minor version may break the API and a patch may not; adding a function is a patch.
 Bit identity with `StrictMath` is the contract, and no version changes it (`CHANGELOG.md`).
 
 ## Use
+
+From 0.1.0 (it is not on Maven Central before the owner has released it):
 
 ```xml
 <dependency>
