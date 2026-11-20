@@ -6,11 +6,12 @@
 # is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either
 # express or implied. See the License for the specific language governing permissions and
 # limitations under the License.
-"""Fail when a port's vector body allocates, which means it boxed.
+r"""Fail when a port's vector body allocates, which means it boxed.
 
 A boxed body computes the right bits, so the tests pass on it; only the allocation rate shows
 that the Vector API fell back to Java (SKILLS.md, "Allocation is the verdict"). This script runs
-every JMH benchmark method named *256 or *Preferred, on common and mixed inputs, under -prof gc
+every JMH benchmark method named *256 or *Preferred of a class named *Benchmark, on common and
+mixed inputs, under -prof gc
 with the body inlined as Varka emits it, and fails if any measured iteration of any row allocates
 THRESHOLD bytes per op or more. It reads the numbers from JMH's JSON result, and fails too when
 a benchmark that JMH lists for the regex threw or has no row there for an inputs value it runs.
@@ -19,7 +20,9 @@ Rows left out: 128 bits, since on x86 C2 lowers no mask at two 64-bit lanes and 
 128-bit body boxes (SKILLS.md); and 512 bits, which runs in software on an AVX2 host (the
 preferred arm covers 512 bits on a host that has it). Mixed inputs are checked because they are
 the ones that run the rare lanes' paths, which common inputs never reach. The *Max rows, at
-SPECIES_MAX, and the *Boxed* rows are left out by INCLUDE's regex (see the comment there).
+SPECIES_MAX, and the *Boxed* rows are left out by INCLUDE's regex (see the comment there), and
+so is ExpKindsBench, by its class name: its rows call the bodies ExpBenchmark's rows call, and
+its other inputs values are checked by naming it, as below.
 
 With --why it runs nothing new through the check: it reads the last run's result and runs the
 rows that failed once more (WHY_ROWS of them at most, one of each benchmark method first),
@@ -34,7 +37,13 @@ Usage, from the repository root:
     bench/alloc-check.py --jvm-args=-XX:MaxVectorSize=16  # one option needs the = form
     bench/alloc-check.py --preferred-only                 # where 256 bits is not the hardware's
     bench/alloc-check.py --include 'ExpBenchmark.finish128'               # a row that boxes
+    bench/alloc-check.py --include 'ExpKindsBench\.\w+(256|Preferred)$' \
+        --inputs common,none,nan,overflow,underflow,subnormal,mixed       # other inputs values
     bench/alloc-check.py --why                            # ask C2 about the rows that failed
+
+--inputs is for a class whose setUp throws on a value it does not know, as ExpKindsBench's
+does. The <Function>Benchmark classes read every value but mixed as common, so a row of theirs
+named for another value would pass on common data.
 """
 
 import argparse
@@ -99,11 +108,12 @@ WHY_WIDTH = 200
 # few say why (one per benchmark method first), and a hung fork must not hold a CI job.
 WHY_ROWS = 8
 WHY_TIMEOUT = 600
+# The inputs values the run covers unless --inputs names others; check() requires a row for
+# each of them.
+INPUTS = ("common", "mixed")
 # One fork; warmup long enough for C2 to finish the body before the first measured iteration,
 # which every iteration being checked (not only the mean) enforces.
-# The inputs values the run covers; check() requires a row for each of them.
-INPUTS = ("common", "mixed")
-JMH_OPTIONS = f"-f 1 -wi 3 -w 1s -i 3 -r 1s -prof gc -p inputs={','.join(INPUTS)}"
+JMH_OPTIONS = "-f 1 -wi 3 -w 1s -i 3 -r 1s -prof gc"
 
 
 def mvn_jmh(mvn, jmh_args, capture=False, check=True, timeout=None):
@@ -149,11 +159,12 @@ def list_benchmarks(mvn, include):
                   if re.fullmatch(r"[\w.$]+", line.strip()) and re.search(include, line.strip()))
 
 
-def run_jmh(mvn, include, jvm_args):
+def run_jmh(mvn, include, jvm_args, inputs=INPUTS):
     append = " ".join(a for a in (INLINE, jvm_args) if a)
     # -foe true: a benchmark that throws fails the run. Without it JMH prints <failure>, leaves
     # the row out of the JSON and exits 0, so a broken row would pass unseen.
-    jmh_args = (f"{include} {JMH_OPTIONS} -foe true -rf json -rff {RESULT}"
+    jmh_args = (f"{include} {JMH_OPTIONS} -p inputs={','.join(inputs)}"
+                f" -foe true -rf json -rff {RESULT}"
                 f" -jvmArgsAppend \"{append}\"")
     mvn_jmh(mvn, jmh_args)
 
@@ -272,14 +283,18 @@ def why(mvn, path, threshold):
                  and REFUSED_API.search(line)), WHY_LINES)
 
 
-def check(path, threshold, expected=None):
+def check(path, threshold, expected=None, inputs=INPUTS):
     """Checks every row of the JSON at path; with expected, also that each of those benchmarks
-    has a row for every value in INPUTS."""
+    has a row for every value in inputs."""
     if not os.path.exists(path):
         print(f"FAIL: JMH wrote no {path}")
         return False
-    with open(path, encoding="utf-8") as f:
-        rows = json.load(f)
+    try:
+        with open(path, encoding="utf-8") as f:
+            rows = json.load(f)
+    except ValueError:  # not JSON, or cut inside a character
+        print(f"FAIL: {path} is not valid JSON (empty, or a run was cut short)")
+        return False
     if not rows:
         print("FAIL: JMH ran no benchmark")
         return False
@@ -287,9 +302,9 @@ def check(path, threshold, expected=None):
     if expected is not None:
         got = {(row["benchmark"], row.get("params", {}).get("inputs")) for row in rows}
         for name in expected:
-            for inputs in INPUTS:
-                if (name, inputs) not in got:
-                    print(f"FAIL  {name} [inputs={inputs}]: no row in {path}")
+            for value in inputs:
+                if (name, value) not in got:
+                    print(f"FAIL  {name} [inputs={value}]: no row in {path}")
                     ok = False
     for row in rows:
         name = row["benchmark"].rsplit(".", 2)[-2:]
@@ -319,6 +334,10 @@ def main():
     parser.add_argument("--preferred-only", action="store_true",
                         help="the *Preferred rows without the *256 ones, for a host whose"
                              " vectors are narrower than 256 bits")
+    parser.add_argument("--inputs", default=None,
+                        help="the values of the inputs parameter to run, comma-separated;"
+                             " a value other than common and mixed only for a class whose"
+                             " setUp rejects a value it does not know (default: common,mixed)")
     parser.add_argument("--threshold", type=float, default=THRESHOLD, help="bytes per op")
     parser.add_argument("--no-run", action="store_true",
                         help=f"only check the rows of an existing {RESULT}")
@@ -329,15 +348,27 @@ def main():
     if args.include and args.preferred_only:
         parser.error("--include and --preferred-only both name the rows; pass one")
     if args.why:
-        if args.jvm_args or args.include or args.preferred_only or args.no_run:
+        if args.jvm_args or args.include or args.preferred_only or args.no_run or args.inputs:
             parser.error("--why reruns the failing rows of the last result, each under the"
                          " options the result records; --jvm-args, --include,"
-                         " --preferred-only and --no-run do not apply")
+                         " --preferred-only, --inputs and --no-run do not apply")
         why(args.mvn, RESULT, args.threshold)
         return
     if args.no_run and (args.include or args.preferred_only):
         parser.error("--no-run checks every row of the existing result; --include and"
                      " --preferred-only do not apply")
+    inputs = INPUTS
+    if args.inputs is not None:
+        # The <Function>Benchmark classes read every value but mixed as common, so a row
+        # named for another value would pass on common data. Such a value is therefore refused
+        # below for those classes; it is for classes that throw on an unknown value
+        # (ExpKindsBench). Nothing here checks that a class named apart throws: that rests on
+        # AGENTS.md's rule and on the class's own test.
+        if args.no_run:
+            parser.error("--inputs cannot go with --no-run, which checks the rows it finds")
+        inputs = tuple(args.inputs.split(","))
+        if not all(re.fullmatch(r"\w+", v) for v in inputs):
+            parser.error("--inputs takes comma-separated names, e.g. common,mixed")
     include = args.include or (PREFERRED if args.preferred_only else INCLUDE)
     expected = None
     if not args.no_run:
@@ -349,17 +380,31 @@ def main():
             if not expected:
                 print(f"FAIL: no benchmark matches {include}")
                 sys.exit(1)
-            run_jmh(args.mvn, include, args.jvm_args)
+            unknown = [v for v in inputs if v not in INPUTS]
+            lenient = [name for name in expected
+                       if name.rsplit(".", 2)[-2].endswith("Benchmark")]
+            apart = [name for name in expected if name not in lenient]
+            if apart and args.inputs is None:
+                print(f"FAIL: {apart[0]} is a class named apart, which has inputs values of its"
+                      " own; name the ones to check with --inputs")
+                sys.exit(1)
+            if unknown and lenient:
+                print(f"FAIL: --inputs {unknown[0]} with {lenient[0]}: a <Function>Benchmark"
+                      " class reads any value but mixed as common, so the row would pass on"
+                      " common data")
+                sys.exit(1)
+            run_jmh(args.mvn, include, args.jvm_args, inputs)
         except subprocess.CalledProcessError as e:
             print(e.stdout or "", end="")
             print(f"FAIL: Maven exited with {e.returncode}; a benchmark threw or the build"
                   " failed, see its output above")
             sys.exit(1)
-    if not check(RESULT, args.threshold, expected):
+    if not check(RESULT, args.threshold, expected, inputs):
         print(f"A row is missing, or allocated {args.threshold} B/op or more: a vector body"
               " boxed, or, if only its first iteration did, C2 had not finished. See SKILLS.md.")
         sys.exit(1)
-    print(f"No vector body allocates {args.threshold} B/op or more.")
+    ran = "the rows found" if args.no_run else f"inputs={','.join(inputs)}"
+    print(f"No vector body allocates {args.threshold} B/op or more ({ran}).")
 
 
 if __name__ == "__main__":

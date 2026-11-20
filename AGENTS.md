@@ -72,6 +72,11 @@ vfdlibm ports fdlibm's double functions to the Java Vector API, each lane bit-id
   takes `common` (no lane takes a rare path) and `mixed` (rare lanes run); see `SKILLS.md`.
   CI runs it on x86 both ways and, for the `<arm>Preferred` methods, on the Arm runner, where
   the preferred species is 128 bits.
+  A class that measures a port's bodies on other data and is not the port's benchmark is named
+  otherwise (`ExpKindsBench`), so CI leaves it out; check it by name and on its own inputs
+  before reading its times (`--include` with `--inputs`; the command is in its Javadoc). Its
+  `setUp` must throw on an `inputs` value it does not know, and a test must pin that, or a row
+  named for one kind could pass on another's data.
 
 ## Lessons
 

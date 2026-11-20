@@ -134,7 +134,10 @@ five are a later, optional set; the large-argument reduction of the trigonometri
   `log1p`, with a third arm that blends the rare paths only when a vector holds a rare lane;
   `Expm1Benchmark` has the same three arms for `expm1`. Each of the five has rows at
   `SPECIES_MAX` (`*Max`), which the allocation check leaves out: every port's finish boxes there
-  on mixed data (`bench/results/max-finish-laptop-2026-11-20.txt`).
+  on mixed data (`bench/results/max-finish-laptop-2026-11-20.txt`). `ExpKindsBench` runs exp's
+  two arms on one kind of rare input at a time (a NaN, an overflow, an underflow, a subnormal
+  result), to find which kind costs an arm its time on mixed data (#41); it is named apart so
+  that a run of `ExpBenchmark` and the allocation check's default regex leave it out.
   A function's body is larger than C2 inlines by default, so a call from a loop passes boxed
   vectors; the benchmarks are also run with `-XX:CompileCommand=inline,...` to measure the body
   as Varka emits it, inline.
