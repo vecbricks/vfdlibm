@@ -453,14 +453,18 @@ jobs:
   # job gives the verdict, which the alert job quotes:
   # - caught: a mismatch file of such a function records a mismatch. A job that failed for
   #   another reason (a build, a timeout) is no catch, so the files are read, not the results.
-  # - missed: no such file, and the sweep, the fuzz and Arm all passed; dev/nightly.sh fails on
-  #   any mismatch, so nothing differed. The job fails, so that a missed fault is a red run.
-  # - undecided: no such file, and some job failed or was cut short, perhaps the one that
-  #   would have caught the fault.
+  # - missed: no such file, and every sweep, fuzz and Arm job of those functions passed;
+  #   dev/nightly.sh fails on any mismatch, so nothing differed. The job fails, so that a
+  #   missed fault is a red run.
+  # - undecided: no such file, and a job of those functions failed or was cut short, perhaps
+  #   the one that would have caught the fault.
   fault-caught:
     needs: [plan, sweep, fuzz, arm]
     if: always() && needs.plan.outputs.fault != ''
     runs-on: ubuntu-latest
+    # To list the run's jobs and to download its artifacts.
+    permissions:
+      actions: read
     outputs:
       verdict: ${{ steps.verdict.outputs.verdict }}
     steps:
@@ -473,6 +477,9 @@ jobs:
       - name: Say whether the fault was caught
         id: verdict
         env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          RUN_ID: ${{ github.run_id }}
           FAULT: ${{ needs.plan.outputs.fault }}
           FAULT_FUNCTIONS: ${{ needs.plan.outputs.fault-functions }}
           RESULTS: >-
@@ -480,6 +487,29 @@ jobs:
             arm=${{ needs.arm.result }}
         run: |
           echo "jobs: $RESULTS"
+          # The jobs of the fault's functions, by name as each job's `name:` gives it, and how
+          # many of them did not pass. Another function's job that failed says nothing here.
+          ran=0
+          not_passed=0
+          list="$(gh api "repos/$GH_REPO/actions/runs/$RUN_ID/jobs?per_page=100" --paginate \
+            --jq '.jobs[] | [.name, .conclusion // "none"] | @tsv' || true)"
+          while IFS=$'\t' read -r name conclusion; do
+            for f in $FAULT_FUNCTIONS; do
+              case "$name" in
+                "sweep ($f, "*|"fuzz ($f, "*|"arm ($f, "*)
+                  ran=$((ran + 1))
+                  if [ "$conclusion" != success ]; then
+                    not_passed=$((not_passed + 1))
+                    echo "not passed: $name: $conclusion"
+                  fi ;;
+              esac
+            done
+          done <<< "$list"
+          echo "$ran jobs of $FAULT_FUNCTIONS, $not_passed not passed"
+          # Without the list, the three results stand in: every function's jobs.
+          if [ "$ran" = 0 ] && [ "$RESULTS" != "sweep=success fuzz=success arm=success" ]; then
+            not_passed=1
+          fi
           caught=0
           for f in $FAULT_FUNCTIONS; do
             # An artifact's files are <mode>-<function>-<species>.txt.
@@ -497,14 +527,15 @@ jobs:
           if [ "$caught" -gt 0 ]; then
             echo "the planted fault $FAULT was caught in $caught mismatch files"
             echo "verdict=caught" >> "$GITHUB_OUTPUT"
-          elif [ "$RESULTS" = "sweep=success fuzz=success arm=success" ]; then
+          elif [ "$not_passed" = 0 ]; then
             echo "verdict=missed" >> "$GITHUB_OUTPUT"
-            echo "::error::every sweep and fuzz passed: the planted fault $FAULT was not caught"
+            echo "::error::every sweep and fuzz of $FAULT_FUNCTIONS passed: the planted fault" \
+              "$FAULT was not caught"
             exit 1
           else
             echo "verdict=undecided" >> "$GITHUB_OUTPUT"
-            echo "::warning::no mismatch of $FAULT_FUNCTIONS is recorded, and not every job" \
-              "passed: whether the fault $FAULT would be caught is not decided"
+            echo "::warning::no mismatch of $FAULT_FUNCTIONS is recorded, and not every job of" \
+              "theirs passed: whether the fault $FAULT would be caught is not decided"
           fi
 
   alert:
@@ -545,7 +576,8 @@ jobs:
           REPLAY: ${{ needs.plan.outputs.replay }}
           # The plan job's outputs are empty when it failed before its end; the input still
           # says that a fault was asked for, which decides the label.
-          FAULT: ${{ needs.plan.outputs.fault || inputs.fault }}
+          FAULT_PLANTED: ${{ needs.plan.outputs.fault }}
+          FAULT_ASKED: ${{ inputs.fault }}
           FAULT_FUNCTIONS: ${{ needs.plan.outputs.fault-functions }}
           FAULT_VERDICT: ${{ needs.fault-caught.outputs.verdict }}
           RESULTS: >-
@@ -559,6 +591,7 @@ jobs:
           # is never a comment under a test's issue, nor a test under a night's failure. What
           # else fails in a run with a fault is reported under the test's label, and the body
           # says how to tell it from the fault.
+          FAULT="${FAULT_PLANTED:-$FAULT_ASKED}"
           label=nightly-failure
           about="The nightly correctness run failed"
           title="Nightly correctness run failed"
@@ -566,15 +599,6 @@ jobs:
             label=nightly-fault-test
             about="A nightly run with a planted fault, a test of the alert job"
             title="Nightly run with a planted fault (a test of the alert job)"
-          fi
-          verdict=''
-          reached="$FAULT_FUNCTIONS"
-          if [ -n "$FAULT" ]; then
-            # No verdict: the fault-caught job did not run or did not finish.
-            verdict="${FAULT_VERDICT:-undecided}"
-            RESULTS="$RESULTS fault=$verdict"
-            # The plan job did not get as far as saying which functions the fault reaches.
-            if [ -z "$reached" ]; then reached="${FAULT%%.*}"; fi
           fi
           # One mismatch file's section: its replay, its totals and its first mismatches.
           section() {
@@ -590,9 +614,46 @@ jobs:
             echo '```'
             echo
           }
+          # The mismatch files first. Those of a planted fault's functions are set aside, one
+          # line each, so that their number cannot push another function's mismatch past the
+          # cut below; the rest get a section each.
+          reached="$FAULT_FUNCTIONS"
+          found=0
+          expected=0
+          first=''
+          : > sections.md
+          : > expected.md
+          for f in nightly/*/*.txt; do
+            [ -f "$f" ] || continue
+            total="$(sed -n 's/^# total mismatches: //p' "$f")"
+            # A JVM killed by a timeout or a cancel writes no total, but every mismatch it
+            # wrote is flushed: those count too.
+            written="$(grep -c '^# MISMATCH ' "$f" || true)"
+            case "$total" in 0\ *) continue ;; esac
+            if [ -z "$total" ] && [ "$written" = 0 ]; then continue; fi
+            # A file is <mode>-<function>-<species>.txt.
+            fn="${f##*/}"; fn="${fn#*-}"; fn="${fn%-*}"
+            if [[ " $reached " == *" $fn "* ]]; then
+              expected=$((expected + 1))
+              if [ -z "$first" ]; then first="$f"; fi
+              echo "- \`${f#nightly/}\`: ${total:-$written written, the JVM was stopped}" \
+                >> expected.md
+              continue
+            fi
+            found=1
+            section "$f" "$total" "$written" >> sections.md
+          done
+          # The verdict on the fault: these files when they hold a catch, else the fault-caught
+          # job's, else undecided (that job did not run or did not finish).
+          verdict=''
+          if [ -n "$FAULT_PLANTED" ]; then
+            verdict="${FAULT_VERDICT:-undecided}"
+            if [ "$expected" -gt 0 ]; then verdict=caught; fi
+            RESULTS="$RESULTS fault=$verdict"
+          fi
           {
             # Said first, so that a test of this job is not read as a failure of the library.
-            if [ -n "$FAULT" ]; then
+            if [ -n "$FAULT_PLANTED" ]; then
               echo "**A test of the alert job.** The run was dispatched with the fault"
               echo "\`$FAULT\` planted (\`-Dvfdlibm.fault=$FAULT\`) in every sweep and fuzz."
               echo "Mismatches of ${reached// / and } are expected and are not the library's;"
@@ -606,14 +667,22 @@ jobs:
                 caught)
                   echo "The planted fault was caught." ;;
                 missed)
-                  echo "**The planted fault was not caught**: every sweep and fuzz passed, and"
-                  echo "no mismatch file of ${reached// / or } records a mismatch." ;;
+                  echo "**The planted fault was not caught**: every sweep and fuzz of"
+                  echo "${reached// / and } passed, and no mismatch file of theirs records a"
+                  echo "mismatch." ;;
                 *)
                   echo "**Whether the planted fault would be caught is not decided**: no"
                   echo "mismatch file of ${reached// / or } records a mismatch, and not every"
-                  echo "job ran to its end; one that failed or was cut short may be the one"
-                  echo "that would have caught it." ;;
+                  echo "job of theirs ran to its end; one that failed or was cut short may be"
+                  echo "the one that would have caught it." ;;
               esac
+              echo
+              echo "The run: $run_url"
+            elif [ -n "$FAULT" ]; then
+              echo "**A test of the alert job that did not start.** The run was dispatched to"
+              echo "plant the fault \`$FAULT\`, and its plan job failed before it had checked"
+              echo "the name: nothing was planted and nothing below is a mismatch of the"
+              echo "library."
               echo
               echo "The run: $run_url"
             else
@@ -624,34 +693,8 @@ jobs:
             echo
             echo "Replay: dispatch nightly.yml at $SHA with \`${REPLAY:-none}\`."
             echo
-            # The files of a planted fault's functions are set aside, one line each and the first
-            # in full, so that their number cannot push another function's mismatch past the
-            # cut below.
-            found=0
-            expected=0
-            first=''
-            : > expected.md
-            for f in nightly/*/*.txt; do
-              [ -f "$f" ] || continue
-              total="$(sed -n 's/^# total mismatches: //p' "$f")"
-              # A JVM killed by a timeout or a cancel writes no total, but every mismatch it
-              # wrote is flushed: those count too.
-              written="$(grep -c '^# MISMATCH ' "$f" || true)"
-              case "$total" in 0\ *) continue ;; esac
-              if [ -z "$total" ] && [ "$written" = 0 ]; then continue; fi
-              # A file is <mode>-<function>-<species>.txt.
-              fn="${f##*/}"; fn="${fn#*-}"; fn="${fn%-*}"
-              if [ -n "$FAULT" ] && [[ " $reached " == *" $fn "* ]]; then
-                expected=$((expected + 1))
-                if [ -z "$first" ]; then first="$f"; fi
-                echo "- \`${f#nightly/}\`: ${total:-$written written, the JVM was stopped}" \
-                  >> expected.md
-                continue
-              fi
-              found=1
-              section "$f" "$total" "$written"
-            done
-            if [ -n "$FAULT" ]; then
+            cat sections.md
+            if [ -n "$FAULT_PLANTED" ]; then
               if [ "$found" = 0 ]; then
                 echo "No mismatch file of another function records a mismatch."
                 echo

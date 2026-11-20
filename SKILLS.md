@@ -564,15 +564,16 @@ a settled question.
   line to it. The job `fault-caught` gives a verdict, which the issue quotes: caught, when a
   mismatch file of a function the fault reaches records a mismatch (a job that failed for another
   reason is no catch, so it reads the files and not the results); missed, when there is none and
-  the sweep, the fuzz and Arm all passed, and then the job fails, so a missed fault is a red run
-  with an issue and not a green one; undecided, when there is none and some job failed or was cut
-  short. A run with a fault has its own label, `nightly-fault-test`: its issue, or its comment on
-  the open issue of that label, opens by saying that the fault was planted and in which functions
-  mismatches are expected, and is never mixed with a night's `nightly-failure` issue; whatever
-  else fails in such a run is in that same issue: another function's mismatches come first and in
-  full, the expected files last, one line each. A job that failed there without a mismatch shows
-  only on the run's page, since the sweep, the fuzz and Arm fail under the fault by design. The
-  scheduled nights, the dispatches and the dispatches with a fault each have a concurrency group,
-  so a dispatch never cancels a waiting night, and can run beside one, outside the night's count
-  of at most 16 jobs at once: narrow it with `functions`, or dispatch it away from the night's
-  hours. No such dispatch has been made yet.
+  every sweep, fuzz and Arm job of those functions passed (it lists the run's jobs), and then the
+  job fails, so a missed fault is a red run with an issue and not a green one; undecided, when
+  there is none and a job of those functions failed or was cut short. A run with a fault has its
+  own label, `nightly-fault-test`: its issue, or its comment on the open issue of that label,
+  opens by saying that the fault was planted and in which functions mismatches are expected, and
+  is never mixed with a night's `nightly-failure` issue; whatever else fails in such a run is in
+  that same issue: another function's mismatches come first and in full, the expected files last,
+  one line each. A job that failed there without a mismatch shows only on the run's page, since
+  the sweep, the fuzz and Arm fail under the fault by design. The scheduled nights, the
+  dispatches and the dispatches with a fault each have a concurrency group, so a dispatch never
+  cancels a waiting night, and can run beside one, outside the night's count of at most 16 jobs
+  at once: narrow it with `functions`, or dispatch it away from the night's hours. No such
+  dispatch has been made yet.
