@@ -124,7 +124,8 @@ jobs:
           # A number here has no leading zero, which bash's arithmetic would read as octal, and
           # at most five digits, more than any limit below.
           number() { [[ $1 =~ ^(0|[1-9][0-9]{0,4})$ ]]; }
-          plain='(a number has no leading zero)'
+          # What to add to an error when the value was refused for its leading zero.
+          hint() { if [[ $1 =~ ^0[0-9] ]]; then echo ' (a number has no leading zero)'; fi; }
           pow2() { number "$1" && [ "$1" -ge 1 ] && [ $(($1 & ($1 - 1))) -eq 0 ]; }
           if [ -z "$SEED" ]; then
             SEED="0x$(od -An -N8 -tx8 /dev/urandom | tr -d ' \n')"
@@ -193,7 +194,8 @@ jobs:
             for s in "$SHARDS" "$ARM_SHARDS"; do
               if ! pow2 "$n" || ! pow2 "$s" || [ "$s" -gt 32 ] || [ $((n * s)) -gt 4096 ]; then
                 echo "::error::nights, slice-nights and the shards take powers of two, the" \
-                  "shards at most 32, a nights count times a shard count at most 4096 $plain"
+                  "shards at most 32, a nights count times a shard count at most" \
+                  "4096$(hint "$n")$(hint "$s")"
                 exit 1
               fi
               if [ $((count * s)) -gt 256 ]; then
@@ -207,17 +209,19 @@ jobs:
           if [ -z "$NIGHT" ]; then NIGHT=$((days % NIGHTS)); fi
           if [ -z "$SLICE_NIGHT" ]; then SLICE_NIGHT=$((days % SLICE_NIGHTS)); fi
           if ! number "$NIGHT" || [ "$NIGHT" -ge "$NIGHTS" ]; then
-            echo "::error::night takes 0 to $((NIGHTS - 1)), not '$NIGHT' $plain"; exit 1
+            echo "::error::night takes 0 to $((NIGHTS - 1)), not '$NIGHT'$(hint "$NIGHT")"; exit 1
           fi
           if ! number "$SLICE_NIGHT" || [ "$SLICE_NIGHT" -ge "$SLICE_NIGHTS" ]; then
-            echo "::error::slice-night takes 0 to $((SLICE_NIGHTS - 1)), not '$SLICE_NIGHT'" \
-              "$plain"
+            echo "::error::slice-night takes 0 to $((SLICE_NIGHTS - 1)), not" \
+              "'$SLICE_NIGHT'$(hint "$SLICE_NIGHT")"
             exit 1
           fi
           # The fuzz job runs up to 4 species (128, 256, 512, max) in its 90 minutes.
           if ! number "$FUZZ_SECONDS" || [ "$FUZZ_SECONDS" -lt 1 ] \
               || [ "$FUZZ_SECONDS" -gt 900 ]; then
-            echo "::error::fuzz-seconds takes 1 to 900, not '$FUZZ_SECONDS' $plain"; exit 1
+            echo "::error::fuzz-seconds takes 1 to 900, not" \
+              "'$FUZZ_SECONDS'$(hint "$FUZZ_SECONDS")"
+            exit 1
           fi
           # One matrix entry per function and shard: the whole-sweep stripe, the slice's stripe
           # and the species the slice takes; on Arm the first shard also fuzzes.
@@ -512,6 +516,8 @@ jobs:
             label=nightly-fault-test
             about="A nightly run with a planted fault, a test of the alert job"
             title="Nightly run with a planted fault (a test of the alert job)"
+            # Only its failure says something: see the fault-caught job.
+            if [ "$FAULT_CAUGHT" = failure ]; then RESULTS="$RESULTS fault-caught=failure"; fi
           fi
           {
             # Said first, so that a test of this job is not read as a failure of the library.
@@ -559,9 +565,9 @@ jobs:
             if [ "$found" = 0 ] && [ "$FAULT_CAUGHT" = failure ]; then
               echo "No mismatch file records a mismatch."
             elif [ "$found" = 0 ] && [ -n "$FAULT" ]; then
-              echo "**The planted fault was not caught**: no mismatch file records a mismatch,"
-              echo "and a job failed for another reason (a build, a timeout). See the run's"
-              echo "logs."
+              echo "No mismatch file here shows the planted fault caught: a job failed or was"
+              echo "cut short for another reason (a build, a timeout, a cancel), or the files"
+              echo "could not be downloaded. See the run's logs and artifacts."
             elif [ "$found" = 0 ]; then
               echo "No mismatch file records a mismatch: a job failed for another reason (a"
               echo "build, a timeout, a proof). See the run's logs."
