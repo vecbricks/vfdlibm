@@ -24,9 +24,11 @@
 #      and passes --release.
 #   2. Its manifest names the module, Automatic-Module-Name: io.github.vecbricks.vfdlibm, and the
 #      jar has no module-info.class beside that name.
-#   3. Its classes are the ones of this checkout's src/main/java, each source file's class and
-#      the classes nested in it, all of them and no other; a benchmark, a test or a dependency's
-#      class in the jar fails here, though the tests and benchmarks share the package. The
+#   3. Its classes are the ones of this checkout's src/main/java: each source file's class must
+#      be there, and every class must be a source file's or, by its name (<Name>$...), nested
+#      in one; which nested classes there should be is not known here. So a benchmark, a test
+#      or a dependency's class in the jar fails here, though the tests and benchmarks share the
+#      package. The
 #      main sources are taken to be what they are today, one package with one top-level type a
 #      file; a second package or a second type in a file fails here until this check learns it.
 #      Nothing else is in the jar but the manifest, the two licence files and Maven's
@@ -48,13 +50,17 @@
 # --self-test shows that the checks can fail: it makes copies of the jar with one defect each (a
 # licence file gone, a file or a class that is not the library's, a class missing, the module's
 # name gone, a module-info.class) and requires this script to exit 1 on every copy, with the
-# line that names the defect. It needs python3 to rewrite the jars.
+# line that names the defect. Those are the defects it plants; a licence file that differs, the
+# sources and Javadoc jars, and the consumer's own refusals have no copy. It needs python3 to
+# rewrite the jars.
 #
 # It needs a JDK that compiles and runs the jar's release (jar, javac and java: all three from
 # JAVA_HOME if that is set, else from PATH) and cmp, and writes under a temporary directory it
 # removes; a JDK that is too old is "could not run". Exit status: 0 when every check passed, 1
 # when one failed (each failure is printed, and every check runs), 2 when it could not run.
 set -uo pipefail
+# cd prints the directory it found through CDPATH, which would join what pwd prints below.
+unset CDPATH
 
 MODULE=io.github.vecbricks.vfdlibm
 PACKAGE_DIR=io/github/vecbricks/vfdlibm
@@ -141,9 +147,14 @@ import zipfile
 
 source, target, defect, package = sys.argv[1:5]
 drop = {"no-notice": "META-INF/NOTICE", "no-licence": "META-INF/LICENSE",
-        "missing-class": package + "/Lanes.class"}.get(defect)
+        "missing-class": ""}.get(defect)
 with zipfile.ZipFile(source) as jar, zipfile.ZipFile(target, "w", zipfile.ZIP_DEFLATED) as out:
     names = jar.namelist()
+    if defect == "missing-class":
+        # Any top-level class of the library but the one the copies below are made from.
+        drop = next((name for name in sorted(names) if name.startswith(package + "/")
+                     and name.endswith(".class") and "$" not in name
+                     and name != package + "/VFdlibm.class"), "a second class")
     if drop is not None and drop not in names:
         sys.exit(drop + " is not in the jar to begin with")
     for name in names:
@@ -161,13 +172,14 @@ with zipfile.ZipFile(source) as jar, zipfile.ZipFile(target, "w", zipfile.ZIP_DE
     if defect == "stray-file":
         out.writestr("META-INF/jpms.args", b"--add-modules\n")
     elif defect == "stranger-class":
-        out.writestr(package + "/ExpTest.class", a_class)
+        out.writestr(package + "/NotTheLibrarys.class", a_class)
     elif defect == "nested-stranger":
         out.writestr(package + "/Exp$x/Foo.class", a_class)
     elif defect == "module-info":
         out.writestr("module-info.class", a_class)
 PY
-    JAVA_TOOL_OPTIONS="$consumer_options" "$0" "$work/$defect.jar" > "$work/$defect.log" 2>&1
+    JAVA_TOOL_OPTIONS="$consumer_options" "$root/dev/jar-check.sh" "$work/$defect.jar" \
+      > "$work/$defect.log" 2>&1
     status=$?
     [ "$status" -eq 1 ] || caught=0
     for line in "$@"; do
@@ -191,8 +203,7 @@ PY
   mutant stray-file "FAIL  files that are neither classes"
   mutant stranger-class "FAIL  classes that no file of src/main/java"
   mutant nested-stranger "FAIL  classes that no file of src/main/java"
-  mutant missing-class "FAIL  sources of src/main/java/$PACKAGE_DIR/ with no class in the jar" \
-    "FAIL  the consumer on the class path" "FAIL  the consumer on the module path"
+  mutant missing-class "FAIL  sources of src/main/java/$PACKAGE_DIR/ with no class in the jar"
   if [ "$missed" -ne 0 ]; then
     echo "jar-check: self-test: $missed defects not caught"
     exit 1

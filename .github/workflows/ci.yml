@@ -20,6 +20,8 @@ jobs:
           - name: x86 128+256 bits, 512 on AVX-512 runners
             os: ubuntu-latest
             jvm-args: ""
+            # The one row that also runs the jar check's self-test.
+            jar-self-test: true
           # x86 compiled as an AVX2 host, the headline EPYC 7763, whatever runner is drawn:
           # UseAVX=2 caps vectors at 256 bits and takes AVX-512's instructions away, so the
           # preferred species is 256 bits on every draw, and an operation C2 lowers only with
@@ -52,16 +54,18 @@ jobs:
       # jar and the Javadoc jar to the jar verify built; the tests have just run), and then the
       # jar read as a consumer has it: its licence files (the other two jars' too, which
       # --release requires to be there), its module name, its classes, and a consumer compiled
-      # against it alone, which runs under this row's JVM options as the tests did. The first
-      # row then runs the same script on copies of the jar with one defect each, every one of
-      # which it must fail; once is enough, since that tests the script and not the jar.
+      # against it alone, which runs under this row's JVM options as the tests did. The
+      # row marked jar-self-test then runs the same script on copies of the jar with one defect
+      # each, every one of which it must fail; once is enough, since that tests the script and
+      # not the jar.
       - name: Check the jar from outside
         env:
           JVM_ARGS: ${{ matrix.jvm-args }}
+          JAR_SELF_TEST: ${{ matrix.jar-self-test }}
         run: |
           mvn -B --no-transfer-progress -Prelease -Dgpg.skip=true -DskipTests package
           JAVA_TOOL_OPTIONS="$JVM_ARGS" dev/jar-check.sh --release
-          if [ -z "$JVM_ARGS" ] && [ "$RUNNER_ARCH" = X64 ]; then
+          if [ "$JAR_SELF_TEST" = true ]; then
             dev/jar-check.sh --self-test
           fi
 
