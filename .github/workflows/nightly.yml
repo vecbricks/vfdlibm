@@ -82,12 +82,12 @@ on:
 permissions:
   contents: read
 
-# A dispatch that plants a fault has a group of its own: in one group, a second such dispatch
-# would cancel a scheduled night that was waiting behind the first. It can then run beside a
-# night, which the jobs' max-parallel does not count: narrow it with `functions`, and keep it
-# clear of the night's hours.
+# The scheduled nights, the dispatches and the dispatches that plant a fault each have a group:
+# in one group, a second dispatch would cancel a scheduled night that was waiting behind the
+# first. A dispatch can then run beside a night, which the jobs' max-parallel does not count:
+# narrow it with `functions`, or keep it clear of the night's hours.
 concurrency:
-  group: nightly${{ inputs.fault && '-fault' || '' }}
+  group: nightly-${{ github.event_name }}${{ inputs.fault && '-fault' || '' }}
   cancel-in-progress: false
 
 jobs:
@@ -104,6 +104,7 @@ jobs:
       fault: ${{ steps.plan.outputs.fault }}
       fault-args: ${{ steps.plan.outputs.fault-args }}
       fault-functions: ${{ steps.plan.outputs.fault-functions }}
+      refused: ${{ steps.plan.outputs.refused }}
       replay: ${{ steps.plan.outputs.replay }}
     steps:
       # Only to check that a fault to plant is one pom.xml names.
@@ -127,21 +128,23 @@ jobs:
           # new port is added here (the comments that name the functions aside).
           all='exp expm1 log log10 log1p'
           pow2() { [[ $1 =~ ^[0-9]+$ ]] && [ "$1" -ge 1 ] && [ $(($1 & ($1 - 1))) -eq 0 ]; }
+          # An input was refused: the output keeps the alert job from opening an issue for it.
+          refused() { echo "refused=true" >> "$GITHUB_OUTPUT"; exit 1; }
           if [ -z "$SEED" ]; then
             SEED="0x$(od -An -N8 -tx8 /dev/urandom | tr -d ' \n')"
           elif ! [[ $SEED =~ ^0x[0-9a-fA-F]{1,16}$ ]]; then
-            echo "::error::seed takes 0x and up to 16 hex digits, not '$SEED'"; exit 1
+            echo "::error::seed takes 0x and up to 16 hex digits, not '$SEED'"; refused
           fi
           # The functions input narrows the night; the night's order stays `all`'s.
           functions="$all"
           if [ -n "$FUNCTIONS" ]; then
             if ! [[ $FUNCTIONS =~ ^[a-z0-9]+(,[a-z0-9]+)*$ ]]; then
-              echo "::error::functions takes names separated by commas, not '$FUNCTIONS'"; exit 1
+              echo "::error::functions takes names separated by commas, not '$FUNCTIONS'"; refused
             fi
             for f in ${FUNCTIONS//,/ }; do
               case " $all " in
                 *" $f "*) ;;
-                *) echo "::error::functions takes some of: $all; not '$f'"; exit 1 ;;
+                *) echo "::error::functions takes some of: $all; not '$f'"; refused ;;
               esac
             done
             functions=''
@@ -159,12 +162,12 @@ jobs:
               if ! pow2 "$n" || ! pow2 "$s" || [ "$s" -gt 32 ] || [ $((n * s)) -gt 4096 ]; then
                 echo "::error::nights, slice-nights and the shards take powers of two, the" \
                   "shards at most 32, a nights count times a shard count at most 4096"
-                exit 1
+                refused
               fi
               if [ $((count * s)) -gt 256 ]; then
                 echo "::error::$s shards of $count functions are $((count * s)) jobs, past the" \
                   "256 a matrix holds"
-                exit 1
+                refused
               fi
             done
           done
@@ -172,16 +175,16 @@ jobs:
           if [ -z "$NIGHT" ]; then NIGHT=$((days % NIGHTS)); fi
           if [ -z "$SLICE_NIGHT" ]; then SLICE_NIGHT=$((days % SLICE_NIGHTS)); fi
           if ! [[ $NIGHT =~ ^[0-9]+$ ]] || [ "$NIGHT" -ge "$NIGHTS" ]; then
-            echo "::error::night takes 0 to $((NIGHTS - 1)), not '$NIGHT'"; exit 1
+            echo "::error::night takes 0 to $((NIGHTS - 1)), not '$NIGHT'"; refused
           fi
           if ! [[ $SLICE_NIGHT =~ ^[0-9]+$ ]] || [ "$SLICE_NIGHT" -ge "$SLICE_NIGHTS" ]; then
             echo "::error::slice-night takes 0 to $((SLICE_NIGHTS - 1)), not '$SLICE_NIGHT'"
-            exit 1
+            refused
           fi
           # The fuzz job runs up to 4 species (128, 256, 512, max) in its 90 minutes.
           if ! [[ $FUZZ_SECONDS =~ ^[0-9]+$ ]] || [ "$FUZZ_SECONDS" -lt 1 ] \
               || [ "$FUZZ_SECONDS" -gt 900 ]; then
-            echo "::error::fuzz-seconds takes 1 to 900, not '$FUZZ_SECONDS'"; exit 1
+            echo "::error::fuzz-seconds takes 1 to 900, not '$FUZZ_SECONDS'"; refused
           fi
           # A planted fault is <function>.<what>, one of those pom.xml gives a fault run
           # (PlantedFaultTest holds that list to the ports' faults), and it must reach a function
@@ -199,11 +202,11 @@ jobs:
           fault_functions=''
           if [ -n "$FAULT" ]; then
             if ! [[ $FAULT =~ ^[a-z][a-z0-9]*\.[A-Za-z][A-Za-z0-9]*$ ]]; then
-              echo "::error::fault takes <function>.<what>, not '$FAULT'"; exit 1
+              echo "::error::fault takes <function>.<what>, not '$FAULT'"; refused
             fi
             case " $all " in
               *" ${FAULT%%.*} "*) ;;
-              *) echo "::error::fault takes a fault of one of: $all; not '$FAULT'"; exit 1 ;;
+              *) echo "::error::fault takes a fault of one of: $all; not '$FAULT'"; refused ;;
             esac
             for f in $(reach "${FAULT%%.*}"); do
               case " $functions " in
@@ -212,10 +215,10 @@ jobs:
             done
             if [ -z "$fault_functions" ]; then
               echo "::error::the fault '$FAULT' reaches no function of this run ($functions)"
-              exit 1
+              refused
             fi
             if ! grep -qF -- "-Dvfdlibm.fault=$FAULT</argLine>" pom.xml; then
-              echo "::error::pom.xml has no fault run for '$FAULT'"; exit 1
+              echo "::error::pom.xml has no fault run for '$FAULT'"; refused
             fi
             fault_args="-Dvfdlibm.fault=$FAULT"
           fi
@@ -443,36 +446,67 @@ jobs:
       - name: Check the proofs under both solvers
         run: dev/prove.sh --solver both
 
-  # A run with a planted fault whose sweeps and fuzzes all pass has missed the fault: this job
-  # fails then, so the run is red and the alert job says so.
+  # A run with a planted fault must record a mismatch in a function the fault reaches. A job
+  # that failed for another reason (a build, a timeout) is no catch, so this job reads the
+  # mismatch files and not the jobs' results. It fails when there is none, so that a missed
+  # fault is a red run and the alert job says so; a run that was cut short decides nothing.
   fault-caught:
     needs: [plan, sweep, fuzz, arm]
     if: always() && needs.plan.outputs.fault != ''
     runs-on: ubuntu-latest
     steps:
-      - name: Require a sweep or a fuzz to have failed
+      - name: Download the mismatches
+        continue-on-error: true
+        uses: actions/download-artifact@v4
+        with:
+          pattern: nightly-*
+          path: nightly
+      - name: Require a mismatch of a function the fault reaches
         env:
           FAULT: ${{ needs.plan.outputs.fault }}
+          FAULT_FUNCTIONS: ${{ needs.plan.outputs.fault-functions }}
           RESULTS: >-
             sweep=${{ needs.sweep.result }} fuzz=${{ needs.fuzz.result }}
             arm=${{ needs.arm.result }}
         run: |
-          echo "$RESULTS"
+          echo "jobs: $RESULTS"
+          caught=0
+          for f in $FAULT_FUNCTIONS; do
+            # An artifact's files are <mode>-<function>-<species>.txt.
+            for file in nightly/nightly-*/*-"$f"-*.txt; do
+              [ -f "$file" ] || continue
+              # As the alert job counts: a JVM that was stopped wrote no total.
+              total="$(sed -n 's/^# total mismatches: //p' "$file")"
+              written="$(grep -c '^# MISMATCH ' "$file" || true)"
+              case "$total" in 0\ *) continue ;; esac
+              if [ -z "$total" ] && [ "$written" = 0 ]; then continue; fi
+              echo "caught in ${file#nightly/}: ${total:-$written written, the JVM was stopped}"
+              caught=$((caught + 1))
+            done
+          done
+          if [ "$caught" -gt 0 ]; then
+            echo "the planted fault $FAULT was caught in $caught mismatch files"
+            exit 0
+          fi
           case "$RESULTS" in
-            *=failure*) echo "a job failed under the planted fault $FAULT, as it must" ;;
-            *) echo "::error::no sweep or fuzz job failed: the fault $FAULT was not caught"
-               exit 1 ;;
+            *=cancelled*|*=skipped*)
+              echo "::warning::no mismatch of $FAULT_FUNCTIONS is recorded, and the run was cut" \
+                "short: whether the fault $FAULT would be caught is not decided"
+              exit 0 ;;
           esac
+          echo "::error::no mismatch of $FAULT_FUNCTIONS is recorded: the planted fault $FAULT" \
+            "was not caught"
+          exit 1
 
   alert:
     needs: [plan, sweep, fuzz, arm, proofs, fault-caught]
     # A job past its timeout fails; a cancelled one is reported too, since nothing here cancels
     # a nightly by itself (cancel-in-progress is off).
-    # A dispatch whose plan job failed opens no issue: its inputs were refused, which the
-    # run's own error says to whoever dispatched it.
+    # A run whose plan job refused its inputs opens no issue: the run's own error says so to
+    # whoever dispatched it. A plan job that failed for any other reason is reported.
     if: >-
       always() && (contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled'))
-      && (github.event_name == 'schedule' || needs.plan.result == 'success')
+      && needs.plan.outputs.refused != 'true'
     runs-on: ubuntu-latest
     permissions:
       issues: write
@@ -503,8 +537,10 @@ jobs:
         run: |
           body=body.md
           run_url="$SERVER/$GH_REPO/actions/runs/$RUN_ID"
-          # A run with a planted fault has a label and so an issue of its own: a real failure
-          # is never a comment under a test's issue, nor a test under a real failure's.
+          # A run with a planted fault has a label and so an issue of its own: a night's failure
+          # is never a comment under a test's issue, nor a test under a night's failure. What
+          # else fails in a run with a fault is reported under the test's label, and the body
+          # says how to tell it from the fault.
           label=nightly-failure
           about="The nightly correctness run failed"
           title="Nightly correctness run failed"
@@ -513,17 +549,26 @@ jobs:
             about="A nightly run with a planted fault, a test of the alert job"
             title="Nightly run with a planted fault (a test of the alert job)"
           fi
+          missed=0
+          case "$RESULTS" in *fault-caught=failure*) missed=1 ;; esac
           {
             # Said first, so that a test of this job is not read as a failure of the library.
             if [ -n "$FAULT" ]; then
               echo "**A test of the alert job.** The run was dispatched with the fault"
               echo "\`$FAULT\` planted (\`-Dvfdlibm.fault=$FAULT\`) in every sweep and fuzz."
               echo "Mismatches of ${FAULT_FUNCTIONS// / and } below are expected and are not the"
-              echo "library's. Anything else that failed is to be read as a failure, and so is"
-              echo "\`fault-caught=failure\`: no sweep or fuzz caught the fault."
+              echo "library's. Anything else that failed is a failure to look into: a mismatch"
+              echo "of another function, a job that failed without a mismatch, the proofs."
               echo
+              if [ "$missed" = 1 ]; then
+                echo "**The planted fault was not caught**: no mismatch file of"
+                echo "${FAULT_FUNCTIONS// / or } records a mismatch (\`fault-caught=failure\`)."
+                echo
+              fi
+              echo "The run: $run_url"
+            else
+              echo "The nightly correctness run failed: $run_url"
             fi
-            echo "The nightly correctness run failed: $run_url"
             echo
             echo "Commit $SHA, seed \`${SEED:-none}\`. Jobs: $RESULTS."
             echo
@@ -550,7 +595,10 @@ jobs:
               echo '```'
               echo
             done
-            if [ "$found" = 0 ]; then
+            if [ "$found" = 0 ] && [ "$missed" = 1 ]; then
+              echo "No mismatch file records a mismatch: the planted fault was not caught. See"
+              echo "the run's logs for whether anything else failed."
+            elif [ "$found" = 0 ]; then
               echo "No mismatch file records a mismatch: a job failed for another reason (a"
               echo "build, a timeout, a proof). See the run's logs."
             else
