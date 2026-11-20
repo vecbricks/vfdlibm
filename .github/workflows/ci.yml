@@ -48,21 +48,22 @@ jobs:
         run: >-
           mvn -B --no-transfer-progress verify
           "-Dvfdlibm.test.jvmArgs=${{ matrix.jvm-args }}"
-      # The jars a release uploads, less their signatures: the release profile adds the sources
-      # jar and the Javadoc jar to the jar verify built. The tests have just run.
-      - name: Build the release profile's jars
-        run: >-
-          mvn -B --no-transfer-progress -Prelease -Dgpg.skip=true -DskipTests package
-      # The jar read as a consumer has it: its licence files (the other two jars' too, which
+      # The jars a release uploads, less their signatures (the release profile adds the sources
+      # jar and the Javadoc jar to the jar verify built; the tests have just run), and then the
+      # jar read as a consumer has it: its licence files (the other two jars' too, which
       # --release requires to be there), its module name, its classes, and a consumer compiled
-      # against it alone, which runs under this row's JVM options as the tests did. Then the
-      # same script on copies of the jar with one defect each, every one of which it must fail.
+      # against it alone, which runs under this row's JVM options as the tests did. The first
+      # row then runs the same script on copies of the jar with one defect each, every one of
+      # which it must fail; once is enough, since that tests the script and not the jar.
       - name: Check the jar from outside
         env:
-          JAVA_TOOL_OPTIONS: ${{ matrix.jvm-args }}
+          JVM_ARGS: ${{ matrix.jvm-args }}
         run: |
-          dev/jar-check.sh --release
-          dev/jar-check.sh --self-test
+          mvn -B --no-transfer-progress -Prelease -Dgpg.skip=true -DskipTests package
+          JAVA_TOOL_OPTIONS="$JVM_ARGS" dev/jar-check.sh --release
+          if [ -z "$JVM_ARGS" ] && [ "$RUNNER_ARCH" = X64 ]; then
+            dev/jar-check.sh --self-test
+          fi
 
   # The SMT proofs under proofs/ (proofs/README.md), under the pinned Z3 that dev/prove.sh
   # installs into target/solvers/ from PyPI's z3-solver wheel. --self-test shows the checker of
