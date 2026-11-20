@@ -35,10 +35,11 @@ The set is the functions Spark computes with fdlibm on every host:
 
 That is thirteen functions, about 1,000 lines of fdlibm code in all; `pow` is the largest. Varka's
 row order decides which comes first. `exp` is the first port and is done (`VFdlibm.exp`, from
-`e_exp.c`); `pow`, `sinh` and `cosh` build on it. `log`, `log10` and `log1p` are done too
-(`VFdlibm.log`, from `e_log.c`, `VFdlibm.log10`, from `e_log10.c`, which computes through log's
-common path, and `VFdlibm.log1p`, from `s_log1p.c`), and so is `expm1` (`VFdlibm.expm1`, from
-`s_expm1.c`, whose reduction is exp's).
+`e_exp.c`); `sinh` and `cosh` build on it and on `expm1`, and `pow` on neither: `e_pow.c` has its
+own logarithm and exponential and calls only `sqrt`, `fabs` and `scalbn`. `log`, `log10` and
+`log1p` are done too (`VFdlibm.log`, from `e_log.c`, `VFdlibm.log10`, from `e_log10.c`, which
+computes through log's common path, and `VFdlibm.log1p`, from `s_log1p.c`), and so is `expm1`
+(`VFdlibm.expm1`, from `s_expm1.c`, whose reduction is exp's).
 
 `tan`, `tanh` and `cbrt` are fdlibm on aarch64 but Intel LIBM stubs on x86, so a port of them
 matches the JVM only on Arm. `sin` and `cos` are HotSpot's own stubs on both architectures, so
