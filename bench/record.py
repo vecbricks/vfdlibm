@@ -40,19 +40,20 @@ What it writes:
 
 The hand-written parts are left as lines that hold MARKER, each saying what belongs there.
 
+Several plain runs of one host, a run and its re-run (AGENTS.md asks for one when a claim rests
+on a ratio under about 1.3x), go in one file: the first run's file as above, then for each
+later run that has the file's class a line "# Run N of M of this file: ..." and that run's
+header, table and raw section. The file's name has the first run's date. Runs of two hosts or
+CPUs are refused, since a file is of one CPU; so is a pair among them, whose re-run is a file
+of its own. A class that a later run lacks, or that the first run lacks, is named in a note.
+
 `check` reads a results file's header lines, tables and raw section and compares them with what
 `write` makes from the artifact, and fails if they differ or if a marker line is still there.
 A file of several runs is checked against all of them, given in the file's order.
-
-Several plain runs of one host, a run and its re-run (AGENTS.md asks for one when a claim rests
-on a ratio under about 1.3x), go in one file: the first run's file as above, then for each
-later run a line "# Run N of M of this file: ..." and that run's header, table and raw
-section. The file's name has the first run's date. Runs of two hosts or CPUs are refused, since
-a file is of one CPU; so is a pair among them.
-It compares values, not layout: a header line may be wrapped another way, a table's columns may
-be wider, and the file may hold header lines the workflow did not write (such as "Array").
-Exit status 1 lists the differences; 2 is an error (no artifact, no result in it, a file that
-cannot be read or written).
+`check` compares values, not layout: a header line may be wrapped another way, a table's
+columns may be wider, and the file may hold header lines the workflow did not write (such as
+"Array"). Exit status 1 lists the differences; 2 is an error (no artifact, no result in it, a
+file that cannot be read or written).
 """
 
 import argparse
@@ -88,6 +89,10 @@ RAW_NOTE = ["# Raw output of the run follows: the workflow's artifact from its f
             "# lines dropped and JMH's plus-minus and approximately signs and powers of ten in"
             " ASCII."]
 PAIR_NOTE = "# bench/pair.sh's results file follows."
+
+
+# What write did not do and the user should know, printed after it wrote.
+NOTES = []
 
 
 class Problem(Exception):
@@ -299,7 +304,7 @@ def plain_rows(raw, cls):
 
 def plain_header(lines):
     """The workflow's header fields, the end's load beside the start's."""
-    head = lines[:next(i for i, l in enumerate(lines) if not l.startswith("#"))]
+    head = lines[:next((i for i, l in enumerate(lines) if not l.startswith("#")), len(lines))]
     for line in head[1:]:
         if line != "#" and not FIELD.match(line) and not CONTINUED.match(line):
             raise Problem("a header line of the workflow that this script does not know, and"
@@ -484,23 +489,37 @@ def joined_files(directories, name=None):
             raise Problem("several runs go in one file only if each is a plain run, and %s is"
                           " a pair's" % d)
         header = dict((k, v) for k, v in plain_header(lines))
-        seen.append((header.get("Host"), header.get("CPU"), header.get("Run")))
+        # The host's key, and the CPU as the workflow's check reads it, ignoring case.
+        seen.append(((header.get("Host") or "?").split()[0], (header.get("CPU") or "").lower(),
+                     header.get("Run")))
     if len({x[:2] for x in seen}) > 1 or len({x[2] for x in seen}) < len(seen):
         raise Problem("several runs go in one file only if they are different runs of one host"
                       " and CPU; these are %s" % "; ".join(" ".join(map(str, x)) for x in seen))
-    out = {file_name: list(lines) for file_name, lines in first.items()}
+    # A later run joins the file of its class, whatever the files are named; a class that a
+    # run lacks, or that only a later run has, is said and never joined to another's.
+    blocks = {file_name: [] for file_name in first}
+    of_class = {frozenset(classes_of(lines)): file_name for file_name, lines in first.items()}
     for n, d in enumerate(directories[1:], 2):
-        later = {NAME_END.sub("", file_name): lines
-                 for file_name, lines in files_of(d, name).items()}
-        for file_name, lines in out.items():
-            block = later.get(NAME_END.sub("", file_name))
-            if block is None:
-                raise Problem("run %d has no rows for %s, which the first run has" % (n, file_name))
-            # The later run's lines from its header on, without the places for hand-written
-            # text, which the file has once, above.
-            block = [l for l in block[block.index(header_block(block)[0]):] if MARKER not in l]
-            block = [l for i, l in enumerate(block) if not (l == "#" and block[i - 1] == "#")]
-            lines += ["#", RUN_LINE % (n, len(directories)), "#"] + block
+        later = {frozenset(classes_of(lines)): lines for lines in files_of(d, name).values()}
+        for cls in sorted(set(of_class) - set(later), key=sorted):
+            NOTES.append("run %d has no %s: %s does not hold that run"
+                         % (n, ", ".join(sorted(cls)), of_class[cls]))
+        for cls in sorted(set(later) - set(of_class), key=sorted):
+            NOTES.append("run %d's %s is in no file, since the first run has none: write that"
+                         " run by itself" % (n, ", ".join(sorted(cls))))
+        for cls, block in later.items():
+            if cls in of_class:
+                # The later run's lines from its header on, without the places for
+                # hand-written text, which the file has once, above.
+                block = [l for l in block[block.index(header_block(block)[0]):]
+                         if MARKER not in l]
+                blocks[of_class[cls]].append(
+                    [l for i, l in enumerate(block) if not (l == "#" and block[i - 1] == "#")])
+    out = {}
+    for file_name, lines in first.items():
+        out[file_name] = list(lines)
+        for k, block in enumerate(blocks[file_name], 2):
+            out[file_name] += ["#", RUN_LINE % (k, 1 + len(blocks[file_name])), "#"] + block
     return out
 
 
@@ -556,11 +575,17 @@ def check(path, directories):
                    " was" if len(directories) == 1 else "s were")]
     if len(directories) > 1:
         joined_files(directories)  # refuses runs that do not belong in one file
-    diffs = []
+        del NOTES[:]
+    diffs, of_first = [], None
     for n, (start, end, d) in enumerate(zip(starts, starts[1:] + [len(actual)], directories), 1):
         part = actual[start:end]
         if n > 1 and part[0] != RUN_LINE % (n, len(directories)):
             diffs.append("run %d: its first line is not '%s'" % (n, RUN_LINE % (n, len(starts))))
+        of_first = of_first or classes_of(part)
+        if classes_of(part) != of_first:
+            diffs.append("run %d is of %s and the file's first run of %s: a file is of one"
+                         " class" % (n, ", ".join(sorted(classes_of(part))) or "no benchmark",
+                                     ", ".join(sorted(of_first))))
         while part and part[-1] in ("", "#"):
             part.pop()
         found = check_run(path, part, d, n == 1)
@@ -804,6 +829,30 @@ def selftest():
             assert len(found) == 1 and "holds 2 runs" in found[0], found
             found = check(written(d, exp), [d, again])
             assert len(found) == 1 and "holds 1 run " in found[0], found
+            # A later run's block goes by its class, not by the file's name; a class only
+            # one of the runs has is noted and joined to nothing.
+            with open(os.path.join(again, "bench-results.txt"), "w", encoding="utf-8") as f:
+                cut = rerun.index("# JMH version: 1.37\n# Benchmark: %sLog1p" % PACKAGE)
+                f.write("\n".join(
+                    l for l in (rerun[:cut] + rerun[rerun.index("# Run complete."):]).split("\n")
+                    if "Log1pBenchmark" not in l).replace(
+                        "01234567 (main)", "01234567 (main)\n# Run:         r2"))
+            del NOTES[:]
+            narrow = joined_files([d, again])
+            assert narrow["exp-xeon8573c-2026-11-20.txt"] == two
+            assert narrow["log1p-xeon8573c-2026-11-20.txt"] == log1p
+            assert NOTES == ["run 2 has no Log1pBenchmark: log1p-xeon8573c-2026-11-20.txt does"
+                             " not hold that run"], NOTES
+            del NOTES[:]
+            wide = joined_files([again, d])
+            assert list(wide) == ["exp-xeon8573c-2026-11-21.txt"] and len(NOTES) == 1 \
+                and NOTES[0].startswith("run 2's Log1pBenchmark is in no file"), NOTES
+            del NOTES[:]
+            # A file whose second run is of another class does not check.
+            mixed = two[:at + 1] + [l for l in both["log1p-xeon8573c-2026-11-20.txt"]
+                                    if MARKER not in l][at + 1:]
+            found = check(written(d, mixed), [d, again])
+            assert any("a file is of one class" in x for x in found), found
             # Runs of two hosts are not one file's.
             with open(os.path.join(again, "bench-results.txt"), "w", encoding="utf-8") as f:
                 f.write(rerun.replace("# Host:        xeon8573c", "# Host:        epyc7763"))
@@ -1066,8 +1115,11 @@ def act(args, directories):
              for name, lines in joined_files(directories, args.name).items()}
     there = [path for path in files if os.path.exists(path)]
     if there and not args.force:
-        raise Problem("%s: there already, and nothing was written; pass --force to overwrite,"
-                      " or --name" % ", ".join(there))
+        raise Problem("%s: there already, and nothing was written; pass --force to overwrite"
+                      " (a file's hand-written lines are then to be put back from git), or %s"
+                      % (", ".join(there), "--name" if len(files) == 1 else "--out-dir"))
+    for note in NOTES:
+        print("bench/record.py: note: %s" % note, file=sys.stderr)
     for path, lines in files.items():
         with open(path, "w", encoding="ascii", newline="\n") as f:
             f.write("\n".join(lines) + "\n")
