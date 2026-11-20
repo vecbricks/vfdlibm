@@ -48,6 +48,11 @@ jobs:
         run: >-
           mvn -B --no-transfer-progress verify
           "-Dvfdlibm.test.jvmArgs=${{ matrix.jvm-args }}"
+      # The jar verify built, read as a consumer has it: its licence files, its module name, its
+      # classes, and a consumer compiled against it alone, which runs at the runner's own flags
+      # in every row (512 or 256 bits on x86, 128 on Arm), whatever the row's tests ran at.
+      - name: Check the jar from outside
+        run: dev/jar-check.sh
 
   # The SMT proofs under proofs/ (proofs/README.md), under the pinned Z3 that dev/prove.sh
   # installs into target/solvers/ from PyPI's z3-solver wheel. --self-test shows the checker of

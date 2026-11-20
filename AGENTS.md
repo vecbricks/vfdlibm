@@ -56,6 +56,10 @@ vfdlibm ports fdlibm's double functions to the Java Vector API, each lane bit-id
   `src/test/java` (`Sweep`, `Fuzz`, run per species by `dev/nightly.sh`), which `verify` does
   not run beyond `NightlyTest`'s few thousand inputs; a failing night opens an issue labelled
   `nightly-failure`. How to run a slice by hand is in `SKILLS.md`, "The nightly sweep and fuzz".
+- The jar is checked from outside by `dev/jar-check.sh`, which CI runs after `verify`: it must
+  hold `LICENSE` and `NOTICE` under `META-INF/`, its module name, the library's classes and
+  nothing else, and a consumer compiled against it alone, on the class path and on the module
+  path, must get `StrictMath`'s bits. A new public function goes in that consumer too.
 - Benchmarks are JMH, in `src/jmh/java`; `verify` compiles them. Run them with
   `mvn -B -Pjmh test-compile exec:exec`, passing JMH options as `-Djmh.args="..."`, e.g.
   `-Djmh.args="ExpBenchmark.finish256 -p inputs=common"`.

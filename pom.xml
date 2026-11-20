@@ -88,6 +88,20 @@
   </dependencies>
 
   <build>
+    <resources>
+      <!-- The licence and the notice travel with the classes, in the jar's META-INF/ (and in the
+           sources jar, which packs the same resources). NOTICE carries Sun's fdlibm notice, which
+           the ported sources keep in their headers and compiled classes do not.
+           dev/jar-check.sh requires both. There is no src/main/resources. -->
+      <resource>
+        <directory>${project.basedir}</directory>
+        <targetPath>META-INF</targetPath>
+        <includes>
+          <include>LICENSE</include>
+          <include>NOTICE</include>
+        </includes>
+      </resource>
+    </resources>
     <plugins>
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
@@ -383,6 +397,12 @@
         <artifactId>maven-jar-plugin</artifactId>
         <version>3.4.1</version>
         <configuration>
+          <!-- maven-compiler-plugin writes the module options it compiled with to
+               target/classes/META-INF/jpms.args, for its own later runs. It is no part of the
+               library, and dev/jar-check.sh fails a jar that holds it. -->
+          <excludes>
+            <exclude>META-INF/jpms.args</exclude>
+          </excludes>
           <archive>
             <manifestEntries>
               <Automatic-Module-Name>io.github.vecbricks.vfdlibm</Automatic-Module-Name>
