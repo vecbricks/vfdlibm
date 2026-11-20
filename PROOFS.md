@@ -5,9 +5,9 @@ by operation, except where a lemma below proves that a different computation giv
 double for every input (`PLAN.md` section 6). Each lemma names its hypotheses (the input domain
 and each hinge condition, with the range where it holds and why the lanes are in it), the IEEE 754
 property it rests on, the proof, and the test that checks its hinges; that test fails if a hinge
-were false. The code carries a pointer to the lemma. A port with no departure of its own (log10,
-log1p) has a section saying what it rests on and why it needs none; log1p's holds a
-counter-example.
+were false. The code carries a pointer to the lemma. A port with no departure of its own
+(log10, log1p) has a section saying so; log10's names the lemmas it rests on through `log`,
+log1p's holds a counter-example, a statement and not a proof of a fold.
 
 The tests are of two kinds, and each lemma names both. Hinge tests in `ProofsTest` mostly check a
 lemma's hypotheses on scalar Java, where each operation is the same single rounding as a vector
@@ -682,19 +682,25 @@ not.
 `l6FIsNeverNegativeZero`, `l6FoldedFormsAreTheKZeroForms`, `l6HingesRefuted`,
 `l7ExactConversionIsI2D`, `l8LongWordsAreTheCsInts`), which run on `Log`'s scalar words. The
 hypothesis that is log10's, that its argument is a positive normal finite double in `[0.5, 2)`,
-has no scalar test of its own: it follows from line 86's expression as the port writes it, and a
-lane outside `logCore`'s domain would take its unspecified value and so fail where that differs
-from `StrictMath.log10`. **Vector tie.** Every `Log10Test` case, at every width and at
-`SPECIES_MAX`, unmasked and masked, both arms: e_log10.c's high-word tests and the split of
-line 85 at 1.0 (`thresholdsAndSpecials`, `insideTheBranchWords`), e_log.c's significand words, the
-subnormals and `[0.5, 2)` (`nearOneAndSubnormals`), sampled bit patterns, dense draws over every
-binade and the published hard cases.
+has no scalar test of its own: it follows from line 86's expression as the port writes it. On
+a common lane of log10 a lane outside `logCore`'s domain would take its unspecified value and
+so fail where that differs from `StrictMath.log10`; on a rare lane the result is replaced, so
+that lane's argument is checked by nothing, and nothing in its result depends on it.
+**Vector tie.** `Log10Test`, against `StrictMath.log10` by bits, at every width, both arms:
+e_log10.c's high-word tests and the split of line 85 at 1.0 (`thresholdsAndSpecials`,
+`insideTheBranchWords`), e_log.c's significand words, the subnormals and `[0.5, 2)`
+(`nearOneAndSubnormals`), sampled bit patterns, dense draws over every binade and the
+published hard cases. Only `masked` and `maxSpecies` run masked and at `SPECIES_MAX`, on
+`thresholds()`, and `everySubsetOfLanesRare` with every subset of a vector's lanes rare: the
+other cases are unmasked and at the `VectorWidth` shapes.
 
 **Encoding.** No file of its own. `proofs/log_zero_dk.smt2` (L6), `proofs/log_exact_dk.smt2` (L7)
 and `proofs/log_long_words.smt2` (L8) are rendered from `Log`'s constants and check these steps
 for log10 as they stand, `logCore` being the same body. Informal here: that `xn`'s sign bit and
-exponent field are as above (the expression of line 86, read off the code), the commutativity
-of the product, and that the port computes these steps, the code's text.
+exponent field are as above (the expression of line 86, read off the code), that the write-back
+of the new high word, `I2L` then a shift left by 32, is the C's `__HI(x) =` because that word is
+never negative (so sign extension and zero extension agree, as in L8's proof), the
+commutativity of the product, and that the port computes these steps, the code's text.
 
 ## log1p (`Log1p.java`, from `s_log1p.c`)
 
@@ -728,22 +734,28 @@ at each, and `general` the same C with lines 156-158 skipped:
 (`hu == 0` is reached by line 148's `hu = (0x00100000-hu)>>2` below a power of two and by
 `hu == 0` directly above it, so the four cover both normalisations.) The short path stops
 the series of `log1p(f)` at `f^3/3`, the general one does not, and the two round differently
-on about one input in `2^29` of these windows: of every double with `1+x` in `[2 - 3*2^-20,
-2 + 2^-19)` (raw bits `[0x3feffffa_00000000, 0x3ff00002_00000000)`, `2^35` doubles) 56, and of
-every double with `1+x` in `(0.5 - 3*2^-22, 0.5 + 2^-21]` (raw bits `[0xbfdffffe_00000000,
-0xbfe00001_80000000)`, 15,032,385,536 doubles) 20. The windows of the other powers of two of
-`1+x` are not searched. The counts, the sixteen differences each pass printed, the commands and
-the host are in `bench/results/log1p-hu0-search-laptop-2026-11-20.txt`; the two passes ran a
-scratch program kept in that file as text, not `Log1pShortPath`, which found exactly the
-witness in each of two slices of `2^24` doubles around one.
+on about one input in `2^29` of these windows: of every double `x` whose raw bits lie
+in `[0x3feffffa_00000000, 0x3ff00002_00000000)` (`1+x` in `[2 - 3*2^-20, 2 + 2^-19)`, `2^35`
+doubles) 56, and of every `x` whose raw bits lie in `[0xbfdffffe_00000000, 0xbfe00001_80000000)`
+(`1+x` in `(0.5 - 3*2^-22, 0.5 + 2^-21]`, 15,032,385,536 doubles) 20. The `hu == 0` inputs near
+0.5 are `1+x` in `[0.5 - 3*2^-22, 0.5 + 2^-21)`, so the second range leaves out the input
+`x = -(0.5 + 3*2^-22)` and holds `x = -(0.5 - 2^-21)`, which is not on the path. The windows
+of the other powers of two of `1+x` are not searched. The counts, the sixteen differences each
+pass printed, the commands and the host are in
+`bench/results/log1p-hu0-search-laptop-2026-11-20.txt`; the two passes ran a scratch program
+kept in that file as text, not `Log1pShortPath`, which found exactly the witness in each of two
+slices of `2^24` doubles around one.
 
 **Test (scalar).** `Log1pTest.shortPathIsNotTheGeneralPath` asserts the four rows, each
 through `Log1pTest.cLog1p`, a transcription of s_log1p.c checked against `StrictMath.log1p`
 (`Log1pTest.scalarTranscriptionIsStrictMath`); it fails if the two paths agreed there.
-**Vector tie.** `Log1pTest.nearPowersOfTwo` draws, from `2^-30` to `2^60`, the inputs where `|f|
-< 2^-20` and the C takes this path, and every `Log1pTest` case runs the port's short path
-against `StrictMath` at every width: a port that folded the path away would fail there on the
-inputs that differ, but only where a draw hits one, which is about one in `2^29`.
+**Vector tie.** None that detects the fold. `Log1pTest.nearPowersOfTwo` draws, from `2^-30` to
+`2^60`, inputs where `|f| < 2^-20` and the C takes this path, and runs the port's short path
+against `StrictMath` at every width, but the inputs that differ are about one in `2^29` of
+them and no vector case holds one of the four above or a neighbour of one: a port that folded
+the path away would pass every vector case with near certainty. The four rows are checked on the
+scalar transcription only. A vector test of them, and a planted fault that folds the path,
+are not written.
 
 **Encoding.** None. The two results are Java's evaluation of the transcription, not a solver's,
 and the search is a program, so nothing here is machine-checked in `proofs/`; an evaluation of
