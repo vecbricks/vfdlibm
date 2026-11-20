@@ -17,14 +17,22 @@ name: Nightly
 #   night (`arm-shards` stripes per function, the same `nights` rotation), the rotating slice
 #   at max, and the fuzz at both.
 # - proofs: every SMT proof under both solvers (proofs/README.md).
-# - alert: when any of them fails, opens a GitHub issue labelled nightly-failure, or comments on
-#   the open one, with the run's link, the dispatch inputs that replay it, and the mismatches. It
-#   is the only job that may write.
+# - alert: when any of them fails, opens a GitHub issue labelled nightly-failure (or, for a run
+#   with a planted fault, nightly-fault-test), or comments on the open one, with the run's link,
+#   the dispatch inputs that replay it, and the mismatches. It is the only job that may write.
 #
 # The seed is fresh each night; the plan job prints it with the night and slice night, and a
 # dispatch with those inputs (as the issue lists them) replays every job of the run, Arm's too.
 # Every mismatch file is uploaded as an artifact, its inputs one per line as
 # hard-cases/<function>.txt takes them.
+#
+# The functions are named once, in the plan job, which makes every matrix; the input `functions`
+# narrows them. The input `fault` plants a fault (Faults.java) in every sweep and fuzz JVM, so
+# that a dispatch can show the night catching it and the alert job opening its issue, which is
+# labelled nightly-fault-test and not nightly-failure. Such a run checks only the functions the
+# fault reaches, so its mismatches are expected from the fault:
+#
+#   gh workflow run nightly.yml -f fault=exp.dropCorrection -f functions=exp -f fuzz-seconds=5
 
 on:
   schedule:
@@ -63,6 +71,14 @@ on:
         description: 'Fuzz: seconds per function and species, 1 to 900'
         required: false
         default: '240'
+      functions:
+        description: 'Functions to run, separated by commas; blank for every one'
+        required: false
+        default: ''
+      fault:
+        description: 'Test of the alert only: a fault to plant, as exp.dropCorrection; else blank'
+        required: false
+        default: ''
 
 permissions:
   contents: read
@@ -80,9 +96,14 @@ jobs:
       seed: ${{ steps.plan.outputs.seed }}
       sweep: ${{ steps.plan.outputs.sweep }}
       arm: ${{ steps.plan.outputs.arm }}
+      fuzz: ${{ steps.plan.outputs.fuzz }}
       fuzz-seconds: ${{ steps.plan.outputs.fuzz-seconds }}
+      fault-args: ${{ steps.plan.outputs.fault-args }}
       replay: ${{ steps.plan.outputs.replay }}
     steps:
+      # Only to check that a fault to plant is one pom.xml names.
+      - uses: actions/checkout@v5
+        if: ${{ inputs.fault != '' }}
       - name: Plan the night
         id: plan
         env:
@@ -94,21 +115,102 @@ jobs:
           SLICE_NIGHTS: ${{ inputs.slice-nights || '32' }}
           SLICE_NIGHT: ${{ inputs.slice-night }}
           FUZZ_SECONDS: ${{ inputs.fuzz-seconds || '240' }}
+          FUNCTIONS: ${{ inputs.functions }}
+          FAULT: ${{ inputs.fault }}
         run: |
-          pow2() { [[ $1 =~ ^[0-9]+$ ]] && [ "$1" -ge 1 ] && [ $(($1 & ($1 - 1))) -eq 0 ]; }
+          # Every function of the night: each matrix and each check below reads this list, so a
+          # new port is added here (and in `reach`, if it computes through another port).
+          all='exp expm1 log log10 log1p'
+          # A dispatch's text is echoed in errors below: a line break in it would let a line of
+          # the dispatcher's be read as a workflow command, so line breaks become spaces (which
+          # every check below then refuses).
+          for v in SEED NIGHTS SHARDS ARM_SHARDS NIGHT SLICE_NIGHTS SLICE_NIGHT FUZZ_SECONDS \
+              FUNCTIONS FAULT; do
+            printf -v "$v" '%s' "${!v//[$'\r\n']/ }"
+          done
+          # A number here has no leading zero, which bash's arithmetic would read as octal, and
+          # at most five digits, more than any limit below.
+          number() { [[ $1 =~ ^(0|[1-9][0-9]{0,4})$ ]]; }
+          # What to add to an error when the value was refused for its leading zero.
+          hint() { if [[ $1 =~ ^0[0-9] ]]; then echo ' (a number has no leading zero)'; fi; }
+          pow2() { number "$1" && [ "$1" -ge 1 ] && [ $(($1 & ($1 - 1))) -eq 0 ]; }
           if [ -z "$SEED" ]; then
             SEED="0x$(od -An -N8 -tx8 /dev/urandom | tr -d ' \n')"
           elif ! [[ $SEED =~ ^0x[0-9a-fA-F]{1,16}$ ]]; then
             echo "::error::seed takes 0x and up to 16 hex digits, not '$SEED'"; exit 1
           fi
-          # A matrix holds at most 256 jobs: 5 functions times 32 shards is 160, and 64 shards
-          # would be 320, past the cap. A stripe count (nights or slice-nights times shards) is at
-          # most Sweep's 4096 chunks.
+          # The functions input narrows the night; the night's order stays `all`'s.
+          functions="$all"
+          if [ -n "$FUNCTIONS" ]; then
+            if ! [[ $FUNCTIONS =~ ^[a-z0-9]+(,[a-z0-9]+)*$ ]]; then
+              echo "::error::functions takes names separated by commas, not '$FUNCTIONS'"; exit 1
+            fi
+            for f in ${FUNCTIONS//,/ }; do
+              case " $all " in
+                *" $f "*) ;;
+                *) echo "::error::functions takes some of: $all; not '$f'"; exit 1 ;;
+              esac
+            done
+            functions=''
+            for f in $all; do
+              case ",$FUNCTIONS," in *",$f,"*) functions="$functions${functions:+ }$f" ;; esac
+            done
+          fi
+          # A planted fault is <function>.<what>, and one of those pom.xml gives a fault run
+          # (PlantedFaultTest holds that list to the ports' faults): a mistyped name would plant
+          # nothing, and the run would pass as if the night had missed the fault.
+          # The run then checks only the functions the fault reaches, of those asked for, so
+          # that its mismatches are expected from the fault. A port's faults reach its own
+          # function and every function that computes through it: log10 computes through
+          # Log.logCore, where log's faults are.
+          reach() {
+            case "$1" in
+              log) echo 'log log10' ;;
+              *) echo "$1" ;;
+            esac
+          }
+          fault_args=''
+          if [ -n "$FAULT" ]; then
+            if ! [[ $FAULT =~ ^[a-z][a-z0-9]*\.[A-Za-z][A-Za-z0-9]*$ ]]; then
+              echo "::error::fault takes <function>.<what>, not '$FAULT'"; exit 1
+            fi
+            case " $all " in
+              *" ${FAULT%%.*} "*) ;;
+              *) echo "::error::fault takes a fault of one of: $all; not '$FAULT'"; exit 1 ;;
+            esac
+            # $FAULT is letters, digits and one dot here, so the dot is the only pattern
+            # character; the name ends at a space or the end of the element.
+            if ! grep -qE -- "-Dvfdlibm\.fault=${FAULT//./\\.}([ <]|$)" pom.xml; then
+              echo "::error::pom.xml has no fault run for '$FAULT'"; exit 1
+            fi
+            reached=''
+            for f in $(reach "${FAULT%%.*}"); do
+              case " $functions " in *" $f "*) reached="$reached${reached:+ }$f" ;; esac
+            done
+            if [ -z "$reached" ]; then
+              echo "::error::the fault '$FAULT' reaches no function of this run ($functions)"
+              exit 1
+            fi
+            functions="$reached"
+            fault_args="-Dvfdlibm.fault=$FAULT"
+          fi
+          # A matrix holds at most 256 jobs, one per function and shard of the run: with all of
+          # today's 5 functions 32 shards are 160, so the 256-job check in the loop below starts
+          # to refuse only when the list is longer. A stripe count (nights or slice-nights times
+          # shards) is at most Sweep's 4096 chunks.
+          count="$(wc -w <<< "$functions")"
           for n in "$NIGHTS" "$SLICE_NIGHTS"; do
             for s in "$SHARDS" "$ARM_SHARDS"; do
               if ! pow2 "$n" || ! pow2 "$s" || [ "$s" -gt 32 ] || [ $((n * s)) -gt 4096 ]; then
+                why="$(hint "$n")"; why="${why:-$(hint "$s")}"
                 echo "::error::nights, slice-nights and the shards take powers of two, the" \
-                  "shards at most 32, a nights count times a shard count at most 4096"
+                  "shards at most 32, a nights count times a shard count at most 4096; not" \
+                  "'$n' with '$s'$why"
+                exit 1
+              fi
+              if [ $((count * s)) -gt 256 ]; then
+                echo "::error::$s shards of $count functions are $((count * s)) jobs, past the" \
+                  "256 a matrix holds"
                 exit 1
               fi
             done
@@ -116,23 +218,26 @@ jobs:
           days=$(( $(date -u +%s) / 86400 ))
           if [ -z "$NIGHT" ]; then NIGHT=$((days % NIGHTS)); fi
           if [ -z "$SLICE_NIGHT" ]; then SLICE_NIGHT=$((days % SLICE_NIGHTS)); fi
-          if ! [[ $NIGHT =~ ^[0-9]+$ ]] || [ "$NIGHT" -ge "$NIGHTS" ]; then
-            echo "::error::night takes 0 to $((NIGHTS - 1)), not '$NIGHT'"; exit 1
+          if ! number "$NIGHT" || [ "$NIGHT" -ge "$NIGHTS" ]; then
+            echo "::error::night takes 0 to $((NIGHTS - 1)), not '$NIGHT'$(hint "$NIGHT")"; exit 1
           fi
-          if ! [[ $SLICE_NIGHT =~ ^[0-9]+$ ]] || [ "$SLICE_NIGHT" -ge "$SLICE_NIGHTS" ]; then
-            echo "::error::slice-night takes 0 to $((SLICE_NIGHTS - 1)), not '$SLICE_NIGHT'"
+          if ! number "$SLICE_NIGHT" || [ "$SLICE_NIGHT" -ge "$SLICE_NIGHTS" ]; then
+            echo "::error::slice-night takes 0 to $((SLICE_NIGHTS - 1)), not" \
+              "'$SLICE_NIGHT'$(hint "$SLICE_NIGHT")"
             exit 1
           fi
           # The fuzz job runs up to 4 species (128, 256, 512, max) in its 90 minutes.
-          if ! [[ $FUZZ_SECONDS =~ ^[0-9]+$ ]] || [ "$FUZZ_SECONDS" -lt 1 ] \
+          if ! number "$FUZZ_SECONDS" || [ "$FUZZ_SECONDS" -lt 1 ] \
               || [ "$FUZZ_SECONDS" -gt 900 ]; then
-            echo "::error::fuzz-seconds takes 1 to 900, not '$FUZZ_SECONDS'"; exit 1
+            echo "::error::fuzz-seconds takes 1 to 900, not" \
+              "'$FUZZ_SECONDS'$(hint "$FUZZ_SECONDS")"
+            exit 1
           fi
           # One matrix entry per function and shard: the whole-sweep stripe, the slice's stripe
           # and the species the slice takes; on Arm the first shard also fuzzes.
           matrix() {
             local shards="$1" slice_species="$2" json='{"include":[' sep='' f j fuzz
-            for f in exp expm1 log log10 log1p; do
+            for f in $functions; do
               for ((j = 0; j < shards; j++)); do
                 if [ "$j" = 0 ]; then fuzz=true; else fuzz=false; fi
                 json="$json$sep{\"function\":\"$f\",\"shard\":$j"
@@ -144,9 +249,24 @@ jobs:
             done
             echo "$json]}"
           }
+          # The fuzz: each function at the runner's own flags and compiled as an AVX2 host. The
+          # salt gives each job its own inputs and names its artifact.
+          fuzz_matrix() {
+            local json='{"include":[' sep='' f
+            for f in $functions; do
+              json="$json$sep{\"function\":\"$f\",\"name\":\"runner flags\""
+              json="$json,\"jvm-args\":\"\",\"salt\":1}"
+              json="$json,{\"function\":\"$f\",\"name\":\"as AVX2\""
+              json="$json,\"jvm-args\":\"-XX:UseAVX=2 -XX:MaxVectorSize=32\",\"salt\":2}"
+              sep=','
+            done
+            echo "$json]}"
+          }
           replay="seed=$SEED nights=$NIGHTS shards=$SHARDS arm-shards=$ARM_SHARDS"
           replay="$replay night=$NIGHT slice-nights=$SLICE_NIGHTS slice-night=$SLICE_NIGHT"
           replay="$replay fuzz-seconds=$FUZZ_SECONDS"
+          if [ "$functions" != "$all" ]; then replay="$replay functions=${functions// /,}"; fi
+          if [ -n "$FAULT" ]; then replay="$replay fault=$FAULT"; fi
           echo "replay with the dispatch inputs: $replay"
           echo "sweep: night $NIGHT of $NIGHTS; x86 stripes $((NIGHT * SHARDS)) to" \
             "$((NIGHT * SHARDS + SHARDS - 1)) of $((NIGHTS * SHARDS)), Arm stripes" \
@@ -154,11 +274,18 @@ jobs:
             "$((NIGHTS * ARM_SHARDS)) per function"
           echo "slice (x86 128 bits, Arm max): night $SLICE_NIGHT of $SLICE_NIGHTS"
           echo "fuzz: $FUZZ_SECONDS s per function and species"
+          echo "functions: $functions"
+          if [ -n "$FAULT" ]; then
+            echo "::warning::the fault $FAULT is planted in every sweep and fuzz: this run tests" \
+              "the alert on $functions only, and its mismatches are expected from the fault"
+          fi
           {
             echo "seed=$SEED"
             echo "sweep=$(matrix "$SHARDS" 128)"
             echo "arm=$(matrix "$ARM_SHARDS" max)"
+            echo "fuzz=$(fuzz_matrix)"
             echo "fuzz-seconds=$FUZZ_SECONDS"
+            echo "fault-args=$fault_args"
             echo "replay=$replay"
           } >> "$GITHUB_OUTPUT"
 
@@ -193,6 +320,7 @@ jobs:
           STRIPE: ${{ matrix.stripe }}
           NIGHTLY_EXCEPT: ${{ matrix.slice-species }}
           SEED: ${{ needs.plan.outputs.seed }}
+          NIGHTLY_JVM_ARGS: ${{ needs.plan.outputs.fault-args }}
         run: dev/nightly.sh sweep "$FUNCTION" "stripe:$STRIPE" "$SEED"
       - name: Sweep the slice at 128 bits
         if: ${{ !cancelled() }}
@@ -201,6 +329,7 @@ jobs:
           STRIPE: ${{ matrix.slice }}
           SLICE_SPECIES: ${{ matrix.slice-species }}
           SEED: ${{ needs.plan.outputs.seed }}
+          NIGHTLY_JVM_ARGS: ${{ needs.plan.outputs.fault-args }}
         run: dev/nightly.sh sweep "$FUNCTION" "stripe:$STRIPE" "$SEED" "$SLICE_SPECIES"
       - name: Upload the logs and mismatches
         if: always()
@@ -219,16 +348,7 @@ jobs:
     strategy:
       fail-fast: false
       max-parallel: 3
-      matrix:
-        function: [exp, expm1, log, log10, log1p]
-        name: [runner flags, as AVX2]
-        include:
-          - name: runner flags
-            jvm-args: ''
-            salt: 1
-          - name: as AVX2
-            jvm-args: -XX:UseAVX=2 -XX:MaxVectorSize=32
-            salt: 2
+      matrix: ${{ fromJSON(needs.plan.outputs.fuzz) }}
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-java@v5
@@ -248,7 +368,7 @@ jobs:
           SECONDS_EACH: ${{ needs.plan.outputs.fuzz-seconds }}
           SEED: ${{ needs.plan.outputs.seed }}
           SALT: ${{ matrix.salt }}
-          NIGHTLY_JVM_ARGS: ${{ matrix.jvm-args }}
+          NIGHTLY_JVM_ARGS: ${{ matrix.jvm-args }} ${{ needs.plan.outputs.fault-args }}
         run: |
           seed="$(printf '0x%016x' $((SEED + SALT)))"
           dev/nightly.sh fuzz "$FUNCTION" "$SECONDS_EACH" "$seed"
@@ -290,6 +410,7 @@ jobs:
           STRIPE: ${{ matrix.stripe }}
           NIGHTLY_EXCEPT: ${{ matrix.slice-species }}
           SEED: ${{ needs.plan.outputs.seed }}
+          NIGHTLY_JVM_ARGS: ${{ needs.plan.outputs.fault-args }}
         run: dev/nightly.sh sweep "$FUNCTION" "stripe:$STRIPE" "$SEED"
       - name: Sweep the slice at max
         if: ${{ !cancelled() }}
@@ -298,6 +419,7 @@ jobs:
           STRIPE: ${{ matrix.slice }}
           SLICE_SPECIES: ${{ matrix.slice-species }}
           SEED: ${{ needs.plan.outputs.seed }}
+          NIGHTLY_JVM_ARGS: ${{ needs.plan.outputs.fault-args }}
         run: dev/nightly.sh sweep "$FUNCTION" "stripe:$STRIPE" "$SEED" "$SLICE_SPECIES"
       - name: Fuzz
         if: ${{ !cancelled() && matrix.fuzz }}
@@ -305,6 +427,7 @@ jobs:
           FUNCTION: ${{ matrix.function }}
           SECONDS_EACH: ${{ needs.plan.outputs.fuzz-seconds }}
           SEED: ${{ needs.plan.outputs.seed }}
+          NIGHTLY_JVM_ARGS: ${{ needs.plan.outputs.fault-args }}
         run: |
           seed="$(printf '0x%016x' $((SEED + 3)))"
           dev/nightly.sh fuzz "$FUNCTION" "$SECONDS_EACH" "$seed"
@@ -318,8 +441,10 @@ jobs:
 
   # Every proof under Z3 and cvc5, each held to every expectation (proofs/README.md); ci.yml
   # runs them under Z3 only.
+  # A run with a planted fault leaves them out: it reports the fault's functions only.
   proofs:
     needs: plan
+    if: inputs.fault == ''
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -332,11 +457,42 @@ jobs:
       - name: Check the proofs under both solvers
         run: dev/prove.sh --solver both
 
+  # A run with a planted fault whose sweeps and fuzzes all pass has missed the fault
+  # (dev/nightly.sh fails on any mismatch): this job fails then, so that the run is red and the
+  # alert job reports it. Its passing claims nothing: when a job did fail, the mismatch files
+  # the issue lists say whether it was the fault, and the issue says so when there is none.
+  fault-caught:
+    needs: [plan, sweep, fuzz, arm]
+    if: always() && inputs.fault != '' && needs.plan.result == 'success'
+    runs-on: ubuntu-latest
+    # Set only by the check itself, so that a job that failed to start is not read as a miss.
+    outputs:
+      missed: ${{ steps.check.outputs.missed }}
+    steps:
+      - name: Fail when every sweep and fuzz passed
+        id: check
+        env:
+          FAULT: ${{ inputs.fault }}
+          RESULTS: >-
+            sweep=${{ needs.sweep.result }} fuzz=${{ needs.fuzz.result }}
+            arm=${{ needs.arm.result }}
+        run: |
+          echo "$RESULTS"
+          if [ "$RESULTS" = "sweep=success fuzz=success arm=success" ]; then
+            echo "missed=true" >> "$GITHUB_OUTPUT"
+            echo "::error::every sweep and fuzz passed: the planted fault $FAULT was not caught"
+            exit 1
+          fi
+
   alert:
-    needs: [plan, sweep, fuzz, arm, proofs]
+    needs: [plan, sweep, fuzz, arm, proofs, fault-caught]
     # A job past its timeout fails; a cancelled one is reported too, since nothing here cancels
     # a nightly by itself (cancel-in-progress is off).
-    if: always() && (contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled'))
+    # A dispatch with a fault whose plan job did not pass opens no issue: nothing was planted,
+    # and the run's own error says why to whoever dispatched it.
+    if: >-
+      always() && (contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled'))
+      && (inputs.fault == '' || needs.plan.result == 'success')
     runs-on: ubuntu-latest
     permissions:
       issues: write
@@ -357,6 +513,9 @@ jobs:
           SHA: ${{ github.sha }}
           SEED: ${{ needs.plan.outputs.seed }}
           REPLAY: ${{ needs.plan.outputs.replay }}
+          FAULT: ${{ inputs.fault }}
+          FAULT_MISSED: ${{ needs.fault-caught.outputs.missed }}
+          FAULT_CAUGHT: ${{ needs.fault-caught.result }}
           RESULTS: >-
             plan=${{ needs.plan.result }} sweep=${{ needs.sweep.result }}
             fuzz=${{ needs.fuzz.result }} arm=${{ needs.arm.result }}
@@ -364,8 +523,41 @@ jobs:
         run: |
           body=body.md
           run_url="$SERVER/$GH_REPO/actions/runs/$RUN_ID"
+          # A run with a planted fault has a label and so an issue of its own: a real failure
+          # is never a comment under a test's issue, nor a test under a real failure's.
+          label=nightly-failure
+          about="The nightly correctness run failed"
+          title="Nightly correctness run failed"
+          if [ -n "$FAULT" ]; then
+            label=nightly-fault-test
+            about="A nightly run with a planted fault, a test of the alert job"
+            title="Nightly run with a planted fault (a test of the alert job)"
+            # Only its failure says something: see the fault-caught job.
+            RESULTS="$RESULTS fault-caught=$FAULT_CAUGHT"
+          fi
           {
-            echo "The nightly correctness run failed: $run_url"
+            # Said first, so that a test of this job is not read as a failure of the library.
+            if [ -n "$FAULT" ]; then
+              echo "**A test of the alert job, not a night's failure.** The run was dispatched"
+              echo "with the fault \`$FAULT\` planted (\`-Dvfdlibm.fault=$FAULT\`) in every"
+              echo "sweep and fuzz, and it checked only the functions that fault reaches."
+              if [ "$FAULT_MISSED" != true ]; then
+                echo "A mismatch below is expected from the fault; a real bug in the same"
+                echo "functions would be among them and cannot be told apart, so only a clean"
+                echo "night clears them. When none is listed, nothing here shows the fault caught."
+              fi
+              echo
+              if [ "$FAULT_MISSED" = true ]; then
+                echo "**The planted fault was not caught**: every sweep and fuzz passed (the"
+                echo "job \`fault-caught\` failed for that). A narrow fault, one that only"
+                echo "some inputs show, is missed by every stripe and fuzz that does not draw"
+                echo "them: that is a run that did not sample it, not yet a gap in the checks."
+                echo
+              fi
+              echo "The run: $run_url"
+            else
+              echo "The nightly correctness run failed: $run_url"
+            fi
             echo
             echo "Commit $SHA, seed \`${SEED:-none}\`. Jobs: $RESULTS."
             echo
@@ -392,9 +584,18 @@ jobs:
               echo '```'
               echo
             done
-            if [ "$found" = 0 ]; then
+            if [ "$found" = 0 ] && [ "$FAULT_MISSED" = true ]; then
+              echo "No mismatch file records a mismatch."
+            elif [ "$found" = 0 ] && [ -n "$FAULT" ]; then
+              echo "No mismatch file here shows the planted fault caught: a job failed or was"
+              echo "cut short for another reason (a build, a timeout, a cancel), or the files"
+              echo "could not be downloaded. See the run's logs and artifacts."
+            elif [ "$found" = 0 ]; then
               echo "No mismatch file records a mismatch: a job failed for another reason (a"
               echo "build, a timeout, a proof). See the run's logs."
+            elif [ -n "$FAULT" ]; then
+              echo "These inputs fail under the planted fault: they are not hard cases of the"
+              echo "library and do not go in hard-cases/."
             else
               echo "Each artifact's .txt files hold the inputs, one per line, as"
               echo "src/test/resources/io/github/vecbricks/vfdlibm/hard-cases/<function>.txt"
@@ -412,13 +613,13 @@ jobs:
             printf '\n(cut at 60000 characters; the artifacts hold the rest)\n' >> body.cut
             mv body.cut "$body"
           fi
-          gh label create nightly-failure --color B60205 --force \
-            --description "The nightly correctness run failed"
-          open="$(gh issue list --label nightly-failure --state open --limit 1 \
+          color=B60205
+          if [ -n "$FAULT" ]; then color=C5DEF5; fi
+          gh label create "$label" --color "$color" --force --description "$about"
+          open="$(gh issue list --label "$label" --state open --limit 1 \
             --json number --jq '.[0].number // empty')"
           if [ -n "$open" ]; then
             gh issue comment "$open" --body-file "$body"
           else
-            gh issue create --title "Nightly correctness run failed" \
-              --label nightly-failure --body-file "$body"
+            gh issue create --title "$title" --label "$label" --body-file "$body"
           fi
