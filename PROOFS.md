@@ -18,10 +18,11 @@ machine-checked in `proofs/` under the conventions of Varka's `sql/varka/proofs/
 integers, a double as `M * 2^E`, rounding as the `jdouble.near` relation to the nearest double in
 a named binade, not SMT's floating-point theory; `unsat` checks are the proofs, `sat` checks show
 the domain is not vacuous and that a constant changed by one is refuted, for the constants a claim
-is tight to: not `invln2` and `P1..P5`, as L2's **Encoding** says; `proofs/README.md`).
+is tight to: not `invln2` and `P1..P5`, as L2's **Encoding** says, nor expm1's `Q1..Q5`;
+`proofs/README.md`).
 Each lemma ends with an **Encoding** paragraph naming its file and saying which steps are
-machine-checked and which stay informal. The files' constants are rendered from `Exp`, `Lanes`
-and `Log` by `ProofFiles`, so `ProofFilesTest` fails when one moves without its proof;
+machine-checked and which stay informal. The files' constants are rendered from `Exp`, `Lanes`,
+`Log` and `Expm1` by `ProofFiles`, so `ProofFilesTest` fails when one moves without its proof;
 `dev/prove.sh --solver both` runs them under Z3 and cvc5.
 
 Notation: `fl(v)` is `v` rounded to the nearest double, ties to even (Java's and fdlibm's only
@@ -582,7 +583,7 @@ every width and `SPECIES_MAX`.
 
 **Encoding.** `proofs/expm1_reduction.smt2`, rendered from `Expm1`'s constants and words by
 `Expm1ProofFiles`. Machine-checked there: H13, each of `Expm1`'s five values and two words
-against `Exp`'s, with `ln2_hi` one ulp up, the planted fault's value, refuted (section A), so
+against `Exp`'s, with `Expm1.LN2_HI_UP`, the planted fault's value, refuted (section A), so
 the machine-checked parts of L2 (`proofs/exp_near_band.smt2`) and L5
 (`proofs/exp_half_sign.smt2`), rendered from `Exp`, check steps 1 and 2 for expm1 as they stand;
 step 3 (section B): the zero products, `x - (+0) = x` for a zero `x` of either sign and for
@@ -590,9 +591,9 @@ every nonzero normal double, every binade at once, and `c = +0`, with `t = -0` r
 (section C): at the two witnesses the high word is `0x3fd62e42`, the formula's sum rounds into
 binade 2^0, so its cast is `+-1`, and each rounding of the C as written and of the C reduced
 with that `k` is evaluated, the two results differing, while at the word's top double of either
-sign the same two chains end in one double. Informal above: `fl(x - (-a)) = fl(x + a)` (R4),
-one rational in this encoding, so with no check to write; that `x - x = +0` for a nonzero `x`
-(R5), pinned at sampled doubles while rendering, as in L6's file; that `StrictMath.expm1` is
+sign the cast is `+-1` too and the same two chains end in one double. Informal above:
+`fl(x - (-a)) = fl(x + a)` (R4), one rational in this encoding, so with no check to write;
+that `x - x = +0` for a nonzero `x` (R5), pinned at sampled doubles while rendering, as in L6's file; that `StrictMath.expm1` is
 the forced computation at the witnesses (a test, the oracle being in no solver), that they are
 the first from the word's top and how many doubles differ (a scalar run); a subnormal `x` less
 `+0`, which no lane reads; the casts of `+0.0` and of a double in binade 2^0, and that the port
@@ -622,6 +623,8 @@ boundaries.
 **Encoding.** `proofs/expm1_k_zero_return.smt2`, rendered by `Expm1ProofFiles`. Machine-checked
 there: both (R3) steps, `e - (+0) = e` and `v - (+0) = v`, for a zero of either sign and for
 every nonzero normal double, every binade at once; that the zero product `r*fl(e - c)` has the
-sign `r*e` has; and the hinge, H15 refuted with `c = -0`, where `e = -0` gives `e - c = +0`.
-Informal above: that `e` and `fl(r*e)` are never subnormal on the lanes (bounds on the
+sign `r*e` has; and H15 as a hinge: a double less one step of its binade is another double, so
+a nonzero `c` breaks both steps. With `c = -0` the step fails only at `e = -0`, which no lane
+has, so that check refutes (R3) as stated for every `e`, not the lemma on its lanes. Informal
+above: that `e` and `fl(r*e)` are nonzero and never subnormal on the lanes (bounds on the
 polynomial, sampled by the hinge test), H15 itself (L10), and the code's text.

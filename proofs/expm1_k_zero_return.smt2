@@ -18,11 +18,14 @@
 ;   - Section A: the sign of an exact zero (IEEE 754 6.3), z.sub, z.add and z.mul,
 ;     pinned to the JVM over every pair of signed zeros. A zero e less +0 keeps its sign,
 ;     either sign; so does a zero v; and the product r*fl(e - (+0)) has the sign r*e has.
-;     The hinge: with c = -0 the first step fails, at e = -0, where e - c is +0. So the
-;     lemma needs c = +0 and not a zero of any sign.
+;     With c = -0 the step fails at e = -0, where e - c is +0: the (R3) step as stated,
+;     for every e, needs c = +0. No lane has a zero e (below), so on the lanes this is
+;     not the lemma's hinge.
 ;   - Section B: a nonzero normal double less +0 is itself: jdouble.near admits it for
 ;     itself in any binade, and no other double of its binade or the next ones, every
 ;     normal binade at once. That is e - (+0) = e and v - (+0) = v for normal e and v.
+;     The hinge, H15, is that c is a zero: a double less one step of its binade is
+;     another double, so with a nonzero c the two steps fail.
 ;
 ; What is not machine-checked:
 ;   - That e and v = fl(r*e) are normal or zero on the lanes, never subnormal: for
@@ -35,7 +38,8 @@
 ;   - That the port computes these forms, and line 189's last operation from them: the
 ;     code's text.
 ;
-; Constants: none of Expm1's is used. The claim is about c alone, and c = -0 refutes it.
+; Constants: none of Expm1's is used. The claim is about c alone; a nonzero c refutes
+; it, and c = -0 its step at a zero e.
 ;
 ; The logic is ALL: section B's products S * M * sn are nonlinear.
 ;
@@ -109,32 +113,56 @@
 (check-sat)
 (pop 1)
 
-(echo "a double, either sign, rounds to no other double of its binade, every binade: expect unsat")
+(echo "a double, either sign, rounds to no other of its binade, binades up to 2^52: expect unsat")
 (push 1)
 (declare-const S Int) (declare-const M Int) (declare-const S2 Int) (declare-const M2 Int)
   (declare-const sn Int) (declare-const sd Int)
-(assert (and (< 0 sn) (< 0 sd) (or (= sn 1) (= sd 1)) (<= sd (* jdouble.SUB sn)) (jdouble.S.in S)
-  (jdouble.M.in M)))
+(assert (and (= sn 1) (< 0 sd) (<= sd jdouble.SUB) (jdouble.S.in S) (jdouble.M.in M)))
 (assert (and (jdouble.near (* S M sn) sd S2 M2 sn sd) (not (and (= S2 S) (= M2 M)))))
 (check-sat)
 (pop 1)
 
-(echo "nor to one of the binade above it, every binade: expect unsat")
+(echo "nor in its binade from 2^52 up: with the one before, every binade: expect unsat")
 (push 1)
 (declare-const S Int) (declare-const M Int) (declare-const S2 Int) (declare-const M2 Int)
   (declare-const sn Int) (declare-const sd Int)
-(assert (and (< 0 sn) (< 0 sd) (or (= sn 1) (= sd 1)) (<= sd (* jdouble.SUB sn)) (jdouble.S.in S)
-  (jdouble.M.in M)))
+(assert (and (= sd 1) (< 0 sn) (jdouble.S.in S) (jdouble.M.in M)))
+(assert (and (jdouble.near (* S M sn) sd S2 M2 sn sd) (not (and (= S2 S) (= M2 M)))))
+(check-sat)
+(pop 1)
+
+(echo "nor to one of the binade above it, binades up to 2^52: expect unsat")
+(push 1)
+(declare-const S Int) (declare-const M Int) (declare-const S2 Int) (declare-const M2 Int)
+  (declare-const sn Int) (declare-const sd Int)
+(assert (and (= sn 1) (< 0 sd) (<= sd jdouble.SUB) (jdouble.S.in S) (jdouble.M.in M)))
 (assert (jdouble.near (* S M sn) sd S2 M2 (* 2 sn) sd))
 (check-sat)
 (pop 1)
 
-(echo "nor to one of the binade below it, every binade above the lowest: expect unsat")
+(echo "nor to one of the binade above it, binades from 2^52 up: expect unsat")
 (push 1)
 (declare-const S Int) (declare-const M Int) (declare-const S2 Int) (declare-const M2 Int)
   (declare-const sn Int) (declare-const sd Int)
-(assert (and (< 0 sn) (< 0 sd) (or (= sn 1) (= sd 1)) (<= (* 2 sd) (* jdouble.SUB sn)) (jdouble.S.in
-  S) (jdouble.M.in M)))
+(assert (and (= sd 1) (< 0 sn) (jdouble.S.in S) (jdouble.M.in M)))
+(assert (jdouble.near (* S M sn) sd S2 M2 (* 2 sn) sd))
+(check-sat)
+(pop 1)
+
+(echo "nor to one of the binade below it, binades above the lowest up to 2^52: expect unsat")
+(push 1)
+(declare-const S Int) (declare-const M Int) (declare-const S2 Int) (declare-const M2 Int)
+  (declare-const sn Int) (declare-const sd Int)
+(assert (and (= sn 1) (< 0 sd) (<= (* 2 sd) jdouble.SUB) (jdouble.S.in S) (jdouble.M.in M)))
+(assert (jdouble.near (* S M sn) sd S2 M2 sn (* 2 sd)))
+(check-sat)
+(pop 1)
+
+(echo "nor to one of the binade below it, binades from 2^52 up: expect unsat")
+(push 1)
+(declare-const S Int) (declare-const M Int) (declare-const S2 Int) (declare-const M2 Int)
+  (declare-const sn Int) (declare-const sd Int)
+(assert (and (= sd 1) (< 0 sn) (jdouble.S.in S) (jdouble.M.in M)))
 (assert (jdouble.near (* S M sn) sd S2 M2 sn (* 2 sd)))
 (check-sat)
 (pop 1)

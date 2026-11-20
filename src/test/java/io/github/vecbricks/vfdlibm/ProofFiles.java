@@ -457,28 +457,34 @@ final class ProofFiles {
             "(declare-const sn Int) (declare-const sd Int)",
             "(assert (and (< 0 sn) (< 0 sd) (jdouble.S.in S) (jdouble.M.in M)))",
             "(assert (not (jdouble.near (* S M sn) sd S M sn sd)))"));
-    // A binade is the scale sn / sd with one side 1, as java.smt2 passes it. Any such scale
-    // down to the lowest normal binade's, 2^-1074, is admitted: more than the binades, which
-    // only makes an unsat stronger. Each neighbour is its own check, which both solvers decide
-    // at once; one disjunction of the three took cvc5 a minute.
+    // A binade is the scale sn / sd with one side 1, as java.smt2 passes it: sn = 1 for the
+    // binades up to 2^52, down to the lowest normal one's scale, 2^-1074, and sd = 1 from 2^52
+    // up. Any such scale is admitted, more than the binades, which only makes an unsat stronger.
+    // Each neighbour is its own check, and each is stated once per side of the scale: with
+    // either side free in one check cvc5 took 6 to 13 seconds on a busy machine, past
+    // dev/prove.sh's limit of 10, and it decides each half in under a second.
     String nearVars = "(declare-const S Int) (declare-const M Int) (declare-const S2 Int)"
         + " (declare-const M2 Int) (declare-const sn Int) (declare-const sd Int)";
-    String scale = "(< 0 sn) (< 0 sd) (or (= sn 1) (= sd 1))";
     String dbl = "(jdouble.S.in S) (jdouble.M.in M)";
-    String atLowest = "(<= sd (* jdouble.SUB sn))";
-    check(out, "a double, either sign, rounds to no other double of its binade, every binade",
-        "unsat", ExpProofFiles.body(nearVars,
-            "(assert (and " + scale + " " + atLowest + " " + dbl + "))",
-            "(assert (and (jdouble.near (* S M sn) sd S2 M2 sn sd)"
-                + " (not (and (= S2 S) (= M2 M)))))"));
-    check(out, "nor to one of the binade above it, every binade", "unsat", ExpProofFiles.body(
-        nearVars, "(assert (and " + scale + " " + atLowest + " " + dbl + "))",
-        "(assert (jdouble.near (* S M sn) sd S2 M2 (* 2 sn) sd))"));
-    String aboveLowest = "(<= (* 2 sd) (* jdouble.SUB sn))";
-    check(out, "nor to one of the binade below it, every binade above the lowest", "unsat",
+    String low = "(= sn 1) (< 0 sd) (<= sd jdouble.SUB)";
+    String high = "(= sd 1) (< 0 sn)";
+    String other = "(assert (and (jdouble.near (* S M sn) sd S2 M2 sn sd)"
+        + " (not (and (= S2 S) (= M2 M)))))";
+    check(out, "a double, either sign, rounds to no other of its binade, binades up to 2^52",
+        "unsat", ExpProofFiles.body(nearVars, "(assert (and " + low + " " + dbl + "))", other));
+    check(out, "nor in its binade from 2^52 up: with the one before, every binade", "unsat",
+        ExpProofFiles.body(nearVars, "(assert (and " + high + " " + dbl + "))", other));
+    String above = "(assert (jdouble.near (* S M sn) sd S2 M2 (* 2 sn) sd))";
+    check(out, "nor to one of the binade above it, binades up to 2^52", "unsat",
+        ExpProofFiles.body(nearVars, "(assert (and " + low + " " + dbl + "))", above));
+    check(out, "nor to one of the binade above it, binades from 2^52 up", "unsat",
+        ExpProofFiles.body(nearVars, "(assert (and " + high + " " + dbl + "))", above));
+    String below = "(assert (jdouble.near (* S M sn) sd S2 M2 sn (* 2 sd)))";
+    check(out, "nor to one of the binade below it, binades above the lowest up to 2^52", "unsat",
         ExpProofFiles.body(nearVars,
-            "(assert (and " + scale + " " + aboveLowest + " " + dbl + "))",
-            "(assert (jdouble.near (* S M sn) sd S2 M2 sn (* 2 sd)))"));
+            "(assert (and (= sn 1) (< 0 sd) (<= (* 2 sd) jdouble.SUB) " + dbl + "))", below));
+    check(out, "nor to one of the binade below it, binades from 2^52 up", "unsat",
+        ExpProofFiles.body(nearVars, "(assert (and " + high + " " + dbl + "))", below));
     check(out, "nor, in the lowest binade, to a subnormal", "unsat", ExpProofFiles.body(nearVars,
         "(assert (and (= sn 1) (= sd jdouble.SUB) " + dbl + "))",
         "(assert (jdouble.near.sub (* S M sn) sd S2 M2))"));

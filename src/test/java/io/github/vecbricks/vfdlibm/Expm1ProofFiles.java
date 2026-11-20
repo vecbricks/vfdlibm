@@ -44,7 +44,7 @@ final class Expm1ProofFiles {
   private static final long[] CONTROLS = {0x3fd62e42_ffffffffL, 0xbfd62e42_ffffffffL};
 
   /**
-   * s_expm1.c's lines 181-185 on the reduced {@code x}: {@code hfx}, {@code hxs}, {@code r1},
+   * s_expm1.c's lines 184-188 on the reduced {@code x}: {@code hfx}, {@code hxs}, {@code r1},
    * {@code t} and {@code e}, one rounding at a time; returns {@code hxs} and {@code e}.
    */
   private static double[] hxsAndE(ExpProofFiles.Chain c, double x) {
@@ -78,7 +78,7 @@ final class Expm1ProofFiles {
 
   /**
    * s_expm1.c reduced with the formula's {@code k = +-1} at a double of word 0x3fd62e42: lines
-   * 170-175 with that {@code k}, lines 181-185, then lines 191-196.
+   * 169-175 with that {@code k}, lines 184-188, then lines 191-196.
    */
   private static double reduced(StringBuilder out, long xBits) {
     double x0 = Double.longBitsToDouble(xBits);
@@ -109,6 +109,47 @@ final class Expm1ProofFiles {
   }
 
   /**
+   * The checks that a double of word 0x3fd62e42 is unreduced by the C's test, and that the
+   * formula's {@code fl(fl(x*invln2) + h)} rounds there into binade 2^0 with x's sign, so its
+   * cast is {@code +-1}; returns that k, which Java's own evaluation must agree with.
+   */
+  private static int formulaCast(StringBuilder out, long wb) {
+    double x = Double.longBitsToDouble(wb);
+    int s = x > 0 ? 1 : -1;
+    if (formulaK(x) != s) {
+      throw new IllegalStateException("the formula's k is not +-1 at " + hex(wb));
+    }
+    long mi = mant(Expm1.INVLN2);
+    int ji = binade(Expm1.INVLN2);
+    String at = "at " + hex(wb);
+    check(out, at + ": hx is " + hex(Expm1.HX_HALF_LN2) + ", not above it: unreduced",
+        "unsat", body("(assert (not (= (c.hx " + lit(wb) + ") " + Expm1.HX_HALF_LN2 + ")))"));
+    int jx = binade(x);
+    int jp = binade(x * Expm1.INVLN2);
+    String prodA = "(* " + lit(s * mi) + " " + mant(x) + ")";
+    String prodB = pow2(52 - ji + 52 - jx);
+    String half = "(+ P " + pow2(51 - jp) + ")";
+    String sumA = s > 0 ? half : "(- " + half + ")";
+    String sumB = pow2(52 - jp);
+    check(out, at + ": x*invln2 rounds into 2^" + jp + " only, with x's sign", "unsat", body(
+        "(declare-const S2 Int) (declare-const M2 Int)",
+        "(assert (or " + near(prodA, prodB, "S2", "M2", jp - 1),
+        "  " + near(prodA, prodB, "S2", "M2", jp + 1),
+        "  " + near(prodA, prodB, sign(-s), "M2", jp) + "))"));
+    check(out, at + ": the sum with h rounds into 2^0, x's sign: k = " + s, "unsat",
+        body("(declare-const P Int) (declare-const S2 Int) (declare-const M2 Int)",
+            "(assert " + near(prodA, prodB, sign(s), "P", jp) + ")",
+            "(assert (or " + near(sumA, sumB, "S2", "M2", -1),
+            "  " + near(sumA, sumB, "S2", "M2", 1),
+            "  " + near(sumA, sumB, sign(-s), "M2", 0) + "))"));
+    check(out, "not vacuous: " + at + " the sum rounds into 2^0", "sat", body(
+        "(declare-const P Int) (declare-const M2 Int)",
+        "(assert " + near(prodA, prodB, sign(s), "P", jp) + ")",
+        "(assert " + near(sumA, sumB, sign(s), "M2", 0) + ")"));
+    return s;
+  }
+
+  /**
    * {@code expm1_reduction.smt2}, lemma L10: the constants of the reduction are exp's (H13), the
    * unreduced lanes keep {@code x} with {@code c = +0} (step 3), and the high-word test, not the
    * formula, forces {@code k = 0} there (H14), each rounding of both computations evaluated at the
@@ -117,23 +158,24 @@ final class Expm1ProofFiles {
   static String reduction() {
     double bottom = Double.longBitsToDouble(Lanes.fromHiBits(Expm1.HX_TINY));
     double top = Double.longBitsToDouble(Lanes.fromHiBits(Expm1.HX_HALF_LN2 + 1) - 1);
-    long lnHiUp = bits(Expm1.LN2_HI) + 1;
+    long lnHiUp = bits(Expm1.LN2_HI_UP);
     var out = new StringBuilder(ProofFiles.LICENSE);
     out.append(("""
         ; expm1's reduction is exp's, and its unreduced lanes keep x with c = +0 (PROOFS.md, L10).
         ;
         ; s_expm1.c (reference/fdlibm-5.3) reduces hx > 0x%x by a near and a far form (lines
-        ; 162-175) and leaves k = 0 below it (line 180), never reading c there. The port (Expm1)
+        ; 162-175) and leaves k = 0 below it (line 181), never reading c there. The port (Expm1)
         ; computes on every lane k = (int) fl(fl(x*invln2) + h), with +0.0 as the cast's argument
         ; where hx <= 0x%x, then t = k, hi = x - fl(t*ln2_hi), lo = fl(t*ln2_lo), r = hi - lo
         ; and c = (hi - r) - lo.
         ;
         ; What is proven:
-        ;   - Section A (H13): Expm1's invln2, ln2_hi, ln2_lo, the bits of 0.5 and the two words
-        ;     of the reduction, rendered from Expm1, are Exp's, rendered from Exp, bit for bit; so
+        ;   - Section A (H13): Expm1's invln2, ln2_hi, ln2_lo, -ln2_lo, the bits of 0.5 and the
+        ;     two words of the reduction, rendered from Expm1, are Exp's invln2, ln2HI[0],
+        ;     ln2LO[0], ln2LO[1], HALF_BITS and words, rendered from Exp, bit for bit; so
         ;     exp_near_band.smt2 (L2) and exp_half_sign.smt2 (L5), rendered from Exp's, are about
-        ;     expm1's reduction too. ln2_hi one ulp up, the value the planted fault
-        ;     expm1.constantOffByOneUlp uses, is not Exp's.
+        ;     expm1's reduction too. Expm1's LN2_HI_UP, the value the planted fault
+        ;     expm1.constantOffByOneUlp uses, is ln2_hi one ulp up and is not Exp's.
         ;   - Section B (step 3 of the proof), t = +0: the sign of an exact zero (IEEE 754 6.3)
         ;     as z.sub, z.add and z.mul, pinned to the JVM over every pair of signed zeros and
         ;     over +-0 times Expm1's ln2_hi and ln2_lo; so +0 * ln2_hi and +0 * ln2_lo are +0. A
@@ -148,11 +190,12 @@ final class Expm1ProofFiles {
         ;     have the high word 0x%x, so line 162's test leaves them unreduced; there the
         ;     formula's fl(fl(x*invln2) + h) rounds into binade 2^0 with x's sign, so its cast is
         ;     +-1, not 0. Then each rounding of the C as written (k = 0, line 189's return) and of
-        ;     the C reduced with that k (lines 170-175, 181-185 and 191-196) is evaluated: for
+        ;     the C reduced with that k (lines 169-175, 184-188 and 191-196) is evaluated: for
         ;     every operation, the exact result on the two doubles Java computed before it rounds
         ;     to the double Java computed and to no other double in its binade or the next ones.
-        ;     The two results differ. At the word's top double, either sign, the same two chains
-        ;     end in one double: the witnesses are not an accident of the chains.
+        ;     The two results differ. At the word's top double, either sign, the formula's cast
+        ;     is +-1 as well and the same two chains end in one double: the witnesses are not an
+        ;     accident of the chains.
         ;
         ; What is not machine-checked:
         ;   - fl(x - (-ln2_hi)) = fl(x + ln2_hi), step 2's use of (R4): both are the rounding of
@@ -208,7 +251,8 @@ final class Expm1ProofFiles {
       check(out, "expm1's " + c.name() + ", " + c.value() + ", is exp's " + c.exps(), "unsat",
           body("(assert (not (= " + lit(c.expm1()) + " " + lit(c.exp()) + ")))"));
     }
-    check(out, "refuted: ln2_hi one ulp up, " + hex(lnHiUp) + ", is not exp's ln2HI[0]", "sat",
+    check(out, "refuted: LN2_HI_UP, " + hex(lnHiUp) + ", the fault's, is not exp's ln2HI[0]",
+        "sat",
         body("(assert (not (= " + lit(lnHiUp) + " " + lit(bits(Exp.LN2HI_0)) + ")))"));
     check(out, "that value is ln2_hi with M one more, same sign and binade", "unsat", body(
         "(assert (not (and (= (jdouble.fromBits.M " + lit(lnHiUp) + ") (+ 1 (jdouble.fromBits.M "
@@ -284,53 +328,23 @@ final class Expm1ProofFiles {
 
     out.append("""
 
-        ; Section C: H14. The C's hx, its high word of |x| (lines 139-142).
+        ; Section C: H14. The C's hx, its high word of |x| (lines 140-143).
         (define-fun c.hx ((b Int)) Int (jint.and.low (l2i (jlong.shr b 32)) 2147483648))
         """);
-    long mi = mant(Expm1.INVLN2);
-    int ji = binade(Expm1.INVLN2);
     for (long wb : WITNESSES) {
-      double x = Double.longBitsToDouble(wb);
-      int s = x > 0 ? 1 : -1;
-      if (formulaK(x) != s) {
-        throw new IllegalStateException("the formula's k is not +-1 at " + hex(wb));
-      }
-      String at = "at " + hex(wb);
       out.append("\n; The witness " + hex(wb) + ".\n");
-      check(out, at + ": hx is " + hex(Expm1.HX_HALF_LN2) + ", not above it: unreduced",
-          "unsat", body("(assert (not (= (c.hx " + lit(wb) + ") " + Expm1.HX_HALF_LN2 + ")))"));
-      int jx = binade(x);
-      int jp = binade(x * Expm1.INVLN2);
-      String prodA = "(* " + lit(s * mi) + " " + mant(x) + ")";
-      String prodB = pow2(52 - ji + 52 - jx);
-      String half = "(+ P " + pow2(51 - jp) + ")";
-      String sumA = s > 0 ? half : "(- " + half + ")";
-      String sumB = pow2(52 - jp);
-      check(out, at + ": x*invln2 rounds into 2^" + jp + " only, with x's sign", "unsat", body(
-          "(declare-const S2 Int) (declare-const M2 Int)",
-          "(assert (or " + near(prodA, prodB, "S2", "M2", jp - 1),
-          "  " + near(prodA, prodB, "S2", "M2", jp + 1),
-          "  " + near(prodA, prodB, sign(-s), "M2", jp) + "))"));
-      check(out, at + ": the sum with h rounds into 2^0, x's sign: k = " + s, "unsat",
-          body("(declare-const P Int) (declare-const S2 Int) (declare-const M2 Int)",
-              "(assert " + near(prodA, prodB, sign(s), "P", jp) + ")",
-              "(assert (or " + near(sumA, sumB, "S2", "M2", -1),
-              "  " + near(sumA, sumB, "S2", "M2", 1),
-              "  " + near(sumA, sumB, sign(-s), "M2", 0) + "))"));
-      check(out, "not vacuous: " + at + " the sum rounds into 2^0", "sat", body(
-          "(declare-const P Int) (declare-const M2 Int)",
-          "(assert " + near(prodA, prodB, sign(s), "P", jp) + ")",
-          "(assert " + near(sumA, sumB, sign(s), "M2", 0) + ")"));
+      int k = formulaCast(out, wb);
       long written = bits(asWritten(out, wb));
       long free = bits(reduced(out, wb));
       if (written == free) {
         throw new IllegalStateException("not a witness: " + hex(wb));
       }
-      check(out, at + ": k = 0 gives " + hex(written) + ", k = " + s + " another",
+      check(out, "at " + hex(wb) + ": k = 0 gives " + hex(written) + ", k = " + k + " another",
           "unsat", body("(assert (= " + lit(written) + " " + lit(free) + "))"));
     }
     for (long wb : CONTROLS) {
       out.append("\n; The control " + hex(wb) + ", the word's top double.\n");
+      formulaCast(out, wb);
       long written = bits(asWritten(out, wb));
       long free = bits(reduced(out, wb));
       if (written != free) {
@@ -365,11 +379,14 @@ final class Expm1ProofFiles {
         ;   - Section A: the sign of an exact zero (IEEE 754 6.3), z.sub, z.add and z.mul,
         ;     pinned to the JVM over every pair of signed zeros. A zero e less +0 keeps its sign,
         ;     either sign; so does a zero v; and the product r*fl(e - (+0)) has the sign r*e has.
-        ;     The hinge: with c = -0 the first step fails, at e = -0, where e - c is +0. So the
-        ;     lemma needs c = +0 and not a zero of any sign.
+        ;     With c = -0 the step fails at e = -0, where e - c is +0: the (R3) step as stated,
+        ;     for every e, needs c = +0. No lane has a zero e (below), so on the lanes this is
+        ;     not the lemma's hinge.
         ;   - Section B: a nonzero normal double less +0 is itself: jdouble.near admits it for
         ;     itself in any binade, and no other double of its binade or the next ones, every
         ;     normal binade at once. That is e - (+0) = e and v - (+0) = v for normal e and v.
+        ;     The hinge, H15, is that c is a zero: a double less one step of its binade is
+        ;     another double, so with a nonzero c the two steps fail.
         ;
         ; What is not machine-checked:
         ;   - That e and v = fl(r*e) are normal or zero on the lanes, never subnormal: for
@@ -382,7 +399,8 @@ final class Expm1ProofFiles {
         ;   - That the port computes these forms, and line 189's last operation from them: the
         ;     code's text.
         ;
-        ; Constants: none of Expm1's is used. The claim is about c alone, and c = -0 refutes it.
+        ; Constants: none of Expm1's is used. The claim is about c alone; a nonzero c refutes
+        ; it, and c = -0 its step at a zero e.
         ;
         ; The logic is ALL: section B's products S * M * sn are nonlinear.
         """);

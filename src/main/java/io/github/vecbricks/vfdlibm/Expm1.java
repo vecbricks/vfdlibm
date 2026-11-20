@@ -126,7 +126,7 @@ final class Expm1 {
   static final String THRESHOLD_MOVED = "expm1.thresholdMoved";
   static final String GUARD_MISSES_FILTER = "expm1.guardMissesFilter";
   /** ln2_hi one ulp up, for {@link #CONSTANT_OFF_BY_ONE_ULP}. */
-  private static final double LN2_HI_UP = Double.longBitsToDouble(0x3fe62e42_fee00001L);
+  static final double LN2_HI_UP = Double.longBitsToDouble(0x3fe62e42_fee00001L);
   // Read once into constants, so the body holds no call and an unplanted fault folds away.
   /** Drops the correction {@code c} from {@code e = (x*(e-c)-c)}. */
   private static final boolean DROPPING_CORRECTION = Faults.is(DROP_CORRECTION);

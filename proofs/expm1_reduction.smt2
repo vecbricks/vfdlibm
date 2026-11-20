@@ -8,17 +8,18 @@
 ; expm1's reduction is exp's, and its unreduced lanes keep x with c = +0 (PROOFS.md, L10).
 ;
 ; s_expm1.c (reference/fdlibm-5.3) reduces hx > 0x3fd62e42 by a near and a far form (lines
-; 162-175) and leaves k = 0 below it (line 180), never reading c there. The port (Expm1)
+; 162-175) and leaves k = 0 below it (line 181), never reading c there. The port (Expm1)
 ; computes on every lane k = (int) fl(fl(x*invln2) + h), with +0.0 as the cast's argument
 ; where hx <= 0x3fd62e42, then t = k, hi = x - fl(t*ln2_hi), lo = fl(t*ln2_lo), r = hi - lo
 ; and c = (hi - r) - lo.
 ;
 ; What is proven:
-;   - Section A (H13): Expm1's invln2, ln2_hi, ln2_lo, the bits of 0.5 and the two words
-;     of the reduction, rendered from Expm1, are Exp's, rendered from Exp, bit for bit; so
+;   - Section A (H13): Expm1's invln2, ln2_hi, ln2_lo, -ln2_lo, the bits of 0.5 and the
+;     two words of the reduction, rendered from Expm1, are Exp's invln2, ln2HI[0],
+;     ln2LO[0], ln2LO[1], HALF_BITS and words, rendered from Exp, bit for bit; so
 ;     exp_near_band.smt2 (L2) and exp_half_sign.smt2 (L5), rendered from Exp's, are about
-;     expm1's reduction too. ln2_hi one ulp up, the value the planted fault
-;     expm1.constantOffByOneUlp uses, is not Exp's.
+;     expm1's reduction too. Expm1's LN2_HI_UP, the value the planted fault
+;     expm1.constantOffByOneUlp uses, is ln2_hi one ulp up and is not Exp's.
 ;   - Section B (step 3 of the proof), t = +0: the sign of an exact zero (IEEE 754 6.3)
 ;     as z.sub, z.add and z.mul, pinned to the JVM over every pair of signed zeros and
 ;     over +-0 times Expm1's ln2_hi and ln2_lo; so +0 * ln2_hi and +0 * ln2_lo are +0. A
@@ -33,11 +34,12 @@
 ;     have the high word 0x3fd62e42, so line 162's test leaves them unreduced; there the
 ;     formula's fl(fl(x*invln2) + h) rounds into binade 2^0 with x's sign, so its cast is
 ;     +-1, not 0. Then each rounding of the C as written (k = 0, line 189's return) and of
-;     the C reduced with that k (lines 170-175, 181-185 and 191-196) is evaluated: for
+;     the C reduced with that k (lines 169-175, 184-188 and 191-196) is evaluated: for
 ;     every operation, the exact result on the two doubles Java computed before it rounds
 ;     to the double Java computed and to no other double in its binade or the next ones.
-;     The two results differ. At the word's top double, either sign, the same two chains
-;     end in one double: the witnesses are not an accident of the chains.
+;     The two results differ. At the word's top double, either sign, the formula's cast
+;     is +-1 as well and the same two chains end in one double: the witnesses are not an
+;     accident of the chains.
 ;
 ; What is not machine-checked:
 ;   - fl(x - (-ln2_hi)) = fl(x + ln2_hi), step 2's use of (R4): both are the rounding of
@@ -117,7 +119,7 @@
 (check-sat)
 (pop 1)
 
-(echo "refuted: ln2_hi one ulp up, 0x3fe62e42_fee00001, is not exp's ln2HI[0]: expect sat")
+(echo "refuted: LN2_HI_UP, 0x3fe62e42_fee00001, the fault's, is not exp's ln2HI[0]: expect sat")
 (push 1)
 (assert (not (= 4604418534311723009 4604418534311723008)))
 (check-sat)
@@ -224,32 +226,56 @@
 (check-sat)
 (pop 1)
 
-(echo "a double, either sign, rounds to no other double of its binade, every binade: expect unsat")
+(echo "a double, either sign, rounds to no other of its binade, binades up to 2^52: expect unsat")
 (push 1)
 (declare-const S Int) (declare-const M Int) (declare-const S2 Int) (declare-const M2 Int)
   (declare-const sn Int) (declare-const sd Int)
-(assert (and (< 0 sn) (< 0 sd) (or (= sn 1) (= sd 1)) (<= sd (* jdouble.SUB sn)) (jdouble.S.in S)
-  (jdouble.M.in M)))
+(assert (and (= sn 1) (< 0 sd) (<= sd jdouble.SUB) (jdouble.S.in S) (jdouble.M.in M)))
 (assert (and (jdouble.near (* S M sn) sd S2 M2 sn sd) (not (and (= S2 S) (= M2 M)))))
 (check-sat)
 (pop 1)
 
-(echo "nor to one of the binade above it, every binade: expect unsat")
+(echo "nor in its binade from 2^52 up: with the one before, every binade: expect unsat")
 (push 1)
 (declare-const S Int) (declare-const M Int) (declare-const S2 Int) (declare-const M2 Int)
   (declare-const sn Int) (declare-const sd Int)
-(assert (and (< 0 sn) (< 0 sd) (or (= sn 1) (= sd 1)) (<= sd (* jdouble.SUB sn)) (jdouble.S.in S)
-  (jdouble.M.in M)))
+(assert (and (= sd 1) (< 0 sn) (jdouble.S.in S) (jdouble.M.in M)))
+(assert (and (jdouble.near (* S M sn) sd S2 M2 sn sd) (not (and (= S2 S) (= M2 M)))))
+(check-sat)
+(pop 1)
+
+(echo "nor to one of the binade above it, binades up to 2^52: expect unsat")
+(push 1)
+(declare-const S Int) (declare-const M Int) (declare-const S2 Int) (declare-const M2 Int)
+  (declare-const sn Int) (declare-const sd Int)
+(assert (and (= sn 1) (< 0 sd) (<= sd jdouble.SUB) (jdouble.S.in S) (jdouble.M.in M)))
 (assert (jdouble.near (* S M sn) sd S2 M2 (* 2 sn) sd))
 (check-sat)
 (pop 1)
 
-(echo "nor to one of the binade below it, every binade above the lowest: expect unsat")
+(echo "nor to one of the binade above it, binades from 2^52 up: expect unsat")
 (push 1)
 (declare-const S Int) (declare-const M Int) (declare-const S2 Int) (declare-const M2 Int)
   (declare-const sn Int) (declare-const sd Int)
-(assert (and (< 0 sn) (< 0 sd) (or (= sn 1) (= sd 1)) (<= (* 2 sd) (* jdouble.SUB sn)) (jdouble.S.in
-  S) (jdouble.M.in M)))
+(assert (and (= sd 1) (< 0 sn) (jdouble.S.in S) (jdouble.M.in M)))
+(assert (jdouble.near (* S M sn) sd S2 M2 (* 2 sn) sd))
+(check-sat)
+(pop 1)
+
+(echo "nor to one of the binade below it, binades above the lowest up to 2^52: expect unsat")
+(push 1)
+(declare-const S Int) (declare-const M Int) (declare-const S2 Int) (declare-const M2 Int)
+  (declare-const sn Int) (declare-const sd Int)
+(assert (and (= sn 1) (< 0 sd) (<= (* 2 sd) jdouble.SUB) (jdouble.S.in S) (jdouble.M.in M)))
+(assert (jdouble.near (* S M sn) sd S2 M2 sn (* 2 sd)))
+(check-sat)
+(pop 1)
+
+(echo "nor to one of the binade below it, binades from 2^52 up: expect unsat")
+(push 1)
+(declare-const S Int) (declare-const M Int) (declare-const S2 Int) (declare-const M2 Int)
+  (declare-const sn Int) (declare-const sd Int)
+(assert (and (= sd 1) (< 0 sn) (jdouble.S.in S) (jdouble.M.in M)))
 (assert (jdouble.near (* S M sn) sd S2 M2 sn (* 2 sd)))
 (check-sat)
 (pop 1)
@@ -317,7 +343,7 @@
 (check-sat)
 (pop 1)
 
-; Section C: H14. The C's hx, its high word of |x| (lines 139-142).
+; Section C: H14. The C's hx, its high word of |x| (lines 140-143).
 (define-fun c.hx ((b Int)) Int (jint.and.low (l2i (jlong.shr b 32)) 2147483648))
 
 ; The witness 0x3fd62e42_ffffffec.
@@ -2072,6 +2098,44 @@
 
 ; The control 0x3fd62e42_ffffffff, the word's top double.
 
+(echo "at 0x3fd62e42_ffffffff: hx is 0x3fd62e42, not above it: unreduced: expect unsat")
+(push 1)
+(assert (not (= (c.hx 4599914934703226879) 1071001154)))
+(check-sat)
+(pop 1)
+
+(echo "at 0x3fd62e42_ffffffff: x*invln2 rounds into 2^-1 only, with x's sign: expect unsat")
+(push 1)
+(declare-const S2 Int) (declare-const M2 Int)
+(assert (or (jdouble.near (* 6497320848556798 6243314785320959) 81129638414606681695789005144064 S2
+  M2 1 18014398509481984)
+  (jdouble.near (* 6497320848556798 6243314785320959) 81129638414606681695789005144064 S2 M2 1
+    4503599627370496)
+  (jdouble.near (* 6497320848556798 6243314785320959) 81129638414606681695789005144064 (- 1) M2 1
+    9007199254740992)))
+(check-sat)
+(pop 1)
+
+(echo "at 0x3fd62e42_ffffffff: the sum with h rounds into 2^0, x's sign: k = 1: expect unsat")
+(push 1)
+(declare-const P Int) (declare-const S2 Int) (declare-const M2 Int)
+(assert (jdouble.near (* 6497320848556798 6243314785320959) 81129638414606681695789005144064 1 P 1
+  9007199254740992))
+(assert (or (jdouble.near (+ P 4503599627370496) 9007199254740992 S2 M2 1 9007199254740992)
+  (jdouble.near (+ P 4503599627370496) 9007199254740992 S2 M2 1 2251799813685248)
+  (jdouble.near (+ P 4503599627370496) 9007199254740992 (- 1) M2 1 4503599627370496)))
+(check-sat)
+(pop 1)
+
+(echo "not vacuous: at 0x3fd62e42_ffffffff the sum rounds into 2^0: expect sat")
+(push 1)
+(declare-const P Int) (declare-const M2 Int)
+(assert (jdouble.near (* 6497320848556798 6243314785320959) 81129638414606681695789005144064 1 P 1
+  9007199254740992))
+(assert (jdouble.near (+ P 4503599627370496) 9007199254740992 1 M2 1 4503599627370496))
+(check-sat)
+(pop 1)
+
 (echo "k = 0 at 0x3fd62e42_ffffffff: hfx = 0.5*x = 0x3fc62e42_ffffffff: expect unsat")
 (push 1)
 (declare-const S2 Int) (declare-const M2 Int)
@@ -2907,6 +2971,44 @@
 (pop 1)
 
 ; The control 0xbfd62e42_ffffffff, the word's top double.
+
+(echo "at 0xbfd62e42_ffffffff: hx is 0x3fd62e42, not above it: unreduced: expect unsat")
+(push 1)
+(assert (not (= (c.hx (- 4623457102151548929)) 1071001154)))
+(check-sat)
+(pop 1)
+
+(echo "at 0xbfd62e42_ffffffff: x*invln2 rounds into 2^-1 only, with x's sign: expect unsat")
+(push 1)
+(declare-const S2 Int) (declare-const M2 Int)
+(assert (or (jdouble.near (* (- 6497320848556798) 6243314785320959) 81129638414606681695789005144064
+  S2 M2 1 18014398509481984)
+  (jdouble.near (* (- 6497320848556798) 6243314785320959) 81129638414606681695789005144064 S2 M2 1
+    4503599627370496)
+  (jdouble.near (* (- 6497320848556798) 6243314785320959) 81129638414606681695789005144064 1 M2 1
+    9007199254740992)))
+(check-sat)
+(pop 1)
+
+(echo "at 0xbfd62e42_ffffffff: the sum with h rounds into 2^0, x's sign: k = -1: expect unsat")
+(push 1)
+(declare-const P Int) (declare-const S2 Int) (declare-const M2 Int)
+(assert (jdouble.near (* (- 6497320848556798) 6243314785320959) 81129638414606681695789005144064 (-
+  1) P 1 9007199254740992))
+(assert (or (jdouble.near (- (+ P 4503599627370496)) 9007199254740992 S2 M2 1 9007199254740992)
+  (jdouble.near (- (+ P 4503599627370496)) 9007199254740992 S2 M2 1 2251799813685248)
+  (jdouble.near (- (+ P 4503599627370496)) 9007199254740992 1 M2 1 4503599627370496)))
+(check-sat)
+(pop 1)
+
+(echo "not vacuous: at 0xbfd62e42_ffffffff the sum rounds into 2^0: expect sat")
+(push 1)
+(declare-const P Int) (declare-const M2 Int)
+(assert (jdouble.near (* (- 6497320848556798) 6243314785320959) 81129638414606681695789005144064 (-
+  1) P 1 9007199254740992))
+(assert (jdouble.near (- (+ P 4503599627370496)) 9007199254740992 (- 1) M2 1 4503599627370496))
+(check-sat)
+(pop 1)
 
 (echo "k = 0 at 0xbfd62e42_ffffffff: hfx = 0.5*x = 0xbfc62e42_ffffffff: expect unsat")
 (push 1)
