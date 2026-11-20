@@ -571,9 +571,9 @@ a settled question.
   species of the same width), and fuzzes both species once per function, in shard 0's job. Its
   time was not measured when it was sized; it is now, at 105 minutes a night for its 20 jobs
   by the median ("What the logs say", below). It was sized by the laptop's x86 128-bit time as
-  an upper bound: that
-  path runs per lane, where Arm lowers the masks natively, and the bound assumes a Neoverse N2
-  core is not slower than a Zen 5 core with its SMT sibling, which nobody has measured. Under it
+  an upper bound: that path runs per lane, where Arm lowers the masks natively, and the bound
+  assumes a Neoverse N2 core is not slower than a Zen 5 core with its SMT sibling, which
+  nobody has measured. Under it
   a log1p stripe sweeps for 26 minutes and an exp or log stripe for 12, plus the slice (under 2)
   and 8 minutes of fuzz in shard 0 (30 at the 900-second cap), against a 120-minute timeout.
 - **The projection, in runner-hours a night (the first nights' logs, which print each species'

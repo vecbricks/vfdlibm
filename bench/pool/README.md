@@ -32,7 +32,7 @@ when the logs are gone.
   how many calls are left, which is free, and stops when they would leave fewer than 2,000
   (`--reserve`). It stops, too, when a whole batch got no log. A fetch that stopped
   writes no file and says when to run it again; the same command then goes on from the cache.
-  `--out` and `--cost` are each written whole or not at all, which a shell's `>` is not: it
+  `--out` and `--cost` are written together or not at all, which a shell's `>` is not: it
   empties the file before `fetch` starts.
 - It takes the first of each of the probe's lines in a job's log. The step runs before the
   build, and a later step prints the CPU again.
@@ -132,10 +132,9 @@ What the 17 nights say:
   machine, 6.6 to 13.2 at 256 bits there, and 7.2 to 13.4 at 128 bits on Arm. These are what
   the nightly's jobs took, to size the night with; they say nothing about one body being
   faster than another.
-- An x86 draw with 512-bit vectors is not one machine to size by. The fourth table gives exp
-  at 512 bits 3.5 to 7.1 minutes over 22 runs, against 9.2 to 9.6 at 256 bits on the 256-bit
-  machines. `--by-cpu` shows which CPU reads which, and keeps the EPYC 9V74's draws without
-  AVX-512 apart from those with it.
+- An x86 draw is not one machine to size by: the fourth table's ranges for one species widen
+  with the draws. `--by-cpu` shows which CPU gave which, and keeps the EPYC 9V74's draws
+  without AVX-512 apart from those with it.
 
 ## Adding nights
 

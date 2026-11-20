@@ -152,13 +152,16 @@ def cell(value):
     return text.replace("\t", " ").encode("ascii", "replace").decode("ascii")
 
 
-def write_whole(path, header, rows):
-    """Writes a file of rows at once, beside its place and then into it, so that a fetch that
-    fails leaves the file that was there."""
-    with open(path + ".part", "w", encoding="ascii") as out:
-        out.write("\t".join(header) + "\n")
-        out.writelines("\t".join(cells) + "\n" for cells in rows)
-    os.replace(path + ".part", path)
+def write_all(files):
+    """Writes files of rows, each as (path, header, rows), all beside their places first and
+    then into them, so that a fetch that fails while writing leaves the files that were
+    there, and not one new file beside an old one."""
+    for path, header, rows in files:
+        with open(path + ".part", "w", encoding="ascii") as out:
+            out.write("\t".join(header) + "\n")
+            out.writelines("\t".join(cells) + "\n" for cells in rows)
+    for path, _, _ in files:
+        os.replace(path + ".part", path)
 
 
 def calls_left(repo):
@@ -366,20 +369,21 @@ def fetch(args):
                  " jobs' rows without them."
                  % (unlogged, len(todo), FIRST_FAILURE[0] if FIRST_FAILURE else "none said"))
     rows = sorted(row(date, run, job, f or {}) for (date, run, job), f in zip(todo, found))
-    for path in (args.cost, args.out):
-        # Both files or neither: a path that cannot be written is found before either is.
-        if path and not os.access(os.path.dirname(os.path.abspath(path)), os.W_OK):
-            sys.exit("%s cannot be written; no file was written" % path)
+    files = []
     if args.cost:
         read_of = {job["databaseId"]: f or {} for (_, _, job), f in zip(todo, found)}
         every.sort(key=lambda t: (t[0], t[1], t[2]["databaseId"]))
-        write_whole(args.cost, COST_COLUMNS,
-                    [cells for date, run, job, info in every
-                     for cells in cost_rows(date, run, info, job,
-                                            read_of.get(job["databaseId"], {}))])
+        files.append((args.cost, COST_COLUMNS,
+                      [cells for date, run, job, info in every
+                       for cells in cost_rows(date, run, info, job,
+                                              read_of.get(job["databaseId"], {}))]))
     if args.out:
-        write_whole(args.out, COLUMNS, rows)
-    else:
+        files.append((args.out, COLUMNS, rows))
+    try:
+        write_all(files)
+    except OSError as error:
+        sys.exit("a file could not be written (%s); none was changed" % error)
+    if not args.out:
         print("\t".join(COLUMNS))
         for cells in rows:
             print("\t".join(cells))
@@ -495,9 +499,10 @@ def machine(r):
     size = re.search(r"MaxVectorSize=(\d+)", r["jvm"])
     if not size:
         return "-"
-    # The JVM line says SVE on Arm and AVX on x86; with neither, no model name (Arm has none in
-    # /proc/cpuinfo) says Arm, and a row with a model name is x86.
-    arm = "UseSVE" in r["jvm"] or ("UseAVX" not in r["jvm"] and r["cpu"] == "-")
+    # The JVM line says SVE on Arm and AVX on x86; a row with neither is not guessed at.
+    if "UseSVE" not in r["jvm"] and "UseAVX" not in r["jvm"]:
+        return "-"
+    arm = "UseSVE" in r["jvm"]
     return "%s, %d bits" % ("Arm" if arm else "x86", 8 * int(size.group(1)))
 
 
