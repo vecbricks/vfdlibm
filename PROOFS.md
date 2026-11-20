@@ -583,9 +583,9 @@ every width and `SPECIES_MAX`.
 
 **Encoding.** `proofs/expm1_reduction.smt2`, rendered from `Expm1`'s constants and words by
 `Expm1ProofFiles`. Machine-checked there: H13, each of `Expm1`'s five values and two words
-against `Exp`'s as ground terms, and `Expm1.LN2_HI_UP`, the planted fault's value, is not
-`Exp`'s (section A), so the machine-checked parts of L2 (`proofs/exp_near_band.smt2`) and L5
-(`proofs/exp_half_sign.smt2`), rendered from `Exp`, check steps 1 and 2 for expm1 as they stand;
+against `Exp`'s as ground terms (section A), so the machine-checked parts of L2
+(`proofs/exp_near_band.smt2`) and L5 (`proofs/exp_half_sign.smt2`), rendered from `Exp`, check
+steps 1 and 2 for expm1 as they stand;
 step 3 (section B): the zero products, `x - (+0) = x` for a zero `x` of either sign and for
 every nonzero normal double, every binade at once, and `c = +0`; with `t = -0` the step fails
 at `x = -0` alone, a lane whose `r` nothing reads, so that check refutes the step as stated for

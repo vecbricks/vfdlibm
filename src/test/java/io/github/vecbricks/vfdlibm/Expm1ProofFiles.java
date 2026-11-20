@@ -197,7 +197,6 @@ final class Expm1ProofFiles {
   static String reduction() {
     double bottom = Double.longBitsToDouble(Lanes.fromHiBits(Expm1.HX_TINY));
     double top = Double.longBitsToDouble(Lanes.fromHiBits(Expm1.HX_HALF_LN2 + 1) - 1);
-    long lnHiUp = bits(Expm1.LN2_HI_UP);
     var out = new StringBuilder(ProofFiles.LICENSE);
     out.append(("""
         ; expm1's reduction is exp's, and its unreduced lanes keep x with c = +0 (PROOFS.md, L10).
@@ -213,8 +212,8 @@ final class Expm1ProofFiles {
         ;     two words of the reduction, rendered from Expm1, are Exp's invln2, ln2HI[0],
         ;     ln2LO[0], ln2LO[1], HALF_BITS and words, rendered from Exp, bit for bit; so
         ;     exp_near_band.smt2 (L2) and exp_half_sign.smt2 (L5), rendered from Exp's, are about
-        ;     expm1's reduction too. Expm1's LN2_HI_UP, the value the planted fault
-        ;     expm1.constantOffByOneUlp uses, is ln2_hi one ulp up and is not Exp's.
+        ;     expm1's reduction too. The checks are ground: a constant that moves on either
+        ;     side fails its own.
         ;   - Section B (step 3 of the proof), t = +0: the sign of an exact zero (IEEE 754 6.3)
         ;     as z.sub, z.add and z.mul, pinned to the JVM over every pair of signed zeros and
         ;     over +-0 times Expm1's ln2_hi and ln2_lo; so +0 * ln2_hi and +0 * ln2_lo are +0. A
@@ -254,7 +253,7 @@ final class Expm1ProofFiles {
         ;
         ; Constants. Section A compares the rendered constants as ground terms, so a constant
         ; that moves on one side fails its check; it is as strong as ProofsTest's
-        ; l10ReductionIsExps, and refutes only the planted fault's LN2_HI_UP. No claim of
+        ; l10ReductionIsExps, and no changed constant is written out to be refuted. No claim of
         ; section B is tight to ln2_hi or ln2_lo beyond their sign and finiteness. Section C's
         ; cast holds for a range of invln2 (its margin is that of exp_zero_reduction.smt2's
         ; section C), and its chains evaluate whatever Q1..Q5 Expm1 holds and compare the
@@ -265,9 +264,12 @@ final class Expm1ProofFiles {
         ; the C: while rendering, the k = 0 chain's result is held to StrictMath.expm1 and the
         ; free k's to Expm1Test.cExpm1(x, true), which the scalar tests hold to the oracle.
         ;
-        ; The logic is ALL: section B's products S * M * sn are nonlinear. Section C's checks
-        ; carry their own non-vacuity: each asserts that the named double is not admitted, or
-        ; another one is, so a jdouble.near that admitted nothing would make it sat.
+        ; The logic is ALL: section B's products S * M * sn are nonlinear. Section C's chain
+        ; checks carry their own non-vacuity: each asserts that the named double is not
+        ; admitted, or another one is, so a jdouble.near that admitted nothing would make it
+        ; sat. The two checks of the cast at each double list only the binades and the sign it
+        ; does not round into; the sat check after them, that the sum rounds into 2^0, is
+        ; theirs.
         """).formatted(Expm1.HX_HALF_LN2, Expm1.HX_HALF_LN2, hex(bits(bottom)), hex(bits(top)),
             hex(WITNESSES[0]), hex(WITNESSES[1]), Expm1.HX_HALF_LN2, Expm1.HX_TINY));
     out.append(ProofFiles.rendered("ALL"));
@@ -296,16 +298,6 @@ final class Expm1ProofFiles {
       check(out, "expm1's " + c.name() + ", " + c.value() + ", is exp's " + c.exps(), "unsat",
           body("(assert (not (= " + lit(c.expm1()) + " " + lit(c.exp()) + ")))"));
     }
-    check(out, "refuted: LN2_HI_UP, " + hex(lnHiUp) + ", the fault's, is not exp's ln2HI[0]",
-        "sat",
-        body("(assert (not (= " + lit(lnHiUp) + " " + lit(bits(Exp.LN2HI_0)) + ")))"));
-    check(out, "that value is ln2_hi with M one more, same sign and binade", "unsat", body(
-        "(assert (not (and (= (jdouble.fromBits.M " + lit(lnHiUp) + ") (+ 1 (jdouble.fromBits.M "
-            + lit(bits(Expm1.LN2_HI)) + ")))",
-        "  (= (jdouble.fromBits.E " + lit(lnHiUp) + ") (jdouble.fromBits.E "
-            + lit(bits(Expm1.LN2_HI)) + "))",
-        "  (= (jdouble.fromBits.S " + lit(lnHiUp) + ") 1))))"));
-
     out.append("""
 
         ; Section B: step 3, with t = +0. The sign of an exact zero, true for -0. z.sub sx sy is
@@ -318,11 +310,11 @@ final class Expm1ProofFiles {
         ProofFiles.zeroSignEquations(Expm1.LN2_HI, Expm1.LN2_LO));
     long hiBits = bits(Expm1.LN2_HI);
     long loBits = bits(Expm1.LN2_LO);
-    check(out, "ln2_hi and ln2_lo are positive and finite, as the zero product needs", "unsat",
-        body("(assert (not (and (= (jdouble.fromBits.S " + lit(hiBits) + ") 1)"
-                + " (< (jdouble.fromBits.E " + lit(hiBits) + ") 972)",
+    check(out, "ln2_hi and ln2_lo are positive, normal and finite, as the zero product needs",
+        "unsat", body("(assert (not (and (= (jdouble.fromBits.S " + lit(hiBits) + ") 1)"
+                + " (< (- 1075) (jdouble.fromBits.E " + lit(hiBits) + ") 972)",
             "  (= (jdouble.fromBits.S " + lit(loBits) + ") 1)"
-                + " (< (jdouble.fromBits.E " + lit(loBits) + ") 972))))"));
+                + " (< (- 1075) (jdouble.fromBits.E " + lit(loBits) + ") 972))))"));
     check(out, "t = +0: t*ln2_hi and t*ln2_lo are +0", "unsat", body(
         "(assert (z.mul false false))"));
     out.append("""

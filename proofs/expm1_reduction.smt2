@@ -18,8 +18,8 @@
 ;     two words of the reduction, rendered from Expm1, are Exp's invln2, ln2HI[0],
 ;     ln2LO[0], ln2LO[1], HALF_BITS and words, rendered from Exp, bit for bit; so
 ;     exp_near_band.smt2 (L2) and exp_half_sign.smt2 (L5), rendered from Exp's, are about
-;     expm1's reduction too. Expm1's LN2_HI_UP, the value the planted fault
-;     expm1.constantOffByOneUlp uses, is ln2_hi one ulp up and is not Exp's.
+;     expm1's reduction too. The checks are ground: a constant that moves on either
+;     side fails its own.
 ;   - Section B (step 3 of the proof), t = +0: the sign of an exact zero (IEEE 754 6.3)
 ;     as z.sub, z.add and z.mul, pinned to the JVM over every pair of signed zeros and
 ;     over +-0 times Expm1's ln2_hi and ln2_lo; so +0 * ln2_hi and +0 * ln2_lo are +0. A
@@ -59,7 +59,7 @@
 ;
 ; Constants. Section A compares the rendered constants as ground terms, so a constant
 ; that moves on one side fails its check; it is as strong as ProofsTest's
-; l10ReductionIsExps, and refutes only the planted fault's LN2_HI_UP. No claim of
+; l10ReductionIsExps, and no changed constant is written out to be refuted. No claim of
 ; section B is tight to ln2_hi or ln2_lo beyond their sign and finiteness. Section C's
 ; cast holds for a range of invln2 (its margin is that of exp_zero_reduction.smt2's
 ; section C), and its chains evaluate whatever Q1..Q5 Expm1 holds and compare the
@@ -70,9 +70,12 @@
 ; the C: while rendering, the k = 0 chain's result is held to StrictMath.expm1 and the
 ; free k's to Expm1Test.cExpm1(x, true), which the scalar tests hold to the oracle.
 ;
-; The logic is ALL: section B's products S * M * sn are nonlinear. Section C's checks
-; carry their own non-vacuity: each asserts that the named double is not admitted, or
-; another one is, so a jdouble.near that admitted nothing would make it sat.
+; The logic is ALL: section B's products S * M * sn are nonlinear. Section C's chain
+; checks carry their own non-vacuity: each asserts that the named double is not
+; admitted, or another one is, so a jdouble.near that admitted nothing would make it
+; sat. The two checks of the cast at each double list only the binades and the sign it
+; does not round into; the sat check after them, that the sum rounds into 2^0, is
+; theirs.
 ;
 ; Rendered by ProofFiles (src/test/java). ProofFilesTest fails when this file differs from
 ; its rendering, and mvn -q test -Dtest=ProofFilesTest -Dvfdlibm.proofs.regen=true
@@ -125,21 +128,6 @@
 (check-sat)
 (pop 1)
 
-(echo "refuted: LN2_HI_UP, 0x3fe62e42_fee00001, the fault's, is not exp's ln2HI[0]: expect sat")
-(push 1)
-(assert (not (= 4604418534311723009 4604418534311723008)))
-(check-sat)
-(pop 1)
-
-(echo "that value is ln2_hi with M one more, same sign and binade: expect unsat")
-(push 1)
-(assert (not (and (= (jdouble.fromBits.M 4604418534311723009) (+ 1 (jdouble.fromBits.M
-  4604418534311723008)))
-  (= (jdouble.fromBits.E 4604418534311723009) (jdouble.fromBits.E 4604418534311723008))
-  (= (jdouble.fromBits.S 4604418534311723009) 1))))
-(check-sat)
-(pop 1)
-
 ; Section B: step 3, with t = +0. The sign of an exact zero, true for -0. z.sub sx sy is
 ; the sign of x - y and z.add sx sy that of x + y for zeros x and y; z.mul is a zero
 ; product's.
@@ -170,11 +158,12 @@
 (check-sat)
 (pop 1)
 
-(echo "ln2_hi and ln2_lo are positive and finite, as the zero product needs: expect unsat")
+(echo "ln2_hi and ln2_lo are positive, normal and finite, as the zero product needs: expect unsat")
 (push 1)
-(assert (not (and (= (jdouble.fromBits.S 4604418534311723008) 1) (< (jdouble.fromBits.E
+(assert (not (and (= (jdouble.fromBits.S 4604418534311723008) 1) (< (- 1075) (jdouble.fromBits.E
   4604418534311723008) 972)
-  (= (jdouble.fromBits.S 4461442080421002358) 1) (< (jdouble.fromBits.E 4461442080421002358) 972))))
+  (= (jdouble.fromBits.S 4461442080421002358) 1) (< (- 1075) (jdouble.fromBits.E
+    4461442080421002358) 972))))
 (check-sat)
 (pop 1)
 

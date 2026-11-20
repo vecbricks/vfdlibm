@@ -48,7 +48,7 @@ final class ExpProofFiles {
   static List<String> body(String... lines) {
     var out = new ArrayList<String>();
     for (String text : lines) {
-      for (String l : text.split("\n")) {
+      for (String l : text.split("\n", -1)) {
         out.addAll(wrap(l));
       }
     }

@@ -646,11 +646,13 @@ class ProofsTest {
       assertEquals(bits(StrictMath.expm1(x)), bits(Expm1Test.cExpm1(x, false)), at);
       assertNotEquals(bits(StrictMath.expm1(x)), bits(Expm1Test.cExpm1(x, true)), at);
     }
-    // Above them, to the top of the word, the unforced k still gives the right double: these
+    // Above each, to the top of the word, the unforced k still gives the right double: these
     // are the first witnesses, so the test of the word's top doubles alone would miss them.
-    for (long low = 0xffffffffL; low > 0xffffffecL; low--) {
-      double x = Double.longBitsToDouble(0x3fd62e42_00000000L | low);
-      assertEquals(bits(StrictMath.expm1(x)), bits(Expm1Test.cExpm1(x, true)), Oracle.hex(x));
+    for (long w : Expm1ProofFiles.WITNESSES) {
+      for (long low = 0xffffffffL; low > (w & Lanes.LOW_WORD); low--) {
+        double x = Double.longBitsToDouble((w & ~Lanes.LOW_WORD) | low);
+        assertEquals(bits(StrictMath.expm1(x)), bits(Expm1Test.cExpm1(x, true)), Oracle.hex(x));
+      }
     }
   }
 
