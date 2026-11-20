@@ -21,10 +21,11 @@ job, and `pool.py table` tallies a file of rows:
 GitHub keeps a run's logs for 90 days, so the rows are committed, and the table can be rebuilt
 when the logs are gone.
 
-- `fetch` needs `gh`, authenticated for the repository. It spends the account's REST quota,
-  5,000 calls an hour shared with everything else that uses `gh`: a call for the list of runs,
-  a call or two per run for its jobs, and one call per job for its log, so about 700 calls
-  for the 17 nights and 664 logs here.
+- `fetch` needs `gh`, authenticated for the repository, and one that has `gh api`'s
+  `--allow-escape-sequences`, which a log's colour codes need (2.103.3 was used). It spends
+  the account's REST quota, 5,000 calls an hour shared with everything else that uses `gh`:
+  a few calls for the list of runs (it is paged), a call or two per run for its jobs, and
+  one call per job for its log, so about 700 calls for the 17 nights and 664 logs here.
 - So it keeps every answer it gets under `--cache` (`target/pool-cache`, which git ignores)
   and asks for none of them twice; it reads the logs 50 at a time (`--batch`) with 10 seconds
   between batches (`--pause`); and before the job lists and before each batch it asks the API
@@ -113,10 +114,10 @@ named. `--by-cpu` splits the last two tables by CPU model and its widest vector.
 
 What the 17 nights say:
 
-- The nights since expm1 joined, 5 to 19 November, 43 jobs each, cost 347 to 372
-  runner-minutes, 5.8 to 6.2 runner-hours, and 370 to 394 minutes started. The first two
-  nights, 35 jobs and four functions, cost 272 and 285. A night of 43 jobs spans 50 to 58
-  minutes, once 77.
+- The nights since expm1 joined, 5 to 19 November, 43 jobs each (one of them the alert job,
+  skipped when nothing fails), cost 347 to 372 runner-minutes, 5.8 to 6.2 runner-hours, and
+  370 to 394 minutes started. The first two nights, 35 jobs and four functions, cost 272 and
+  285. A night of 43 jobs spans 50 to 58 minutes, once 77.
 - By job kind, the median fuzz jobs of a night take 137 minutes, the x86 sweep jobs 118 and
   the Arm jobs 105; each is its own column's median, so they are no one night's split. The
   plan, proofs and alert jobs together are under one minute.

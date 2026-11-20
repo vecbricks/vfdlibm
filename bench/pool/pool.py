@@ -314,7 +314,8 @@ def fetch(args):
     """Writes one row per recording job of the nights asked for, as tab-separated values, to
     --out or the standard output, and with --cost a second file of every job's times and
     species runs."""
-    keep_reserve(args, 1, "the list of runs is not read yet")
+    # gh pages the list 100 runs at a time, and a job list can take a second call.
+    keep_reserve(args, 10, "the list of runs is not read yet")
     listed = nights(args.repo, args.since, args.until)
     # A run's job list is a call or two when the cache does not hold it; they are counted
     # against the reserve like the logs.
@@ -350,7 +351,8 @@ def fetch(args):
         # next batch would fare the same. Logs known to be gone are the one case to go on.
         if not any(in_cache(t) for t in batch) and not args.without_logs:
             sys.exit("none of a batch of %d logs could be read, so the fetch stopped and no"
-                     " file was written; the first failure: %s"
+                     " file was written; the first failure: %s. If the logs have expired,"
+                     " --without-logs writes the rows without them."
                      % (len(batch), FIRST_FAILURE[0] if FIRST_FAILURE else "none said"))
     # A log the API did not give is not in the cache, and is not asked for a second time.
     found = [read_one(t) if in_cache(t) else None for t in todo]
@@ -493,9 +495,9 @@ def machine(r):
     size = re.search(r"MaxVectorSize=(\d+)", r["jvm"])
     if not size:
         return "-"
-    # A job's CPU is "-" on Arm, which /proc/cpuinfo gives no model name; its JVM line says SVE
-    # or NEON.
-    arm = r["cpu"] == "-" or "UseSVE" in r["jvm"]
+    # The JVM line says SVE on Arm and AVX on x86; with neither, no model name (Arm has none in
+    # /proc/cpuinfo) says Arm, and a row with a model name is x86.
+    arm = "UseSVE" in r["jvm"] or ("UseAVX" not in r["jvm"] and r["cpu"] == "-")
     return "%s, %d bits" % ("Arm" if arm else "x86", 8 * int(size.group(1)))
 
 
