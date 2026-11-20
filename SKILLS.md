@@ -417,11 +417,21 @@ a settled question.
   measured a `withLane` loop at 47,232 B/op (quoted in the same superseded runs); whether that
   loop sat in a helper taking vectors was not recorded, and it most likely measured that call's
   boxing, not `withLane`.
-- **Possibly redundant, supported by sampling, unproved: the `hu == 0` path.** s_log1p.c's
-  `|f| < 2^-20` path may give the same bits as its general polynomial path. For `f == 0` both
-  paths reduce exactly to `k*ln2_hi + (k*ln2_lo + c)`. A sample of 199,804,321 `hu == 0` inputs
-  with `1+x` between 0.5 and 2^1024 showed 0 bit differences against `StrictMath.log1p`; `x` in
-  (-1, -0.5) was not sampled, and sampling is not proof. The port keeps the C's operations.
+- **The `hu == 0` path is not redundant: a sample said it might be, every input of a window
+  found the witnesses.** s_log1p.c's `|f| < 2^-20` path stops its series at `f^3/3` (line 156),
+  and a sample of 199,804,321 `hu == 0` inputs with `1+x` between 0.5 and 2^1024 showed 0 bit
+  differences against `StrictMath.log1p`. The C sent down its general polynomial path instead
+  differs from the C as written all the same, on about one input in 2^29 of the windows
+  searched: 56 of the 2^35 doubles with `1+x` in `[2 - 3*2^-20, 2 + 2^-19)` (`k = 1`) and 20 of
+  the 15,032,385,536 with `1+x` in `(0.5 - 3*2^-22, 0.5 + 2^-21]` (`k = -1`); at each the C as
+  written is `StrictMath.log1p` and the general path gives the next double. The counts, the
+  hosts and the commands are in `bench/results/log1p-hu0-search-laptop-2026-11-20.txt`, four
+  of the witnesses in `Log1pTest.shortPathIsNotTheGeneralPath`. The other windows (one for each
+  power of two of `1+x`) are not searched. A sample of 2^27.6 inputs was not expected to show
+  a rate of 2^-29, so its silence said nothing; what settles such a question is every input of
+  a window, which the scalar transcription `Log1pTest.cLog1p` and the program `Log1pShortPath`
+  make cheap: 2^35 doubles took 207 s on 8 threads. The port keeps the C's operations, and no
+  lemma folds this path.
 
 ## What the log10 port taught
 

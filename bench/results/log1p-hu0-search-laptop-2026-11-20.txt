@@ -1,0 +1,296 @@
+# Does s_log1p.c's hu == 0 path give the doubles its general polynomial path gives? Searched
+# over the two windows of 1+x around 2 and around 0.5, 20 November 2026
+#
+# NOT A TIMING FILE. The seconds below say how long a search took on a shared laptop; the one
+# remark made from them, in SKILLS.md, is that a window of 2^35 doubles is minutes of work.
+#
+# Why:         SKILLS.md carried "possibly redundant, supported by sampling, unproved" for
+#              s_log1p.c's |f| < 2^-20 path (lines 156 to 158, hu == 0), on a sample of
+#              199,804,321 inputs with 0 differences. Issue 36, step 4, asks for the answer by
+#              searching every input of a window instead of sampling, since the two paths can
+#              differ on about one input in 2^29, which that sample was too small to see.
+# Answer:      NO. At each input listed below the C as written is StrictMath.log1p, and the same
+#              C sent down its general path gives the next double. So no lemma folds the
+#              hu == 0 path into the general one (issue 36, step 5, settled negatively).
+# Windows:     The hu == 0 path runs where f = u-1 is within 2^-20 of zero after the
+#              normalisation, that is for 1+x in [2^m - 3*2^(m-20), 2^m * (1 + 2^-20)), a window
+#              of 2^33 to 2^35 doubles for each power of two 2^m of 1+x. The C leaves x in
+#              (-0.2929, 0.41422) with hu = 1, so m = 0 has none. Searched here, every double:
+#                k = 1  : 1+x in [2 - 3*2^-20, 2 + 2^-19):  raw bits [0x3feffffa_00000000,
+#                         0x3ff00002_00000000), 2^35 = 34,359,738,368 doubles, 56 differ
+#                k = -1 : 1+x in (0.5 - 3*2^-22, 0.5 + 2^-21]: raw bits [0xbfdffffe_00000000,
+#                         0xbfe00001_80000000), 15,032,385,536 doubles, 20 differ; the
+#                         window's lowest input, x = -(0.5 + 3*2^-22), is not in the range
+#              Not searched: the windows of every other m.
+# Programs:    The two long passes ran a scratch program, Proto.java, at the end of this file; it
+#              reads nothing from the repository. Its transcription of s_log1p.c is the one now
+#              in Log1pTest.cLog1p, the constants as literals, and its "on the short path"
+#              count uses a cruder test than Log1pTest.takesShortPath, so that count is its own.
+#              It is committed here only as text. The committed program is Log1pShortPath, the
+#              same computation; it was run over two slices of 2^24 doubles, each around a
+#              witness the long passes printed, and found exactly that witness in each (output
+#              below). The long passes were not repeated with it.
+# Commit:      the commit that adds Log1pShortPath and this file (git log -- this file).
+# JDK:         OpenJDK 64-Bit Server VM, 25.0.5.1+2-1-26.04.1-Ubuntu
+# CPU:         AMD Ryzen AI 9 HX PRO 370 w/ Radeon 890M (24 logical cores, two core types)
+# CPU flags:   avx2, avx512f and avx512dq present; the programs are scalar Java
+# Kernel:      7.0.0-43-generic
+# Load:        the two slices and the sampled run: 1.62, 0.82, 1.66 at start and at end
+#              (/proc/loadavg; the laptop was nearly idle). The two long passes ran with the
+#              laptop shared with other builds, and their load was not recorded.
+# Commands:    The long passes, from a scratch directory holding Proto.java:
+#                java Proto.java 3feffffa00000000 34359738368 8
+#                java Proto.java bfdffffe00000000 15032385536 8
+#              The committed program, from the repository root after "mvn -q test-compile"
+#              (J = java -Xmx2g -cp target/classes:target/test-classes
+#                   --add-modules jdk.incubator.vector io.github.vecbricks.vfdlibm.Log1pShortPath):
+#                J range 0x3feffffd04a63833 0x3feffffd05a63833 4
+#                J range 0xbfe0000155f7e494 0xbfe0000156f7e494 4
+#                J sampled
+#              and to repeat a whole window with it, which this file does not do:
+#                J range 0x3feffffa00000000 0x3ff0000200000000 8
+#                J range 0xbfdffffe00000000 0xbfe0000180000000 8
+#              (the long passes took 206.8 s and 109.4 s on 8 threads).
+# Reading:     "differs at X: C a, general b, StrictMath c" is an input where the C as written
+#              gives the double a and the C sent down its general path gives b, a != b; in every
+#              line printed here a is c. A run prints at most 16 of them, in the order its
+#              threads found them. "sampled not StrictMath's" counts, on one input in 1024, the
+#              C as written against StrictMath.log1p: 0 on the long passes.
+
+# ---------------------------------------------------------------------------------------
+# Long pass, k = 1 (Proto.java; the 16 differences it printed, of 56)
+differs at 3feffffd05263833: C 3fe62e41818d4d28, general 3fe62e41818d4d27, StrictMath 3fe62e41818d4d28
+differs at 3feffffc93650374: C 3fe62e4148acaff0, general 3fe62e4148acafef, StrictMath 3fe62e4148acaff0
+differs at 3feffffb58eaff7a: C 3fe62e40ab6fa407, general 3fe62e40ab6fa406, StrictMath 3fe62e40ab6fa407
+differs at 3ff000016fcd0162: C 3fe62e446ec73310, general 3fe62e446ec7330f, StrictMath 3fe62e446ec73310
+differs at 3feffffb77032453: C 3fe62e40ba7bb788, general 3fe62e40ba7bb787, StrictMath 3fe62e40ba7bb788
+differs at 3feffffb7ab6296e: C 3fe62e40bc553a37, general 3fe62e40bc553a36, StrictMath 3fe62e40bc553a37
+differs at 3feffffb7aeecbce: C 3fe62e40bc718b69, general 3fe62e40bc718b68, StrictMath 3fe62e40bc718b69
+differs at 3feffffa4540b3ce: C 3fe62e40219a7303, general 3fe62e40219a7302, StrictMath 3fe62e40219a7303
+differs at 3feffffa46a65256: C 3fe62e40224d4257, general 3fe62e40224d4256, StrictMath 3fe62e40224d4257
+differs at 3feffffb106f63a4: C 3fe62e408731d365, general 3fe62e408731d364, StrictMath 3fe62e408731d365
+differs at 3feffffa48f76131: C 3fe62e402375c9df, general 3fe62e402375c9de, StrictMath 3fe62e402375c9df
+differs at 3feffffcd267004a: C 3fe62e41682daffb, general 3fe62e41682daffa, StrictMath 3fe62e41682daffb
+differs at 3feffffacc6b4265: C 3fe62e40652fc014, general 3fe62e40652fc013, StrictMath 3fe62e40652fc014
+differs at 3feffffa8fef779a: C 3fe62e4046f1d82b, general 3fe62e4046f1d82a, StrictMath 3fe62e4046f1d82b
+differs at 3feffffa4da78e6e: C 3fe62e4025cde0b3, general 3fe62e4025cde0b2, StrictMath 3fe62e4025cde0b3
+differs at 3feffffa4e9eccd6: C 3fe62e4026497ff2, general 3fe62e4026497ff1, StrictMath 3fe62e4026497ff2
+from 3feffffa00000000, 34359738368 inputs, 34359738356 on the short path, 56 differ, 0 of the sampled not StrictMath's, 206.8 s on 8 threads
+
+# ---------------------------------------------------------------------------------------
+# Long pass, k = -1 (Proto.java; the 16 differences it printed, of 20)
+differs at bfe000012cac6e81: C bfe62e4558532d03, general bfe62e4558532d04, StrictMath bfe62e4558532d03
+differs at bfe000012ee679c0: C bfe62e455cc743d5, general bfe62e455cc743d6, StrictMath bfe62e455cc743d5
+differs at bfe00001323c7514: C bfe62e4563733afc, general bfe62e4563733afd, StrictMath bfe62e4563733afc
+differs at bfdffffe92ae1567: C bfe62e4191a8577b, general bfe62e4191a8577c, StrictMath bfe62e4191a8577b
+differs at bfe0000146e213da: C bfe62e458cbe7bb9, general bfe62e458cbe7bba, StrictMath bfe62e458cbe7bb9
+differs at bfe00000daeabd5d: C bfe62e44b4cfc05c, general bfe62e44b4cfc05d, StrictMath bfe62e44b4cfc05c
+differs at bfe0000112959ce1: C bfe62e4524258619, general bfe62e452425861a, StrictMath bfe62e4524258619
+differs at bfe00000c32721f2: C bfe62e448548871f, general bfe62e4485488720, StrictMath bfe62e448548871f
+differs at bfe000011ca7bd3a: C bfe62e453849c82b, general bfe62e453849c82c, StrictMath bfe62e453849c82b
+differs at bfe00000d24e5950: C bfe62e44a396f75b, general bfe62e44a396f75c, StrictMath bfe62e44a396f75b
+differs at bfe000012740037e: C bfe62e454d7a5633, general bfe62e454d7a5634, StrictMath bfe62e454d7a5633
+differs at bfdffffe2ecf1447: C bfe62e412dc95b6b, general bfe62e412dc95b6c, StrictMath bfe62e412dc95b6b
+differs at bfe000017bb0a612: C bfe62e45f65ba945, general bfe62e45f65ba946, StrictMath bfe62e45f65ba945
+differs at bfdffffe0e2d8eb3: C bfe62e410d27d7c2, general bfe62e410d27d7c3, StrictMath bfe62e410d27d7c2
+differs at bfe000015677e494: C bfe62e45abea1fb9, general bfe62e45abea1fba, StrictMath bfe62e45abea1fb9
+differs at bfe0000158ba0e92: C bfe62e45b06e7416, general bfe62e45b06e7417, StrictMath bfe62e45b06e7416
+from bfdffffe00000000, 15032385536 inputs, 15032385530 on the short path, 20 differ, 0 of the sampled not StrictMath's, 109.4 s on 8 threads
+
+# ---------------------------------------------------------------------------------------
+# Committed program, a slice of 2^24 doubles around the first k = 1 witness above
+differs at 0x3feffffd05263833 (0.9999985790798348): the C 0x3fe62e41818d4d28 (0.6931464700996104), its general path 0x3fe62e41818d4d27 (0.6931464700996103), StrictMath 0x3fe62e41818d4d28 (0.6931464700996104)
+bits [0x3feffffd04a63833, 0x3feffffd05a63833) on 4 threads: 16777216 inputs, 16777216 on the hu == 0 path, 1 differ, 0 where the C as written is not StrictMath.log1p, 0.1 s
+
+# ---------------------------------------------------------------------------------------
+# Committed program, a slice of 2^24 doubles around a k = -1 witness above
+differs at 0xbfe000015677e494 (-0.5000006378969766): the C 0xbfe62e45abea1fb9 (-0.6931484563547122), its general path 0xbfe62e45abea1fba (-0.6931484563547123), StrictMath 0xbfe62e45abea1fb9 (-0.6931484563547122)
+bits [0xbfe0000155f7e494, 0xbfe0000156f7e494) on 4 threads: 16777216 inputs, 16777216 on the hu == 0 path, 1 differ, 0 where the C as written is not StrictMath.log1p, 0.1 s
+
+# ---------------------------------------------------------------------------------------
+# Committed program, sampled: the published hard cases; 91 powers of two of 1+x with 2^18
+# seeded draws each; for x in (-1, -0.5), 52 powers of two with 2^18 each; every draw within
+# 2^-21 (relative) of its power of two, which is part of each window, not all of it. No
+# difference in 37 million inputs is what a rate of one in 2^29 predicts (of the order of
+# 0.05), not evidence.
+the published hard cases: 7550 inputs, 0 on the hu == 0 path, 0 differ, 0 where the C as written is not StrictMath.log1p, 0.0 s
+near the powers of two of 1+x, seed 5100: 23855104 inputs, 23527596 on the hu == 0 path, 0 differ, 0 where the C as written is not StrictMath.log1p, 0.6 s
+x in (-1, -0.5) near them, seed 5101: 13631488 inputs, 8126575 on the hu == 0 path, 0 differ, 0 where the C as written is not StrictMath.log1p, 0.3 s
+
+# ---------------------------------------------------------------------------------------
+# Proto.java, the scratch program of the two long passes, verbatim. It transcribes
+# s_log1p.c (reference/fdlibm-5.3/s_log1p.c), which carries this notice:
+#
+# ====================================================
+# Copyright (C) 1993 by Sun Microsystems, Inc. All rights reserved.
+#
+# Developed at SunSoft, a Sun Microsystems, Inc. business.
+# Permission to use, copy, modify, and distribute this
+# software is freely granted, provided that this notice
+# is preserved.
+# ====================================================
+#
+BEGIN Proto.java
+import java.util.concurrent.atomic.AtomicLong;
+import java.util.stream.LongStream;
+
+public class Proto {
+  static final double LN2_HI = 6.93147180369123816490e-01;
+  static final double LN2_LO = 1.90821492927058770002e-10;
+  static final double TWO54 = 1.80143985094819840000e+16;
+  static final double LP1 = 6.666666666666735130e-01;
+  static final double LP2 = 3.999999999940941908e-01;
+  static final double LP3 = 2.857142874366239149e-01;
+  static final double LP4 = 2.222219843214978396e-01;
+  static final double LP5 = 1.818357216161805012e-01;
+  static final double LP6 = 1.531383769920937332e-01;
+  static final double LP7 = 1.479819860511658591e-01;
+  static final double ZERO = 0.0;
+
+  static int hi(double d) {
+    return (int) (Double.doubleToRawLongBits(d) >>> 32);
+  }
+
+  static double withHi(double y, int hi) {
+    return Double.longBitsToDouble(
+        ((long) hi << 32) | (Double.doubleToRawLongBits(y) & 0xffffffffL));
+  }
+
+  static double cLog1p(double x, boolean generalPathOnly) {
+    double hfsq;
+    double f = 0;
+    double c = 0;
+    double s;
+    double z;
+    double r;
+    double u;
+    int k;
+    int hx;
+    int hu = 0;
+    int ax;
+    hx = hi(x);
+    ax = hx & 0x7fffffff;
+    k = 1;
+    if (hx < 0x3FDA827A) {
+      if (ax >= 0x3ff00000) {
+        if (x == -1.0) {
+          return -TWO54 / ZERO;
+        } else {
+          return (x - x) / (x - x);
+        }
+      }
+      if (ax < 0x3e200000) {
+        if (TWO54 + x > ZERO && ax < 0x3c900000) {
+          return x;
+        } else {
+          return x - x * x * 0.5;
+        }
+      }
+      if (hx > 0 || hx <= 0xbfd2bec3) {
+        k = 0;
+        f = x;
+        hu = 1;
+      }
+    }
+    if (hx >= 0x7ff00000) {
+      return x + x;
+    }
+    if (k != 0) {
+      if (hx < 0x43400000) {
+        u = 1.0 + x;
+        hu = hi(u);
+        k = (hu >> 20) - 1023;
+        c = (k > 0) ? 1.0 - (u - x) : x - (u - 1.0);
+        c /= u;
+      } else {
+        u = x;
+        hu = hi(u);
+        k = (hu >> 20) - 1023;
+        c = 0;
+      }
+      hu &= 0x000fffff;
+      if (hu < 0x6a09e) {
+        u = withHi(u, hu | 0x3ff00000);
+      } else {
+        k += 1;
+        u = withHi(u, hu | 0x3fe00000);
+        hu = (0x00100000 - hu) >> 2;
+      }
+      f = u - 1.0;
+    }
+    hfsq = 0.5 * f * f;
+    if (hu == 0) {
+      if (f == ZERO) {
+        if (k == 0) {
+          return ZERO;
+        } else {
+          c += k * LN2_LO;
+          return k * LN2_HI + c;
+        }
+      }
+      if (!generalPathOnly) {
+        r = hfsq * (1.0 - 0.66666666666666666 * f);
+        if (k == 0) {
+          return f - r;
+        } else {
+          return k * LN2_HI - ((r - (k * LN2_LO + c)) - f);
+        }
+      }
+    }
+    s = f / (2.0 + f);
+    z = s * s;
+    r = z * (LP1 + z * (LP2 + z * (LP3 + z * (LP4 + z * (LP5 + z * (LP6 + z * LP7))))));
+    if (k == 0) {
+      return f - (hfsq - s * (hfsq + r));
+    } else {
+      return k * LN2_HI - ((hfsq - (s * (hfsq + r) + (k * LN2_LO + c))) - f);
+    }
+  }
+
+  public static void main(String[] args) {
+    long from = Long.parseUnsignedLong(args[0], 16);
+    long count = Long.parseLong(args[1]);
+    int threads = Integer.parseInt(args[2]);
+    System.setProperty("java.util.concurrent.ForkJoinPool.common.parallelism", args[2]);
+    long chunk = 1L << 22;
+    AtomicLong diffs = new AtomicLong();
+    AtomicLong shortPath = new AtomicLong();
+    AtomicLong notOracle = new AtomicLong();
+    AtomicLong printed = new AtomicLong();
+    long t0 = System.nanoTime();
+    LongStream.range(0, (count + chunk - 1) / chunk).parallel().forEach(ci -> {
+      long lo = from + ci * chunk;
+      long hiB = Math.min(from + count, lo + chunk);
+      long d = 0;
+      long sp = 0;
+      long no = 0;
+      for (long b = lo; b < hiB; b++) {
+        double x = Double.longBitsToDouble(b);
+        long a = Double.doubleToRawLongBits(cLog1p(x, false));
+        long g = Double.doubleToRawLongBits(cLog1p(x, true));
+        if (a != g) {
+          d++;
+          if (printed.incrementAndGet() <= 16) {
+            System.out.printf("differs at %016x: C %016x, general %016x, StrictMath %016x%n", b, a,
+                g, Double.doubleToRawLongBits(StrictMath.log1p(x)));
+          }
+        }
+        double u = 1.0 + x;
+        int hu = hi(u) & 0xfffff;
+        if ((hu == 0 || hu > 0xffffc) && u != withHi(0.0, hi(u))) {
+          sp++;
+        }
+        if ((b & 1023) == 0 && a != Double.doubleToRawLongBits(StrictMath.log1p(x))) {
+          no++;
+        }
+      }
+      diffs.addAndGet(d);
+      shortPath.addAndGet(sp);
+      notOracle.addAndGet(no);
+    });
+    System.out.printf("from %016x, %d inputs, %d on the short path, %d differ, %d of the sampled"
+        + " not StrictMath's, %.1f s on %d threads%n", from, count, shortPath.get(), diffs.get(),
+        notOracle.get(), (System.nanoTime() - t0) / 1e9, threads);
+  }
+}
+END Proto.java
