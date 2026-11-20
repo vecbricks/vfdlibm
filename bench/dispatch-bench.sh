@@ -46,8 +46,8 @@
 # an older one the dispatch fails and the script says so. A gh call that fails is tried five
 # times, a minute apart. Finding the run and waiting for it are bounded (ten minutes, about seven
 # hours plus retries); the hourly CPU retry is bounded only by --attempts, by design. A run that
-# failed before its CPU check ran and before the step that checks the fetched script (the job
-# fetches bench/host.sh first, and a fetch can fail) says nothing about the machine, so it is
+# failed in its fetch of bench/host.sh, so that the steps after it, the one that checks the
+# fetched script and the CPU check, were skipped, says nothing about the machine, so it is
 # retried an hour later like a miss, and counts as an attempt; three such runs in a row stop
 # the script. A script that was fetched and cannot be run, or does not know the host, fails
 # that step of its own and is not retried. Exit status: 0 on success, 1 when the run
@@ -170,6 +170,9 @@ bench() {
     # else is a failure not to be retried: the check passed, the fetched script cannot be run
     # or lacks the host, the run was cancelled, or no job started (a run with no steps, a
     # startup failure).
+    if grep -qx "failure Check the probe's script" <<<"$steps"; then
+      echo "$(t) $N: run $m could not use $B's bench/host.sh; no benchmark ran, stopping"
+      return 1; fi
     if [ "$probe" != skipped ] || [ "$c" != failure ] \
         || ! grep -qx "skipped Check the probe's script" <<<"$steps"; then return 1; fi
     early=$((early + 1))
