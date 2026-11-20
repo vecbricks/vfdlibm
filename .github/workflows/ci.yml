@@ -136,15 +136,23 @@ jobs:
           distribution: zulu
           java-version: 25
           cache: maven
-      # The machine in the log, so a reading names where it was taken. The probe's exit status
-      # is not a gate: with 128-bit vectors only it has no 256:128 control to read.
+      # The machine in the log, so a reading names where it was taken: the probe's lines, the
+      # kernel, and the load before the check and after it. The probe's exit status is not a
+      # gate: with 128-bit vectors only it has no 256:128 control to read.
       - name: Record the machine
-        run: bench/datapath.sh || true
+        run: |
+          bench/datapath.sh || true
+          echo "kernel: $(uname -r)"
+          echo "load at start: $(cut -d' ' -f1-3 /proc/loadavg)"
       - name: Check that no vector body allocates
-        run: bench/alloc-check.py --jvm-args "$JVM_ARGS" $ROWS
+        run: |
+          status=0
+          bench/alloc-check.py --jvm-args "$JVM_ARGS" $ROWS || status=$?
+          echo "load at end: $(cut -d' ' -f1-3 /proc/loadavg)"
+          exit "$status"
       - name: Ask C2 what it refused in each failing row
         if: failure()
-        run: bench/alloc-check.py --why --jvm-args "$JVM_ARGS"
+        run: bench/alloc-check.py --why
       - name: Keep the failing check's result
         if: failure()
         uses: actions/upload-artifact@v4

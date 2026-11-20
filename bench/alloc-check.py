@@ -22,8 +22,9 @@ the ones that run the rare lanes' paths, which common inputs never reach. The *M
 SPECIES_MAX, and the *Boxed* rows are left out by INCLUDE's regex (see the comment there).
 
 With --why it runs nothing new through the check: it reads the last run's result and runs each
-row that failed once more, with C2 printing what it did not intrinsify and what it refused to
-inline (SKILLS.md, "Ask C2 what it refused"), each distinct line with its count.
+row that failed once more, under the JVM options the result records for that row, with C2
+printing what it did not intrinsify and what it refused to inline (SKILLS.md, "Ask C2 what it
+refused"), each distinct line with its count.
 
 Usage, from the repository root:
     bench/alloc-check.py                                  # the host's own flags
@@ -43,8 +44,11 @@ import sys
 
 # Bytes per op, one op being 1024 doubles. One boxed 256-bit DoubleVector is an object holding
 # a double[4], about 64 bytes with headers, so a row that boxes a single vector per op reads
-# some 64 B/op, and a boxed body kilobytes (exp's D2L path read 98304). An unboxed row reads
-# 0.01 to 0.03 B/op, JMH's own allocation spread over the ops. 1 B/op sits between the two.
+# some 64 B/op, and a boxed body kilobytes (exp's D2L path read 98304); a boxed 128-bit vector
+# is smaller by its two doubles only, and one op holds twice as many. An unboxed row reads 0.01
+# to 0.03 B/op on the x86 hosts and 0.04 to 0.10 on GitHub's Arm runner
+# (bench/results/alloc-arm-2026-11-20.txt), JMH's own allocation spread over the ops. 1 B/op
+# sits between the two, some ten times over the highest unboxed reading.
 THRESHOLD = 1.0
 
 # Not *Max: at SPECIES_MAX the finish arm boxes on mixed data, so finishMax would fail. Its lane
@@ -66,13 +70,20 @@ INCLUDE = ROWS % "256|Preferred"
 PREFERRED = ROWS % "Preferred"
 INLINE = "-XX:CompileCommand=inline,io.github.vecbricks.vfdlibm.*::*"
 RESULT = "target/alloc-check.json"
-# What --why adds to a failing row's JVM, and the lines it keeps: PrintIntrinsics' three kinds,
-# and of PrintInlining's refusals those that can box a vector, a call into the library or the
-# Vector API, or any call refused for the node count.
-WHY = ("-XX:CompileCommand=PrintIntrinsics,io.github.vecbricks.vfdlibm.*::*"
+# What --why adds to a failing row's JVM, and the lines it keeps. C2 alone compiles
+# (-TieredCompilation): PrintInlining prints for every tier, and C1's refusals box nothing and
+# would outnumber C2's. PrintIntrinsics' three kinds of line are kept whole, each cut at its
+# "**", since a line of C2's can land in the middle of one of JMH's. Of PrintInlining's
+# refusals, each cut at its "@ <bci>", two lists: those naming the library or the node count,
+# which are the ones that box a port's vectors and are printed in full; and those naming the
+# Vector API, printed up to WHY_LINES, without the retries of a late inline ("trying again").
+WHY = ("-XX:-TieredCompilation"
+       " -XX:CompileCommand=PrintIntrinsics,io.github.vecbricks.vfdlibm.*::*"
        " -XX:+UnlockDiagnosticVMOptions -XX:+PrintInlining")
-NOT_INTRINSIFIED = re.compile(r"not supported|missing constant|unbox failed")
-REFUSED = re.compile(r"vfdlibm|jdk\.incubator\.vector|VectorSupport|NodeCountInliningCutoff")
+NOT_INTRINSIFIED = re.compile(r"\*\* (not supported|missing constant|unbox failed).*")
+REFUSED = re.compile(r"@ \d+ .*failed to inline.*")
+REFUSED_FIRST = re.compile(r"vfdlibm|NodeCountInliningCutoff")
+REFUSED_API = re.compile(r"jdk\.incubator\.vector|VectorSupport")
 WHY_LINES = 40
 # One fork; warmup long enough for C2 to finish the body before the first measured iteration,
 # which every iteration being checked (not only the mean) enforces.
@@ -122,30 +133,33 @@ def alloc_iterations(row):
 
 
 def failing(path, threshold):
-    """The (benchmark, inputs) of the rows at path that check() fails for their allocation."""
+    """The JSON rows at path that check() fails for their allocation."""
     with open(path, encoding="utf-8") as f:
         rows = json.load(f)
     found = []
     for row in rows:
         iterations = alloc_iterations(row)
         if iterations and max(iterations) >= threshold:
-            found.append((row["benchmark"], row.get("params", {}).get("inputs")))
+            found.append(row)
     return found
 
 
-def counted(lines):
-    """Prints each distinct line with its count, the most frequent first, WHY_LINES at most."""
+def counted(lines, limit=None):
+    """Prints each distinct line with its count, the most frequent first, limit at most."""
     counts = collections.Counter(" ".join(line.split()) for line in lines)
-    for line, count in counts.most_common(WHY_LINES):
+    for line, count in counts.most_common(limit):
         print(f"{count:6d}  {line}")
-    if len(counts) > WHY_LINES:
-        print(f"        and {len(counts) - WHY_LINES} more distinct lines")
+    if limit is not None and len(counts) > limit:
+        print(f"        and {len(counts) - limit} more distinct lines")
     if not counts:
         print("        none")
 
 
-def why(mvn, path, threshold, jvm_args):
-    """Runs each failing row of path once more and prints C2's account of it."""
+def why(mvn, path, threshold):
+    """Runs each failing row of path once more and prints C2's account of it.
+
+    A row runs under the JVM options the result records for it, the ones it failed under, not
+    under this command's: the same row can box under one set of flags and not under another."""
     if not os.path.exists(path):
         print(f"No {path}: the check did not get as far as a result, see its own output.")
         return
@@ -153,10 +167,11 @@ def why(mvn, path, threshold, jvm_args):
     if not rows:
         print(f"No row of {path} allocated {threshold} B/op or more; if the check failed, a"
               " row was missing, see its own output.")
-    append = " ".join(a for a in (INLINE, WHY, jvm_args) if a)
-    for name, inputs in rows:
+    for row in rows:
+        name, inputs = row["benchmark"], row.get("params", {}).get("inputs")
         print(f"\n== {name} [inputs={inputs}]", flush=True)
         param = f" -p inputs={inputs}" if inputs else ""
+        append = " ".join(row.get("jvmArgs", []) + [WHY])
         run = mvn_jmh(mvn, f"{re.escape(name)}${param} -f 1 -wi 3 -w 1s -i 1 -r 1s -prof gc"
                            f" -jvmArgsAppend \"{append}\"", capture="all", check=False)
         lines = run.stdout.splitlines()
@@ -168,11 +183,22 @@ def why(mvn, path, threshold, jvm_args):
             print("\n".join(lines[-40:]))
             continue
         print(alloc[-1])
+        try:
+            again = float(alloc[-1].split()[-2])
+        except (IndexError, ValueError):
+            again = None
+        if again is not None and again < threshold:
+            print(f"This run read under {threshold} B/op: the row did not box this time, so"
+                  " the lines below do not explain the failure. If only the first iteration"
+                  " of the failing run allocated, C2 was late there (SKILLS.md).")
         print("PrintIntrinsics, each distinct line with its count:")
-        counted(line for line in lines if NOT_INTRINSIFIED.search(line))
-        print("PrintInlining, the refused calls into the library and the Vector API, and"
-              " any refused for the node count:")
-        counted(line for line in lines if "failed to inline" in line and REFUSED.search(line))
+        counted(m.group(0) for m in map(NOT_INTRINSIFIED.search, lines) if m)
+        refused = [m.group(0) for m in map(REFUSED.search, lines) if m]
+        print("PrintInlining, C2's refused calls that name the library or the node count:")
+        counted(line for line in refused if REFUSED_FIRST.search(line))
+        print("PrintInlining, C2's other refused calls into the Vector API:")
+        counted((line for line in refused if not REFUSED_FIRST.search(line)
+                 and REFUSED_API.search(line) and "trying again" not in line), WHY_LINES)
 
 
 def check(path, threshold, expected=None):
@@ -228,7 +254,10 @@ def main():
     if args.include and args.preferred_only:
         parser.error("--include and --preferred-only both name the rows; pass one")
     if args.why:
-        why(args.mvn, RESULT, args.threshold, args.jvm_args)
+        if args.jvm_args:
+            parser.error("--why runs each row under the options its result records; --jvm-args"
+                         " does not apply")
+        why(args.mvn, RESULT, args.threshold)
         return
     include = args.include or (PREFERRED if args.preferred_only else INCLUDE)
     expected = None

@@ -74,9 +74,12 @@ a settled question.
   reading, not a timing: no Arm host is a benchmark host, and nothing here says how fast those
   bodies are.
 - **When the check fails, ask it why.** `bench/alloc-check.py --why` reads the failed run's
-  result and runs each failing row once more with the two flags of the next entries, printing
-  each distinct `PrintIntrinsics` line and each refused call into the library or the Vector API
-  with its count. CI runs it after a failing check, so the job's log holds C2's account.
+  result and runs each failing row once more, under the JVM options the result records for it,
+  with the two flags of the next entries and C2 alone compiling (`-XX:-TieredCompilation`:
+  `PrintInlining` prints for every tier, and C1's refusals, which box nothing, outnumber C2's).
+  It prints each distinct `PrintIntrinsics` line with its count, then the refused calls that
+  name the library or `NodeCountInliningCutoff`, then the other refused calls into the Vector
+  API. CI runs it after a failing check, so the job's log holds C2's account.
 - **Ask C2 what it refused.** `-XX:+UnlockDiagnosticVMOptions -XX:+PrintIntrinsics`, or scoped
   to the library, `-XX:CompileCommand=PrintIntrinsics,io.github.vecbricks.vfdlibm.*::*`. Add
   `-Xbatch` when lines must be attributed to one shape: compiles then happen on the calling
