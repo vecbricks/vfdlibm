@@ -555,15 +555,17 @@ a settled question.
   faults, as `-Dvfdlibm.fault=<name>` in every sweep and fuzz JVM, so a dispatch can show the
   night catching it and the alert job at work without a real failure: `gh workflow run
   nightly.yml -f fault=exp.dropCorrection -f fuzz-seconds=5`. The plan job refuses a fault that
-  `pom.xml` gives no fault run, since a mistyped name would plant nothing and pass. A run with a
-  fault checks only the functions the fault reaches, of those asked for, so every mismatch it
-  reports is the fault's: its own function and those that compute through it. log's three faults
-  also fail log10, which calls `Log.logCore` (a two-second fuzz of each function under each
-  function's `dropCorrection` on the laptop failed its own function, and log10 under log's, and
-  nothing else); the plan job's `reach` holds that map, and a port that computes through another
-  adds a line to it. When every sweep and fuzz of such a run passes, the job `fault-caught`
-  fails, so a missed fault is a red run with an issue and not a green one. The issue has its own
-  label, `nightly-fault-test`, and opens by saying that the fault was planted, so it is never
-  mixed with a night's `nightly-failure` issue; a fault dispatch whose plan job fails opens none.
-  The run shares the night's concurrency group, where a new run replaces one that is waiting:
-  dispatch it when no night is running or waiting. No such dispatch has been made yet.
+  `pom.xml` gives no fault run, since a mistyped name would plant nothing and be reported as a
+  fault the night missed. A run with a fault checks only the functions the fault reaches, of
+  those asked for, and leaves the proofs out, so every mismatch it reports is the fault's: its
+  own function and those that compute through it. log's three faults also fail log10, which calls
+  `Log.logCore` (a two-second fuzz of each function under each function's `dropCorrection` on the
+  laptop failed its own function, and log10 under log's, and nothing else); the plan job's
+  `reach` holds that map, and a port that computes through another adds a line to it. When every
+  sweep and fuzz of such a run passes, the job `fault-caught` fails, so a missed fault is a red
+  run with an issue and not a green one; when a job failed, the mismatch files the issue lists
+  say whether it was the fault, and the issue says so when none records a mismatch. The issue has
+  its own label, `nightly-fault-test`, and opens by saying that the fault was planted, so it is
+  never mixed with a night's `nightly-failure` issue; a fault dispatch whose plan job fails opens
+  none. The run shares the night's concurrency group, where a new run replaces one that is
+  waiting: dispatch it when no night is running or waiting. No such dispatch has been made yet.

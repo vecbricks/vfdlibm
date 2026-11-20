@@ -123,7 +123,12 @@ jobs:
           all='exp expm1 log log10 log1p'
           # A number here has no leading zero, which bash's arithmetic would read as octal, and
           # at most five digits, more than any limit below.
-          number() { [[ $1 =~ ^(0|[1-9][0-9]{0,4})$ ]]; }
+          number() {
+            [[ $1 =~ ^(0|[1-9][0-9]{0,4})$ ]] && return 0
+            echo "::error::a number is written without a leading zero, in at most five digits:" \
+              "not '$1'"
+            return 1
+          }
           pow2() { number "$1" && [ "$1" -ge 1 ] && [ $(($1 & ($1 - 1))) -eq 0 ]; }
           if [ -z "$SEED" ]; then
             SEED="0x$(od -An -N8 -tx8 /dev/urandom | tr -d ' \n')"
@@ -425,8 +430,10 @@ jobs:
 
   # Every proof under Z3 and cvc5, each held to every expectation (proofs/README.md); ci.yml
   # runs them under Z3 only.
+  # A run with a planted fault leaves them out: what it reports is the fault's and nothing else.
   proofs:
     needs: plan
+    if: inputs.fault == ''
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -515,8 +522,8 @@ jobs:
             if [ -n "$FAULT" ]; then
               echo "**A test of the alert job, not a night's failure.** The run was dispatched"
               echo "with the fault \`$FAULT\` planted (\`-Dvfdlibm.fault=$FAULT\`) in every"
-              echo "sweep and fuzz, and it checked only the functions that fault reaches, so the"
-              echo "mismatches below are the planted fault's and not the library's."
+              echo "sweep and fuzz, and it checked only the functions that fault reaches, so a"
+              echo "mismatch below is the planted fault's and not the library's."
               echo
               if [ "$FAULT_CAUGHT" = failure ]; then
                 echo "**The planted fault was not caught**: every sweep and fuzz passed"
@@ -553,7 +560,11 @@ jobs:
               echo '```'
               echo
             done
-            if [ "$found" = 0 ]; then
+            if [ "$found" = 0 ] && [ -n "$FAULT" ]; then
+              echo "No mismatch file records a mismatch: no job that ran caught the planted"
+              echo "fault. See the run's logs for a job that failed for another reason (a build,"
+              echo "a timeout)."
+            elif [ "$found" = 0 ]; then
               echo "No mismatch file records a mismatch: a job failed for another reason (a"
               echo "build, a timeout, a proof). See the run's logs."
             else
