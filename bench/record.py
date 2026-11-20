@@ -72,7 +72,7 @@ WIDTH = 100
 PACKAGE = "io.github.vecbricks.vfdlibm."
 # A header line of the workflow or of bench/pair.sh, and a line that continues one.
 FIELD = re.compile(r"^# ([A-Z][A-Za-z0-9-]*(?: [a-z]+)?):(?: +(\S.*?))?\s*$")
-CONTINUED = re.compile(r"^# {14}(\S.*?)\s*$")
+CONTINUED = re.compile(r"^# {2,}(\S.*?)\s*$")
 MAVEN = re.compile(r"^\[(INFO|WARNING|ERROR)\]")
 TABLE_ROW = re.compile(r"^# (\S+\.\S+)\s+(\S.*?)\s+(-?[\d.]+)\s+(-?[\d.]+)\s+(-?[\d.]+)$")
 SIDE_LINE = re.compile(r"^# The (base|head), \S*: minimum, average and maximum of its .*"
@@ -81,7 +81,7 @@ LOAD = re.compile(r"(\d+\.\d+ \d+\.\d+ \d+\.\d+) at (start|end)")
 CORES = re.compile(r" ?\(\d+ cores\)")
 PAIR_TITLE = re.compile(r"^# Pair: \S.*, base against head, \d{4}-\d{2}-\d{2} ")
 NAME_END = re.compile(r"-[^-]+-\d{4}-\d{2}-\d{2}\.txt$")
-RUN_LINE = "# Run %d of %d of this file: its header, its table and its raw output follow."
+RUN_LINE = "# Run %d of %d of this file: its title, header, table and raw output follow."
 RUN_LINE_RE = re.compile(r"^# Run \d+ of \d+ of this file: ")
 TABLE_HEAD = re.compile(r"^# Row\s+\S+\s+min\s+avg\s+max\s+\(ns/op\)$")
 RAW_NOTE = ["# Raw output of the run follows: the workflow's artifact from its first JMH line,"
@@ -326,9 +326,11 @@ def function_of(cls):
     return (name[:-len("Benchmark")] if name.endswith("Benchmark") else name).lower()
 
 
-def host_and_date(title, header):
+def host_and_date(title, header, named=True):
     host = dict((k, v) for k, v in header).get("Host", "").split()
     m = re.search(r"(\d{4}-\d{2}-\d{2}) \d{2}:\d{2} UTC", title)
+    if not named and (not host or not m):
+        return "unknown", "unknown"
     if not host or not m:
         raise Problem("the artifact's header has no Host line or its title no date: the file's"
                       " name is <function>-<host>-<date>.txt, of the run's host and date")
@@ -342,10 +344,10 @@ def mark(text):
     return "# %s %s" % (MARKER, text)
 
 
-def plain_files(lines, name):
+def plain_files(lines, name, named=True):
     """{file name: lines} for a plain run, one file per benchmark class."""
     title, header = lines[0], plain_header(lines)
-    host, date = host_and_date(title, header)
+    host, date = host_and_date(title, header, named)
     raw = plain_raw(lines)
     parts = plain_parts(raw)
     classes = sorted({cls for cls, _ in parts if cls})
@@ -430,7 +432,7 @@ def pair_tables(directory, header):
     return out
 
 
-def pair_files(lines, directory, name):
+def pair_files(lines, directory, name, named=True):
     while lines and not lines[-1]:
         lines = lines[:-1]
     # A commit's subject is the author's text: what is not ASCII in it is written escaped.
@@ -438,14 +440,14 @@ def pair_files(lines, directory, name):
              if re.match(r"# (Base|Head): ", l) else l for l in lines]
     head = lines[:next((i for i, l in enumerate(lines) if not l.startswith("#")), len(lines))]
     header = fields(head[1:])
-    host, date = host_and_date(lines[0], header)
-    m = re.match(r"# Pair: (.*), base against head", lines[0])
-    classes = sorted({c.rsplit(".", 1)[0] for c in re.findall(r"\b(\w+Benchmark)\b", m.group(1))}
-                     ) if m else []
+    host, date = host_and_date(lines[0], header, named)
+    # The classes that ran, from the rows of the rounds' JSON, not from the regex's text.
+    classes = sorted({k[0].split(".")[0] for side in pair_sides(directory)[0].values()
+                      for k in side})
     if not name:
         if len(classes) != 1:
-            raise Problem("the pair's benchmarks (%s) name no one class: pass --name"
-                          % (m.group(1) if m else lines[0]))
+            raise Problem("the pair ran %s: not one class, so pass --name"
+                          % (", ".join(classes) or "no benchmark"))
         name = function_of(classes[0]) + "-pair"
     out = ["# %s" % lines[0][2:],
            mark("Replace the line above with the title: what was paired, the CPU, the date,"),
@@ -467,9 +469,10 @@ def artifact_lines(directory):
     return lines, bool(PAIR_TITLE.match(lines[0]))
 
 
-def files_of(directory, name=None):
+def files_of(directory, name=None, named=True):
     lines, pair = artifact_lines(directory)
-    files = pair_files(lines, directory, name) if pair else plain_files(lines, name)
+    files = (pair_files(lines, directory, name, named) if pair
+             else plain_files(lines, name, named))
     for file_name, written in files.items():
         require_ascii(written, "the artifact, in what goes to " + file_name)
     return files
@@ -490,11 +493,16 @@ def joined_files(directories, name=None):
                           " a pair's" % d)
         header = dict((k, v) for k, v in plain_header(lines))
         # The host's key, and the CPU as the workflow's check reads it, ignoring case.
+        # What makes it one measurement again: the host's key and CPU (case aside), the
+        # commit, the JMH options and the JVM's vector settings; and the run itself differs.
         seen.append(((header.get("Host") or "?").split()[0], (header.get("CPU") or "").lower(),
+                     (header.get("Commit") or "").split(" ")[0], " ".join(
+                         (header.get("JMH") or "").split()), header.get("Vector"),
                      header.get("Run")))
-    if len({x[:2] for x in seen}) > 1 or len({x[2] for x in seen}) < len(seen):
+    if len({x[:-1] for x in seen}) > 1 or len({x[-1] for x in seen}) < len(seen):
         raise Problem("several runs go in one file only if they are different runs of one host"
-                      " and CPU; these are %s" % "; ".join(" ".join(map(str, x)) for x in seen))
+                      " and CPU, at one commit, with the same JMH options and vector settings;"
+                      " these are %s" % "; ".join(" ".join(map(str, x)) for x in seen))
     # A later run joins the file of its class, whatever the files are named; a class that a
     # run lacks, or that only a later run has, is said and never joined to another's.
     blocks = {file_name: [] for file_name in first}
@@ -507,19 +515,23 @@ def joined_files(directories, name=None):
         for cls in sorted(set(later) - set(of_class), key=sorted):
             NOTES.append("run %d's %s is in no file, since the first run has none: write that"
                          " run by itself" % (n, ", ".join(sorted(cls))))
+        if not set(later) & set(of_class):
+            raise Problem("run %d has none of the first run's classes (%s), so it joins no file"
+                          % (n, "; ".join(", ".join(sorted(c)) for c in of_class)))
         for cls, block in later.items():
             if cls in of_class:
                 # The later run's lines from its header on, without the places for
                 # hand-written text, which the file has once, above.
+                title = block[0]
                 block = [l for l in block[block.index(header_block(block)[0]):]
                          if MARKER not in l]
-                blocks[of_class[cls]].append(
-                    [l for i, l in enumerate(block) if not (l == "#" and block[i - 1] == "#")])
+                blocks[of_class[cls]].append([title, "#"] + [
+                    l for i, l in enumerate(block) if not (l == "#" and block[i - 1] == "#")])
     out = {}
     for file_name, lines in first.items():
         out[file_name] = list(lines)
         for k, block in enumerate(blocks[file_name], 2):
-            out[file_name] += ["#", RUN_LINE % (k, 1 + len(blocks[file_name])), "#"] + block
+            out[file_name] += ["#", RUN_LINE % (k, 1 + len(blocks[file_name]))] + block
     return out
 
 
@@ -568,6 +580,12 @@ def check(path, directories):
     while actual and not actual[-1]:
         actual.pop()
     starts = [0] + [i for i, l in enumerate(actual) if RUN_LINE_RE.match(l)]
+    if len(directories) > len(starts):
+        # A run that lacks the file's class is not in the file (write noted it).
+        mine = classes_of(actual)
+        directories = [d for d in directories
+                       if any(classes_of(v) == mine for v in files_of(
+                           d, "x" if artifact_lines(d)[1] else None, False).values())]
     if len(starts) != len(directories):
         return ["the file holds %d run%s (a later one starts at a '# Run N of M of this file:'"
                 " line), and %d artifact%s given"
@@ -602,7 +620,7 @@ def check_run(path, actual, directory, first):
     if pair != bool(PAIR_TITLE.match(raw[0])):
         return ["the file is of a %s and the artifact of a %s: is it the file's run?"
                 % (("plain run", "pair") if pair else ("pair", "plain run"))]
-    made = list(files_of(directory, name="x" if pair else None).items())
+    made = list(files_of(directory, name="x" if pair else None, named=False).items())
     if len(made) > 1:
         # A run of several classes: the file is checked against the class its raw section has.
         mine = classes_of(raw)
@@ -615,8 +633,12 @@ def check_run(path, actual, directory, first):
     diffs = ["a marker is still to be replaced: %s" % l for l in actual if MARKER in l]
     if first and actual[0] == expected[0]:
         diffs.append("line 1 is still the workflow's title, and the file has none of its own")
-    suffix = NAME_END.search(made[0][0]).group(0)
-    if first and not os.path.basename(path).endswith(suffix):
+    if not first and expected[0] not in actual:
+        diffs.append("the run's title line is not there: %s" % expected[0])
+    # A run from before the workflow wrote a Host line has no name to compare.
+    suffix = NAME_END.search(made[0][0])
+    suffix = suffix.group(0) if suffix else None
+    if first and suffix and not os.path.basename(path).endswith(suffix):
         diffs.append("the file's name does not end in %s, the first run's host and date"
                      % suffix)
     have = {}
@@ -812,10 +834,10 @@ def selftest():
             both = joined_files([d, again])
             assert sorted(both) == sorted(files), sorted(both)
             two = both["exp-xeon8573c-2026-11-20.txt"]
-            at = two.index("# Run 2 of 2 of this file: its header, its table and its raw output"
-                           " follow.")
-            assert two[:at - 1] == exp and two[at + 1:at + 3] == [
-                "#", "# Host:        xeon8573c (expected CPU 'INTEL(R) XEON(R) PLATINUM 8573C')"]
+            at = two.index(RUN_LINE % (2, 2))
+            assert two[:at - 1] == exp and two[at + 1:at + 4] == [
+                "# (Exp|Log1p)Benchmark on a GitHub runner, 2026-11-21 01:02 UTC", "#",
+                "# Host:        xeon8573c (expected CPU 'INTEL(R) XEON(R) PLATINUM 8573C')"]
             assert sum(MARKER in l for l in two) == 6 and len(tables_of(two)) == 2
             assert "# ExpBenchmark.finish256  common         10.2         11.0         12.0" \
                 in two[at:], two[at:at + 20]
@@ -853,6 +875,27 @@ def selftest():
                                     if MARKER not in l][at + 1:]
             found = check(written(d, mixed), [d, again])
             assert any("a file is of one class" in x for x in found), found
+            # The file of a class the re-run lacks checks with both artifacts given.
+            assert check(written(d, narrow["log1p-xeon8573c-2026-11-20.txt"]), [d, again]) == []
+            assert check(written(d, narrow["exp-xeon8573c-2026-11-20.txt"]), [d, again]) == []
+            # A re-run at another commit, or one that joins no file, is refused.
+            with open(os.path.join(again, "bench-results.txt"), "w", encoding="utf-8") as f:
+                f.write(rerun.replace("0123456789abcdef", "ffffffffffffffff"))
+            try:
+                joined_files([d, again])
+                raise AssertionError("another commit")
+            except Problem as e:
+                assert "one commit" in str(e), e
+            # A run from before the workflow wrote a Host line still checks, by its content.
+            with open(os.path.join(again, "bench-results.txt"), "w", encoding="utf-8") as f:
+                f.write(rerun.replace("# Host:        xeon8573c (expected CPU 'INTEL(R) XEON(R)"
+                                      " PLATINUM 8573C')\n", ""))
+            hostless = [l for l in files_of(again, named=False)["exp-unknown-unknown.txt"]
+                        if MARKER not in l]
+            assert not any(l.startswith("# Host:") for l in hostless)
+            assert check(written(again, hostless, name="exp-epyc7763-2026-11-02.txt"),
+                         again) == [], check(written(again, hostless, name="exp-epyc7763-"
+                                                     "2026-11-02.txt"), again)
             # Runs of two hosts are not one file's.
             with open(os.path.join(again, "bench-results.txt"), "w", encoding="utf-8") as f:
                 f.write(rerun.replace("# Host:        xeon8573c", "# Host:        epyc7763"))
