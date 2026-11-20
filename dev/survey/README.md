@@ -37,11 +37,11 @@ may have no counterpart in the port at all.
 
 ## The tables
 
-`<function>.tsv` is the first pass and `<function>-uncaught.tsv` the second, tab-separated
-after `#` lines that give the commit, the seed and the size of each set. A row is a mutant: its
-name (`P1+ulp`, `hx>0x3fd62e42-1`, `drop:x=hi-lo`), its kind, the count in each set, and
-`caught_by`, the first of `suite` (its count or `hard`'s above zero), `fuzz`, `sweep` and `search` with a count above zero, or
-`none`, with one input from that set as raw bits.
+`<function>.tsv` is the first pass and `<function>-uncaught.tsv` the second, tab-separated after `#`
+lines that give the commit, the seed and the size of each set. A row is a mutant: its name
+(`P1+ulp`, `hx>0x3fd62e42-1`, `drop:x=hi-lo`), its kind, the count in each set, and `caught_by`, the
+first of `suite` (its count or `hard`'s above zero), `fuzz`, `sweep` and `search` with a count above
+zero, or `none`, with one input from that set as raw bits.
 
 Made on 20 November 2026, on the laptop, seed `0x5eed`. The `commit` in each table's header is a
 commit of this pull request's branch before it was squashed (log10's "local changes" were the
