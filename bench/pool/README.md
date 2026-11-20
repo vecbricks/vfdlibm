@@ -101,8 +101,9 @@ how many jobs have none.
 night of its own. A run in which no sweep, fuzz or Arm job started is left out and named, and
 so is a run that planted a fault (a dispatch with the input `fault`, a test of the alert job,
 whose JVM options hold `-Dvfdlibm.fault=`): `fetch` leaves it out of both files, and `cost`
-of a file that holds one does the same. `--by-cpu` splits the last two tables by CPU model
-and its widest vector.
+of a file that holds one does the same. It knows such a run by its logs, so with
+`--without-logs` a run whose logs are gone stays in. `--by-cpu` splits the last two tables by
+CPU model and its widest vector.
 
 - **Runner-minutes a night by job kind.** A job's cost is its seconds from start to end; a
   night's is their sum over 60, beside the minutes the jobs started (each job's seconds

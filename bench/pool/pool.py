@@ -209,9 +209,11 @@ def nights(repo, since, until):
     gh lists it), oldest first. A run's date is the UTC day it was created on."""
     runs = json.loads(gh(["run", "list", "--workflow", WORKFLOW, "--limit", "1000", "--json",
                           "databaseId,createdAt,status,attempt,event,headSha"], repo))
-    if since and len(runs) >= 1000 and min(r["createdAt"][:10] for r in runs) > since:
-        sys.exit("the 1000 newest runs of %s do not reach back to %s; the earlier nights would"
-                 " drop out of the range silently" % (WORKFLOW, since))
+    if len(runs) >= 1000 and (not since or min(r["createdAt"][:10] for r in runs) > since):
+        sys.exit("the 1000 newest runs of %s are all gh lists, and %s; the earlier nights would"
+                 " drop out of the range silently"
+                 % (WORKFLOW, "--since reaches back past them" if since
+                    else "with no --since the earliest is not known to be among them"))
     completed = [(r["createdAt"][:10], r["databaseId"], r) for r in runs
                  if r["status"] == "completed"]
     return sorted((n for n in completed
@@ -394,6 +396,7 @@ def fetch(args):
         every = [t for t in every if t[1] not in faulty]
         kept_rows = [(t, f) for t, f in zip(todo, found) if t[1] not in faulty]
         todo, found = [t for t, _ in kept_rows], [f for _, f in kept_rows]
+        unlogged = sum(1 for f in found if f is None)
         if not todo:
             sys.exit("every run of that range planted a fault; no file was written")
     rows = sorted(row(date, run, job, f or {}) for (date, run, job), f in zip(todo, found))
@@ -565,7 +568,7 @@ def cost(args):
     # A run that planted a fault tests the alert job and is no night, though a file written
     # before that was known may hold it.
     faulty = {r["run"] for r in rows if planted(r["jvmargs"])}
-    fault_runs = sorted({(j["date"], int(j["run"])) for j in jobs if j["run"] in faulty})
+    faulty_nights = sorted({(j["date"], int(j["run"])) for j in jobs if j["run"] in faulty})
     jobs = [j for j in jobs if j["run"] not in faulty]
     rows = [r for r in rows if r["run"] not in faulty]
     # A run in which no sweep, fuzz or Arm job started, cancelled as its jobs waited or
@@ -735,10 +738,10 @@ def cost(args):
               " ended before its first, or its log could not be read): their time is in the"
               " nights' tables, as \"the rest\" in the third, and the last two tables have"
               " no run of theirs." % blank)
-    if fault_runs:
+    if faulty_nights:
         print()
         print("Left out, a fault was planted in them: %s." % "; ".join(
-            "%s, run %d" % night for night in fault_runs))
+            "%s, run %d" % night for night in faulty_nights))
     if idle:
         print()
         print("Left out, since no sweep, fuzz or Arm job of theirs started: %s." % "; ".join(
@@ -833,7 +836,8 @@ def main():
     f.add_argument("--parallel", type=positive, default=4,
                    help="logs fetched at once (default 4)")
     f.add_argument("--without-logs", action="store_true",
-                   help="write the rows even when some jobs' logs cannot be read")
+                   help="write the rows even when some jobs' logs cannot be read (a run that"
+                        " planted a fault is then known only by its logs, so it stays in)")
     f.add_argument("--cache", default="target/pool-cache", metavar="DIR",
                    help="where the runs' job lists and the jobs' logs are kept, so that none"
                         " is fetched twice (default target/pool-cache)")
