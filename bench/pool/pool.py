@@ -556,11 +556,19 @@ def species_label(r):
 
 
 def cost(args):
-    """Prints the nights' runner-minutes by job kind, each function's share of a night, the
-    time of a whole sweep and the fuzz's rate by function, species and machine."""
+    """Prints the nights' runner-minutes by job kind and by function, how long one job takes by
+    kind, what the jobs do, the time of a whole sweep and the fuzz's rate by function, species
+    and machine, for the nights from --since to --until."""
     rows = read(args.file, COST_COLUMNS)
+    # --since and --until pick the nights, by the date of their run, to quote one set of them,
+    # as the nights of five functions, apart from the two of four.
+    for given in (args.since, args.until):
+        if given and not re.fullmatch(r"\d{4}-\d\d-\d\d", given):
+            sys.exit("%s is not a date as YYYY-MM-DD" % given)
+    rows = [r for r in rows if (not args.since or r["date"] >= args.since)
+            and (not args.until or r["date"] <= args.until)]
     if not rows:
-        sys.exit("%s holds no rows" % args.file)
+        sys.exit("%s holds no rows in that range" % args.file)
     jobs = {}
     for r in rows:
         jobs.setdefault(r["job"], r)
@@ -658,6 +666,18 @@ def cost(args):
             bits = int(r["bits"]) if r["bits"] != "-" else 0
             spent[(kind(r["name"]), r["mode"], species_label(r), bits)] += float(r["seconds"])
             spent[(kind(r["name"]), "the rest", "", 0)] -= float(r["seconds"])
+    # How long one job takes bounds the night's wall time with the slots a kind has
+    # (max-parallel in nightly.yml): a kind's minutes over its slots, and its longest job.
+    print()
+    print("Minutes one job takes, by job kind, over the jobs that ran.")
+    print()
+    print("| job kind | jobs | least | median | most |")
+    print("|---|---|---|---|---|")
+    for k in kinds:
+        walls = [int(j["wall"]) / 60.0 for j in jobs if kind(j["name"]) == k
+                 and int(j["wall"]) > 0]
+        if walls:
+            print("| %s | %d | %s |" % (k, len(walls), low_mid_high(walls)))
     print()
     print("Runner-minutes a night by job kind and what the job was doing, the mean over all")
     print("%d nights; a species a night's machines lacked adds nothing for that night." % len(runs))
@@ -812,17 +832,30 @@ def selftest(args):
              job_row("2026-11-19", 2, "sweep (exp, stripe 0/2)",
                      "--add-modules=x -Dvfdlibm.fault=exp.dropCorrection"),
              job_row("2026-11-20", 3, "sweep (exp, stripe 0/2)", "--add-modules=x")]
-    with tempfile.TemporaryDirectory() as tmp:
-        path = os.path.join(tmp, "cost.tsv")
-        with open(path, "w", encoding="ascii") as out:
-            out.write("\n".join(lines) + "\n")
-        text = io.StringIO()
-        with contextlib.redirect_stdout(text):
-            cost(argparse.Namespace(file=path, by_cpu=False))
+    tmpdir = tempfile.TemporaryDirectory()
+    tmp = tmpdir.name
+    path = os.path.join(tmp, "cost.tsv")
+    with open(path, "w", encoding="ascii") as out:
+        out.write("\n".join(lines) + "\n")
+    text = io.StringIO()
+    with contextlib.redirect_stdout(text):
+        cost(argparse.Namespace(file=path, by_cpu=False, since=None, until=None))
     said = text.getvalue()
     assert said.startswith("2 jobs of 2 nights, 2026-11-18 to 2026-11-20;"), said[:80]
+    assert "Minutes one job takes" in said
+    # --since picks nights by date, and a date not as YYYY-MM-DD is refused.
+    text = io.StringIO()
+    with contextlib.redirect_stdout(text):
+        cost(argparse.Namespace(file=path, by_cpu=False, since="2026-11-20", until=None))
+    assert text.getvalue().startswith("1 jobs of 1 nights, 2026-11-20 to 2026-11-20;")
+    try:
+        cost(argparse.Namespace(file=path, by_cpu=False, since="2026-11-5", until=None))
+        raise AssertionError("a date not as YYYY-MM-DD was taken")
+    except SystemExit:
+        pass
     assert "Left out, a fault was planted in them: 2026-11-19, run 2." in said, said[-400:]
     assert "| 2026-11-19 |" not in said
+    tmpdir.cleanup()
     print("pool.py selftest: the fault-run rule and the log readers passed")
 
 
@@ -859,6 +892,8 @@ def main():
     t.set_defaults(run=table)
     c = commands.add_parser("cost", help="tabulate a file that fetch --cost wrote")
     c.add_argument("file")
+    c.add_argument("--since", help="the first night to count, YYYY-MM-DD; default the earliest")
+    c.add_argument("--until", help="the last night to count, YYYY-MM-DD; default the latest")
     c.add_argument("--by-cpu", action="store_true",
                    help="split the sweep and fuzz tables by CPU model, not by vector width")
     c.set_defaults(run=cost)

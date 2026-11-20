@@ -538,7 +538,7 @@ a settled question.
   samples; the fuzz is for splits.
 - **A slice by hand.** After `mvn -B -q test-compile`, `dev/nightly.sh sweep exp 1023/4096 0x5eed
   256` sweeps the 2^20 high words of `[1, 2)` at 256 bits (a second or two);
-  `dev/nightly.sh sweep log stripe:255/256 0x5eed` sweeps the stripe the sizing below used at
+  `dev/nightly.sh sweep log stripe:255/256 0x5eed` sweeps a stripe of 2^24 high words at
   every width the host has (`NIGHTLY_EXCEPT=128` leaves one out, as the nightly does);
   `dev/nightly.sh fuzz log1p 30 0x5eed` fuzzes for 30 seconds a species. A width the host lacks
   is named in the output (`512: not on this host`). `NIGHTLY_JVM_ARGS` passes JVM options,
@@ -556,63 +556,83 @@ a settled question.
   per arm and mask form are written, and a stopped run's total, vary. On the laptop, take the
   heavy lock and pin to one core type, for example
   `flock ~/proj/.varka-locks/heavy.lock taskset -c 0,1,12,13 dev/nightly.sh ...`.
-- **Its cost, measured once (laptop, 2 November 2026).** Stripe `255/256` of each function, 2^24
-  high words over 16 exponents of both signs, with 4 threads on two Zen 5 cores and their SMT
-  siblings (`taskset -c 0,1,12,13`, the shape of a 4-vCPU runner), took in seconds at 128 / 256
-  / 512 bits / max: exp 10.7 / 1.9 / 1.5 / 1.6, log 11.6 / 1.7 / 1.6 / 1.6, log1p 24.1 / 2.2 /
-  1.8 / 1.9; stripe `0/256` read within 0.6 s of these. On another 2^24 sample, exp at 256 bits
-  swept 4.7 million high words a second on one thread and 9.7 million on the four, 2.1 times as
-  many. Times 256, the whole sweep at every width is 67 minutes for exp, 70 for log and 128 for
-  log1p on those two laptop cores, 6 to 8 runner-hours a night on GitHub's x86 runners. log10,
-  added later and timed the same way on its port's branch (one run, while other work shared the
-  laptop, so a laptop cost estimate, not a committed result), took 13.6 / 2.0 / 1.7 / 1.8, about
-  81 minutes whole, a little above log, whose body it holds. expm1 was not timed on the
-  laptop; what it costs a night is measured ("What the logs say", below). The projection below
-  is for the first three functions.
-- **Why x86 sweeps 128 bits by a slice (Max, 2 November 2026).** The 128-bit species is 68 to
-  80% of that cost: x86 C2 lowers no mask at two 64-bit lanes (above), so that width runs lane
-  by lane in Java, and Varka declines 128-bit doubles on x86, so no user of the port runs it
-  there. So on x86 the nightly sweeps every high word at 256 bits and max (and 512 on an AVX-512
-  draw), and at 128 bits a rotating slice: on night n of 32, stripe `n*shards + j` of
-  `32*shards` in shard j's job, every high word in 32 nights. 1/32 keeps the slice near a tenth
-  of the x86 sweep while covering it every month; the 128-bit logic itself is swept whole every
-  night on Arm, natively, so what the slice alone guards is x86's per-lane fallback. The fuzz
-  still runs at 128 bits on x86 every night. The dispatch inputs `slice-nights` and
-  `slice-night` change or replay the rotation; `nights` and `shards` do the same for the rest.
+- **Its cost, measured (the logs of 3 to 19 November 2026).** The first sizing was a laptop's,
+  from a sample of high words, before any night had run; the nights' own logs replaced it.
+  `bench/pool/pool.py cost --since 2026-11-05
+  bench/pool/nightly-cost-2026-11-03-to-2026-11-19.tsv` prints the tables the figures here are
+  read or summed from (`bench/pool/README.md`, "What a night costs"); a sum is of its rows.
+  Those are the 15 nights of five functions, from the night expm1 joined; the two nights
+  before them ran four, at 272 and 285 runner-minutes.
+  The figures are what the nightly's jobs took on whatever machine each drew, to size the night
+  with, and no comparison of one body with another.
+  - A night costs 347 to 372 runner-minutes, 5.8 to 6.2 runner-hours. By the median of each
+    column, the 10 x86 sweep jobs take 119 minutes, the 10 fuzz jobs 138 and the 20 Arm jobs
+    105; the plan and proofs jobs add at most one. The night's span, from its first job's start
+    to its last job's end, is 54 minutes by the median and 77 at most.
+  - By what the jobs do, as means: fuzzing is 172.5 minutes (132.5 in the fuzz jobs, 40.0 in
+    the Arm jobs), sweeping 167.7 (112.9 on x86, 54.8 on Arm) and setup, build and the machine's
+    probe 21, about half a minute a job. The fuzz is the largest part, and it is exactly what
+    `fuzz-seconds` sets: a species costs those seconds.
+  - By function, a night costs 61 minutes for log, 68 for exp and for log10, 79 for log1p and
+    84 for expm1, 72 on average.
+  - A sweep job takes 10.9 minutes by the median and 19.8 at most, a fuzz job 12.6 and 17.0, an
+    Arm job 3.8 and 12.1 (the first shard of a function, which also fuzzes).
+  - One runner sweeping every high word of a function takes, by the median, at 256 bits on a
+    256-bit x86 machine, 6.5 minutes for log, 8.2 for log10, 9.3 for exp, 12.5 for expm1 and
+    13.2 for log1p; at 128 bits on the same machine 67.5, 88.2, 80.7, 262.1 and 199.5; and at
+    128 bits on Arm, natively, 7.2, 9.5, 9.7, 13.4 and 12.7. An x86 draw with 512-bit vectors
+    is faster and its range wide (exp at 512 bits: 3.5 to 7.1 minutes), and `--by-cpu` splits
+    the draws.
+- **Why x86 sweeps 128 bits by a slice (Max, 2 November 2026).** The 128-bit species is 80 to
+  91% of a whole sweep's cost on a 256-bit x86 machine (the medians above: exp 80.7 of 100.2
+  minutes, expm1 262.1 of 288.0): x86 C2 lowers no mask at two 64-bit lanes (above), so that
+  width runs lane by lane in Java, and Varka declines 128-bit doubles on x86, so no user of the
+  port runs it there. So on x86 the nightly sweeps every high word at 256 bits and max (and 512
+  on an AVX-512 draw), and at 128 bits a rotating slice: on night n of 32, stripe `n*shards + j`
+  of `32*shards` in shard j's job, every high word in 32 nights. At 1/32 the slice costs 17.9
+  minutes a night, 16% of the x86 sweep jobs' sweeping, while covering it every month; the
+  128-bit logic itself is swept whole every night on Arm, natively, so what the slice alone
+  guards is x86's per-lane fallback. The fuzz still runs at 128 bits on x86 every night. The
+  dispatch inputs `slice-nights` and `slice-night` change or replay the rotation; `nights` and
+  `shards` do the same for the rest.
 - **The Arm job** sweeps every high word at 128 bits every night, in 4 stripes per function
   (`arm-shards`), the same rotating 1/32 slice at max (128 bits wide on Arm too, a second
-  species of the same width), and fuzzes both species once per function, in shard 0's job. Its
-  time was not measured when it was sized; it is now, at 105 minutes a night for its 20 jobs
-  by the median ("What the logs say", below). It was sized by the laptop's x86 128-bit time as
-  an upper bound: that path runs per lane, where Arm lowers the masks natively, and the bound
-  assumes a Neoverse N2 core is not slower than a Zen 5 core with its SMT sibling, which
-  nobody has measured. Under it
-  a log1p stripe sweeps for 26 minutes and an exp or log stripe for 12, plus the slice (under 2)
-  and 8 minutes of fuzz in shard 0 (30 at the 900-second cap), against a 120-minute timeout.
-- **The projection, in runner-hours a night (the first nights' logs, which print each species'
-  time, replace it).** From the laptop numbers, with GitHub's cores taken as 1.5 to 2 times
-  slower (not measured), the x86 sweep is 16, 16 and 21 laptop-minutes for exp, log and log1p
-  (256 bits, max and the 128 slice), 79 to 105 runner-minutes in all, plus 31 to 42 on an
-  AVX-512 draw; 2 jobs per function of 12 to 30 minutes. That is 2 shards, not 4: the jobs got
-  short, and each pays its setup and build (about 2 minutes) and is billed by the started
-  minute. The fuzz is unchanged: 6 jobs of 240 seconds times 3 or 4 species, 72 to 84 minutes.
-  The proofs and every job's setup add about half an hour. So x86 is 1.3 to 1.8 runner-hours of
-  sweep (6 to 8 before) and 3 to 3.7 with fuzz and setup. Arm is at most 4.2 under the bound
-  above (198 minutes of sweep, 6 of slice, 24 of fuzz, 24 of setup for its 12 jobs) and, if its
-  native 128 bits costs twice x86's 256 bits per vector (half the lanes) on cores 1.5 to 2 times
-  slower than the laptop's, 2 to 2.5. The target is 2 to 3 runner-hours a night:
-  the sweep is within it; the whole night is above it until the logs say otherwise, mostly from
-  the fuzz, which this schedule does not change.
-- **What the logs say.** `bench/pool/pool.py cost` tabulates the nights' measured cost from
-  `bench/pool/nightly-cost-2026-11-03-to-2026-11-19.tsv`, one row per job and species run
-  (`bench/pool/README.md`, "What a night costs"). The 15 nights of five functions, 5 to 19
-  November 2026, cost 5.8 to 6.2 runner-hours each, above the target. As means over all 17
-  nights, fuzzing is 168 minutes a night (129 in the fuzz jobs, 39 in the Arm jobs), sweeping
-  162 (109 on x86, 53 on Arm) and setup and build 21: the fuzz is the largest part. The x86
-  fuzz jobs' 129 minutes, for five functions on 15 nights and four on 2, stand against the
-  72 to 84 projected for three; a species still fuzzes for the 240 seconds asked, so the
-  difference is the functions added. The projection and the laptop timings above have not
-  been requoted from the table yet.
+  species of the same width), and fuzzes both species once per function, in shard 0's job. It
+  costs 105 minutes a night: 52.8 of the whole sweep, 2.0 of the slice, 40.0 of fuzz and 10.5 of
+  setup, over 20 jobs. Arm lowers the masks natively, so its 128 bits costs about what x86's
+  256 bits does (log1p 12.7 minutes a whole sweep against 13.2, exp 9.7 against 9.3). A stripe
+  of 4 is 1.8 to 3.4 minutes of sweep, and no job of the 15 nights took more than 12.1.
+- **The budget (20 November 2026, from the table above).**
+  - **What it protects.** The repository is public, so GitHub's standard runners, Arm's too
+    (its changelog of 7 August 2025), cost no money, and a night's runner-hours are not the
+    limit. The limits are the 20 jobs the free plan runs at once, shared by the night, CI and
+    the benchmark dispatches, and the night's wall time. So the budget is two numbers: **at
+    most 16 jobs of the night at once (the matrices' `max-parallel` 15, and the proofs), and a
+    median span of at most 90 minutes**. It replaces the earlier target of 2 to 3
+    runner-hours a night, which the five functions overran at 6 and which would not have been
+    kept at 13.
+  - **How the span follows the schedule.** A kind of job (sweep, fuzz, Arm) runs on its
+    `max-parallel` slots, and the span is its slowest kind's minutes over its slots, plus 8
+    minutes (the night's 54 against the fuzz's 138 over 3 slots, 46). At 13 functions of the
+    average 72 minutes, that is 13/5 of the night's medians (sweep 309, fuzz 359, Arm 273: 941
+    runner-minutes, 15.7 hours; 13 times 72 is 936), the old slots 8, 3 and 4 give 120 minutes
+    of fuzz and a span of 128. Slots 5, 6 and 4, the best split of 15 by this model, give 62,
+    60 and 68, a span of 76 (and 34 for five functions, from 24, 23 and 26). The model is
+    linear and counts no whole waves of jobs, so 76 is a lower bound; the sweep's 62, plus its
+    longest job, 19.8, plus the 8 minutes, gives 90 as the upper. The 8 minutes are one fit
+    (54 against 46). So the defaults keep `fuzz-seconds` 240, `nights` 1, `shards` 2
+    and `arm-shards` 4, and `max-parallel` is 5 for the sweep, 6 for the fuzz and 4 for Arm. At
+    13 functions the span is within 90 by the upper bound, with no room above it: each further
+    average function adds about 5 minutes (Arm's 273 over 13 functions and 4 slots).
+  - **What gives when it does not fit,** cheapest first, with what each buys at 13 functions
+    (the table's means times 2.6): `fuzz-seconds` 120 saves 224 runner-minutes a night (172 in
+    the fuzz jobs, 52 in Arm's) and halves what a species is fuzzed; `nights` 2 saves 192, 124
+    of them on x86, and sweeps every high word every second night; `slice-nights` 64 saves 26;
+    `arm-shards` 2 saves 14 and buys nothing, since a job's setup is half a minute, so the slots
+    and not the shards bound the span. Which of these to give up first is the owner's.
+  - **Not in it.** The two-argument functions (#33, #34) need another sweep and a cost of their
+    own, measured before they join; 13 times 72 assumes none. The prediction of 34 minutes for
+    five functions under the new slots is checked by the first nights after this change.
 - **When a night fails,** the `alert` job (the only one with `issues: write`) opens an issue
   labelled `nightly-failure`, or comments on the open one, with the run's link, the seed, each
   job's result, the dispatch inputs that replay the run (seed, `nights`, `shards`, `arm-shards`,
