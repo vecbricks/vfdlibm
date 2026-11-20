@@ -9,7 +9,7 @@
 #
 # Describes the machine this runs on and measures its vector datapath. Adapted from
 # vecbricks/varka's dev/varka_datapath.sh, the script of the same role, without its CPU gate:
-# here the benchmark workflow's first step checks the CPU, and this only records.
+# here the benchmark workflow checks the CPU first (bench/host.sh), and this only records.
 #
 #   bench/datapath.sh
 #

@@ -8,8 +8,9 @@
 # limitations under the License.
 #
 # The table of benchmark hosts, and the check of a machine against it. This is the one place
-# that holds each host's CPU string: .github/workflows/benchmark.yml runs it as its first step,
-# bench/dispatch-bench.sh takes its host keys from it, and CI runs its self-test.
+# that holds each host's CPU string: .github/workflows/benchmark.yml fetches it and runs it
+# before anything else, bench/dispatch-bench.sh takes its host keys from it, and CI runs its
+# self-test.
 #
 #   bench/host.sh --expect <key>   check this machine against one host; exit 1 on any other CPU
 #   bench/host.sh                  print this machine's host key; exit 1 when it is no named host
@@ -29,7 +30,9 @@
 # runs), matched ignoring case, since Azure VMs have reported Intel names in capitals
 # ("INTEL(R) XEON(R) PLATINUM 8573C"). The two EPYC strings are the full names the runs printed
 # and must end the model name ("end"), so that a longer model number cannot pass; the two Xeon
-# strings have no recorded full form, so they may sit anywhere in it ("any"). The last field is
+# strings had no recorded full form when they were written, so they may sit anywhere in it
+# ("any"). The census of the pool (bench/pool/) has since printed both as whole names; making
+# them "end" would be a change to the check, which is the owner's. The last field is
 # a list of words of /proc/cpuinfo's flags line, separated by spaces, all of which the machine
 # must have; no host of today's needs one, since each model name has come with one set of
 # flags.
@@ -80,7 +83,7 @@ classify() {
   return 1; }
 
 # The check of one host: the key, the model name, the flags line. Prints what
-# benchmark.yml's first step has always printed.
+# benchmark.yml's probe step has always printed.
 expect() {
   local row cpu
   if ! row="$(row_of "$1")"; then echo "::error::Unknown host '$1'"; return 1; fi
@@ -166,6 +169,37 @@ self_test() {
       echo "host.sh: malformed row '$row'" >&2; failed=1
     fi
   done
+
+  # The keys are the choices of benchmark.yml's host input, in its order: a key on one side
+  # only would fail a dispatch, or fail every run in the probe step, which reads as a CPU miss.
+  local yml; yml="$(dirname "$0")/../.github/workflows/benchmark.yml"
+  n=$((n + 1))
+  got="$(awk '/^      host:/ {h = 1; next} h && /^      [a-z]/ {exit}
+    h && /^        options:/ {o = 1; next} h && o && /^          - / {print $2}' "$yml")"
+  if [ "$got" != "$(keys)" ]; then
+    echo "host.sh: benchmark.yml's host choices are '$(tr '\n' ' ' <<<"$got")'" >&2; failed=1
+  fi
+
+  # The script as the workflow runs it, on this machine, for every key: it passes for the key
+  # this machine is, if it is a host, and then writes that host's string for the results
+  # header; for every other key it fails and writes nothing.
+  local here env line
+  here="$(classify "$(this_cpu)" "$(this_flags)")" || here="-"
+  env="$(mktemp)"
+  for key in $(keys); do
+    n=$((n + 1)); : > "$env"
+    GITHUB_ENV="$env" "$0" --expect "$key" > /dev/null; got=$?
+    line="$(cat "$env")"
+    if [ "$key" = "$here" ]; then
+      want="EXPECTED_CPU=$(string_of "$(row_of "$key")")"
+      if [ "$got" != 0 ] || [ "$line" != "$want" ]; then
+        echo "host.sh: --expect $key here ended with $got and wrote '$line'" >&2; failed=1
+      fi
+    elif [ "$got" != 1 ] || [ -n "$line" ]; then
+      echo "host.sh: --expect $key here ended with $got and wrote '$line'" >&2; failed=1
+    fi
+  done
+  rm -f "$env"
 
   # A row's flags are required, every one of them. No host of today's has any, so the test
   # adds a row of its own: one model name that is a host only with AVX-512.

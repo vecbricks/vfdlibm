@@ -25,7 +25,8 @@
 # (the hourly retry goes on until the host is drawn). For epyc9v45, a draw of about one in eighteen
 # that is recorded whenever drawn but never waited for, it defaults to 18: an hourly try for
 # about a day, which draws it at least once with a chance of about 64%, each miss costing a
-# minute of runner time, since the check is the job's first step. --attempts 1 is a single
+# minute of runner time, since the check is the job's first step after it fetches the check's
+# script. --attempts 1 is a single
 # opportunistic try. Running out of attempts is exit status 3, not a failure of the run.
 #
 # --base <base> makes each run a pair (bench/pair.sh in the workflow): the benchmarks on <base>
@@ -40,10 +41,14 @@
 # wrong run. The <ref> must have the run-tag and host inputs, and the base input with --base; on
 # an older one the dispatch fails and the script says so. A gh call that fails is tried five
 # times, a minute apart. Finding the run and waiting for it are bounded (ten minutes, about seven
-# hours plus retries); the hourly CPU retry is bounded only by --attempts, by design. Exit
-# status: 0 on success, 1 when the run failed other than on the CPU check (for a pair, also when
-# a row is slower), 2 when GitHub could not be asked, 3 when --attempts ran out without drawing
-# the host, 64 on a usage error.
+# hours plus retries); the hourly CPU retry is bounded only by --attempts, by design. A run that
+# failed before its CPU check ran (the job fetches bench/host.sh first, and a fetch can fail) says
+# nothing about the machine, so it is retried an hour later like a miss, and counts as an
+# attempt; three such runs in a row stop the script. Exit status: 0 on success, 1 when the run
+# failed other than on the CPU check (for a pair, also when a row is slower) or three times in a
+# row before it, 2 when GitHub could not be asked or bench/host.sh, which must sit beside this
+# script, could not be run, 3 when --attempts ran out without drawing the host, 64 on a usage
+# error.
 #
 # Then fetch the results: gh run download <run id> -R vecbricks/vfdlibm -n bench-results, and
 # save them as bench/results/<function>-<host>-<date>.txt (AGENTS.md, "Measurements, not
@@ -70,7 +75,8 @@ while [ $# -gt 0 ]; do
   esac
 done
 # A key of bench/host.sh's table, so a typo stops here and not at GitHub.
-grep -qxF -- "$H" <<<"$KEYS" || { echo "unknown host '$H'" >&2; usage; }
+known=0; for k in $KEYS; do [ "$k" = "$H" ] && known=1; done
+[ $known = 1 ] || { echo "unknown host '$H'" >&2; usage; }
 [ "$H" = epyc9v45 ] && A=${A:-18}
 case "$A" in "") ;; *[!0-9]*|0) echo "--attempts takes a positive number" >&2; usage ;; esac
 [ $# -ge 1 ] && [ $# -le 3 ] || usage
@@ -108,7 +114,7 @@ check_base() {
   echo "base '$P' is neither a branch or tag of origin nor a commit on an origin branch" >&2
   return 64; }
 bench() {
-  local n=0
+  local n=0 early=0 probe
   while :; do n=$((n + 1)); tag="dispatch-$H-$(date -u +%Y%m%dT%H%M%SZ)-$$-$RANDOM"
     # A dispatch whose reply was lost may still have started a run, so before each retry look
     # for a run with this tag, and dispatch again only if there is none.
@@ -141,14 +147,28 @@ bench() {
     # The failed step's name comes from the jobs API: a failed log can label every line
     # "UNKNOWN STEP", which made a log grep miss a CPU-check failure and stop. An API error is
     # tried again, not read as a failure elsewhere.
-    if ! failed=$(try gh api "repos/$R/actions/runs/$m/jobs" \
-        --jq '.jobs[].steps[]|select(.conclusion=="failure")|.name'); then
+    if ! steps=$(try gh api "repos/$R/actions/runs/$m/jobs" \
+        --jq '.jobs[].steps[]|"\(.conclusion) \(.name)"'); then
       echo "$(t) could not read run $m's jobs, stopping"; return 2; fi
-    if ! grep -qx "Probe the machine's CPU" <<<"$failed"; then return 1; fi
+    probe=$(sed -n "s/ Probe the machine's CPU\$//p" <<<"$steps" | head -1)
+    if [ "$probe" = failure ]; then
+      early=0
+      if [ -n "$A" ] && [ "$n" -ge "$A" ]; then
+        echo "$(t) $N: CPU check failed (not $H) on attempt $n of $A; no attempts left"
+        return 3; fi
+      echo "$(t) $N: CPU check failed (not $H), retry in an hour"; sleep 3600; continue
+    fi
+    # The check passed, or the run was cancelled: a failure elsewhere, not to be retried.
+    if [ "$probe" = success ] || [ "$c" = cancelled ]; then return 1; fi
+    # The check did not run: a step before it failed, and the machine is not known.
+    early=$((early + 1))
+    if [ $early -ge 3 ]; then
+      echo "$(t) $N: run $m failed before its CPU check, the third in a row, stopping"
+      return 1; fi
     if [ -n "$A" ] && [ "$n" -ge "$A" ]; then
-      echo "$(t) $N: CPU check failed (not $H) on attempt $n of $A; no attempts left"
+      echo "$(t) $N: run $m failed before its CPU check on attempt $n of $A; no attempts left"
       return 3; fi
-    echo "$(t) $N: CPU check failed (not $H), retry in an hour"; sleep 3600
+    echo "$(t) $N: run $m failed before its CPU check, retry in an hour"; sleep 3600
   done; }
 if [ -n "$P" ]; then check_base || exit $?; fi
 bench
