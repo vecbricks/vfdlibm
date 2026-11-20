@@ -127,7 +127,10 @@ jobs:
           # Every function of the night: each matrix and each check below reads this list, so a
           # new port is added here (the comments that name the functions aside).
           all='exp expm1 log log10 log1p'
-          pow2() { [[ $1 =~ ^[0-9]+$ ]] && [ "$1" -ge 1 ] && [ $(($1 & ($1 - 1))) -eq 0 ]; }
+          # A number here has no leading zero, which bash's arithmetic would read as octal, and
+          # at most five digits, more than any limit below.
+          number() { [[ $1 =~ ^(0|[1-9][0-9]{0,4})$ ]]; }
+          pow2() { number "$1" && [ "$1" -ge 1 ] && [ $(($1 & ($1 - 1))) -eq 0 ]; }
           # An input was refused: the output keeps the alert job from opening an issue for it.
           refused() { echo "refused=true" >> "$GITHUB_OUTPUT"; exit 1; }
           if [ -z "$SEED" ]; then
@@ -174,15 +177,15 @@ jobs:
           days=$(( $(date -u +%s) / 86400 ))
           if [ -z "$NIGHT" ]; then NIGHT=$((days % NIGHTS)); fi
           if [ -z "$SLICE_NIGHT" ]; then SLICE_NIGHT=$((days % SLICE_NIGHTS)); fi
-          if ! [[ $NIGHT =~ ^[0-9]+$ ]] || [ "$NIGHT" -ge "$NIGHTS" ]; then
+          if ! number "$NIGHT" || [ "$NIGHT" -ge "$NIGHTS" ]; then
             echo "::error::night takes 0 to $((NIGHTS - 1)), not '$NIGHT'"; refused
           fi
-          if ! [[ $SLICE_NIGHT =~ ^[0-9]+$ ]] || [ "$SLICE_NIGHT" -ge "$SLICE_NIGHTS" ]; then
+          if ! number "$SLICE_NIGHT" || [ "$SLICE_NIGHT" -ge "$SLICE_NIGHTS" ]; then
             echo "::error::slice-night takes 0 to $((SLICE_NIGHTS - 1)), not '$SLICE_NIGHT'"
             refused
           fi
           # The fuzz job runs up to 4 species (128, 256, 512, max) in its 90 minutes.
-          if ! [[ $FUZZ_SECONDS =~ ^[0-9]+$ ]] || [ "$FUZZ_SECONDS" -lt 1 ] \
+          if ! number "$FUZZ_SECONDS" || [ "$FUZZ_SECONDS" -lt 1 ] \
               || [ "$FUZZ_SECONDS" -gt 900 ]; then
             echo "::error::fuzz-seconds takes 1 to 900, not '$FUZZ_SECONDS'"; refused
           fi
@@ -446,15 +449,20 @@ jobs:
       - name: Check the proofs under both solvers
         run: dev/prove.sh --solver both
 
-  # A run with a planted fault must record a mismatch in a function the fault reaches. A job
-  # that failed for another reason (a build, a timeout) is no catch, so this job reads the
-  # mismatch files and not the jobs' results. It fails when those files record none and at
-  # least one of them is a JVM's whole clean run, so that a missed fault is a red run and the
-  # alert job says so; a run that was cut short, or where no JVM finished, decides nothing.
+  # A run with a planted fault must record a mismatch in a function the fault reaches. This
+  # job gives the verdict, which the alert job quotes:
+  # - caught: a mismatch file of such a function records a mismatch. A job that failed for
+  #   another reason (a build, a timeout) is no catch, so the files are read, not the results.
+  # - missed: no such file, and the sweep, the fuzz and Arm all passed; dev/nightly.sh fails on
+  #   any mismatch, so nothing differed. The job fails, so that a missed fault is a red run.
+  # - undecided: no such file, and some job failed or was cut short, perhaps the one that
+  #   would have caught the fault.
   fault-caught:
     needs: [plan, sweep, fuzz, arm]
     if: always() && needs.plan.outputs.fault != ''
     runs-on: ubuntu-latest
+    outputs:
+      verdict: ${{ steps.verdict.outputs.verdict }}
     steps:
       - name: Download the mismatches
         continue-on-error: true
@@ -462,7 +470,8 @@ jobs:
         with:
           pattern: nightly-*
           path: nightly
-      - name: Require a mismatch of a function the fault reaches
+      - name: Say whether the fault was caught
+        id: verdict
         env:
           FAULT: ${{ needs.plan.outputs.fault }}
           FAULT_FUNCTIONS: ${{ needs.plan.outputs.fault-functions }}
@@ -472,7 +481,6 @@ jobs:
         run: |
           echo "jobs: $RESULTS"
           caught=0
-          clean=0
           for f in $FAULT_FUNCTIONS; do
             # An artifact's files are <mode>-<function>-<species>.txt.
             for file in nightly/nightly-*/*-"$f"-*.txt; do
@@ -480,7 +488,7 @@ jobs:
               # As the alert job counts: a JVM that was stopped wrote no total.
               total="$(sed -n 's/^# total mismatches: //p' "$file")"
               written="$(grep -c '^# MISMATCH ' "$file" || true)"
-              case "$total" in 0\ *) clean=$((clean + 1)); continue ;; esac
+              case "$total" in 0\ *) continue ;; esac
               if [ -z "$total" ] && [ "$written" = 0 ]; then continue; fi
               echo "caught in ${file#nightly/}: ${total:-$written written, the JVM was stopped}"
               caught=$((caught + 1))
@@ -488,33 +496,33 @@ jobs:
           done
           if [ "$caught" -gt 0 ]; then
             echo "the planted fault $FAULT was caught in $caught mismatch files"
-            exit 0
+            echo "verdict=caught" >> "$GITHUB_OUTPUT"
+          elif [ "$RESULTS" = "sweep=success fuzz=success arm=success" ]; then
+            echo "verdict=missed" >> "$GITHUB_OUTPUT"
+            echo "::error::every sweep and fuzz passed: the planted fault $FAULT was not caught"
+            exit 1
+          else
+            echo "verdict=undecided" >> "$GITHUB_OUTPUT"
+            echo "::warning::no mismatch of $FAULT_FUNCTIONS is recorded, and not every job" \
+              "passed: whether the fault $FAULT would be caught is not decided"
           fi
-          case "$RESULTS" in *=cancelled*|*=skipped*) clean=0 ;; esac
-          if [ "$clean" = 0 ]; then
-            echo "::warning::no mismatch of $FAULT_FUNCTIONS is recorded, but the run was cut" \
-              "short or no JVM of them finished: whether the fault $FAULT would be caught is" \
-              "not decided"
-            exit 0
-          fi
-          echo "::error::$clean JVMs of $FAULT_FUNCTIONS finished and none records a mismatch:" \
-            "the planted fault $FAULT was not caught"
-          exit 1
 
   alert:
     needs: [plan, sweep, fuzz, arm, proofs, fault-caught]
     # A job past its timeout fails; a cancelled one is reported too, since nothing here cancels
     # a nightly by itself (cancel-in-progress is off).
-    # A run whose plan job refused its inputs opens no issue: the run's own error says so to
-    # whoever dispatched it. A plan job that failed for any other reason is reported.
+    # A dispatch whose plan job refused its inputs opens no issue: the run's own error says so
+    # to whoever dispatched it. A plan job that failed for any other reason is reported, and
+    # so is a scheduled night whose plan job refused the defaults.
     if: >-
       always() && (contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled'))
-      && needs.plan.outputs.refused != 'true'
+      && (needs.plan.outputs.refused != 'true' || github.event_name == 'schedule')
     runs-on: ubuntu-latest
-    # One at a time: two runs that fail together must not both find no open issue and each
-    # open one.
+    # One at a time for a label: two runs that fail together must not both find no open issue
+    # and each open one. A night and a dispatch share the first group, and a group holds one
+    # job waiting, so a third failure of one minute would lose the second's report.
     concurrency:
-      group: nightly-alert
+      group: nightly-alert-${{ inputs.fault && 'fault-test' || 'failure' }}
       cancel-in-progress: false
     permissions:
       issues: write
@@ -539,7 +547,7 @@ jobs:
           # says that a fault was asked for, which decides the label.
           FAULT: ${{ needs.plan.outputs.fault || inputs.fault }}
           FAULT_FUNCTIONS: ${{ needs.plan.outputs.fault-functions }}
-          FAULT_CAUGHT: ${{ needs.fault-caught.result }}
+          FAULT_VERDICT: ${{ needs.fault-caught.outputs.verdict }}
           RESULTS: >-
             plan=${{ needs.plan.result }} sweep=${{ needs.sweep.result }}
             fuzz=${{ needs.fuzz.result }} arm=${{ needs.arm.result }}
@@ -559,11 +567,12 @@ jobs:
             about="A nightly run with a planted fault, a test of the alert job"
             title="Nightly run with a planted fault (a test of the alert job)"
           fi
-          missed=0
+          verdict=''
           reached="$FAULT_FUNCTIONS"
           if [ -n "$FAULT" ]; then
-            RESULTS="$RESULTS fault-caught=$FAULT_CAUGHT"
-            if [ "$FAULT_CAUGHT" = failure ]; then missed=1; fi
+            # No verdict: the fault-caught job did not run or did not finish.
+            verdict="${FAULT_VERDICT:-undecided}"
+            RESULTS="$RESULTS fault=$verdict"
             # The plan job did not get as far as saying which functions the fault reaches.
             if [ -z "$reached" ]; then reached="${FAULT%%.*}"; fi
           fi
@@ -593,12 +602,19 @@ jobs:
               echo "the sweep, the fuzz and Arm fail under the fault by design: the run's page"
               echo "names each failed job with its function."
               echo
-              if [ "$missed" = 1 ]; then
-                echo "**The planted fault was not caught**: JVMs of ${reached// / and } ran to"
-                echo "their end and no mismatch file of theirs records a mismatch"
-                echo "(\`fault-caught=failure\`)."
-                echo
-              fi
+              case "$verdict" in
+                caught)
+                  echo "The planted fault was caught." ;;
+                missed)
+                  echo "**The planted fault was not caught**: every sweep and fuzz passed, and"
+                  echo "no mismatch file of ${reached// / or } records a mismatch." ;;
+                *)
+                  echo "**Whether the planted fault would be caught is not decided**: no"
+                  echo "mismatch file of ${reached// / or } records a mismatch, and not every"
+                  echo "job ran to its end; one that failed or was cut short may be the one"
+                  echo "that would have caught it." ;;
+              esac
+              echo
               echo "The run: $run_url"
             else
               echo "The nightly correctness run failed: $run_url"
@@ -651,7 +667,7 @@ jobs:
                 section "$first" "$total" "$(grep -c '^# MISMATCH ' "$first" || true)"
               fi
             fi
-            if [ "$found" = 0 ] && [ "$expected" = 0 ] && [ "$missed" = 1 ]; then
+            if [ "$found" = 0 ] && [ "$expected" = 0 ] && [ "$verdict" = missed ]; then
               echo "No mismatch file records a mismatch: the planted fault was not caught. See"
               echo "the run's logs for whether anything else failed."
             elif [ "$found" = 0 ] && [ "$expected" = 0 ]; then
