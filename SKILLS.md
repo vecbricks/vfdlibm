@@ -464,8 +464,9 @@ a settled question.
   words, so exp's far-form fold (L2) and its sign-bit `halF` (L5) hold for expm1 once a test
   pins the five values to exp's (`PROOFS.md`, L10, H13), and the SMT files rendered from `Exp`
   check those steps for expm1 too; `proofs/expm1_reduction.smt2` holds the values to exp's
-  under the solvers as well, and checks the unreduced lanes' step and the forcing of `k = 0`
-  itself, as exp's L1 does for exp. The forcing still needs its own
+  under the solvers as well, and checks the unreduced lanes' step (`c = +0`) and, at four
+  doubles, that the formula's `k` would be wrong there; the forcing over the whole word is the
+  port's blend and a hinge test. The forcing still needs its own
   witness: the C reduced with the formula's `k` first differs from `StrictMath.expm1` at
   `0x3fd62e42_ffffffec`, and for negative x at `0xbfd62e42_fffffff3`, not at the word's top
   double, so a test of the top alone would pass without the forcing.
