@@ -91,8 +91,18 @@ jobs:
         run: dev/prove.sh --self-test
       - name: Check the proofs
         run: dev/prove.sh --lint
-      # No JVM either: the script that writes and checks results files (bench/record.py).
-      - name: Check the results-file script
+
+  # The script that writes and checks results files from a run's artifact (bench/record.py):
+  # Python only, no JVM, no solver.
+  record:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Self-test of bench/record.py
         run: bench/record.py --selftest
 
   # A boxed vector body computes the right bits, so the tests pass on it; only its allocation

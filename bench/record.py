@@ -50,6 +50,11 @@ of its own. A class that a later run lacks, or that the first run lacks, is name
 `check` reads a results file's header lines, tables and raw section and compares them with what
 `write` makes from the artifact, and fails if they differ or if a marker line is still there.
 A file of several runs is checked against all of them, given in the file's order.
+The table's figures are JMH's printed values (three decimals, itself rounded) rounded to one
+decimal, a tie to the even digit; a pair's, from the JSON's full values, so the same
+measurement may differ by 0.1 between the two kinds of file. A run's parameters are in the
+order of its JMH lines in a plain file and sorted in a pair's.
+
 `check` compares values, not layout: a header line may be wrapped another way, a table's
 columns may be wider, and the file may hold header lines the workflow did not write (such as
 "Array"). Exit status 1 lists the differences; 2 is an error (no artifact, no result in it, a
@@ -131,7 +136,12 @@ def find_artifact(path):
 
 def download(run, repo, d):
     cmd = ["gh", "run", "download", str(run), "--name", "bench-results", "--dir", d]
-    done = subprocess.run(cmd + (["--repo", repo] if repo else []), capture_output=True, text=True)
+    try:
+        done = subprocess.run(cmd + (["--repo", repo] if repo else []), capture_output=True,
+                              text=True)
+    except OSError as e:
+        raise Problem("--run needs the gh command (%s); download the artifact by hand and give"
+                      " its directory instead" % e)
     if done.returncode != 0:
         raise Problem("%s failed: %s" % (" ".join(cmd), done.stderr.strip()))
     return d
@@ -498,8 +508,9 @@ def joined_files(directories, name=None):
         seen.append(((header.get("Host") or "?").split()[0], (header.get("CPU") or "").lower(),
                      (header.get("Commit") or "").split(" ")[0], " ".join(
                          (header.get("JMH") or "").split()), header.get("Vector"),
-                     header.get("Run")))
-    if len({x[:-1] for x in seen}) > 1 or len({x[-1] for x in seen}) < len(seen):
+                     header.get("Run") or lines[0]))  # an older run: its title, with its time
+    runs = [x[-1] for x in seen]
+    if len({x[:-1] for x in seen}) > 1 or len(set(runs)) < len(runs):
         raise Problem("several runs go in one file only if they are different runs of one host"
                       " and CPU, at one commit, with the same JMH options and vector settings;"
                       " these are %s" % "; ".join(" ".join(map(str, x)) for x in seen))
@@ -508,7 +519,8 @@ def joined_files(directories, name=None):
     blocks = {file_name: [] for file_name in first}
     of_class = {frozenset(classes_of(lines)): file_name for file_name, lines in first.items()}
     for n, d in enumerate(directories[1:], 2):
-        later = {frozenset(classes_of(lines)): lines for lines in files_of(d, name).values()}
+        # The name is the first run's: it names no file of a later run.
+        later = {frozenset(classes_of(lines)): lines for lines in files_of(d).values()}
         for cls in sorted(set(of_class) - set(later), key=sorted):
             NOTES.append("run %d has no %s: %s does not hold that run"
                          % (n, ", ".join(sorted(cls)), of_class[cls]))
@@ -1163,6 +1175,7 @@ def act(args, directories):
                       % (", ".join(there), "--name" if len(files) == 1 else "--out-dir"))
     for note in NOTES:
         print("bench/record.py: note: %s" % note, file=sys.stderr)
+    os.makedirs(args.out_dir, exist_ok=True)
     for path, lines in files.items():
         with open(path, "w", encoding="ascii", newline="\n") as f:
             f.write("\n".join(lines) + "\n")
