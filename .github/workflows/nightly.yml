@@ -124,9 +124,10 @@ jobs:
           # A dispatch's text is echoed in errors below: a line break in it would let a line of
           # the dispatcher's be read as a workflow command, so line breaks become spaces (which
           # every check below then refuses).
-          SEED="${SEED//[$'\r\n']/ }"
-          FUNCTIONS="${FUNCTIONS//[$'\r\n']/ }"
-          FAULT="${FAULT//[$'\r\n']/ }"
+          for v in SEED NIGHTS SHARDS ARM_SHARDS NIGHT SLICE_NIGHTS SLICE_NIGHT FUZZ_SECONDS \
+              FUNCTIONS FAULT; do
+            printf -v "$v" '%s' "${!v//[$'\r\n']/ }"
+          done
           # A number here has no leading zero, which bash's arithmetic would read as octal, and
           # at most five digits, more than any limit below.
           number() { [[ $1 =~ ^(0|[1-9][0-9]{0,4})$ ]]; }
@@ -462,8 +463,12 @@ jobs:
     needs: [plan, sweep, fuzz, arm]
     if: always() && inputs.fault != '' && needs.plan.result == 'success'
     runs-on: ubuntu-latest
+    # Set only by the check itself, so that a job that failed to start is not read as a miss.
+    outputs:
+      missed: ${{ steps.check.outputs.missed }}
     steps:
       - name: Fail when every sweep and fuzz passed
+        id: check
         env:
           FAULT: ${{ inputs.fault }}
           RESULTS: >-
@@ -472,6 +477,7 @@ jobs:
         run: |
           echo "$RESULTS"
           if [ "$RESULTS" = "sweep=success fuzz=success arm=success" ]; then
+            echo "missed=true" >> "$GITHUB_OUTPUT"
             echo "::error::every sweep and fuzz passed: the planted fault $FAULT was not caught"
             exit 1
           fi
@@ -506,7 +512,7 @@ jobs:
           SEED: ${{ needs.plan.outputs.seed }}
           REPLAY: ${{ needs.plan.outputs.replay }}
           FAULT: ${{ inputs.fault }}
-          FAULT_CAUGHT: ${{ needs.fault-caught.result }}
+          FAULT_MISSED: ${{ needs.fault-caught.outputs.missed }}
           RESULTS: >-
             plan=${{ needs.plan.result }} sweep=${{ needs.sweep.result }}
             fuzz=${{ needs.fuzz.result }} arm=${{ needs.arm.result }}
@@ -524,7 +530,7 @@ jobs:
             about="A nightly run with a planted fault, a test of the alert job"
             title="Nightly run with a planted fault (a test of the alert job)"
             # Only its failure says something: see the fault-caught job.
-            if [ "$FAULT_CAUGHT" = failure ]; then RESULTS="$RESULTS fault-caught=failure"; fi
+            if [ "$FAULT_MISSED" = true ]; then RESULTS="$RESULTS fault-caught=failure"; fi
           fi
           {
             # Said first, so that a test of this job is not read as a failure of the library.
@@ -536,7 +542,7 @@ jobs:
               echo "functions would be among them and cannot be told apart, so only a clean"
               echo "night clears them."
               echo
-              if [ "$FAULT_CAUGHT" = failure ]; then
+              if [ "$FAULT_MISSED" = true ]; then
                 echo "**The planted fault was not caught**: every sweep and fuzz passed (the"
                 echo "job \`fault-caught\` failed for that)."
                 echo
@@ -571,7 +577,7 @@ jobs:
               echo '```'
               echo
             done
-            if [ "$found" = 0 ] && [ "$FAULT_CAUGHT" = failure ]; then
+            if [ "$found" = 0 ] && [ "$FAULT_MISSED" = true ]; then
               echo "No mismatch file records a mismatch."
             elif [ "$found" = 0 ] && [ -n "$FAULT" ]; then
               echo "No mismatch file here shows the planted fault caught: a job failed or was"
@@ -580,6 +586,9 @@ jobs:
             elif [ "$found" = 0 ]; then
               echo "No mismatch file records a mismatch: a job failed for another reason (a"
               echo "build, a timeout, a proof). See the run's logs."
+            elif [ -n "$FAULT" ]; then
+              echo "These inputs fail under the planted fault: they are not hard cases of the"
+              echo "library and do not go in hard-cases/."
             else
               echo "Each artifact's .txt files hold the inputs, one per line, as"
               echo "src/test/resources/io/github/vecbricks/vfdlibm/hard-cases/<function>.txt"
