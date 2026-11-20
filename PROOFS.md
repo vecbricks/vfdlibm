@@ -622,9 +622,9 @@ blend, which `Expm1Test.foldBoundaries` samples (1026 low words per sign at each
 a sparse sample of the word's `2^32` doubles, and 4096 doubles each side of `+-0.5 ln2`, which
 is `0x3fd62e42_fefa39ef`, about 17 million doubles below the witnesses at the word's top) and
 `Expm1Test.thresholds()` touches (8 doubles each side of `0.5 ln2`, and 64 around the word's
-first double); and `l10KIsForcedByTheHighWordTest` scans the scalar transcription from each witness to the word's
-top and finds the forcing not needed there, which says nothing of the port; and that the port
-computes these steps, the code's text.
+first double); and `l10KIsForcedByTheHighWordTest` scans the scalar transcription from each
+witness to the word's top and finds the forcing not needed there, which says nothing of the
+port; and that the port computes these steps, the code's text.
 
 ### L11. The k == 0 return is x - e with e = (x*(e-c)-c)-hxs and c = +0
 
@@ -762,9 +762,10 @@ in `[0x3feffffa_00000000, 0x3ff00002_00000000)` (`1+x` in `[2 - 3*2^-20, 2 + 2^-
 doubles) 56, and of every `x` whose raw bits lie in `[0xbfdffffe_00000000, 0xbfe00001_80000000)`
 (`1+x` in `(0.5 - 3*2^-22, 0.5 + 2^-21]`, 15,032,385,536 doubles) 20. The `hu == 0` inputs near
 0.5 are `1+x` in `[0.5 - 3*2^-22, 0.5 + 2^-21)`, so the second range leaves out the input
-`x = -(0.5 + 3*2^-22)` and holds `x = -(0.5 - 2^-21)`, which is not on the path. The windows
-of the other powers of two of `1+x` are not searched. The counts, the sixteen differences each
-pass printed, the commands and the host are in
+`x = -(0.5 + 3*2^-22)` and holds two inputs that are not on the path, `x = -(0.5 - 2^-21)`
+(raw bits `0xbfdffffe_00000000`) and the next double, whose `1+x` rounds to `0.5 + 2^-21`, where
+`hu = 1`. The windows of the other powers of two of `1+x` are not searched. The counts, the
+sixteen differences each pass printed, the commands and the host are in
 `bench/results/log1p-hu0-search-laptop-2026-11-20.txt`; the two passes ran a scratch program
 kept in that file as text, not `Log1pShortPath`, which found exactly the witness in each of two
 slices of `2^24` doubles around one.
