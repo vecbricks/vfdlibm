@@ -55,6 +55,9 @@ final class Oracle {
       DoubleUnaryOperator oracle,
       double[] xs) {
     assertNonEmpty(xs);
+    if (Survey.RECORD != null) {
+      Survey.record(name, xs);
+    }
     int lanes = species.length();
     double[] x = new double[lanes];
     String first = null;
@@ -126,6 +129,9 @@ final class Oracle {
       DoubleUnaryOperator oracle,
       double[] xs,
       long seed) {
+    if (Survey.RECORD != null) {
+      Survey.record(name, xs);
+    }
     assertBinaryMasked(
         name,
         species,

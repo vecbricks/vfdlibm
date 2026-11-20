@@ -644,3 +644,29 @@ a settled question.
   whose plan job fails opens none. The run shares the night's concurrency group, where a new run
   replaces one that is waiting: dispatch it when no night is running or waiting. Close the test's
   issue once read: a later test comments on an open one. No such dispatch has been made yet.
+
+## What the mutant survey taught
+
+- **What it is.** `dev/survey.sh` changes one constant, threshold or correction term of a
+  function's C by one step and counts the inputs whose result is no longer `StrictMath`'s, in the
+  unit tests' inputs, a fuzz, the sweep and a search over the common path (`dev/survey/README.md`
+  has the tables, for exp, expm1, log and log10 as of 20 November 2026; log1p needs its scalar
+  transcription first). A mutant changes the C, not a port: where a port follows the C, an input
+  that shows the mutant shows the same change in the vector code.
+- **Inputs do not hold the coefficients.** One ulp on a polynomial coefficient late in its
+  series changed no result in 1.8 * 10^10 inputs for exp's `P4` and `P5`, expm1's `Q3` to `Q5`
+  and log's `Lg5` to `Lg7`, and the suite saw none of exp's
+  `P3`, expm1's `Q2` or log's `Lg4` either. The test that pins every constant to the C's hex
+  (`ExpTest.constantsAreTheSourcesBits` and its like) is what guards them, so a new port names
+  every constant in such a test.
+- **A planted fault is chosen among the mutants the suite catches.** About three in five are: every
+  dropped correction term, the first coefficient of each series, the thresholds the suite has
+  neighbours of. A survey row whose `caught_by` is `suite` and whose count is large is a fault
+  already sized; the README says what a `none` row does and does not show.
+- **The sweep caught nothing the fuzz and the suite did not.** No mutant showed on the sweep's
+  inputs and on none of the suite's or the fuzz's: stripe `0/64` for every mutant, and all 2^32 high
+  words (three low words each) for those nothing else had found in exp, expm1 and log (stripe `0/8`
+  in log10). The sweep is for bands of wrong results, not for a constant one ulp off.
+- **The suite misses exp's `invln2` one ulp off**, which the fuzz finds within 250 draws: it moves
+  `k` at the doubles `(k + 1/2) ln2`, and `ExpTest` takes the neighbours of three of them only,
+  where expm1's has 16 of each and catches it. The README lists one input for each.
