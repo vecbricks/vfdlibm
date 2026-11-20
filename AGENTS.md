@@ -70,6 +70,8 @@ vfdlibm ports fdlibm's double functions to the Java Vector API, each lane bit-id
   It covers each vector arm at 256 bits and at the preferred species if the class is named
   `<Function>Benchmark`, the methods `<arm>256` and `<arm>Preferred`, and the `@Param` `inputs`
   takes `common` (no lane takes a rare path) and `mixed` (rare lanes run); see `SKILLS.md`.
+  CI runs it on x86 both ways and, for the `<arm>Preferred` methods, on the Arm runner, where
+  the preferred species is 128 bits.
 
 ## Lessons
 

@@ -53,15 +53,25 @@ a settled question.
 - **CI checks it.** `bench/alloc-check.py` runs every benchmark method named `*256` or
   `*Preferred`, on `inputs=common` and `mixed`, one fork under `-prof gc` with the body inlined,
   and fails if any measured iteration reaches 1 B/op; the `alloc` job of `ci.yml` runs it at the
-  runner's flags and under `-XX:UseAVX=2`. On the laptop, under load, C2 finished exp's body
-  within the first one-second iteration and later ones read about 0.02 B/op, so three warmup
-  seconds leave two to spare; a row that fails only in its first iteration means C2 was late.
+  x86 runner's flags, under `-XX:UseAVX=2`, and on Arm (below). On the laptop, under load, C2
+  finished exp's body within the first one-second iteration and later ones read about 0.02
+  B/op, so three warmup seconds leave two to spare; a row that fails only in its first
+  iteration means C2 was late.
   Left out: 128 bits (masks box at two lanes on x86, below) and 512 bits (software on AVX2; the
   preferred arm covers it where it is real). Mixed inputs were left out too until the per-lane
   finish stopped allocating (below); common data alone never runs a rare path, so it could not
   see that path box. The `*Max` rows are left out by the regex, since the finish still boxes at
-  `SPECIES_MAX` on mixed data (below). Arm is not checked yet: its preferred species is 128 bits,
-  and no run has shown exp unboxed there.
+  `SPECIES_MAX` on mixed data (below).
+- **On Arm the check runs the preferred rows, and they pass.** GitHub's Arm runners have 128-bit
+  vectors (`MaxVectorSize=16 UseSVE=2` on every job of `HARDWARE.md`'s pool table), so the
+  preferred species is 128 bits there and a `*256` row would run in the Java fallback, as 512
+  bits does on an AVX2 host. Run once on such a runner (pull request 46's `alloc` job, 20
+  November 2026), all 24 `*Preferred` rows of the five ports, every arm on common and on mixed
+  data, read 0.04 to 0.10 B/op at the worst of three iterations. So at two 64-bit lanes the
+  bodies run unboxed on Arm, where on x86 every masked one boxes (below); that is read from the
+  allocation alone, and no `PrintIntrinsics` line was read there. `ci.yml`'s `alloc` job has that row since, with `--include
+  '.*Benchmark\.(?!\w*Boxed)\w+Preferred$'`. It is an allocation reading, not a timing: no Arm
+  host is a benchmark host, and nothing here says how fast those bodies are.
 - **Ask C2 what it refused.** `-XX:+UnlockDiagnosticVMOptions -XX:+PrintIntrinsics`, or scoped
   to the library, `-XX:CompileCommand=PrintIntrinsics,io.github.vecbricks.vfdlibm.*::*`. Add
   `-Xbatch` when lines must be attributed to one shape: compiles then happen on the calling

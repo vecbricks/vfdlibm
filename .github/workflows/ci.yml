@@ -99,15 +99,16 @@ jobs:
   # AVX-512 on the draws that have it, where the preferred arm is 512 bits) and as an AVX2 host
   # on every draw, where D2L and L2D box.
   #
-  # The Arm row is a trial (issue 37): the check has not been shown to hold at the Arm runners'
-  # 128-bit vectors (SKILLS.md), so the row may fail without failing the workflow. It runs the
-  # *Preferred rows only, which are 128 bits there; a *256 row would run in the Java fallback,
-  # as 512 bits does on an AVX2 host. When a row fails, the next step runs that row again with
-  # C2 printing what it did not intrinsify or inline.
+  # On Arm it runs the *Preferred rows only: the runners' vectors are 128 bits, so the preferred
+  # species is the one width C2 lowers there, and a *256 row would run in the Java fallback, as
+  # 512 bits does on an AVX2 host. Every such row read under 1 B/op when the row was first run
+  # (SKILLS.md, "On Arm the check runs the preferred rows").
+  #
+  # When a row fails, the last steps run it again with C2 printing what it did not intrinsify
+  # or inline, and keep the check's JSON.
   alloc:
     name: alloc (${{ matrix.name }})
     runs-on: ${{ matrix.os }}
-    continue-on-error: ${{ matrix.trial }}
     strategy:
       fail-fast: false
       matrix:
@@ -116,17 +117,14 @@ jobs:
             os: ubuntu-latest
             jvm-args: ""
             include: ""
-            trial: false
           - name: x86 as AVX2
             os: ubuntu-latest
             jvm-args: -XX:UseAVX=2 -XX:MaxVectorSize=32
             include: ""
-            trial: false
-          - name: Arm 128 bits, trial
+          - name: Arm 128 bits
             os: ubuntu-24.04-arm
             jvm-args: ""
             include: .*Benchmark\.(?!\w*Boxed)\w+Preferred$
-            trial: true
     env:
       JVM_ARGS: ${{ matrix.jvm-args }}
       INCLUDE: ${{ matrix.include }}
@@ -137,10 +135,9 @@ jobs:
           distribution: zulu
           java-version: 25
           cache: maven
-      # The trial row names its machine, so its reading can be quoted. The probe's exit status
-      # is not a gate here: with 128-bit vectors only it has no 256:128 control to read.
+      # The machine in the log, so a reading names where it was taken. The probe's exit status
+      # is not a gate: with 128-bit vectors only it has no 256:128 control to read.
       - name: Record the machine
-        if: matrix.trial
         run: bench/datapath.sh || true
       - name: Check that no vector body allocates
         run: |
@@ -154,26 +151,27 @@ jobs:
       # refused calls only the library's and VectorSupport's are kept; the JDK's own are many
       # and box nothing.
       - name: Ask C2 what it refused in each failing row
-        if: failure() && matrix.trial
+        if: failure()
         run: |
+          [ -f target/alloc-check.json ] || { echo "The check left no JSON to read."; exit 0; }
+          cp target/alloc-check.json alloc-check.json
           python3 - > failing.txt <<'PY'
           import json
-          for row in json.load(open("target/alloc-check.json")):
-              norm = [m for k, m in row["secondaryMetrics"].items()
-                      if k.endswith("gc.alloc.rate.norm")][0]
-              if max(v for fork in norm["rawData"] for v in fork) >= 1.0:
+          for row in json.load(open("alloc-check.json")):
+              norms = [m for k, m in row.get("secondaryMetrics", {}).items()
+                       if k.endswith("gc.alloc.rate.norm")]
+              if norms and max(v for fork in norms[0]["rawData"] for v in fork) >= 1.0:
                   print(row["benchmark"], row["params"]["inputs"])
           PY
-          cp target/alloc-check.json alloc-check.json
           flags="-XX:CompileCommand=inline,io.github.vecbricks.vfdlibm.*::*"
           flags="$flags -XX:CompileCommand=PrintIntrinsics,io.github.vecbricks.vfdlibm.*::*"
           flags="$flags -XX:+UnlockDiagnosticVMOptions -XX:+PrintInlining $JVM_ARGS"
+          count() { sed -E 's/^ +//; s/ +/ /g' | sort | uniq -c | sort -rn | head -80; }
           while read -r row inputs; do
             echo "::group::$row [inputs=$inputs]"
             options="-p inputs=$inputs -f 1 -wi 3 -w 1s -i 1 -r 1s -prof gc"
             mvn -B --no-transfer-progress -q -Pjmh test-compile exec:exec \
               "-Djmh.args=$row\$ $options -jvmArgsAppend \"$flags\"" > c2.txt 2>&1 || true
-            count() { sed -E 's/^ +//; s/ +/ /g' | sort | uniq -c | sort -rn | head -80; }
             echo "PrintIntrinsics, each distinct line with its count:"
             grep -E 'not supported|missing constant|unbox failed' c2.txt | count
             echo "PrintInlining, the refused calls of the library and of the Vector API:"
@@ -182,15 +180,13 @@ jobs:
             grep -E 'gc.alloc.rate.norm' c2.txt | tail -1
             echo "::endgroup::"
           done < failing.txt
-      - name: Keep the trial row's result
-        if: always() && matrix.trial
+      - name: Keep the failing check's result
+        if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: alloc-check-arm
-          path: |
-            target/alloc-check.json
-            alloc-check.json
-          if-no-files-found: warn
+          name: alloc-check-${{ strategy.job-index }}
+          path: alloc-check.json
+          if-no-files-found: ignore
 
   # The self-tests of the benchmark scripts, which no build runs: bench/host.sh's table of
   # benchmark hosts against the machines the runner pool gives (the CPU check of
