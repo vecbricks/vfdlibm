@@ -17,9 +17,9 @@
 #                           [benchmark regex] [extra JVM options]
 #
 # The host is one of epyc7763 (AMD EPYC 7763, the default), xeon8573c (Intel Xeon Platinum
-# 8573C), xeon6973p (Intel Xeon 6973P-C) or epyc9v45 (AMD EPYC 9V45); benchmark.yml holds each
-# host's CPU string. bench/dispatch-epyc.sh is this script with the default host, kept for the
-# calls written before the other hosts.
+# 8573C), xeon6973p (Intel Xeon 6973P-C) or epyc9v45 (AMD EPYC 9V45); bench/host.sh holds the
+# keys and each host's CPU string. bench/dispatch-epyc.sh is this script with the default host,
+# kept for the calls written before the other hosts.
 #
 # --attempts bounds the dispatches. For the three hosts that results wait on, it defaults to none
 # (the hourly retry goes on until the host is drawn). For epyc9v45, a draw of about one in eighteen
@@ -50,8 +50,11 @@
 # adjectives").
 
 R=vecbricks/vfdlibm; H=epyc7763; A=""; P=""
+# The host keys are bench/host.sh's, the table benchmark.yml checks the machine against.
+KEYS=$("$(dirname "$0")/host.sh" --keys) || { echo "could not read bench/host.sh's keys" >&2
+  exit 2; }
 usage() {
-  echo "usage: bench/dispatch-bench.sh [--host epyc7763|xeon8573c|xeon6973p|epyc9v45]" \
+  echo "usage: bench/dispatch-bench.sh [--host $(tr '\n' '|' <<<"$KEYS" | sed 's/|$//')]" \
     "[--attempts n] [--base ref] <ref> [benchmark regex] [jvm args]" >&2; exit 64; }
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -66,12 +69,9 @@ while [ $# -gt 0 ]; do
     *) break ;;
   esac
 done
-# The same four keys as benchmark.yml's host input, so a typo stops here and not at GitHub.
-case "$H" in
-  epyc7763|xeon8573c|xeon6973p) ;;
-  epyc9v45) A=${A:-18} ;;
-  *) echo "unknown host '$H'" >&2; usage ;;
-esac
+# A key of bench/host.sh's table, so a typo stops here and not at GitHub.
+grep -qxF -- "$H" <<<"$KEYS" || { echo "unknown host '$H'" >&2; usage; }
+[ "$H" = epyc9v45 ] && A=${A:-18}
 case "$A" in "") ;; *[!0-9]*|0) echo "--attempts takes a positive number" >&2; usage ;; esac
 [ $# -ge 1 ] && [ $# -le 3 ] || usage
 B=$1; N=${2:-ExpBenchmark}; X=${3:-}

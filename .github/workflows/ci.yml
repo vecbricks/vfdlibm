@@ -97,3 +97,16 @@ jobs:
           cache: maven
       - name: Check that no vector body allocates
         run: bench/alloc-check.py --jvm-args "${{ matrix.jvm-args }}"
+
+  # The self-tests of the benchmark scripts, which no build runs: bench/host.sh's table of
+  # benchmark hosts against the machines the runner pool gives (the CPU check of
+  # benchmark.yml), and bench/pair.py's verdicts. No JVM.
+  bench-scripts:
+    name: bench scripts
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Check the table of benchmark hosts
+        run: bench/host.sh --self-test
+      - name: Check the pair's verdicts
+        run: bench/pair.py --selftest

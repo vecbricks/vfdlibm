@@ -197,7 +197,9 @@ a settled question.
   decision waits on a 9V45 file; when one exists, it is read with the other AVX-512 hosts.
 - **The benchmark fails on any other CPU, and is retried, never relaxed.**
   `.github/workflows/benchmark.yml` takes a `host` input with exactly four choices and maps each
-  to a model-name string fixed in the file, as runs of that host printed it, matched ignoring
+  to a model-name string fixed in `bench/host.sh`'s table (the workflow's first step runs
+  `bench/host.sh --expect <host>`, and CI runs `bench/host.sh --self-test`, which classifies
+  every kind of machine in the pool's census), as runs of that host printed it, matched ignoring
   case: `INTEL(R) XEON(R) PLATINUM 8573C` (Varka's fork runs 41465323581, 41255932044 and
   41241977271, in capitals as Azure printed it), `Intel(R) Xeon(R) 6973P-C` (vfdlibm run
   41442062308), `AMD EPYC 9V45 96-Core Processor` (Varka's fork runs 41486339971, 41446843041,

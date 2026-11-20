@@ -28,7 +28,8 @@ Each host decides for its own instruction set (`SKILLS.md`, "Where headline numb
 
 The host key is `benchmark.yml`'s `host` input, and the string after it is what the workflow's
 CPU check requires of `/proc/cpuinfo`'s model name, matched ignoring case: the two EPYC strings
-are full names and must end it, the two Xeon strings may sit anywhere in it.
+are full names and must end it, the two Xeon strings may sit anywhere in it. The table the check
+reads is `bench/host.sh`'s.
 
 | machine | host key and CPU string | vector flags | JVM | lane-ops/ns at 128 / 256 / 512 | control | 512:256 | source |
 |---|---|---|---|---|---|---|---|
