@@ -132,7 +132,9 @@ five are a later, optional set; the large-argument reduction of the trigonometri
   function adds its own benchmark the same way. `Log10Benchmark` does the same for `log10`, at
   256 and 512 bits, the preferred species and `SPECIES_MAX`. `Log1pBenchmark` does the same for
   `log1p`, with a third arm that blends the rare paths only when a vector holds a rare lane;
-  `Expm1Benchmark` has the same three arms for `expm1`.
+  `Expm1Benchmark` has the same three arms for `expm1`. Each of the five has rows at
+  `SPECIES_MAX` (`*Max`), which the allocation check leaves out: every port's finish boxes there
+  on mixed data (`bench/results/max-finish-laptop-2026-11-20.txt`).
   A function's body is larger than C2 inlines by default, so a call from a loop passes boxed
   vectors; the benchmarks are also run with `-XX:CompileCommand=inline,...` to measure the body
   as Varka emits it, inline.

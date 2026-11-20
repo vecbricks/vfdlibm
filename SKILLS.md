@@ -156,6 +156,23 @@ a settled question.
   512 bits and 36992 under `-XX:UseAVX=2`, where `finish512` and `finish256` read under 0.01
   (`bench/results/exp-finish-laptop-2026-11-02.txt`). Common data never runs that loop and does not
   allocate. A port meant to run at `SPECIES_MAX` measures its slow path there too.
+- **Every port's finish boxes at `SPECIES_MAX`, Log's counted loop too; constant lane indices do
+  not.** With `*Max` rows in all five benchmarks, read on the laptop under `-prof gc`
+  (`bench/results/max-finish-laptop-2026-11-20.txt`, allocation readings on a loaded machine,
+  no timings): on mixed data `finishMax` allocates 30912 B/op at 512 bits for exp, expm1 and
+  log1p and 30432 for log and log10, and 36992 and 36672 under `-XX:UseAVX=2`; on common data
+  it allocates nothing, and neither do the blended rows of any port or the guarded rows of
+  log1p and expm1, on either data. Log's finish is a counted loop over `species.length()` that
+  tests each bit where the others walk the set bits with `numberOfTrailingZeros`; it boxes the
+  same, so the loop's shape is not the cause, the lane index not being a constant is. Tried and
+  not merged: the first eight lanes written out with literal indices, `if (lanes > 0 &&
+  (rareLanes & 1L) != 0) result = result.withLane(0, f(x.lane(0)));` and so on, the loop
+  kept for lanes past eight. With it every `*Max` row of every port read under 0.5 B/op, on
+  mixed data and under both flag sets, and the five ports' tests passed. Owed before a port
+  takes it: the `*256` and `*Preferred` rows through `bench/alloc-check.py` on a quiet machine
+  (under load they ended under 0.4 B/op, with first iterations where C2 was late, which the
+  check counts as failures), `mvn verify` with the planted faults, and a pair on a host, since
+  the fixed shapes' finish changes too.
 - **At two 64-bit lanes x86 C2 lowers no mask.** Compare to mask, blend, mask cast, mask
   broadcast, logic and test are `not supported` at `vlen=2` for double and long masks, and fine
   at four lanes. So on x86 every 128-bit double port that branches through masks runs per lane
