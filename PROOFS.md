@@ -591,8 +591,8 @@ unmasked and masked, against `StrictMath` at the words `0x3c8fffff`, `0x3c900000
 `0x3fd62e42`, `0x3fd62e43`, `0x3ff0a2b1` and `0x3ff0a2b2`, both signs, low words 0,
 `0xffffffff` and 1024 seeded, plus the 4096 doubles each side of `+-0.5 ln2`, at every width
 and `SPECIES_MAX`. For (c), the far form above `1.5 ln2`, the cases at every width are
-`Expm1Test.magnitudes` (every magnitude from `2^-60` to `2^10`, both signs, and `2^16` draws
-from 38 to `o_threshold`, where `k` reaches 1024),
+`Expm1Test.magnitudes` (draws spread over the binades `2^-60` to `2^10`, both signs, and `2^16`
+draws from 38 to `o_threshold`, where `k` reaches 1024),
 `formSplits` (the bands of `k` where the form changes, 19 to 21 and 55 to 58 times `ln2`, and
 `+-0.5` to `+-3 ln2`), `denseOverTheForms` (`-45` to `45`), `sampledBitPatterns` and the
 published hard cases.
@@ -619,10 +619,10 @@ rationals); the casts of `+0.0` and of a double in binade 2^0; that `k` is force
 lane of the word `0x3fd62e42` and below, of which section C checks four doubles (the formula's
 `k` would be wrong at the witnesses, the C as written is the oracle's) and the rest is the code's
 blend, which `Expm1Test.foldBoundaries` samples (1026 low words per sign at each of its words,
-a sparse sample of the word's `2^32` doubles, and 4096 doubles each side of `+-0.5 ln2`, at the
-word's bottom, not near the witnesses at its top) and `Expm1Test.thresholds()` touches (8
-doubles each side of `0.5 ln2`, and 64 around the word's first double); and
-`l10KIsForcedByTheHighWordTest` scans the scalar transcription from each witness to the word's
+a sparse sample of the word's `2^32` doubles, and 4096 doubles each side of `+-0.5 ln2`, which
+is `0x3fd62e42_fefa39ef`, about 17 million doubles below the witnesses at the word's top) and
+`Expm1Test.thresholds()` touches (8 doubles each side of `0.5 ln2`, and 64 around the word's
+first double); and `l10KIsForcedByTheHighWordTest` scans the scalar transcription from each witness to the word's
 top and finds the forcing not needed there, which says nothing of the port; and that the port
 computes these steps, the code's text.
 
