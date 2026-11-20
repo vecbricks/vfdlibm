@@ -151,9 +151,10 @@ self_test() {
   local avx2="fpu sse4_2 avx avx2 fma"
   local avx512="$avx2 avx512f avx512dq avx512cd avx512bw avx512vl"
 
-  # Every kind of x86 machine in the census of the runner pool
-  # (bench/pool/nightly-2026-11-03-to-2026-11-19.tsv), and the Arm runners, whose
-  # /proc/cpuinfo has no model name.
+  # Every kind of x86 machine in the census of the runner pool as of 3 to 19 November 2026
+  # (bench/pool/nightly-2026-11-03-to-2026-11-19.tsv), copied here by hand, and the Arm
+  # runners, whose /proc/cpuinfo has no model name. A newer census with a model not listed
+  # here needs its case added.
   check epyc7763 'AMD EPYC 7763 64-Core Processor' "$avx2"
   check epyc9v45 'AMD EPYC 9V45 96-Core Processor' "$avx512"
   check - 'AMD EPYC 9V74 80-Core Processor' "$avx2"
@@ -276,13 +277,14 @@ self_test() {
   local step
   for step in "Fetch the probe's script" "Check the probe's script" "Probe the machine's CPU"; do
     n=$((n + 1))
-    if ! grep -qxF -- "      - name: $step" "$yml"; then
-      echo "host.sh: benchmark.yml has no step named \"$step\"" >&2; failed=1
+    if [ "$(grep -cxF -- "      - name: $step" "$yml")" != 1 ]; then
+      echo "host.sh: benchmark.yml has not exactly one step named \"$step\"" >&2; failed=1
     fi
   done
 
   # A row's flags are required, every one of them. No host of today's has any, so the test
   # adds a row of its own: one model name that is a host only with AVX-512.
+  local saved=("${HOSTS[@]}")
   HOSTS+=("testhost|end|Test CPU 1 Processor|avx512f avx512dq")
   check testhost 'Test CPU 1 Processor' "$avx512"
   check - 'Test CPU 1 Processor' "$avx2"
@@ -298,6 +300,7 @@ self_test() {
   if [ "$got" != 0 ]; then
     echo "host.sh: a host with its flags ended with $got and printed '$(flat "$out")'" >&2; failed=1
   fi
+  HOSTS=("${saved[@]}")
 
   if [ "$failed" != 0 ]; then echo "host.sh: self-test FAILED" >&2; return 1; fi
   echo "host.sh: self-test passed, $n checks"; }

@@ -28,11 +28,12 @@
 # --attempts bounds the dispatches. For the three hosts that results wait on, it defaults to none
 # (the hourly retry goes on until the host is drawn). For epyc9v45, a draw of about one in eighteen
 # that is recorded whenever drawn but never waited for, it defaults to 18: an hourly try for
-# about a day, which draws it at least once with a chance of about 64%, each miss costing a
-# minute of runner time, since the check comes first in the job, after only the fetch of its
-# script and that script's own test. --attempts 1 is a single opportunistic try. Running out
-# of attempts on a CPU miss is exit status 3, not a failure of the run; when the last attempt
-# failed before the CPU check, it is 1.
+# about a day, which draws it at least once with a chance of about 64%, each miss costing
+# seconds of runner time (two misses of the probe on a branch of this script's pull request,
+# runs 44710593722 and 44710785601, took 7 and 4 seconds), since the check comes first in the
+# job, after only the fetch of its script and that script's own test. --attempts 1 is a single
+# opportunistic try. Running out of attempts on a CPU miss is exit status 3, not a failure of
+# the run; when the last attempt failed before the CPU check, it is 1.
 #
 # --base <base> makes each run a pair (bench/pair.sh in the workflow): the benchmarks on <base>
 # and on the dispatched <ref> as head, alternating, on one machine. <base> is a branch or tag of
@@ -62,12 +63,14 @@
 # adjectives").
 
 R=vecbricks/vfdlibm; H=epyc7763; A=""; P=""
-# The host keys are bench/host.sh's, the table benchmark.yml checks the machine against.
-# Beside this script, as check_base's git is: the script is run by its path in the repository.
-KEYS=$(bash "$(dirname "$0")/host.sh" --keys) || {
-  echo "could not read bench/host.sh's keys" >&2; exit 2; }
+# The host keys are bench/host.sh's, the table benchmark.yml checks the machine against, read
+# once the arguments have parsed, so that a usage error needs no other file. The table is
+# beside this script, as check_base's git is: the script is run by its path in the repository.
+KEYS=""
 usage() {
-  echo "usage: bench/dispatch-bench.sh [--host $(tr '\n' '|' <<<"$KEYS" | sed 's/|$//')]" \
+  local hosts="<a key of bench/host.sh>"
+  [ -z "$KEYS" ] || hosts=$(tr '\n' '|' <<<"$KEYS" | sed 's/|$//')
+  echo "usage: bench/dispatch-bench.sh [--host $hosts]" \
     "[--attempts n] [--base ref] <ref> [benchmark regex] [jvm args]" >&2; exit 64; }
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -83,6 +86,8 @@ while [ $# -gt 0 ]; do
   esac
 done
 # A key of bench/host.sh's table, so a typo stops here and not at GitHub.
+KEYS=$(bash "$(dirname "$0")/host.sh" --keys) || {
+  echo "could not read bench/host.sh's keys" >&2; exit 2; }
 known=0; for k in $KEYS; do [ "$k" = "$H" ] && known=1; done
 [ $known = 1 ] || { echo "unknown host '$H'" >&2; usage; }
 [ "$H" = epyc9v45 ] && A=${A:-18}
