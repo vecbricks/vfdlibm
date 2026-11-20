@@ -114,6 +114,10 @@ expect() {
 this_cpu() { grep -m1 'model name' /proc/cpuinfo | sed 's/.*: //'; }
 this_flags() { grep -m1 '^flags' /proc/cpuinfo; }
 
+# Lines joined into one, for the self-test's messages: a quoted line that began with "::" would
+# be read by GitHub as a command of its own.
+flat() { tr '\n' '|' <<<"$1" | sed 's/|$//'; }
+
 self_test() {
   local failed=0 n=0 want got out
   # check <want> <model name> <flags>: classify gives the key <want>, or no key for "-".
@@ -126,7 +130,7 @@ self_test() {
   expecting() {
     n=$((n + 1)); out="$(expect "$2" "$3" "")"; got=$?
     if [ "$got" != "$1" ]; then
-      echo "host.sh: --expect $2 on '$3' ended with $got, expected $1: $out" >&2; failed=1
+      echo "host.sh: --expect $2 on '$3' ended with $got, expected $1: $(flat "$out")" >&2; failed=1
     fi; }
   local avx2="fpu sse4_2 avx avx2 fma"
   local avx512="$avx2 avx512f avx512dq avx512cd avx512bw avx512vl"
@@ -169,7 +173,7 @@ self_test() {
   want="::error::CPU mismatch on host xeon8573c! Expected 'INTEL(R) XEON(R) PLATINUM 8573C'"
   want+=" but got 'AMD EPYC 7763 64-Core Processor'"
   if [ "$(tail -n 1 <<<"$out")" != "$want" ]; then
-    echo "host.sh: a mismatch printed '$out'" >&2; failed=1
+    echo "host.sh: a mismatch printed '$(flat "$out")'" >&2; failed=1
   fi
 
   # No key is there twice, and every row is well formed.
@@ -226,11 +230,11 @@ self_test() {
   want="::error::CPU mismatch on host testhost! 'Test CPU 1 Processor' lacks the flags"
   want+=" 'avx512dq'"
   if [ "$got" != 1 ] || [ "$(tail -n 1 <<<"$out")" != "$want" ]; then
-    echo "host.sh: missing flags ended with $got and printed '$out'" >&2; failed=1
+    echo "host.sh: missing flags ended with $got and printed '$(flat "$out")'" >&2; failed=1
   fi
   n=$((n + 1)); out="$(expect testhost 'Test CPU 1 Processor' "$avx512")"; got=$?
   if [ "$got" != 0 ]; then
-    echo "host.sh: a host with its flags ended with $got and printed '$out'" >&2; failed=1
+    echo "host.sh: a host with its flags ended with $got and printed '$(flat "$out")'" >&2; failed=1
   fi
 
   if [ "$failed" != 0 ]; then echo "host.sh: self-test FAILED" >&2; return 1; fi

@@ -95,7 +95,10 @@ jobs:
           if ! probe/bench/host.sh --self-test; then
             echo "::error::bench/host.sh fails its self-test on this ref"; exit 1
           fi
-          if ! probe/bench/host.sh --keys | grep -qxF -- "$HOST"; then
+          # The keys are read whole first: in a pipe, grep -q leaves at its match, and the
+          # script, still writing, would end on a broken pipe and fail the pipeline.
+          keys="$(probe/bench/host.sh --keys)"
+          if ! grep -qxF -- "$HOST" <<<"$keys"; then
             echo "::error::bench/host.sh has no row for host '$HOST'"; exit 1
           fi
       - name: Probe the machine's CPU
