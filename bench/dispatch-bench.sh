@@ -21,8 +21,9 @@
 # The host is one of epyc7763 (AMD EPYC 7763, the default), xeon8573c (Intel Xeon Platinum
 # 8573C), xeon6973p (Intel Xeon 6973P-C) or epyc9v45 (AMD EPYC 9V45); bench/host.sh holds the
 # keys and each host's CPU string. The keys are checked against this checkout's table, and the
-# run checks its machine against the <ref>'s, so the two should hold the same hosts. bench/dispatch-epyc.sh is this script with the default host,
-# kept for the calls written before the other hosts.
+# run checks its machine against the <ref>'s, so the two should hold the same hosts.
+# bench/dispatch-epyc.sh is this script with the default host, kept for the calls written
+# before the other hosts.
 #
 # --attempts bounds the dispatches. For the three hosts that results wait on, it defaults to none
 # (the hourly retry goes on until the host is drawn). For epyc9v45, a draw of about one in eighteen
