@@ -141,4 +141,27 @@ five are a later, optional set; the large-argument reduction of the trigonometri
   A function's body is larger than C2 inlines by default, so a call from a loop passes boxed
   vectors; the benchmarks are also run with `-XX:CompileCommand=inline,...` to measure the body
   as Varka emits it, inline.
-- The first release is cut once Varka's first exact kernel lands and needs a pinned version.
+
+### The 0.1.0 criteria
+
+0.1.0 is the first release. It does not wait for Varka's first exact kernel: Varka pins the
+released version, and the next function arrives as a patch or a minor.
+
+- **What it holds:** the five ports, `exp`, `expm1`, `log`, `log1p` and `log10`, each in the
+  forms `f(x)` and `f(x, live)`, each lane bit-identical to `StrictMath`.
+- **The contract:** bit identity with `StrictMath` for every `double` input, compared by raw
+  bits at every vector width of 128 bits or more. It is the one thing no version changes. How a
+  function reaches its bits (an arm) may change in a patch, since every arm gives the same
+  results; a result that differs from `StrictMath`'s is a bug, fixed in a patch.
+- **The version promise (0.x):** a minor may break the public API, a patch may not; adding a
+  function is a patch (`AGENTS.md`, "Releases").
+- **What must hold on the commit that is tagged:** `mvn -B clean verify` with every test; the
+  nightly's last sweep and fuzz green (looked at by the owner before the tag; the dry run does
+  not gate on it); the proofs under both solvers; the allocation check; `dev/jar-check.sh
+  --release` on the jars, which holds the licence files, the module name and a consumer on the
+  class path and the module path; a `## [0.1.0]` changelog section.
+- **What a client needs:** the jar's module is `io.github.vecbricks.vfdlibm`; the Vector API is
+  incubating, so a client adds `--add-modules jdk.incubator.vector` at compile time and at run
+  time, and a modular client `requires jdk.incubator.vector`.
+- **How it is cut:** by the owner from a tag (`dev/release.sh`, then `mvn -B -Prelease deploy`);
+  `release.yml` is a dry run only.

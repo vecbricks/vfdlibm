@@ -3,10 +3,28 @@
 fdlibm on the Java Vector API: math functions over `DoubleVector` lanes whose every lane is
 bit-identical to `java.lang.StrictMath`.
 
-**Status: pre-alpha.** The repository, build, licence and plan exist. Functions are added one at
-a time, as [Varka](https://github.com/vecbricks/varka) needs them. Nothing is published yet.
+**Status: 0.x.** `exp`, `expm1`, `log`, `log1p` and `log10` are ported; 0.1.0, the first
+release, is being prepared (`CHANGELOG.md`). Functions are added one at a time, as
+[Varka](https://github.com/vecbricks/varka) needs them.
+A minor version may break the API and a patch may not; adding a function is a patch.
+Bit identity with `StrictMath` is the contract, and no version changes it (`CHANGELOG.md`).
 
 ## Use
+
+From 0.1.0 (it is not on Maven Central before the owner has released it):
+
+```xml
+<dependency>
+  <groupId>io.github.vecbricks</groupId>
+  <artifactId>vfdlibm</artifactId>
+  <version>0.1.0</version>
+</dependency>
+```
+
+The Vector API is still incubating, so a client that does not add its module already must:
+`--add-modules jdk.incubator.vector` for `javac` and for `java` (in Maven, a `compilerArgs`
+entry and the same flag in the test and run JVMs), or `requires jdk.incubator.vector;` in a
+`module-info.java`. The jar's module name is `io.github.vecbricks.vfdlibm`. It needs Java 25.
 
 ```java
 DoubleVector y = VFdlibm.exp(DoubleVector.fromArray(DoubleVector.SPECIES_PREFERRED, xs, i));

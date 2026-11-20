@@ -1,52 +1,33 @@
-name: Release
+name: Release dry run
 
-# Publishes io.github.vecbricks:vfdlibm to Maven Central from a tag, behind ci.yml's jobs, the
-# nightly's proofs job (not its sweep and fuzz: look at the last nightly before a tag) and an
-# approval; and, as a dry run, does everything up to the upload.
+# A DRY RUN OF A RELEASE, AND NOTHING MORE. This workflow never publishes, never uploads, holds
+# no secret and uses no GitHub environment. A real release is owner-run, from a tag, on the
+# owner's machine: `dev/release.sh <version>` prepares and tags it, and `mvn -B -Prelease
+# deploy` on that tag signs it with the owner's key and uploads it to Maven Central
+# (AGENTS.md, "Releases"). What this workflow does is show, on GitHub's runners and before and
+# after that, that the release would build. It does not cover the owner's signing: it signs
+# with a key made for the run, through Maven's Bouncy Castle signer, where the owner's machine
+# signs with gpg and its agent:
 #
-# A real run needs all of: this repository, a ref that is a tag v<version>, and either the push
-# of that tag or a dispatch on it with dry-run unticked. Anything else is a dry run: a dispatch
-# as it comes (dry-run is ticked by default), a dispatch from a branch whatever is ticked, and
-# every pull request that touches the files below. A dry run and a real run are one list of
-# jobs; a dry run skips `publish`, the only job that holds a secret or uploads.
-#
-#   version   The tag may release the pom's version (dev/release-version.sh): the tag is
-#             v<version>, the version is no -SNAPSHOT, the pom's <scm><tag> is the tag, and the
-#             tagged commit is on main. With no tag it prints the version and passes.
+#   version   The two release scripts' own self-tests; and, on a tag v<version>, that the tag
+#             may release the pom's version (dev/release-version.sh): the tag is v<version>, the
+#             version is no -SNAPSHOT, the pom's <scm><tag> is the tag, and the tagged commit is
+#             on main. With no tag it prints the pom's version and passes.
 #   ci        ci.yml's own jobs, called as they are: verify in its four rows with the jar check,
 #             the proofs under Z3, the allocation check at the runner's flags and as AVX2, and
 #             the bench scripts' tests. A tag does not start ci.yml by itself.
 #   proofs    Every proof under Z3 and cvc5, as nightly.yml's job of that name.
-#   bundle    What would be uploaded, built as `publish` builds it but with a signing key made
-#             for the run: the jar, the sources jar, the Javadoc jar and the pom, each with a
-#             signature that gpg then verifies, and dev/jar-check.sh on the jar.
-#   publish   mvn deploy with the release profile, in the environment `central`.
+#   bundle    What a release would upload, built with the release profile and signed with a key
+#             made for the run (never the owner's): the jar, the sources jar, the Javadoc jar and
+#             the pom, each with a signature that gpg then verifies, and dev/jar-check.sh
+#             --release on the jars. The files are kept seven days as `dry-run-bundle`; they are
+#             never a release.
 #
-# On a pull request `ci` and `proofs` are skipped: the pull request's own CI runs ci.yml on the
-# same commit, so the dry run there is `version` and `bundle`, the two that only this workflow
-# has. A dispatched dry run runs all four.
-#
-# What the owner sets up before the first tag (none of it exists yet, and a dry run needs none):
-#
-#   - The environment `central`, with a required reviewer. Create it before any tag is pushed: a
-#     job that names an environment the repository does not have creates it with no protection
-#     rule, and `publish` would then run unattended. Limit its deployment branches and tags to
-#     the tag pattern `v*`, so that no branch or pull request reaches its approval, and block
-#     self-review; whoever approves reads this file at the tag's commit first, since a run uses
-#     the workflow of the ref it was started on.
-#   - In that environment, not in the repository, so that only an approved `publish` reads them:
-#     CENTRAL_USERNAME and CENTRAL_PASSWORD, the two halves of a Central Portal user token;
-#     MAVEN_GPG_KEY, the signing key as `gpg --armor --export-secret-keys <id>` prints it; and
-#     MAVEN_GPG_PASSPHRASE, its passphrase.
-#   - At Central: the namespace io.github.vecbricks verified, and the signing key's public half
-#     on a keyserver Central reads.
-#
-# A real run is one push of a tag, or one dispatch on it with dry-run unticked, not both; after a
-# run has uploaded, look at Central's deployments before running again.
-#
-# `publish` uploads and stops: pom.xml leaves central-publishing-maven-plugin's autoPublish at
-# its default, false, so the upload is validated at Central and waits there for the owner to
-# publish or drop it. A published version cannot be taken back.
+# It runs on a push of a tag v*, when dispatched by hand, and on every pull request that touches
+# the files below. On a pull request `ci` and `proofs` are skipped: the pull request's own CI
+# runs ci.yml on the same commit, so the dry run there is `version` and `bundle`, the two that
+# only this workflow has (a pull request does not exercise the call into ci.yml, which a
+# dispatch does). A dispatch or a tag runs all four.
 #
 # The actions of this file's own jobs are pinned by commit, with the version each commit is in a
 # comment; the jobs of ci.yml, called here as they are, use the majors that file names.
@@ -55,17 +36,14 @@ on:
   push:
     tags: ['v*']
   workflow_dispatch:
-    inputs:
-      dry-run:
-        description: 'Dry run: do everything but the upload (a branch is always a dry run)'
-        type: boolean
-        default: true
   pull_request:
     paths:
       - pom.xml
       - .github/workflows/release.yml
       - dev/jar-check.sh
       - dev/release-version.sh
+      - dev/release.sh
+      - CHANGELOG.md
       - .github/workflows/ci.yml
       - LICENSE
       - NOTICE
@@ -85,23 +63,17 @@ jobs:
     name: version
     runs-on: ubuntu-latest
     timeout-minutes: 5
-    outputs:
-      publish: ${{ steps.decide.outputs.publish }}
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
         with:
           # The history, to ask whether a tagged commit is on main.
           fetch-depth: 0
-      - name: Check the rule itself
-        run: dev/release-version.sh --self-test
-      - name: Check the tag against the pom
-        id: decide
-        env:
-          EVENT: ${{ github.event_name }}
-          # Empty unless dispatched; 'false' only when the box was unticked.
-          DRY_RUN: ${{ inputs.dry-run }}
+      - name: Check the rules themselves
         run: |
-          publish=false
+          dev/release-version.sh --self-test
+          dev/release.sh --self-test
+      - name: Check the tag against the pom
+        run: |
           case "$GITHUB_REF" in
             refs/tags/v*)
               dev/release-version.sh "$GITHUB_REF_NAME"
@@ -111,24 +83,11 @@ jobs:
                 exit 1
               fi
               echo "the tagged commit is on main"
-              if [ "$GITHUB_REPOSITORY" = vecbricks/vfdlibm ]; then
-                if [ "$EVENT" = push ]; then
-                  publish=true
-                elif [ "$EVENT" = workflow_dispatch ] && [ "$DRY_RUN" = false ]; then
-                  publish=true
-                fi
-              fi
               ;;
             *)
               dev/release-version.sh
               ;;
           esac
-          echo "publish=$publish" >> "$GITHUB_OUTPUT"
-          if [ "$publish" = true ]; then
-            echo "This is a real run: publish will ask for its approval."
-          else
-            echo "This is a dry run: publish is skipped and nothing is uploaded."
-          fi
 
   ci:
     name: ci
@@ -164,19 +123,13 @@ jobs:
           distribution: zulu
           java-version: 25
           cache: maven
-          # publish's settings.xml, so that Maven signs here under the file it will sign under
-          # there. The two server variables are never set here: nothing reads them before the
-          # deploy phase.
-          server-id: central
-          server-username: CENTRAL_USERNAME
-          server-password: CENTRAL_PASSWORD
-          gpg-passphrase: MAVEN_GPG_PASSPHRASE
-      # The command is publish's with `verify` for `deploy`, so the Javadoc run, the sources jar
-      # and the signing are the ones a release makes; the upload is bound to the deploy phase,
-      # which verify never reaches. The key is generated here, lives in a directory of its own
-      # and signs nothing anyone will see; it reaches Maven as publish's key does, in
+      # The command is the owner's `mvn -B -Prelease deploy` with `verify` for `deploy`, so the
+      # Javadoc run, the sources jar and the signing are the ones a release makes; the upload is
+      # bound to the deploy phase, which verify never reaches. The key is generated here, lives
+      # in a directory of its own and signs nothing anyone will see; it reaches Maven in
       # MAVEN_GPG_KEY and MAVEN_GPG_PASSPHRASE, read by maven-gpg-plugin's Bouncy Castle signer,
-      # which needs no gpg, no agent and no terminal. The tests are skipped: `ci` runs them.
+      # which needs no gpg, no agent and no terminal (the owner's machine signs with gpg and
+      # its agent instead). The tests are skipped: `ci` runs them.
       - name: Build, document and sign with a key made for this run
         run: |
           set -euo pipefail
@@ -187,8 +140,8 @@ jobs:
             --quick-generate-key "vfdlibm release dry run" rsa3072 sign 1d
           key="$(gpg --batch --pinentry-mode loopback --passphrase "$passphrase" \
             --armor --export-secret-keys)"
-          # Maven gets a gpg home with no key, as publish has none: if the Bouncy Castle signer
-          # were not in use, signing would fail here and not after the approval.
+          # Maven gets a gpg home with no key: if the Bouncy Castle signer were not in use,
+          # signing would fail here.
           mkdir -m 700 "$RUNNER_TEMP/no-gnupg"
           GNUPGHOME="$RUNNER_TEMP/no-gnupg" \
           MAVEN_GPG_KEY="$key" MAVEN_GPG_PASSPHRASE="$passphrase" \
@@ -209,7 +162,7 @@ jobs:
       - name: Keep what was built
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          # Signed with the key made for this run, not the release key: never a release.
+          # Signed with the key made for this run, not the owner's: never a release.
           name: dry-run-bundle
           path: |
             target/*.jar
@@ -217,68 +170,3 @@ jobs:
             target/*.asc
           if-no-files-found: error
           retention-days: 7
-
-  publish:
-    name: publish
-    needs: [version, ci, proofs, bundle]
-    # Both must say so: the version job's verdict, and the event and the ref read again here.
-    if: >-
-      needs.version.outputs.publish == 'true'
-      && github.event_name != 'pull_request'
-      && startsWith(github.ref, 'refs/tags/v')
-      && github.repository == 'vecbricks/vfdlibm'
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    environment: central
-    steps:
-      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
-      # No cache. This job builds its own jars from its own checkout and downloads nothing from
-      # bundle (whose files are signed with a throwaway key). server-id writes a
-      # settings.xml whose server `central`, the id pom.xml's publishingServerId names, takes
-      # its username and password from the two environment variables named here; gpg-passphrase
-      # only names the variable its passphrase entry points at, and no key is given to the
-      # action: the key goes to Maven in MAVEN_GPG_KEY.
-      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5.7.0
-        with:
-          distribution: zulu
-          java-version: 25
-          server-id: central
-          server-username: CENTRAL_USERNAME
-          server-password: CENTRAL_PASSWORD
-          gpg-passphrase: MAVEN_GPG_PASSPHRASE
-      - name: Check that the environment holds the four secrets
-        env:
-          CENTRAL_USERNAME: ${{ secrets.CENTRAL_USERNAME }}
-          CENTRAL_PASSWORD: ${{ secrets.CENTRAL_PASSWORD }}
-          MAVEN_GPG_KEY: ${{ secrets.MAVEN_GPG_KEY }}
-          MAVEN_GPG_PASSPHRASE: ${{ secrets.MAVEN_GPG_PASSPHRASE }}
-        run: |
-          missing=0
-          for name in CENTRAL_USERNAME CENTRAL_PASSWORD MAVEN_GPG_KEY MAVEN_GPG_PASSPHRASE; do
-            if [ -z "${!name}" ]; then
-              echo "::error::the environment central has no secret $name"
-              missing=1
-            fi
-          done
-          exit "$missing"
-      # That the tagged commit is on main is checked by the version job alone, which this job
-      # needs; this repeats the rest of the rule.
-      - name: Check the tag against the pom once more
-        run: dev/release-version.sh "$GITHUB_REF_NAME"
-      # verify builds and signs and uploads nothing, so the jars are checked before deploy
-      # builds them again and uploads. The check covers the first build; that the second is the
-      # same is assumed (one checkout, one command), not shown.
-      - name: Build and sign
-        env:
-          MAVEN_GPG_KEY: ${{ secrets.MAVEN_GPG_KEY }}
-          MAVEN_GPG_PASSPHRASE: ${{ secrets.MAVEN_GPG_PASSPHRASE }}
-        run: mvn -B --no-transfer-progress -Prelease -DskipTests -Dgpg.signer=bc verify
-      - name: Check the jars before the upload
-        run: dev/jar-check.sh --release
-      - name: Upload to Central
-        env:
-          CENTRAL_USERNAME: ${{ secrets.CENTRAL_USERNAME }}
-          CENTRAL_PASSWORD: ${{ secrets.CENTRAL_PASSWORD }}
-          MAVEN_GPG_KEY: ${{ secrets.MAVEN_GPG_KEY }}
-          MAVEN_GPG_PASSPHRASE: ${{ secrets.MAVEN_GPG_PASSPHRASE }}
-        run: mvn -B --no-transfer-progress -Prelease -DskipTests -Dgpg.signer=bc deploy

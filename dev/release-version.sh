@@ -15,10 +15,12 @@
 #   dev/release-version.sh --self-test
 #
 # A tag v<version> releases the pom's <version> when the two are equal, the version is not a
-# -SNAPSHOT, and the pom's <scm><tag> is the tag too. .github/workflows/release.yml runs it with
-# the pushed tag before anything is built for upload. With no tag it prints the pom's version
-# and the tag that would release it, and passes: that is a dry run from a branch. --version
-# prints the pom's version and nothing else; --self-test runs the rule on cases written here.
+# -SNAPSHOT, and the pom's <scm><tag> is the tag too. dev/release.sh, which makes the tag, calls
+# it on the release's pom before it builds, and .github/workflows/release.yml's `version` job
+# (a dry run: that workflow publishes nothing) runs it with a pushed tag. With no tag it prints
+# the pom's version and the tag that would release it, and passes: that is a dry run from a
+# branch. --version prints the pom's version and nothing else; --self-test runs the rule on
+# cases written here.
 #
 # It reads pom.xml as XML with Python, with no JVM and no Maven: the version is the project's own
 # <version> element, which this pom writes out (no property, no parent). Exit status: 0 when
