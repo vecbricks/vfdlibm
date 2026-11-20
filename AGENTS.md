@@ -59,7 +59,8 @@ vfdlibm ports fdlibm's double functions to the Java Vector API, each lane bit-id
 - The jar is checked from outside by `dev/jar-check.sh`, which CI runs after `verify`: it must
   hold `LICENSE` and `NOTICE` under `META-INF/`, its module name, the library's classes and
   nothing else, and a consumer compiled against it alone, on the class path and on the module
-  path, must get `StrictMath`'s bits. A new public function goes in that consumer too.
+  path, must get `StrictMath`'s bits. A new public function goes in that consumer too, which
+  fails until it is there; `--self-test` shows each check failing on a jar with a defect.
 - Benchmarks are JMH, in `src/jmh/java`; `verify` compiles them. Run them with
   `mvn -B -Pjmh test-compile exec:exec`, passing JMH options as `-Djmh.args="..."`, e.g.
   `-Djmh.args="ExpBenchmark.finish256 -p inputs=common"`.

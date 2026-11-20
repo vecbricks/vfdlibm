@@ -9,7 +9,8 @@
 #
 # Checks the library's jar from outside, as a consumer has it:
 #
-#   dev/jar-check.sh [<jar>]
+#   dev/jar-check.sh [--release] [<jar>]
+#   dev/jar-check.sh --self-test [<jar>]
 #
 # <jar> defaults to the one jar under target/ that is not a sources, javadoc or tests jar, so
 # after `mvn -B verify` (or `mvn -B -DskipTests package`) it needs no argument; a jar downloaded
@@ -18,8 +19,9 @@
 #   1. The jar holds META-INF/LICENSE and META-INF/NOTICE, byte for byte the files at the root of
 #      this checkout, and NOTICE names Sun Microsystems: compiled classes carry no notice. A
 #      sources jar or a Javadoc jar beside the jar (<name>-sources.jar, <name>-javadoc.jar, as
-#      the release profile builds them) must hold the same two files; one that is not there
-#      is said to be skipped.
+#      the release profile builds them) must hold the same two files. One that is not there
+#      is said to be skipped, or, with --release, fails: CI and the release workflow build
+#      that profile's jars first and pass --release.
 #   2. Its manifest names the module, Automatic-Module-Name: io.github.vecbricks.vfdlibm, and the
 #      jar has no module-info.class beside that name.
 #   3. Its classes are the ones of this checkout's src/main/java, each source file's class and
@@ -38,25 +40,45 @@
 #      io.github.vecbricks.vfdlibm with the jar on the module path.
 #
 # The consumer is no test of a function: the suite is. It shows that the jar loads and links for
-# somebody who has nothing else of this project. It needs a JDK that compiles --release 25 (jar,
-# javac and java: all three from JAVA_HOME if that is set, else from PATH) and cmp, and writes
-# under a temporary directory it removes; a JDK that is too old is "could not run". The JVM's
-# own options variables (JAVA_TOOL_OPTIONS and the like) apply to the consumer as to any JVM. Exit
-# status: 0 when every check passed, 1 when one failed (each failure is printed, and every check
-# runs), 2 when it could not run.
+# somebody who has nothing else of this project. The consumer is compiled at the Java release the
+# jar's own classes were compiled at, read from VFdlibm.class. The options in JAVA_TOOL_OPTIONS
+# go to the JVMs that run the consumer and to no other tool here, so CI's rows check the jar at
+# their widths (-XX:UseAVX=2 -XX:MaxVectorSize=32, say).
+#
+# --self-test shows that the checks can fail: it makes copies of the jar with one defect each (a
+# licence file gone, a file or a class that is not the library's, a class missing, the module's
+# name gone, a module-info.class) and requires this script to exit 1 on every copy, with the
+# line that names the defect. It needs python3 to rewrite the jars.
+#
+# It needs a JDK that compiles and runs the jar's release (jar, javac and java: all three from
+# JAVA_HOME if that is set, else from PATH) and cmp, and writes under a temporary directory it
+# removes; a JDK that is too old is "could not run". Exit status: 0 when every check passed, 1
+# when one failed (each failure is printed, and every check runs), 2 when it could not run.
 set -uo pipefail
 
 MODULE=io.github.vecbricks.vfdlibm
-RELEASE=25
 PACKAGE_DIR=io/github/vecbricks/vfdlibm
 VECTOR_MODULE=jdk.incubator.vector
 
 die() { echo "jar-check: $*" >&2; exit 2; }
 
-case "${1:-}" in
-  -h|--help) sed -n '/^# Checks the library/,/^[^#]/p' "$0" | sed '$d'; exit 0 ;;
-esac
-[ $# -le 1 ] || die "usage: dev/jar-check.sh [<jar>]"
+release_jars=0
+self_test=0
+while [ $# -gt 0 ]; do
+  case "$1" in
+    -h|--help) sed -n '/^# Checks the library/,/^[^#]/p' "$0" | sed '$d'; exit 0 ;;
+    --release) release_jars=1; shift ;;
+    --self-test) self_test=1; shift ;;
+    -*) die "unknown option $1" ;;
+    *) break ;;
+  esac
+done
+[ $# -le 1 ] || die "usage: dev/jar-check.sh [--release | --self-test] [<jar>]"
+
+# The consumer's JVM options, taken out of the environment so that jar and javac do not read
+# them, nor print their notice of it on every call.
+consumer_options="${JAVA_TOOL_OPTIONS:-}"
+unset JAVA_TOOL_OPTIONS
 
 root="$(cd "$(dirname "$0")/.." && pwd)" || die "cannot find the checkout"
 
@@ -73,14 +95,11 @@ JAR="$(tool jar)" || exit 2
 JAVAC="$(tool javac)" || exit 2
 JAVA="$(tool java)" || exit 2
 command -v cmp > /dev/null || die "no cmp on PATH"
-# The line of -version that holds the version: JAVA_TOOL_OPTIONS puts a notice before it.
+# The line of -version that holds the version, whatever notice a JVM prints before it.
 version_of() { "$1" -version 2>&1 | grep -m 1 -E '^(javac|openjdk|java) ' ; }
-"$JAVAC" --release "$RELEASE" -version > /dev/null 2>&1 \
-  || die "$JAVAC does not compile --release $RELEASE: $(version_of "$JAVAC")"
 feature="$("$JAVA" -XshowSettings:properties -version 2>&1 \
   | sed -n 's/^ *java\.specification\.version = \([0-9]*\).*/\1/p' | head -1)"
-[ -n "$feature" ] && [ "$feature" -ge "$RELEASE" ] \
-  || die "$JAVA does not run Java $RELEASE classes: $(version_of "$JAVA")"
+[ -n "$feature" ] || die "cannot read the Java version of $JAVA"
 
 if [ $# -eq 1 ]; then
   jar="$1"
@@ -106,6 +125,81 @@ case "$jar$work" in
   *:*) die "a colon in the jar's path or the temporary directory's: $jar, $work" ;;
 esac
 
+# --self-test: one defect a copy, and this script must fail each copy on the defect's own line.
+if [ "$self_test" -eq 1 ]; then
+  command -v python3 > /dev/null || die "no python3 on PATH, which --self-test needs"
+  missed=0
+  # mutant <defect> <a line the run must print>...
+  mutant() {
+    local defect="$1" status line caught=1
+    shift
+    python3 - "$jar" "$work/$defect.jar" "$defect" "$PACKAGE_DIR" <<'PY' \
+      || die "cannot make the $defect copy"
+import sys
+import zipfile
+
+source, target, defect, package = sys.argv[1:5]
+drop = {"no-notice": "META-INF/NOTICE", "no-licence": "META-INF/LICENSE",
+        "missing-class": package + "/Lanes.class"}.get(defect)
+with zipfile.ZipFile(source) as jar, zipfile.ZipFile(target, "w", zipfile.ZIP_DEFLATED) as out:
+    names = jar.namelist()
+    if drop is not None and drop not in names:
+        sys.exit(drop + " is not in the jar to begin with")
+    for name in names:
+        data = jar.read(name)
+        if name == drop:
+            continue
+        if defect == "no-module-name" and name == "META-INF/MANIFEST.MF":
+            lines = data.split(b"\r\n")
+            kept = [line for line in lines if not line.startswith(b"Automatic-Module-Name:")]
+            if len(kept) == len(lines):
+                sys.exit("the manifest has no module name to begin with")
+            data = b"\r\n".join(kept)
+        out.writestr(name, data)
+    a_class = jar.read(package + "/VFdlibm.class")
+    if defect == "stray-file":
+        out.writestr("META-INF/jpms.args", b"--add-modules\n")
+    elif defect == "stranger-class":
+        out.writestr(package + "/ExpTest.class", a_class)
+    elif defect == "nested-stranger":
+        out.writestr(package + "/Exp$x/Foo.class", a_class)
+    elif defect == "module-info":
+        out.writestr("module-info.class", a_class)
+PY
+    JAVA_TOOL_OPTIONS="$consumer_options" "$0" "$work/$defect.jar" > "$work/$defect.log" 2>&1
+    status=$?
+    [ "$status" -eq 1 ] || caught=0
+    for line in "$@"; do
+      grep -qF -- "$line" "$work/$defect.log" || caught=0
+    done
+    if [ "$caught" -eq 1 ]; then
+      echo "ok    $defect: exit 1, with \"$1\""
+    else
+      echo "FAIL  $defect: exit $status; wanted 1 and each of:"
+      printf '        "%s"\n' "$@"
+      echo "      it printed:"
+      sed 's/^/        /' "$work/$defect.log"
+      missed=$((missed + 1))
+    fi
+  }
+  echo "jar-check: self-test on copies of $jar"
+  mutant no-notice "FAIL  META-INF/NOTICE is not in the jar"
+  mutant no-licence "FAIL  META-INF/LICENSE is not in the jar"
+  mutant no-module-name "FAIL  the manifest has no line Automatic-Module-Name: $MODULE"
+  mutant module-info "FAIL  the jar has a module-info.class"
+  mutant stray-file "FAIL  files that are neither classes"
+  mutant stranger-class "FAIL  classes that no file of src/main/java"
+  mutant nested-stranger "FAIL  classes that no file of src/main/java"
+  mutant missing-class "FAIL  sources of src/main/java/$PACKAGE_DIR/ with no class in the jar" \
+    "FAIL  the consumer on the class path" "FAIL  the consumer on the module path"
+  if [ "$missed" -ne 0 ]; then
+    echo "jar-check: self-test: $missed defects not caught"
+    exit 1
+  fi
+  echo "jar-check: self-test passed"
+  exit 0
+fi
+
 failures=0
 fail() { echo "FAIL  $*"; failures=$((failures + 1)); }
 ok() { echo "ok    $*"; }
@@ -116,6 +210,22 @@ echo "jar-check: $(version_of "$JAVA")"
 "$JAR" tf "$jar" > "$work/listing" || die "cannot list $jar"
 mkdir "$work/unpacked" || die "cannot unpack"
 (cd "$work/unpacked" && "$JAR" xf "$jar") || die "cannot unpack $jar"
+
+# The Java release the jar was compiled at, from a class file's major version (44 more than the
+# release), so that the consumer is compiled as the jar was and no number is repeated here. A
+# jar without the class fails check 3; the consumer is then tried at this JDK's own release.
+RELEASE="$feature"
+if [ -f "$work/unpacked/$PACKAGE_DIR/VFdlibm.class" ]; then
+  major="$(od -An -tu1 -j7 -N1 "$work/unpacked/$PACKAGE_DIR/VFdlibm.class" | tr -d ' ')"
+  [ -n "$major" ] && [ "$major" -gt 44 ] || die "cannot read VFdlibm.class's version"
+  RELEASE=$((major - 44))
+  [ "$feature" -ge "$RELEASE" ] \
+    || die "the jar is Java $RELEASE, which $JAVA does not run: $(version_of "$JAVA")"
+  "$JAVAC" --release "$RELEASE" -version > /dev/null 2>&1 \
+    || die "$JAVAC does not compile --release $RELEASE: $(version_of "$JAVAC")"
+fi
+echo "jar-check: the jar's classes are Java $RELEASE"
+[ -z "$consumer_options" ] || echo "jar-check: the consumer runs with $consumer_options"
 
 # 1. The licence files.
 for name in LICENSE NOTICE; do
@@ -137,7 +247,11 @@ fi
 for kind in sources javadoc; do
   sibling="${jar%.jar}-$kind.jar"
   if [ ! -f "$sibling" ]; then
-    echo "skip  no $kind jar beside the jar (the release profile builds one)"
+    if [ "$release_jars" -eq 1 ]; then
+      fail "no $kind jar beside the jar, which --release requires (build with -Prelease)"
+    else
+      echo "skip  no $kind jar beside the jar (the release profile builds one)"
+    fi
     continue
   fi
   mkdir "$work/$kind" || die "cannot unpack"
@@ -147,7 +261,8 @@ for kind in sources javadoc; do
     if cmp -s "$root/$name" "$work/$kind/META-INF/$name"; then
       ok "the $kind jar's META-INF/$name is this checkout's $name"
     else
-      fail "the $kind jar has no META-INF/$name, or not this checkout's"
+      fail "the $kind jar has no META-INF/$name, or not this checkout's" \
+        "(if it is older than the jar, build again with -Prelease)"
     fi
   done
 done
@@ -390,19 +505,23 @@ while IFS= read -r class; do
   names+=("${class//\//.}")
 done < "$work/classes"
 
-# What javac and java print, less their warning that an incubating module is in use: those
-# lines whole and no other, so that an error which names the module is still shown.
+# What javac and java print, less their warning that an incubating module is in use and the
+# JVM's notice of its options: those lines whole and no other, so that an error which names the
+# module is still shown.
 show() {
   grep -v -x \
       -e "warning: \(\[incubating\] \)\?using incubating module(s): $VECTOR_MODULE" \
       -e "1 warning" \
-      -e "WARNING: Using incubator modules: $VECTOR_MODULE" "$work/log" \
+      -e "WARNING: Using incubator modules: $VECTOR_MODULE" \
+      -e "Picked up JAVA_TOOL_OPTIONS: .*" "$work/log" \
     | sed 's/^/        /'
 }
+# Runs the consumer's JVM, with the options this script was given for it.
+consumer() { JAVA_TOOL_OPTIONS="$consumer_options" "$JAVA" "$@"; }
 
 if "$JAVAC" --release "$RELEASE" --add-modules "$VECTOR_MODULE" -cp "$jar" -d "$work/classpath" \
     "$work/src/consumer/Consumer.java" > "$work/log" 2>&1 \
-  && "$JAVA" --add-modules "$VECTOR_MODULE" -cp "$jar:$work/classpath" consumer.Consumer "" \
+  && consumer --add-modules "$VECTOR_MODULE" -cp "$jar:$work/classpath" consumer.Consumer "" \
     "${names[@]}" >> "$work/log" 2>&1; then
   ok "a consumer on the class path gets StrictMath's bits"
 else
@@ -412,7 +531,7 @@ show
 
 if "$JAVAC" --release "$RELEASE" --module-path "$jar" -d "$work/modulepath" \
     "$work/src/module-info.java" "$work/src/consumer/Consumer.java" > "$work/log" 2>&1 \
-  && "$JAVA" --module-path "$jar:$work/modulepath" -m consumer/consumer.Consumer "$MODULE" \
+  && consumer --module-path "$jar:$work/modulepath" -m consumer/consumer.Consumer "$MODULE" \
     "${names[@]}" >> "$work/log" 2>&1; then
   ok "a consumer module that requires $MODULE gets StrictMath's bits"
 else
