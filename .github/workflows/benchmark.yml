@@ -62,7 +62,10 @@ jobs:
   benchmark:
     runs-on: ubuntu-latest
     env:
-      JMH_OPTIONS: -f 2 -wi 3 -w 2s -i 5 -r 2s -prof gc
+      # -foe true: a benchmark whose setUp throws fails the run. Without it JMH prints <failure>
+      # for that row, goes on, ends the run and exits 0, and the row is missing from a green
+      # run's results (bench/pair.sh and bench/alloc-check.py pass it for the same reason).
+      JMH_OPTIONS: -f 2 -wi 3 -w 2s -i 5 -r 2s -prof gc -foe true
       INLINE: -XX:CompileCommand=inline,io.github.vecbricks.vfdlibm.*::*
     steps:
       # First, before any setup beyond fetching the one script: a job checks its own machine,
