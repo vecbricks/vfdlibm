@@ -64,7 +64,7 @@
 R=vecbricks/vfdlibm; H=epyc7763; A=""; P=""
 # The host keys are bench/host.sh's, the table benchmark.yml checks the machine against.
 # Beside this script, as check_base's git is: the script is run by its path in the repository.
-KEYS=$("$(dirname "$0")/host.sh" --keys) || {
+KEYS=$(bash "$(dirname "$0")/host.sh" --keys) || {
   echo "could not read bench/host.sh's keys" >&2; exit 2; }
 usage() {
   echo "usage: bench/dispatch-bench.sh [--host $(tr '\n' '|' <<<"$KEYS" | sed 's/|$//')]" \
