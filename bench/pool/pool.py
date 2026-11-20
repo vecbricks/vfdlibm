@@ -103,6 +103,13 @@ def gh(args, repo, check=True, remember=True):
     return done.stdout
 
 
+def planted(jvmargs):
+    """Whether a JVM's own options plant a fault (-Dvfdlibm.fault=<name>, Faults.java). A
+    dispatch of the nightly that plants one tests the alert job: it checks only the functions
+    the fault reaches, its mismatches are expected, and it is no night."""
+    return "vfdlibm.fault=" in jvmargs
+
+
 def host_of(repo):
     """gh api's option for the host of a --repo given as HOST/OWNER/REPO, or none."""
     parts = repo.split("/") if repo else []
@@ -194,6 +201,9 @@ def nights(repo, since, until):
     gh lists it), oldest first. A run's date is the UTC day it was created on."""
     runs = json.loads(gh(["run", "list", "--workflow", WORKFLOW, "--limit", "1000", "--json",
                           "databaseId,createdAt,status,attempt,event,headSha"], repo))
+    if since and len(runs) >= 1000 and min(r["createdAt"][:10] for r in runs) > since:
+        sys.exit("the 1000 newest runs of %s do not reach back to %s; the earlier nights would"
+                 " drop out of the range silently" % (WORKFLOW, since))
     completed = [(r["createdAt"][:10], r["databaseId"], r) for r in runs
                  if r["status"] == "completed"]
     return sorted((n for n in completed
@@ -368,6 +378,17 @@ def fetch(args):
                  " failure: %s. If the logs are gone for good, --without-logs writes those"
                  " jobs' rows without them."
                  % (unlogged, len(todo), FIRST_FAILURE[0] if FIRST_FAILURE else "none said"))
+    # A run that planted a fault is a test of the alert, and is no night: out of both files.
+    faulty = {run for (_, run, _), f in zip(todo, found)
+              if f and any(planted(one.get("jvmargs", "")) for one in f["species"])}
+    if faulty:
+        print("left out, a fault was planted: run %s" % ", ".join(map(str, sorted(faulty))),
+              file=sys.stderr)
+        every = [t for t in every if t[1] not in faulty]
+        kept_rows = [(t, f) for t, f in zip(todo, found) if t[1] not in faulty]
+        todo, found = [t for t, _ in kept_rows], [f for _, f in kept_rows]
+        if not todo:
+            sys.exit("every run of that range planted a fault; no file was written")
     rows = sorted(row(date, run, job, f or {}) for (date, run, job), f in zip(todo, found))
     files = []
     if args.cost:
@@ -437,6 +458,8 @@ def rates(group, column, digits=1, sep="-"):
 def table(args):
     """Prints the x86 jobs by CPU, flags and JVM settings, then the Arm jobs by JVM settings."""
     rows = read(args.file)
+    if not rows:
+        sys.exit("%s holds no rows" % args.file)
     by_arch = collections.defaultdict(list)
     for r in rows:
         by_arch[arch(r)].append(r)
@@ -532,6 +555,12 @@ def cost(args):
     for r in rows:
         jobs.setdefault(r["job"], r)
     jobs = list(jobs.values())
+    # A run that planted a fault tests the alert job and is no night, though a file written
+    # before that was known may hold it.
+    faulty = {r["run"] for r in rows if planted(r["jvmargs"])}
+    fault_runs = sorted({(j["date"], int(j["run"])) for j in jobs if j["run"] in faulty})
+    jobs = [j for j in jobs if j["run"] not in faulty]
+    rows = [r for r in rows if r["run"] not in faulty]
     # A run in which no sweep, fuzz or Arm job started, cancelled as its jobs waited or
     # stopped by its plan, is no night: it is named at the end and left out, or it would
     # lower every mean and the least.
@@ -699,6 +728,10 @@ def cost(args):
               " ended before its first, or its log could not be read): their time is in the"
               " nights' tables, as \"the rest\" in the third, and the last two tables have"
               " no run of theirs." % blank)
+    if fault_runs:
+        print()
+        print("Left out, a fault was planted in them: %s." % "; ".join(
+            "%s, run %d" % night for night in fault_runs))
     if idle:
         print()
         print("Left out, since no sweep, fuzz or Arm job of theirs started: %s." % "; ".join(
@@ -721,7 +754,7 @@ def cost(args):
     print("Commits: %s." % "; ".join(
         "%s (%s)" % (c, first if first == last else "%s to %s" % (first, last))
         for c, first, last in spans))
-    print("JDK: %s." % "; ".join(jdks))
+    print("JDK: %s." % ("; ".join(jdks) if jdks else "none recorded"))
 
 
 def main():
