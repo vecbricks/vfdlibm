@@ -69,9 +69,10 @@ a settled question.
   November 2026), all 24 `*Preferred` rows of the five ports, every arm on common and on mixed
   data, read 0.04 to 0.10 B/op at the worst of three iterations. So at two 64-bit lanes the
   bodies run unboxed on Arm, where on x86 every masked one boxes (below); that is read from the
-  allocation alone, and no `PrintIntrinsics` line was read there. `ci.yml`'s `alloc` job has that row since, with `--include
-  '.*Benchmark\.(?!\w*Boxed)\w+Preferred$'`. It is an allocation reading, not a timing: no Arm
-  host is a benchmark host, and nothing here says how fast those bodies are.
+  allocation alone, and no `PrintIntrinsics` line was read there. `ci.yml`'s `alloc` job has
+  that row since, with `--include '.*Benchmark\.(?!\w*Boxed)\w+Preferred$'`. It is an
+  allocation reading, not a timing: no Arm host is a benchmark host, and nothing here says how
+  fast those bodies are.
 - **Ask C2 what it refused.** `-XX:+UnlockDiagnosticVMOptions -XX:+PrintIntrinsics`, or scoped
   to the library, `-XX:CompileCommand=PrintIntrinsics,io.github.vecbricks.vfdlibm.*::*`. Add
   `-Xbatch` when lines must be attributed to one shape: compiles then happen on the calling
