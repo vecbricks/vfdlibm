@@ -628,13 +628,14 @@ witness to the word's top and finds the forcing not needed there, which says not
 port. The port's blend has a planted fault, `expm1.dropKForcing` (`Expm1.DROP_K_FORCING`),
 which gives every lane the formula's `k`: with it planted `Expm1Test`'s `thresholdsAndSpecials`,
 `foldBoundaries`, `foldBoundariesAtMaxSpecies`, `masked`, `maxSpecies` and `faultRunInputsPass`
-fail at every width: 13 of `thresholds()`' 20935 inputs differ, 11 among the 64 below the
+fail, at each width they run: 13 of `thresholds()`' 20935 inputs differ, 11 among the 64 below the
 word's top (the first in array order is `0x3fd62e42_ffffffcb`) and 2 at `0.5 ln2`,
 `0x3fd62e42_fefa39f7`, the eighth double above `0.5 ln2`, and `0xbfd62e42_fefa39f0`, the first
-above it in magnitude; and 822 of `foldBoundaries`' 28698, the first in array order `0x3fd62e42_fefa39f7`. That
-list is a run of `-Dtest=Expm1Test` with the fault, which CI does not make; what CI checks is
-`Expm1Test.faultCatchers`, which requires every arm to fail at each width the host has on
-`faultRunInputs()`. Informal besides: that the port computes these steps, the code's text.
+above it in magnitude; and 822 of `foldBoundaries`' 28698, the first in array order
+`0x3fd62e42_fefa39f7`. That list is a run of `-Dtest=Expm1Test` with the fault, which CI does
+not make; what CI checks is `Expm1Test.faultCatchers`, which requires every arm to fail at each
+width the host has on `faultRunInputs()`. Informal besides: that the port computes these steps,
+the code's text.
 
 ### L11. The k == 0 return is x - e with e = (x*(e-c)-c)-hxs and c = +0
 
