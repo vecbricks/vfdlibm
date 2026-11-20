@@ -656,12 +656,14 @@ a settled question.
   `constantOffByOneUlp` does, ends each JVM early; a narrow one (the `thresholdMoved` ones,
   `log10.subnormalThresholdMoved`, the `guardMisses` ones, for example) lets every stripe that
   misses it sweep to its end, a night's cost for its functions, so give it a larger `nights` and
-  the `night` whose stripes hold it. The plan job refuses a fault that `pom.xml` gives no fault
-  run, since a mistyped name would plant nothing and be reported as a fault the night missed. A
-  run with a fault checks only the functions the fault reaches, of those asked for, and leaves
-  the proofs out, so every mismatch it reports is expected from the fault (a real bug in the same
-  functions would be among them, so only a clean night clears them): its own function and those
-  that compute through it. log's three faults also fail log10, which calls `Log.logCore` (on the
+  the `night` whose stripes hold it. `log1p.foldShortPath` is one the nightly cannot catch: its
+  inputs are about one in 2^29 of a window, so dispatching it reports a missed fault, and
+  `Log1pTest`'s four witnesses are its check. The plan job refuses a fault that `pom.xml` gives
+  no fault run, since a mistyped name would plant nothing and be reported as a fault the night
+  missed. A run with a fault checks only the functions the fault reaches, of those asked for,
+  and leaves the proofs out, so every mismatch it reports is expected from the fault (a real
+  bug in the same functions would be among them, so only a clean night clears them): its own
+  function and those that compute through it. log's three faults also fail log10, which calls `Log.logCore` (on the
   laptop, a two-second fuzz at 256 bits of each function under each function's `dropCorrection`
   failed its own function, and log10 under log's, and nothing else; a three-second one of log10
   under each of log's three faults failed every time; each is

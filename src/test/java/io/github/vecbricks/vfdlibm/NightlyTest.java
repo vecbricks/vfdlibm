@@ -28,7 +28,8 @@ import org.junit.jupiter.params.provider.EnumSource;
 /**
  * Keeps the nightly runs, {@link Sweep} and {@link Fuzz}, working between nights: each runs on a
  * few thousand inputs and must pass, their mismatch file must be in {@code Inputs.hardCases}
- * form, and in each fault run the fuzz must catch the planted fault, so the nightly can fail.
+ * form, and in each fault run but {@link #NOT_FOR_THE_FUZZ}'s the fuzz must catch the planted
+ * fault, so the nightly can fail.
  */
 class NightlyTest {
 
@@ -65,7 +66,10 @@ class NightlyTest {
    */
   private static final Set<String> NOT_FOR_THE_FUZZ = Set.of(Log1p.FOLD_SHORT_PATH);
 
-  /** The fuzz finds each planted fault of the five functions in a second at most. */
+  /**
+   * The fuzz finds each planted fault of the five functions in a second at most, but those of
+   * {@link #NOT_FOR_THE_FUZZ}.
+   */
   @Test
   @Tag("fault")
   void fuzzCatchesThePlantedFault() {

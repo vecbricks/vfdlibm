@@ -440,22 +440,22 @@ class Log1pTest {
       0x3feffffd_05263833L, 0x3ff00001_6fcd0162L, 0xbfe00001_2cac6e81L, 0xbfdffffe_92ae1567L};
 
   /**
-   * The four witnesses and their neighbours one ulp each way, repeated so that each takes every
-   * lane position of a vector of up to 8 lanes: in every arm, lane by lane, the C as written is
-   * {@code StrictMath.log1p} at all of them.
+   * Groups of 8 doubles: each witness once at each of the 8 positions of a group, the other seven
+   * its neighbours one ulp up and down in turn. Every vector of 2, 4 or 8 lanes is a run of
+   * consecutive elements starting at a multiple of its length, so each witness takes every lane
+   * of each width, and the C as written is {@code StrictMath.log1p} at all of the inputs.
    */
   private static double[] shortPathWitnessInputs() {
-    double[] once = new double[3 * SHORT_PATH_WITNESS_BITS.length];
+    double[] xs = new double[SHORT_PATH_WITNESS_BITS.length * 8 * 8];
     int next = 0;
     for (long bits : SHORT_PATH_WITNESS_BITS) {
       double x = Double.longBitsToDouble(bits);
-      once[next++] = x;
-      once[next++] = Math.nextUp(x);
-      once[next++] = Math.nextDown(x);
-    }
-    double[] xs = new double[0];
-    for (int lanes = 0; lanes < 8; lanes++) {
-      xs = Inputs.concat(xs, once);
+      double[] neighbours = {Math.nextUp(x), Math.nextDown(x)};
+      for (int position = 0; position < 8; position++) {
+        for (int lane = 0; lane < 8; lane++) {
+          xs[next++] = lane == position ? x : neighbours[lane & 1];
+        }
+      }
     }
     return xs;
   }
@@ -512,7 +512,10 @@ class Log1pTest {
   /**
    * log1p's faults, each with the check that must catch it: every arm, at each width the host
    * has, over the thresholds, dense draws over (-1, 4) and draws from 2^52 to 2^53. The same
-   * inputs pass in the normal run, through {@link #faultRunInputsPass}.
+   * inputs pass in the normal run, through {@link #faultRunInputsPass}. Two are narrower: the
+   * guarded arm's own fault, caught on lone NaNs, and {@link Log1p#FOLD_SHORT_PATH}, caught on
+   * the four witnesses by the three arms that compute the {@code hu == 0} path, which the
+   * nightly's fuzz and sweep cannot catch (dispatching it there reports a missed fault).
    */
   static Map<String, Executable> faultCatchers() {
     Map<String, Executable> catchers = new LinkedHashMap<>();
