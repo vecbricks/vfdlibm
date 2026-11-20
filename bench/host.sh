@@ -40,7 +40,8 @@ export LC_ALL=C
 # them "end" would be a change to the check, which is the owner's. The last field is
 # a list of words of /proc/cpuinfo's flags line, separated by spaces, all of which the machine
 # must have; no host of today's needs one, since each model name has come with one set of
-# flags.
+# flags. A row can only require a flag, not forbid one, so of a model name that comes both with
+# and without a flag only the kind with it can be a row.
 HOSTS=(
   "epyc7763|end|AMD EPYC 7763 64-Core Processor|"
   "xeon8573c|any|INTEL(R) XEON(R) PLATINUM 8573C|"
@@ -112,6 +113,14 @@ expect() {
     return 1
   fi
   return 0; }
+
+# The check of one host, and on success the line for the results header of benchmark.yml's
+# later steps, written to $GITHUB_ENV when it is set: the key, the model name, the flags line.
+expect_and_record() {
+  expect "$1" "$2" "$3" || return 1
+  if [ -n "${GITHUB_ENV:-}" ]; then
+    echo "EXPECTED_CPU=$(string_of "$(row_of "$1")")" >> "$GITHUB_ENV"
+  fi; }
 
 this_cpu() { grep -m1 'model name' /proc/cpuinfo | sed 's/.*: //'; }
 this_flags() { grep -m1 '^flags' /proc/cpuinfo; }
@@ -219,7 +228,27 @@ self_test() {
       echo "host.sh: --expect $key here ended with $got and wrote '$line'" >&2; failed=1
     fi
   done
+
+  # On every machine, the success path with each host's own name: status 0 and the one line.
+  for key in $(keys); do
+    n=$((n + 1)); : > "$env"
+    GITHUB_ENV="$env" expect_and_record "$key" "$(string_of "$(row_of "$key")")" "$avx512" \
+      > /dev/null; got=$?
+    line="$(cat "$env")"; want="EXPECTED_CPU=$(string_of "$(row_of "$key")")"
+    if [ "$got" != 0 ] || [ "$line" != "$want" ]; then
+      echo "host.sh: a $key machine ended with $got and wrote '$line'" >&2; failed=1
+    fi
+  done
   rm -f "$env"
+
+  # bench/dispatch-bench.sh reads two steps of benchmark.yml by their exact names.
+  local step
+  for step in "Check the probe's script" "Probe the machine's CPU"; do
+    n=$((n + 1))
+    if ! grep -qxF -- "      - name: $step" "$yml"; then
+      echo "host.sh: benchmark.yml has no step named \"$step\"" >&2; failed=1
+    fi
+  done
 
   # A row's flags are required, every one of them. No host of today's has any, so the test
   # adds a row of its own: one model name that is a host only with AVX-512.
@@ -256,11 +285,7 @@ case "${1:-}" in
     fi ;;
   --expect)
     [ $# -eq 2 ] || usage
-    expect "$2" "$(this_cpu)" "$(this_flags)" || exit 1
-    # For the results header of benchmark.yml's later steps.
-    if [ -n "${GITHUB_ENV:-}" ]; then
-      echo "EXPECTED_CPU=$(string_of "$(row_of "$2")")" >> "$GITHUB_ENV"
-    fi ;;
+    expect_and_record "$2" "$(this_cpu)" "$(this_flags)" || exit 1 ;;
   --keys) [ $# -eq 1 ] || usage; keys ;;
   --classify)
     [ $# -eq 2 ] || [ $# -eq 3 ] || usage

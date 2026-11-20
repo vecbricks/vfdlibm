@@ -120,6 +120,10 @@ check_base() {
   fi
   echo "base '$P' is neither a branch or tag of origin nor a commit on an origin branch" >&2
   return 64; }
+# The names of the run's failed steps, from $steps, on one line.
+failed_steps() {
+  local f; f=$(sed -n 's/^failure //p' <<<"$steps" | tr '\n' ';' | sed 's/;$//')
+  printf '%s\n' "${f:-none}"; }
 bench() {
   local n=0 early=0 probe
   while :; do n=$((n + 1)); tag="dispatch-$H-$(date -u +%Y%m%dT%H%M%SZ)-$$-$RANDOM"
@@ -175,18 +179,20 @@ bench() {
       return 1; fi
     if [ "$probe" != skipped ] || [ "$c" != failure ] \
         || ! grep -qx "skipped Check the probe's script" <<<"$steps"; then
-      failed=$(sed -n 's/^failure //p' <<<"$steps" | tr '\n' ';' | sed 's/;$//')
-      echo "$(t) $N: run $m ended as $c, its failed steps: ${failed:-none}; stopping"
+      echo "$(t) $N: run $m ended as $c, its failed steps: $(failed_steps); stopping"
       return 1; fi
     early=$((early + 1))
     if [ $early -ge 3 ]; then
-      echo "$(t) $N: run $m failed before its CPU check, the third in a row, stopping"
+      echo "$(t) $N: run $m failed before its CPU check (in: $(failed_steps)), the third in" \
+        "a row, stopping"
       return 1; fi
     # Out of attempts on such a run is a failure, not status 3: no CPU was seen to be another.
     if [ -n "$A" ] && [ "$n" -ge "$A" ]; then
-      echo "$(t) $N: run $m failed before its CPU check on attempt $n of $A; no attempts left"
+      echo "$(t) $N: run $m failed before its CPU check (in: $(failed_steps)) on attempt $n" \
+        "of $A; no attempts left"
       return 1; fi
-    echo "$(t) $N: run $m failed before its CPU check, retry in an hour"; sleep 3600
+    echo "$(t) $N: run $m failed before its CPU check (in: $(failed_steps)), retry in an" \
+        "hour"; sleep 3600
   done; }
 if [ -n "$P" ]; then check_base || exit $?; fi
 bench
