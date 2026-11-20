@@ -669,4 +669,4 @@ a settled question.
   in log10). The sweep is for bands of wrong results, not for a constant one ulp off.
 - **The suite misses exp's `invln2` one ulp off**, which the fuzz finds within 250 draws: it moves
   `k` at the doubles `(k + 1/2) ln2`, and `ExpTest` takes the neighbours of three of them only,
-  where expm1's has 16 of each and catches it. The README lists every such input.
+  where expm1's has 16 of each and catches it. The README lists one input for each.
