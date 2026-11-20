@@ -22,13 +22,15 @@ the ones that run the rare lanes' paths, which common inputs never reach. The *M
 SPECIES_MAX, and the *Boxed* rows are left out by INCLUDE's regex (see the comment there).
 
 With --why it runs nothing new through the check: it reads the last run's result and runs each
-row that failed once more, under the JVM options the result records for that row, with C2
-printing what it did not intrinsify and what it refused to inline (SKILLS.md, "Ask C2 what it
-refused"), each distinct line with its count.
+row that failed once more (the first WHY_ROWS of them), under the JVM options the result
+records for that row, with C2 printing what it did not intrinsify and what it refused to inline
+(SKILLS.md, "Ask C2 what it refused"), each distinct line with its count. The rerun differs
+from the failing run in one thing besides the printing: C2 compiles alone, see WHY.
 
 Usage, from the repository root:
     bench/alloc-check.py                                  # the host's own flags
-    bench/alloc-check.py --jvm-args "-XX:UseAVX=2 -XX:MaxVectorSize=32"   # as an AVX2 host
+    bench/alloc-check.py --jvm-args="-XX:UseAVX=2 -XX:MaxVectorSize=32"   # as an AVX2 host
+    bench/alloc-check.py --jvm-args=-XX:MaxVectorSize=16  # one option needs the = form
     bench/alloc-check.py --preferred-only                 # where 256 bits is not the hardware's
     bench/alloc-check.py --include 'ExpBenchmark.finish128'               # a row that boxes
     bench/alloc-check.py --why                            # ask C2 about the rows that failed
@@ -72,19 +74,26 @@ INLINE = "-XX:CompileCommand=inline,io.github.vecbricks.vfdlibm.*::*"
 RESULT = "target/alloc-check.json"
 # What --why adds to a failing row's JVM, and the lines it keeps. C2 alone compiles
 # (-TieredCompilation): PrintInlining prints for every tier, and C1's refusals box nothing and
-# would outnumber C2's. PrintIntrinsics' three kinds of line are kept whole, each cut at its
-# "**", since a line of C2's can land in the middle of one of JMH's. Of PrintInlining's
-# refusals, each cut at its "@ <bci>", two lists: those naming the library or the node count,
-# which are the ones that box a port's vectors and are printed in full; and those naming the
-# Vector API, printed up to WHY_LINES, without the retries of a late inline ("trying again").
+# would outnumber C2's. Turning the tiers off also lowers InlineSmallCode, a limit of C2's own
+# inlining, so why() reads the value the JVM has with the tiers on and passes it back; with it
+# the rerun's C2 inlines as the failing run's did, as far as this script knows. PrintIntrinsics'
+# lines are kept whole, each cut at its "**", since a line of C2's can land in the middle of
+# one of JMH's. Of PrintInlining's refusals, each cut at its "@ <bci>", two lists: those naming
+# the library or the node count, which are the ones that box a port's vectors and are printed
+# in full; and those naming the Vector API, printed up to WHY_LINES, without the retries of a
+# late inline ("trying again").
 WHY = ("-XX:-TieredCompilation"
        " -XX:CompileCommand=PrintIntrinsics,io.github.vecbricks.vfdlibm.*::*"
        " -XX:+UnlockDiagnosticVMOptions -XX:+PrintInlining")
-NOT_INTRINSIFIED = re.compile(r"\*\* (not supported|missing constant|unbox failed).*")
+NOT_INTRINSIFIED = re.compile(r"\*\* .*")
 REFUSED = re.compile(r"@ \d+ .*failed to inline.*")
 REFUSED_FIRST = re.compile(r"vfdlibm|NodeCountInliningCutoff")
 REFUSED_API = re.compile(r"jdk\.incubator\.vector|VectorSupport")
 WHY_LINES = 40
+# The rows --why reruns at most, and the seconds one rerun may take: when every row fails, the
+# first few say why, and a hung fork must not hold a CI job.
+WHY_ROWS = 8
+WHY_TIMEOUT = 600
 # One fork; warmup long enough for C2 to finish the body before the first measured iteration,
 # which every iteration being checked (not only the mean) enforces.
 # The inputs values the run covers; check() requires a row for each of them.
@@ -92,16 +101,18 @@ INPUTS = ("common", "mixed")
 JMH_OPTIONS = f"-f 1 -wi 3 -w 1s -i 3 -r 1s -prof gc -p inputs={','.join(INPUTS)}"
 
 
-def mvn_jmh(mvn, jmh_args, capture=False, check=True):
+def mvn_jmh(mvn, jmh_args, capture=False, check=True, timeout=None):
     """Runs JMH through the jmh profile's exec:exec, as CI and the benchmark workflow do.
 
     capture is False (the output goes to the terminal), True (stdout is returned) or "all"
     (stdout and stderr are returned as one text). The child gets no stdin: exec:exec would pass
-    this script's on to JMH."""
+    this script's on to JMH. Captured bytes that do not decode are replaced, not raised on:
+    with "all", a line of the JVM's can cut one of JMH's in two."""
     command = [mvn, "-B", "--no-transfer-progress", "-q", "-Pjmh", "test-compile", "exec:exec",
                f"-Djmh.args={jmh_args}"]
     print("Running:", " ".join(command), flush=True)
-    return subprocess.run(command, check=check, text=True, stdin=subprocess.DEVNULL,
+    return subprocess.run(command, check=check, text=True, errors="replace", timeout=timeout,
+                          stdin=subprocess.DEVNULL,
                           stdout=subprocess.PIPE if capture else None,
                           stderr=subprocess.STDOUT if capture == "all" else None)
 
@@ -155,8 +166,21 @@ def counted(lines, limit=None):
         print("        none")
 
 
+def tiered_inline_small_code(jvm, jvm_args):
+    """The -XX:InlineSmallCode=<n> the JVM has under jvm_args with the tiers on, or ""."""
+    try:
+        out = subprocess.run([jvm] + jvm_args + ["-XX:+PrintFlagsFinal", "-version"],
+                             check=True, text=True, errors="replace", timeout=60,
+                             stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
+                             stderr=subprocess.DEVNULL).stdout
+    except (OSError, subprocess.SubprocessError):
+        return ""
+    match = re.search(r"\bInlineSmallCode\s*=\s*(\d+)", out)
+    return f"-XX:InlineSmallCode={match.group(1)}" if match else ""
+
+
 def why(mvn, path, threshold):
-    """Runs each failing row of path once more and prints C2's account of it.
+    """Runs failing rows of path once more and prints C2's account of each.
 
     A row runs under the JVM options the result records for it, the ones it failed under, not
     under this command's: the same row can box under one set of flags and not under another."""
@@ -167,13 +191,26 @@ def why(mvn, path, threshold):
     if not rows:
         print(f"No row of {path} allocated {threshold} B/op or more; if the check failed, a"
               " row was missing, see its own output.")
-    for row in rows:
+    if len(rows) > WHY_ROWS:
+        print(f"{len(rows)} rows failed; asking about the first {WHY_ROWS}.")
+    for row in rows[:WHY_ROWS]:
         name, inputs = row["benchmark"], row.get("params", {}).get("inputs")
         print(f"\n== {name} [inputs={inputs}]", flush=True)
         param = f" -p inputs={inputs}" if inputs else ""
-        append = " ".join(row.get("jvmArgs", []) + [WHY])
-        run = mvn_jmh(mvn, f"{re.escape(name)}${param} -f 1 -wi 3 -w 1s -i 1 -r 1s -prof gc"
-                           f" -jvmArgsAppend \"{append}\"", capture="all", check=False)
+        jvm_args = row.get("jvmArgs", [])
+        small_code = tiered_inline_small_code(row.get("jvm", "java"), jvm_args)
+        if not small_code:
+            print("Could not read InlineSmallCode with the tiers on; this run's C2 has the"
+                  " lower limit of -TieredCompilation, so a refusal as \"already compiled into"
+                  " a big method\" below may be this run's alone.")
+        append = " ".join(jvm_args + [WHY, small_code]).strip()
+        try:
+            run = mvn_jmh(mvn, f"{re.escape(name)}${param} -f 1 -wi 3 -w 1s -i 1 -r 1s -prof gc"
+                               f" -jvmArgsAppend \"{append}\"", capture="all", check=False,
+                          timeout=WHY_TIMEOUT)
+        except subprocess.TimeoutExpired:
+            print(f"The run did not end within {WHY_TIMEOUT} seconds and was stopped.")
+            continue
         lines = run.stdout.splitlines()
         alloc = [line for line in lines if "gc.alloc.rate.norm" in line]
         if run.returncode != 0 or not alloc:
@@ -183,11 +220,13 @@ def why(mvn, path, threshold):
             print("\n".join(lines[-40:]))
             continue
         print(alloc[-1])
+        # JMH prints a score under 0.001 as "~ 10^-4" with non-ASCII signs; any score that is
+        # not a plain number is such a one, and under every threshold in use.
         try:
-            again = float(alloc[-1].split()[-2])
+            boxed = float(alloc[-1].split()[-2]) >= threshold
         except (IndexError, ValueError):
-            again = None
-        if again is not None and again < threshold:
+            boxed = False
+        if not boxed:
             print(f"This run read under {threshold} B/op: the row did not box this time, so"
                   " the lines below do not explain the failure. If only the first iteration"
                   " of the failing run allocated, C2 was late there (SKILLS.md).")
@@ -254,9 +293,10 @@ def main():
     if args.include and args.preferred_only:
         parser.error("--include and --preferred-only both name the rows; pass one")
     if args.why:
-        if args.jvm_args:
-            parser.error("--why runs each row under the options its result records; --jvm-args"
-                         " does not apply")
+        if args.jvm_args or args.include or args.preferred_only or args.no_run:
+            parser.error("--why reruns the failing rows of the last result, each under the"
+                         " options the result records; --jvm-args, --include,"
+                         " --preferred-only and --no-run do not apply")
         why(args.mvn, RESULT, args.threshold)
         return
     include = args.include or (PREFERRED if args.preferred_only else INCLUDE)

@@ -76,7 +76,9 @@ a settled question.
 - **When the check fails, ask it why.** `bench/alloc-check.py --why` reads the failed run's
   result and runs each failing row once more, under the JVM options the result records for it,
   with the two flags of the next entries and C2 alone compiling (`-XX:-TieredCompilation`:
-  `PrintInlining` prints for every tier, and C1's refusals, which box nothing, outnumber C2's).
+  `PrintInlining` prints for every tier, and C1's refusals, which box nothing, outnumber C2's;
+  it passes back the `InlineSmallCode` the JVM has with the tiers on, 2500 against 1000 on the
+  laptop's JDK 25, since that limit of C2's inlining drops with them).
   It prints each distinct `PrintIntrinsics` line with its count, then the refused calls that
   name the library or `NodeCountInliningCutoff`, then the other refused calls into the Vector
   API. CI runs it after a failing check, so the job's log holds C2's account.
