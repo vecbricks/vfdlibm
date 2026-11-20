@@ -28,9 +28,9 @@
 # --attempts bounds the dispatches. For the three hosts that results wait on, it defaults to none
 # (the hourly retry goes on until the host is drawn). For epyc9v45, a draw of about one in eighteen
 # that is recorded whenever drawn but never waited for, it defaults to 18: an hourly try for
-# about a day, which draws it at least once with a chance of about 64%; a miss is a short job,
-# since the check comes first, after only the fetch of its script and that script's own test
-# (its cost has not been measured on the current workflow). --attempts 1 is a single
+# about a day, which draws it at least once with a chance of about 64%; the check
+# comes first in the job, after only the fetch of its script and that script's own test, and
+# what a miss costs on the current workflow has not been measured. --attempts 1 is a single
 # opportunistic try. Running out of attempts on a CPU miss is exit status 3, not a failure of
 # the run; when the last attempt failed before the CPU check, it is 1.
 #

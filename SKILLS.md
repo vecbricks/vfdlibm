@@ -193,9 +193,9 @@ a settled question.
   `bench/dispatch-bench.sh --host epyc9v45` stops after 18 dispatches, an hourly try for about a
   day (at one in eighteen, a draw with a chance of about 64%; at the recent rates, almost
   surely), with exit status 3 if none drew it (1 if the last try failed before the CPU check);
-  `--attempts 1` is a single opportunistic try. A miss is a short job, since the CPU
-  check comes first, after only the fetch of its script and that script's own test; its cost
-  has not been measured on the current workflow. No decision waits on a 9V45 file; when
+  `--attempts 1` is a single opportunistic try. The CPU check comes first in the job,
+  after only the fetch of its script and that script's own test; what a miss costs on the
+  current workflow has not been measured. No decision waits on a 9V45 file; when
   one exists, it is read with the other AVX-512 hosts.
 - **The benchmark fails on any other CPU, and is retried, never relaxed.**
   `.github/workflows/benchmark.yml` takes a `host` input with exactly four choices and maps each
