@@ -21,23 +21,40 @@ preferred arm covers 512 bits on a host that has it). Mixed inputs are checked b
 the ones that run the rare lanes' paths, which common inputs never reach. The *Max rows, at
 SPECIES_MAX, and the *Boxed* rows are left out by INCLUDE's regex (see the comment there).
 
+With --why it runs nothing new through the check: it reads the last run's result and runs the
+rows that failed once more (WHY_ROWS of them at most, one of each benchmark method first),
+under the JVM options the result records for each row, with C2 printing what it did not
+intrinsify and what it refused to inline (SKILLS.md, "Ask C2 what it refused"), each distinct
+line with its count. A rerun measures one iteration, not three, and C2 compiles alone with the
+inlining limit it has in tiered mode (see WHY); nothing else differs from the failing run.
+
 Usage, from the repository root:
     bench/alloc-check.py                                  # the host's own flags
-    bench/alloc-check.py --jvm-args "-XX:UseAVX=2 -XX:MaxVectorSize=32"   # as an AVX2 host
+    bench/alloc-check.py --jvm-args="-XX:UseAVX=2 -XX:MaxVectorSize=32"   # as an AVX2 host
+    bench/alloc-check.py --jvm-args=-XX:MaxVectorSize=16  # one option needs the = form
+    bench/alloc-check.py --preferred-only                 # where 256 bits is not the hardware's
     bench/alloc-check.py --include 'ExpBenchmark.finish128'               # a row that boxes
+    bench/alloc-check.py --why                            # ask C2 about the rows that failed
 """
 
 import argparse
+import collections
 import json
 import os
 import re
+import signal
 import subprocess
 import sys
 
 # Bytes per op, one op being 1024 doubles. One boxed 256-bit DoubleVector is an object holding
 # a double[4], about 64 bytes with headers, so a row that boxes a single vector per op reads
-# some 64 B/op, and a boxed body kilobytes (exp's D2L path read 98304). An unboxed row reads
-# 0.01 to 0.03 B/op, JMH's own allocation spread over the ops. 1 B/op sits between the two.
+# some 64 B/op, and a boxed body kilobytes (exp's D2L path read 98304); a boxed 128-bit vector
+# is smaller by its two doubles only, and one op holds twice as many. An unboxed row reads 0.01
+# to 0.03 B/op on the x86 hosts and 0.04 to 0.10 on GitHub's Arm runner
+# (bench/results/alloc-arm-2026-11-20.txt), JMH's own allocation spread over the ops. 1 B/op
+# sits between the two. The unboxed reading is a rate times the time of an op, so it grows with
+# a slow row: on Arm, 0.103 B/op at 14.7 us per op, and 1 B/op would be reached at about
+# 143 us per op with no vector boxed. A row that slow wants the threshold read again.
 THRESHOLD = 1.0
 
 # Not *Max: at SPECIES_MAX the finish arm boxes on mixed data, so finishMax would fail. Its lane
@@ -50,9 +67,38 @@ THRESHOLD = 1.0
 # nodes, fixed in product JVMs). Past it C2 refuses every callee larger than MaxTrivialSize
 # (6 bytes) that is not @ForceInline, and a refused call boxes its vectors, so those rows
 # allocate on every vector (SKILLS.md). They record that, like the *Max rows; they cannot pass.
-INCLUDE = r".*Benchmark\.(?!\w*Boxed)\w+(256|Preferred)$"
+#
+# PREFERRED is the same with *256 left out too, for a host whose vectors are narrower than 256
+# bits (GitHub's Arm runners, 128 bits): a *256 row runs in the Java fallback there, as 512
+# bits does on an AVX2 host. Both come from one pattern, so an exclusion is written once.
+ROWS = r".*Benchmark\.(?!\w*Boxed)\w+(%s)$"
+INCLUDE = ROWS % "256|Preferred"
+PREFERRED = ROWS % "Preferred"
 INLINE = "-XX:CompileCommand=inline,io.github.vecbricks.vfdlibm.*::*"
 RESULT = "target/alloc-check.json"
+# What --why adds to a failing row's JVM, and the lines it keeps. C2 alone compiles
+# (-TieredCompilation): PrintInlining prints for every tier, and C1's refusals box nothing and
+# would outnumber C2's. Turning the tiers off also lowers InlineSmallCode, a limit of C2's own
+# inlining, so why() reads the value the JVM has with the tiers on and passes it back; with it
+# the rerun's C2 inlines as the failing run's did, as far as this script knows. PrintIntrinsics'
+# lines are kept whole, each cut at its "**", since a line of C2's can land in the middle of
+# one of JMH's. Of PrintInlining's refusals, each cut at its "@ <bci>", two lists: those naming
+# the library, the node count or a refused intrinsic, which are the ones that box a port's
+# vectors and are printed in full; and the others naming the Vector API, up to WHY_LINES. A
+# line carries every attempt at its call site, so one that repeats itself is cut at WHY_WIDTH.
+WHY = ("-XX:-TieredCompilation"
+       " -XX:CompileCommand=PrintIntrinsics,io.github.vecbricks.vfdlibm.*::*"
+       " -XX:+UnlockDiagnosticVMOptions -XX:+PrintInlining")
+NOT_INTRINSIFIED = re.compile(r"\*\* .*")
+REFUSED = re.compile(r"@ \d+ .*failed to inline.*")
+REFUSED_FIRST = re.compile(r"vfdlibm|NodeCountInliningCutoff|failed to inline \(intrinsic\)")
+REFUSED_API = re.compile(r"jdk\.incubator\.vector|VectorSupport")
+WHY_LINES = 40
+WHY_WIDTH = 200
+# The rows --why reruns at most, and the seconds one rerun may take: when every row fails, a
+# few say why (one per benchmark method first), and a hung fork must not hold a CI job.
+WHY_ROWS = 8
+WHY_TIMEOUT = 600
 # One fork; warmup long enough for C2 to finish the body before the first measured iteration,
 # which every iteration being checked (not only the mean) enforces.
 # The inputs values the run covers; check() requires a row for each of them.
@@ -60,13 +106,38 @@ INPUTS = ("common", "mixed")
 JMH_OPTIONS = f"-f 1 -wi 3 -w 1s -i 3 -r 1s -prof gc -p inputs={','.join(INPUTS)}"
 
 
-def mvn_jmh(mvn, jmh_args, capture=False):
-    """Runs JMH through the jmh profile's exec:exec, as CI and the benchmark workflow do."""
+def mvn_jmh(mvn, jmh_args, capture=False, check=True, timeout=None):
+    """Runs JMH through the jmh profile's exec:exec, as CI and the benchmark workflow do.
+
+    capture is False (the output goes to the terminal), True (stdout is returned) or "all"
+    (stdout and stderr are returned as one text). The child gets no stdin: exec:exec would pass
+    this script's on to JMH. Captured bytes that do not decode are replaced, not raised on:
+    with "all", a line of the JVM's can cut one of JMH's in two. Maven runs in a process group
+    of its own, and past timeout seconds the whole group is killed, JMH and its fork with it,
+    before subprocess.TimeoutExpired is raised."""
     command = [mvn, "-B", "--no-transfer-progress", "-q", "-Pjmh", "test-compile", "exec:exec",
                f"-Djmh.args={jmh_args}"]
     print("Running:", " ".join(command), flush=True)
-    return subprocess.run(command, check=True, text=True,
-                          stdout=subprocess.PIPE if capture else None)
+    try:
+        process = subprocess.Popen(command, text=True, errors="replace", start_new_session=True,
+                                   stdin=subprocess.DEVNULL,
+                                   stdout=subprocess.PIPE if capture else None,
+                                   stderr=subprocess.STDOUT if capture == "all" else None)
+    except OSError as e:
+        sys.exit(f"FAIL: cannot run {mvn} ({e.strerror}); name a Maven with --mvn")
+    try:
+        out, _ = process.communicate(timeout=timeout)
+    except BaseException:
+        # A timeout, or this script interrupted: leave no JMH behind.
+        try:
+            os.killpg(process.pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
+        process.wait()
+        raise
+    if check and process.returncode != 0:
+        raise subprocess.CalledProcessError(process.returncode, command, output=out)
+    return subprocess.CompletedProcess(command, process.returncode, stdout=out)
 
 
 def list_benchmarks(mvn, include):
@@ -85,6 +156,120 @@ def run_jmh(mvn, include, jvm_args):
     jmh_args = (f"{include} {JMH_OPTIONS} -foe true -rf json -rff {RESULT}"
                 f" -jvmArgsAppend \"{append}\"")
     mvn_jmh(mvn, jmh_args)
+
+
+def alloc_iterations(row):
+    """Every measured iteration's gc.alloc.rate.norm of a JSON row, or None if it has none."""
+    # JMH names the metric with a leading middle dot; match on the ASCII suffix.
+    norms = [m for k, m in row.get("secondaryMetrics", {}).items()
+             if k.endswith("gc.alloc.rate.norm")]
+    return [v for fork in norms[0]["rawData"] for v in fork] if norms else None
+
+
+def failing(path, threshold):
+    """The JSON rows at path that check() fails for their allocation."""
+    with open(path, encoding="utf-8") as f:
+        rows = json.load(f)
+    found = []
+    for row in rows:
+        iterations = alloc_iterations(row)
+        if iterations and max(iterations) >= threshold:
+            found.append(row)
+    return found
+
+
+def counted(lines, limit=None):
+    """Prints each distinct line with its count, the most frequent first, limit at most."""
+    counts = collections.Counter(" ".join(line.split()) for line in lines)
+    for line, count in counts.most_common(limit):
+        print(f"{count:6d}  {line}")
+    if limit is not None and len(counts) > limit:
+        print(f"        and {len(counts) - limit} more distinct lines")
+    if not counts:
+        print("        none")
+
+
+def tiered_inline_small_code(jvm, jvm_args):
+    """The -XX:InlineSmallCode=<n> the JVM has under jvm_args with the tiers on, or ""."""
+    try:
+        out = subprocess.run([jvm] + jvm_args + ["-XX:+PrintFlagsFinal", "-version"],
+                             check=True, text=True, errors="replace", timeout=60,
+                             stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
+                             stderr=subprocess.DEVNULL).stdout
+    except (OSError, subprocess.SubprocessError):
+        return ""
+    match = re.search(r"\bInlineSmallCode\s*=\s*(\d+)", out)
+    return f"-XX:InlineSmallCode={match.group(1)}" if match else ""
+
+
+def why(mvn, path, threshold):
+    """Runs failing rows of path once more and prints C2's account of each.
+
+    A row runs under the JVM options the result records for it, the ones it failed under, not
+    under this command's: the same row can box under one set of flags and not under another."""
+    if not os.path.exists(path):
+        print(f"No {path}: the check did not get as far as a result, see its own output.")
+        return
+    rows = failing(path, threshold)
+    if not rows:
+        print(f"No row of {path} allocated {threshold} B/op or more; if the check failed, a"
+              " row was missing or had no gc.alloc.rate.norm, see its own output.")
+    if len(rows) > WHY_ROWS:
+        # One row of each benchmark method first, its last (mixed data, which runs the rare
+        # paths too), so that eight slots reach as many bodies as they can.
+        last = {row["benchmark"]: row for row in rows}
+        first = list(last.values())
+        rows = first + [row for row in rows if all(row is not chosen for chosen in first)]
+        print(f"{len(rows)} rows failed; asking about {WHY_ROWS} of them, one of each"
+              " benchmark method first.")
+    for row in rows[:WHY_ROWS]:
+        name, inputs = row["benchmark"], row.get("params", {}).get("inputs")
+        print(f"\n== {name} [inputs={inputs}]", flush=True)
+        param = f" -p inputs={inputs}" if inputs else ""
+        jvm_args = row.get("jvmArgs", [])
+        small_code = tiered_inline_small_code(row.get("jvm", "java"), jvm_args)
+        if not small_code:
+            print("Could not read InlineSmallCode with the tiers on; this run's C2 has the"
+                  " lower limit of -TieredCompilation, so a refusal as \"already compiled into"
+                  " a big method\" below may be this run's alone.")
+        append = " ".join(jvm_args + [WHY, small_code]).strip()
+        try:
+            run = mvn_jmh(mvn, f"{re.escape(name)}${param} -f 1 -wi 3 -w 1s -i 1 -r 1s -prof gc"
+                               f" -jvmArgsAppend \"{append}\"", capture="all", check=False,
+                          timeout=WHY_TIMEOUT)
+        except subprocess.TimeoutExpired:
+            print(f"The run did not end within {WHY_TIMEOUT} seconds and was stopped.")
+            continue
+        lines = run.stdout.splitlines()
+        alloc = [line for line in lines if "gc.alloc.rate.norm" in line]
+        if run.returncode != 0 or not alloc:
+            # Empty sections below would read as "C2 refused nothing"; show what happened.
+            print(f"The run did not measure the row (Maven exited with {run.returncode});"
+                  " the end of its output:")
+            print("\n".join(lines[-40:]))
+            continue
+        print(alloc[-1])
+        # JMH prints a score under 0.001 as an approximation, with its sign for "about"; such
+        # a score is under every threshold in use. Any other text that is no number is not
+        # judged, and no notice is printed for it.
+        try:
+            boxed = float(alloc[-1].split()[-2]) >= threshold
+        except (IndexError, ValueError):
+            boxed = "\u2248" not in alloc[-1]
+        if not boxed:
+            print(f"This run read under {threshold} B/op: the row did not box this time, so"
+                  " the lines below do not explain the failure. If only the first iteration"
+                  " of the failing run allocated, C2 was late there (SKILLS.md).")
+        print("PrintIntrinsics, each distinct line with its count:")
+        counted(m.group(0) for m in map(NOT_INTRINSIFIED.search, lines) if m)
+        refused = [" ".join(m.group(0).split())[:WHY_WIDTH]
+                   for m in map(REFUSED.search, lines) if m]
+        print("PrintInlining, C2's refused calls that name the library, the node count or a"
+              " refused intrinsic:")
+        counted(line for line in refused if REFUSED_FIRST.search(line))
+        print("PrintInlining, C2's other refused calls into the Vector API:")
+        counted((line for line in refused if not REFUSED_FIRST.search(line)
+                 and REFUSED_API.search(line)), WHY_LINES)
 
 
 def check(path, threshold, expected=None):
@@ -110,14 +295,11 @@ def check(path, threshold, expected=None):
         name = row["benchmark"].rsplit(".", 2)[-2:]
         params = ",".join(f"{k}={v}" for k, v in sorted(row.get("params", {}).items()))
         label = ".".join(name) + (f" [{params}]" if params else "")
-        # JMH names the metric with a leading middle dot; match on the ASCII suffix.
-        norms = [m for k, m in row.get("secondaryMetrics", {}).items()
-                 if k.endswith("gc.alloc.rate.norm")]
-        if not norms:
+        iterations = alloc_iterations(row)
+        if not iterations:
             print(f"FAIL  {label}: no gc.alloc.rate.norm (was -prof gc on?)")
             ok = False
             continue
-        iterations = [v for fork in norms[0]["rawData"] for v in fork]
         worst = max(iterations)
         verdict = "ok  " if worst < threshold else "FAIL"
         ok = ok and worst < threshold
@@ -126,25 +308,48 @@ def check(path, threshold, expected=None):
 
 
 def main():
+    # A terminated script (timeout, a closed terminal) must not leave JMH running: turn the
+    # signals into an exit, which mvn_jmh answers by killing Maven's process group.
+    for name in ("SIGTERM", "SIGHUP"):
+        signal.signal(getattr(signal, name), lambda number, frame: sys.exit(128 + number))
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--mvn", default="mvn", help="the Maven to run (default: mvn)")
     parser.add_argument("--jvm-args", default="", help="extra options for the benchmark JVMs")
-    parser.add_argument("--include", default=INCLUDE, help="JMH benchmark regex")
+    parser.add_argument("--include", default=None, help="JMH benchmark regex")
+    parser.add_argument("--preferred-only", action="store_true",
+                        help="the *Preferred rows without the *256 ones, for a host whose"
+                             " vectors are narrower than 256 bits")
     parser.add_argument("--threshold", type=float, default=THRESHOLD, help="bytes per op")
     parser.add_argument("--no-run", action="store_true",
                         help=f"only check the rows of an existing {RESULT}")
+    parser.add_argument("--why", action="store_true",
+                        help=f"run each failing row of an existing {RESULT} once more, with C2"
+                             " printing what it did not intrinsify or inline")
     args = parser.parse_args()
+    if args.include and args.preferred_only:
+        parser.error("--include and --preferred-only both name the rows; pass one")
+    if args.why:
+        if args.jvm_args or args.include or args.preferred_only or args.no_run:
+            parser.error("--why reruns the failing rows of the last result, each under the"
+                         " options the result records; --jvm-args, --include,"
+                         " --preferred-only and --no-run do not apply")
+        why(args.mvn, RESULT, args.threshold)
+        return
+    if args.no_run and (args.include or args.preferred_only):
+        parser.error("--no-run checks every row of the existing result; --include and"
+                     " --preferred-only do not apply")
+    include = args.include or (PREFERRED if args.preferred_only else INCLUDE)
     expected = None
     if not args.no_run:
         # A result left by an earlier run must not stand in for this one.
         if os.path.exists(RESULT):
             os.remove(RESULT)
         try:
-            expected = list_benchmarks(args.mvn, args.include)
+            expected = list_benchmarks(args.mvn, include)
             if not expected:
-                print(f"FAIL: no benchmark matches {args.include}")
+                print(f"FAIL: no benchmark matches {include}")
                 sys.exit(1)
-            run_jmh(args.mvn, args.include, args.jvm_args)
+            run_jmh(args.mvn, include, args.jvm_args)
         except subprocess.CalledProcessError as e:
             print(e.stdout or "", end="")
             print(f"FAIL: Maven exited with {e.returncode}; a benchmark threw or the build"

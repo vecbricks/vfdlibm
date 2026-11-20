@@ -66,10 +66,12 @@ vfdlibm ports fdlibm's double functions to the Java Vector API, each lane bit-id
   `mvn -B -Pjmh test-compile exec:exec`, passing JMH options as `-Djmh.args="..."`, e.g.
   `-Djmh.args="ExpBenchmark.finish256 -p inputs=common"`.
 - A port's benchmark must pass the allocation check, which CI runs: `bench/alloc-check.py
-  --mvn <mvn>` (add `--jvm-args "-XX:UseAVX=2 -XX:MaxVectorSize=32"` to compile as an AVX2 host).
+  --mvn <mvn>` (add `--jvm-args="-XX:UseAVX=2 -XX:MaxVectorSize=32"` to compile as an AVX2 host).
   It covers each vector arm at 256 bits and at the preferred species if the class is named
   `<Function>Benchmark`, the methods `<arm>256` and `<arm>Preferred`, and the `@Param` `inputs`
   takes `common` (no lane takes a rare path) and `mixed` (rare lanes run); see `SKILLS.md`.
+  CI runs it on x86 both ways and, for the `<arm>Preferred` methods, on the Arm runner, where
+  the preferred species is 128 bits.
 
 ## Lessons
 
@@ -91,7 +93,9 @@ port teaches.
 - A results file is named `bench/results/<function>-<host>-<date>.txt`, one CPU per file, the
   host being the workflow's host key (`xeon8573c`, `xeon6973p`, `epyc9v45`, `epyc7763`) or
   `laptop` with a suffix for its flags (`laptop-avx2`); `<function>` may name the comparison too
-  (`exp-finish`, `exp-onediv`). The files written before the newer hosts keep their names.
+  (`exp-finish`, `exp-onediv`). The files written before the newer hosts keep their names. An
+  allocation reading from GitHub's Arm runner, which is no benchmark host and has no key, uses
+  `arm` (`alloc-arm-2026-11-20.txt`); it is no timing, and says so.
 - The method is fixed: `-f 2 -wi 3 -w 2s -i 5 -r 2s -prof gc`, the body inlined with
   `-XX:CompileCommand=inline,io.github.vecbricks.vfdlibm.*::*`, on an otherwise idle machine.
   The arms of a comparison run in one JMH run. A claim resting on a ratio under about 1.3x is
