@@ -30,13 +30,19 @@ name: Release
 #
 #   - The environment `central`, with a required reviewer. Create it before any tag is pushed: a
 #     job that names an environment the repository does not have creates it with no protection
-#     rule, and `publish` would then run unattended.
+#     rule, and `publish` would then run unattended. Limit its deployment branches and tags to
+#     the tag pattern `v*`, so that no branch or pull request reaches its approval, and block
+#     self-review; whoever approves reads this file at the tag's commit first, since a run uses
+#     the workflow of the ref it was started on.
 #   - In that environment, not in the repository, so that only an approved `publish` reads them:
 #     CENTRAL_USERNAME and CENTRAL_PASSWORD, the two halves of a Central Portal user token;
 #     MAVEN_GPG_KEY, the signing key as `gpg --armor --export-secret-keys <id>` prints it; and
 #     MAVEN_GPG_PASSPHRASE, its passphrase.
 #   - At Central: the namespace io.github.vecbricks verified, and the signing key's public half
 #     on a keyserver Central reads.
+#
+# A real run is one push of a tag, or one dispatch on it with dry-run unticked, not both; after a
+# run has uploaded, look at Central's deployments before running again.
 #
 # `publish` uploads and stops: pom.xml leaves central-publishing-maven-plugin's autoPublish at
 # its default, false, so the upload is validated at Central and waits there for the owner to
@@ -126,11 +132,13 @@ jobs:
 
   ci:
     name: ci
+    needs: version
     if: github.event_name != 'pull_request'
     uses: ./.github/workflows/ci.yml
 
   proofs:
     name: proofs under both solvers
+    needs: version
     if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -146,6 +154,7 @@ jobs:
 
   bundle:
     name: bundle
+    needs: version
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -251,7 +260,8 @@ jobs:
       - name: Check the tag against the pom once more
         run: dev/release-version.sh "$GITHUB_REF_NAME"
       # verify builds and signs and uploads nothing, so the jars are checked before deploy
-      # builds them again and uploads.
+      # builds them again and uploads. The check covers the first build; the second is of the
+      # same checkout and the same command.
       - name: Build and sign
         env:
           MAVEN_GPG_KEY: ${{ secrets.MAVEN_GPG_KEY }}

@@ -95,9 +95,11 @@ CASES
 
 case "${1:-}" in
   -h|--help) sed -n '/^# Says whether/,/^[^#]/p' "$0" | sed '$d'; exit 0 ;;
-  --self-test) self_test; exit $? ;;
+  --self-test) [ $# -eq 1 ] || die "--self-test takes no argument"; self_test; exit $? ;;
+  --version) [ $# -eq 1 ] || die "--version takes no argument" ;;
+  -*) die "unknown option $1" ;;
 esac
-[ $# -le 1 ] || die "usage: dev/release-version.sh [<tag>]"
+[ $# -le 1 ] || die "usage: dev/release-version.sh [--version | --self-test | <tag>]"
 
 fields="$(pom_fields "$root/pom.xml")" || die "cannot read $root/pom.xml"
 version="$(echo "$fields" | sed -n 1p)"
