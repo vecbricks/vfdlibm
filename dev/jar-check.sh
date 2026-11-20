@@ -42,7 +42,8 @@
 #      io.github.vecbricks.vfdlibm with the jar on the module path.
 #
 # The consumer is no test of a function: the suite is. It shows that the jar loads and links for
-# somebody who has nothing else of this project. The consumer is compiled at the Java release the
+# somebody who has nothing else of this project, on a few dozen inputs: linkage, not coverage of
+# any function's branches. The consumer is compiled at the Java release the
 # jar's own classes were compiled at, read from VFdlibm.class. The options in JAVA_TOOL_OPTIONS
 # go to the JVMs that run the consumer and to no other tool here, so CI's rows check the jar at
 # their widths (-XX:UseAVX=2 -XX:MaxVectorSize=32, say).
@@ -85,7 +86,7 @@ done
 # The consumer's JVM options, taken out of the environment so that jar and javac do not read
 # them, nor print their notice of it on every call.
 consumer_options="${JAVA_TOOL_OPTIONS:-}"
-unset JAVA_TOOL_OPTIONS
+unset JAVA_TOOL_OPTIONS JDK_JAVA_OPTIONS _JAVA_OPTIONS
 
 root="$(cd "$(dirname "$0")/.." && pwd)" || die "cannot find the checkout"
 
@@ -341,7 +342,7 @@ if [ -z "$strangers$missing" ]; then
   ok "$(grep -c . "$work/classes") classes, the ones of the ${#sources[@]} files of src/main/java"
 fi
 others="$(grep -v '/$' "$work/listing" | grep -v '\.class$' \
-  | grep -v -x -e META-INF/MANIFEST.MF -e META-INF/LICENSE -e META-INF/NOTICE \
+  | grep -v -x -F -e META-INF/MANIFEST.MF -e META-INF/LICENSE -e META-INF/NOTICE \
   | grep -v "^META-INF/maven/")"
 if [ -n "$others" ]; then
   fail "files that are neither classes, the manifest, the licence files nor Maven's metadata:"
@@ -411,8 +412,8 @@ public final class Consumer {
         same(name, in[i], got[i], oracle.applyAsDouble(in[i]));
       }
       // Three masks, each leaving out another third of the lanes, so that every input is live
-      // in two of them whatever the lane count.
-      for (int out = 0; out < 3; out++) {
+      // in two of them whatever the lane count, and then a mask with every lane live (out = 3).
+      for (int out = 0; out < 4; out++) {
         for (int i = 0; i < length; i++) {
           live[i] = (from + i) % 3 != out;
         }
@@ -534,7 +535,7 @@ consumer() { JAVA_TOOL_OPTIONS="$consumer_options" "$JAVA" "$@"; }
 if "$JAVAC" --release "$RELEASE" --add-modules "$VECTOR_MODULE" -cp "$jar" -d "$work/classpath" \
     "$work/src/consumer/Consumer.java" > "$work/log" 2>&1 \
   && consumer --add-modules "$VECTOR_MODULE" -cp "$jar:$work/classpath" consumer.Consumer "" \
-    "${names[@]}" >> "$work/log" 2>&1; then
+    ${names[@]+"${names[@]}"} >> "$work/log" 2>&1; then
   ok "a consumer on the class path gets StrictMath's bits"
 else
   fail "the consumer on the class path:"
@@ -544,7 +545,7 @@ show
 if "$JAVAC" --release "$RELEASE" --module-path "$jar" -d "$work/modulepath" \
     "$work/src/module-info.java" "$work/src/consumer/Consumer.java" > "$work/log" 2>&1 \
   && consumer --module-path "$jar:$work/modulepath" -m consumer/consumer.Consumer "$MODULE" \
-    "${names[@]}" >> "$work/log" 2>&1; then
+    ${names[@]+"${names[@]}"} >> "$work/log" 2>&1; then
   ok "a consumer module that requires $MODULE gets StrictMath's bits"
 else
   fail "the consumer on the module path:"
