@@ -227,7 +227,8 @@ BENCHMARK = re.compile(r"^# Benchmark: (\S+)$")
 PARAMETERS = re.compile(r"^# Parameters: \((.*)\)$")
 RESULT = re.compile(r'^Result "(\S+)":$')
 MIN_AVG_MAX = re.compile(r"^\s*\(min, avg, max\) = \((-?[\d.]+), (-?[\d.]+), (-?[\d.]+)\)")
-UNIT = re.compile(r"^\s*\S+ \+/-\(99\.9%\) \S+ (\S+) \[Average\]$")
+# The error may be "~ 0" or "~ 10^-4": JMH's approximately sign and a value, two words.
+UNIT = re.compile(r"^\s*\S+ \+/-\(99\.9%\) (?:~ )?\S+ (\S+) \[Average\]$")
 SUMMARY_ROW = re.compile(r"^(\w+)\.\w+(:\S+)?\s")
 
 
@@ -373,7 +374,8 @@ def plain_files(lines, name, named=True):
         out = [title,
                mark("Replace the line above with the title: the class, the CPU, the date, and"),
                mark("why the run was made. Then say what dispatched it and at which commit,"),
-               mark("and delete these lines.")]
+               mark("and add an 'Array:' line if the benchmark's inputs need describing (see"),
+               mark("the other files). Delete these lines.")]
         if len(classes) > 1:
             out += ["#",
                     "# The run held %d classes; this file has %s's blocks and rows of it."
@@ -431,6 +433,8 @@ def pair_tables(directory, header):
     out = []
     for side in ("base", "head"):
         rows = sides[side]
+        if not rows:
+            raise Problem("the %s's pair/%s-*.json hold no benchmark" % (side, side))
         counts = sorted({len(v) for v in rows.values()})
         count = "%d" % counts[0] if len(counts) == 1 else "%d to %d" % (counts[0], counts[-1])
         sha = commits.get(side.capitalize(), "").split(" ")[0][:7]
@@ -705,7 +709,9 @@ def fake_plain(directory):
         out += ["Iteration   %d: %.3f ns/op" % (i + 1, s) for i, s in enumerate(scores)]
         out += ["                 gc.count:           \u2248 0 counts", "", "",
                 'Result "%s%s.%s":' % (PACKAGE, cls, method),
-                "  %.3f \u00b1(99.9%%) 1.000 ns/op [Average]" % statistics.mean(scores),
+                "  %.3f \u00b1(99.9%%) %s ns/op [Average]" % (
+                    statistics.mean(scores), "\u2248 10\u207b\u2074" if method == "guarded256"
+                    else "1.000"),
                 "  (min, avg, max) = (%.3f, %.3f, %.3f), stdev = 1.000"
                 % (min(scores), statistics.mean(scores), max(scores)), ""]
         return out
@@ -803,7 +809,7 @@ def selftest():
         assert len(found) == 1 and found[0].startswith("table 1: Log1pBenchmark.plain -"), found
         assert not any("ExpBenchmark." in l for l in log1p)
         assert exp[-1].startswith("ExpBenchmark.finish256          mixed"), exp[-1]
-        assert sum(MARKER in l for l in exp) == 6
+        assert sum(MARKER in l for l in exp) == 7
         # A header line with no value is kept, and a value typed into it is found.
         assert "# Vector:" in exp
         found = check(written(d, exp, lambda l: l.replace("# Vector:", "# Vector: UseAVX=3")), d)
@@ -812,7 +818,7 @@ def selftest():
         with open(os.path.join(d, "kept.txt"), "w") as f:
             f.write("\n".join(exp) + "\n")
         kept = check(os.path.join(d, "kept.txt"), d)
-        assert len(kept) == 8 and sum("marker" in x for x in kept) == 6, kept
+        assert len(kept) == 9 and sum("marker" in x for x in kept) == 7, kept
         # With the markers deleted and no title written, or under another host's name, it
         # still does not check.
         found = check(written(d, exp, title=exp[0]), d)
@@ -850,7 +856,7 @@ def selftest():
             assert two[:at - 1] == exp and two[at + 1:at + 4] == [
                 "# (Exp|Log1p)Benchmark on a GitHub runner, 2026-11-21 01:02 UTC", "#",
                 "# Host:        xeon8573c (expected CPU 'INTEL(R) XEON(R) PLATINUM 8573C')"]
-            assert sum(MARKER in l for l in two) == 6 and len(tables_of(two)) == 2
+            assert sum(MARKER in l for l in two) == 7 and len(tables_of(two)) == 2
             assert "# ExpBenchmark.finish256  common         10.2         11.0         12.0" \
                 in two[at:], two[at:at + 20]
             assert check(written(d, two), [d, again]) == []
@@ -1166,6 +1172,8 @@ def act(args, directories):
         print("%s: %s" % (args.file, "differs from the artifact" if diffs
                           else "its header, tables and raw section are the artifact's"))
         return 1 if diffs else 0
+    if args.name and os.sep in args.name:
+        raise Problem("--name is a file's name, not a path: %s" % args.name)
     files = {os.path.join(args.out_dir, name): lines
              for name, lines in joined_files(directories, args.name).items()}
     there = [path for path in files if os.path.exists(path)]
