@@ -464,7 +464,12 @@ final class Survey {
       note = options.getOrDefault("note", "");
       only = options.getOrDefault("only", ".*");
       java.util.regex.Pattern.compile(only);
-      append = Boolean.parseBoolean(options.getOrDefault("append", "false"));
+      String appendText = options.getOrDefault("append", "false");
+      if (!appendText.equals("true") && !appendText.equals("false")) {
+        throw new IllegalArgumentException("--append takes true or false, not '" + appendText
+            + "'");
+      }
+      append = appendText.equals("true");
     } catch (IllegalArgumentException e) {
       System.err.println("Survey: " + e.getMessage());
       return Nightly.ERROR;
@@ -520,7 +525,9 @@ final class Survey {
               inSearch.inputs);
         }
         for (int m = 0; m < mutants.length; m++) {
-          int layer = inSuite.count[m] > 0 ? 0 : inFuzz.count[m] > 0 ? 1
+          // The hard cases are part of the suite; a test that left them out of Oracle's inputs
+          // would not make a mutant they show uncaught.
+          int layer = inSuite.count[m] > 0 || inHard.count[m] > 0 ? 0 : inFuzz.count[m] > 0 ? 1
               : inSweep.count[m] > 0 ? 2 : inSearch.count[m] > 0 ? 3 : 4;
           caughtBy[layer]++;
           long example = layer == 0 ? inSuite.example[m] : layer == 1 ? inFuzz.example[m]

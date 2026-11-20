@@ -78,12 +78,12 @@ done
 
 if [ -n "${SURVEY_INPUTS:-}" ]; then
   inputs="$SURVEY_INPUTS"
-  "${lock[@]}" "$mvn" -B -q test-compile || exit 2
+  ${lock[@]+"${lock[@]}"} "$mvn" -B -q test-compile || exit 2
 else
   inputs="$root/target/survey/inputs"
   rm -rf "$inputs"
   # A -Dtest filter leaves the fault runs out (the profile one-test of pom.xml).
-  "${lock[@]}" "$mvn" -B -q test -Dtest="$tests" \
+  ${lock[@]+"${lock[@]}"} "$mvn" -B -q test -Dtest="$tests" \
     -Dvfdlibm.test.jvmArgs="-Dvfdlibm.survey.record=$inputs" || exit 2
 fi
 
@@ -95,7 +95,7 @@ fi
 note="commit $commit; $(date -u +%Y-%m-%d); $("$java" -version 2>&1 | head -1)"
 
 survey() {
-  "${lock[@]}" "$java" -Xmx2g --add-modules jdk.incubator.vector \
+  ${lock[@]+"${lock[@]}"} "$java" -Xmx2g --add-modules jdk.incubator.vector \
     -cp target/classes:target/test-classes io.github.vecbricks.vfdlibm.Survey \
     --suite "$inputs" --seed "$seed" --threads "$threads" --note "$note" "$@"
 }

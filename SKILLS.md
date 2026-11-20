@@ -661,8 +661,8 @@ a settled question.
   every constant in such a test.
 - **A planted fault is chosen among the mutants the suite catches.** About three in five are: every
   dropped correction term, the first coefficient of each series, the thresholds the suite has
-  neighbours of. Picking a fault from a survey row whose `caught_by` is `suite` is quicker than
-  sizing it on draws by hand.
+  neighbours of. A survey row whose `caught_by` is `suite` and whose count is large is a fault
+  already sized; the README says what a `none` row does and does not show.
 - **The sweep caught nothing the fuzz and the suite did not.** No mutant showed on the sweep's
   inputs and on none of the suite's or the fuzz's: stripe `0/64` for every mutant, and all 2^32 high
   words (three low words each) for those nothing else had found in exp, expm1 and log (stripe `0/8`

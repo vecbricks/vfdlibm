@@ -121,7 +121,7 @@ settings in their table's header.
   - a line that agrees with its neighbour on the inputs that move: the near reduction's last
     word taking the far form (`hx<0x3FF0A2B2-1`, which `PROOFS.md`'s L2 proves for exp's whole
     band), exp's `k>=-1021+1`, expm1's `hx>=0x4043687A` and `hx<0x3c900000` a word either way
-    and `k<20+1`, log's and log10's `hx<0x00100000+1`. Each is a fold a lemma could state;
+    log's and log10's `hx<0x00100000+1`. Each is a fold a lemma could state;
   - `hx>=0x7ff00000+1`, which sends a NaN whose high word is `0x7ff00000` down the arithmetic.
     The transcription is Java, where `(int)` of a NaN is 0, as it is in the ports' conversions;
     in C that conversion is undefined, so the mutant says nothing about the C itself. In Java
@@ -130,16 +130,22 @@ settings in their table's header.
     exp's `halF`, expm1's `-0.25`, log's `ln2_lo` and `0.33333333333333333`, log10's
     `log10_2lo`. The 64 neighbours of every `(k + 1/2) ln2` show nothing for `halF`, and the
     2^20 neighbours of `ln2_hi - 0.25` nothing for `-0.25`; these two and the `k < 20` counts
-    below come from a probe run by hand over `Mutants`, which is not committed.
+    in the next section come from probes run by hand over `Mutants`, which are not committed.
 
-## One note against SKILLS.md
+## A "none" is a sampling result, not a proof
 
-SKILLS.md ("A planted fault must change results, measured before it is wired") records that
-expm1's line 203 moved from `k < 20` to `k < 21` changed 3 of 2^22 draws in (19.4, 20.6) ln2 and
-moved to `k < 19` none. Here `k<20+1` changed none of 2^22 draws in that interval, nor any of
-1.8 * 10^10 inputs, and `k<20-1` changed 8 of 2^22 draws in (18.4, 19.6) ln2, where the lanes
-with `k = 19` are. The two readings disagree on `k < 21`; the earlier one's transcription is not
-in the repository, so which is right is open.
+Every row that reads `none` says only that no input drawn showed the mutant, and a mutant that
+changes a few results in a million draws is missed by a pass of 4 * 10^9. `k<20+1` is the
+example in this table. Its row reads `none` after 1.8 * 10^10 inputs, and in a check made
+afterwards by hand, 26 of 2^26 uniform draws in (19.5, 20.5) ln2 differ from `StrictMath.expm1`
+under it, the first at `0x402b2688d692d264` (13.575...), a rate near 4 * 10^-7 where `k = 20`
+(`k = 20` takes 0.1% of the search's draws). That agrees with SKILLS.md ("A planted fault must
+change results, measured before it is wired"), which counts 3 changed results in 2^22 draws in
+(19.4, 20.6) ln2 for `k < 21` and none for `k < 19`; here `k<20-1` changed 8 of 2^22 draws in
+(18.4, 19.6) ln2, the lanes with `k = 19`. Of the rows that read `none`, only those the
+groups above give a reason for are argued equal, and none is proved. The rest, and `k<20+1`
+above all, are gaps in the tests until an input or a lemma settles them: `k<20+1` wants a hard
+case at `0x402b2688d692d264`, and the issue's next step is to write one.
 
 ## Running it
 

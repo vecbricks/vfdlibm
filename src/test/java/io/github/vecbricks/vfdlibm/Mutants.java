@@ -7,11 +7,22 @@
  * limitations under the License.
  *
  * This file transcribes fdlibm 5.3's e_exp.c, s_expm1.c, e_log.c and e_log10.c (under
- * reference/fdlibm-5.3/), each of which carries this notice:
+ * reference/fdlibm-5.3/). e_exp.c and s_expm1.c carry this notice:
  *
  * ====================================================
  * Copyright (C) 2004 by Sun Microsystems, Inc. All rights reserved.
  *
+ * Permission to use, copy, modify, and distribute this
+ * software is freely granted, provided that this notice
+ * is preserved.
+ * ====================================================
+ *
+ * and e_log.c and e_log10.c carry the same notice with the year 1993:
+ *
+ * ====================================================
+ * Copyright (C) 1993 by Sun Microsystems, Inc. All rights reserved.
+ *
+ * Developed at SunSoft, a Sun Microsystems, Inc. business.
  * Permission to use, copy, modify, and distribute this
  * software is freely granted, provided that this notice
  * is preserved.
