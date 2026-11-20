@@ -410,7 +410,8 @@ a settled question.
   are, a loop over the set bits of `rare.toLong()` with `result.withLane(lane,
   StrictMath.log1p(x.lane(lane)))`, it reads ~0.01 B/op on mixed data at 256 and 512 bits, so
   nothing in it was refused in log1p's large body (the current runs in the same files). Its
-  `SPECIES_MAX` form, which boxes in exp, is not measured. An earlier exploratory run had
+  `SPECIES_MAX` form boxes as exp's does: 30912 B/op on mixed data at 512 bits and 36993 under
+  `-XX:UseAVX=2` (`bench/results/max-finish-laptop-2026-11-20.txt`). An earlier exploratory run had
   measured a `withLane` loop at 47,232 B/op (quoted in the same superseded runs); whether that
   loop sat in a helper taking vectors was not recorded, and it most likely measured that call's
   boxing, not `withLane`.
