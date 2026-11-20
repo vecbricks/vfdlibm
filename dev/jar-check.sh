@@ -19,18 +19,20 @@
 #      this checkout, and NOTICE names Sun Microsystems: compiled classes carry no notice.
 #   2. Its manifest names the module, Automatic-Module-Name: io.github.vecbricks.vfdlibm, and the
 #      jar has no module-info.class beside that name.
-#   3. Every class in it is in io/github/vecbricks/vfdlibm/, and VFdlibm.class is there; a
-#      benchmark, a test or a dependency's class in the jar fails here. Nothing else is in it but
-#      the manifest, the two licence files and Maven's META-INF/maven/.
+#   3. Its classes are the ones of this checkout's src/main/java, each source file's class and
+#      the classes nested in it, all of them and no other; a benchmark, a test or a dependency's
+#      class in the jar fails here, though the tests and benchmarks share the package. Nothing
+#      else is in it but the manifest, the two licence files and Maven's META-INF/maven/.
 #   4. A consumer compiled against the jar alone, with the module jdk.incubator.vector, runs and
 #      finds every lane of every public function equal to StrictMath's by raw bits, in the plain
-#      and the masked form, at the preferred species. It is compiled and run twice: with the jar
-#      on the class path, and as a module that requires io.github.vecbricks.vfdlibm with the jar
-#      on the module path.
+#      and the masked form, at the preferred species; it fails if VFdlibm has a public method it
+#      does not check. It is compiled and run twice: with the jar on the class path, and as a
+#      module that requires io.github.vecbricks.vfdlibm with the jar on the module path.
 #
 # The consumer is no test of a function: the suite is. It shows that the jar loads and links for
-# somebody who has nothing else of this project. It needs a JDK (jar, javac, java; JAVA_HOME's if
-# that is set, else PATH's) and cmp, and writes under a temporary directory it removes. Exit
+# somebody who has nothing else of this project. It needs a JDK (jar, javac and java: all three
+# from JAVA_HOME if that is set, else from PATH) and cmp, and writes under a temporary directory
+# it removes. Exit
 # status: 0 when every check passed, 1 when one failed (each failure is printed, and every check
 # runs), 2 when it could not run.
 set -uo pipefail
@@ -48,16 +50,18 @@ esac
 
 root="$(cd "$(dirname "$0")/.." && pwd)" || die "cannot find the checkout"
 
+# One JDK for all three tools: JAVA_HOME's when it is set, with no falling back to PATH's.
 tool() {
-  if [ -n "${JAVA_HOME:-}" ] && [ -x "$JAVA_HOME/bin/$1" ]; then
+  if [ -n "${JAVA_HOME:-}" ]; then
+    [ -x "$JAVA_HOME/bin/$1" ] || die "JAVA_HOME is $JAVA_HOME, which has no bin/$1"
     echo "$JAVA_HOME/bin/$1"
   else
-    command -v "$1"
+    command -v "$1" || die "no $1 on PATH, and JAVA_HOME is not set"
   fi
 }
-JAR="$(tool jar)" || die "no jar on PATH and none under JAVA_HOME"
-JAVAC="$(tool javac)" || die "no javac on PATH and none under JAVA_HOME"
-JAVA="$(tool java)" || die "no java on PATH and none under JAVA_HOME"
+JAR="$(tool jar)" || exit 2
+JAVAC="$(tool javac)" || exit 2
+JAVA="$(tool java)" || exit 2
 
 if [ $# -eq 1 ]; then
   jar="$1"
@@ -120,15 +124,42 @@ else
 fi
 
 # 3. The classes, and what else is there.
-classes="$(grep -c '\.class$' "$work/listing")"
-strangers="$(grep '\.class$' "$work/listing" | grep -v "^$PACKAGE_DIR/[^/]*\.class$")"
+# A class belongs if it is <Name>.class or <Name>$<nested>.class for a source file
+# src/main/java/<package>/<Name>.java: the tests and the benchmarks are in the same package, so
+# the directory alone would not tell them apart.
+sources=()
+for source in "$root/src/main/java/$PACKAGE_DIR"/*.java; do
+  [ -f "$source" ] && sources+=("$(basename "$source" .java)")
+done
+[ ${#sources[@]} -gt 0 ] || die "no sources under $root/src/main/java/$PACKAGE_DIR"
+grep '\.class$' "$work/listing" > "$work/classes"
+strangers=""
+while IFS= read -r class; do
+  name="${class#"$PACKAGE_DIR"/}"
+  name="${name%.class}"
+  top="${name%%\$*}"
+  known=0
+  if [ "$class" = "$PACKAGE_DIR/$name.class" ]; then
+    for source in "${sources[@]}"; do
+      [ "$top" = "$source" ] && known=1
+    done
+  fi
+  [ "$known" -eq 1 ] || strangers="$strangers$class"$'\n'
+done < "$work/classes"
+missing=""
+for source in "${sources[@]}"; do
+  grep -qx "$PACKAGE_DIR/$source.class" "$work/classes" || missing="$missing$source.java"$'\n'
+done
 if [ -n "$strangers" ]; then
-  fail "classes outside $PACKAGE_DIR/:"
-  echo "$strangers" | sed 's/^/        /'
-elif ! grep -qx "$PACKAGE_DIR/VFdlibm.class" "$work/listing"; then
-  fail "$PACKAGE_DIR/VFdlibm.class is not in the jar"
-else
-  ok "$classes classes, all in $PACKAGE_DIR/"
+  fail "classes that no file of src/main/java/$PACKAGE_DIR/ compiles to:"
+  printf '%s' "$strangers" | sed 's/^/        /'
+fi
+if [ -n "$missing" ]; then
+  fail "sources of src/main/java/$PACKAGE_DIR/ with no class in the jar:"
+  printf '%s' "$missing" | sed 's/^/        /'
+fi
+if [ -z "$strangers$missing" ]; then
+  ok "$(grep -c . "$work/classes") classes, the ones of the ${#sources[@]} files of src/main/java"
 fi
 others="$(grep -v '/$' "$work/listing" | grep -v '\.class$' \
   | grep -v -x -e META-INF/MANIFEST.MF -e META-INF/LICENSE -e META-INF/NOTICE \
@@ -146,6 +177,10 @@ cat > "$work/src/consumer/Consumer.java" <<'JAVA'
 package consumer;
 
 import io.github.vecbricks.vfdlibm.VFdlibm;
+import java.lang.reflect.Method;
+import java.lang.reflect.Modifier;
+import java.util.Set;
+import java.util.TreeSet;
 import java.util.function.DoubleUnaryOperator;
 import jdk.incubator.vector.DoubleVector;
 import jdk.incubator.vector.VectorMask;
@@ -171,6 +206,7 @@ public final class Consumer {
     DoubleVector apply(DoubleVector x, VectorMask<Double> live);
   }
 
+  private static final Set<String> CHECKED = new TreeSet<>();
   private static int lanes;
   private static int wrong;
 
@@ -178,23 +214,44 @@ public final class Consumer {
     int length = SPECIES.length();
     double[] in = new double[length];
     boolean[] live = new boolean[length];
+    CHECKED.add(name);
     for (int from = 0; from < INPUTS.length; from += length) {
       for (int i = 0; i < length; i++) {
         in[i] = INPUTS[(from + i) % INPUTS.length];
-        live[i] = (from + i) % 3 != 0;
       }
       DoubleVector x = DoubleVector.fromArray(SPECIES, in, 0);
       double[] got = plain.apply(x).toArray();
-      double[] gotMasked = masked.apply(x, VectorMask.fromArray(SPECIES, live, 0)).toArray();
       for (int i = 0; i < length; i++) {
-        double expected = oracle.applyAsDouble(in[i]);
-        same(name, in[i], got[i], expected);
-        // Only the live lanes: what a lane that is not live holds is the suite's to check.
-        if (live[i]) {
-          same(name + " (masked)", in[i], gotMasked[i], expected);
+        same(name, in[i], got[i], oracle.applyAsDouble(in[i]));
+      }
+      // Three masks, each leaving out another third of the lanes, so that every input is live
+      // in two of them whatever the lane count.
+      for (int out = 0; out < 3; out++) {
+        for (int i = 0; i < length; i++) {
+          live[i] = (from + i) % 3 != out;
+        }
+        double[] gotMasked = masked.apply(x, VectorMask.fromArray(SPECIES, live, 0)).toArray();
+        for (int i = 0; i < length; i++) {
+          // Only the live lanes: what a lane that is not live holds is the suite's to check.
+          if (live[i]) {
+            same(name + " (masked)", in[i], gotMasked[i], oracle.applyAsDouble(in[i]));
+          }
         }
       }
     }
+  }
+
+  /** The public static methods of VFdlibm that no check above named, by name. */
+  private static Set<String> unchecked() {
+    Set<String> names = new TreeSet<>();
+    for (Method method : VFdlibm.class.getDeclaredMethods()) {
+      int modifiers = method.getModifiers();
+      if (Modifier.isPublic(modifiers) && Modifier.isStatic(modifiers)) {
+        names.add(method.getName());
+      }
+    }
+    names.removeAll(CHECKED);
+    return names;
   }
 
   private static void same(String name, double in, double got, double expected) {
@@ -221,6 +278,11 @@ public final class Consumer {
       System.out.printf("expected the library in module \"%s\"%n", args[0]);
       System.exit(1);
     }
+    if (!unchecked().isEmpty()) {
+      System.out.printf("VFdlibm has public methods this consumer does not check: %s; "
+          + "add them to dev/jar-check.sh%n", unchecked());
+      System.exit(1);
+    }
     System.exit(wrong == 0 && lanes > 0 ? 0 : 1);
   }
 
@@ -234,8 +296,15 @@ module consumer {
 }
 JAVA
 
-# What javac and java print, less their warning that an incubating module is in use.
-show() { grep -v "incubator" "$work/log" | sed 's/^/        /'; }
+# What javac and java print, less their warning that an incubating module is in use: those
+# lines whole and no other, so that an error which names the module is still shown.
+show() {
+  grep -v -x \
+      -e "warning: using incubating module(s): $VECTOR_MODULE" \
+      -e "1 warning" \
+      -e "WARNING: Using incubator modules: $VECTOR_MODULE" "$work/log" \
+    | sed 's/^/        /'
+}
 
 if "$JAVAC" --release 25 --add-modules "$VECTOR_MODULE" -cp "$jar" -d "$work/classpath" \
     "$work/src/consumer/Consumer.java" > "$work/log" 2>&1 \
