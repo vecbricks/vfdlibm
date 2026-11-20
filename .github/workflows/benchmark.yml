@@ -68,15 +68,18 @@ jobs:
       # since every job is a new VM. bench/dispatch-bench.sh looks for the probe step's exact
       # name among a failed run's failed steps. bench/host.sh holds each host's CPU string and
       # says how it is matched; CI runs its self-test. The whole tree is checked out further
-      # down, after the checks that cost seconds.
+      # down, after the checks that cost seconds. The script goes to a directory of its own,
+      # which the later checkout removes: a second checkout over a sparse one in the same
+      # directory left the tree without its other files.
       - uses: actions/checkout@v5
         with:
           sparse-checkout: bench/host.sh
           sparse-checkout-cone-mode: false
+          path: probe
       - name: Probe the machine's CPU
         env:
           HOST: ${{ inputs.host }}
-        run: bench/host.sh --expect "$HOST"
+        run: probe/bench/host.sh --expect "$HOST"
       # A pair's free-text inputs, checked before any setup so that a typo costs seconds: the
       # same rules as bench/pair.sh's, which checks them again.
       - name: Check the pair inputs
