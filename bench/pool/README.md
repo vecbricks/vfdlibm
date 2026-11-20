@@ -68,6 +68,10 @@ second file from the logs it has already read, and `pool.py cost` tabulates it:
         --cost bench/pool/nightly-cost-2026-11-03-to-2026-11-19.tsv \
         --out bench/pool/nightly-2026-11-03-to-2026-11-19.tsv
     bench/pool/pool.py cost bench/pool/nightly-cost-2026-11-03-to-2026-11-19.tsv
+    bench/pool/pool.py selftest
+
+`selftest` checks the log readers and the fault-run rule on rows made up in the script, with
+no `gh` call, and fails when a run that planted a fault is counted as a night.
 
 `nightly-cost-2026-11-03-to-2026-11-19.tsv` holds the 715 jobs of the same 17 nights, the plan,
 proofs and alert jobs too, and their 1984 species runs, every one of which exited 0. It has one

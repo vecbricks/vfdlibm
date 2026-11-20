@@ -34,6 +34,7 @@ Usage, from the repository root:
         --out rows.tsv --cost cost-rows.tsv                                     # needs gh
     bench/pool/pool.py table bench/pool/nightly-2026-11-03-to-2026-11-19.tsv
     bench/pool/pool.py cost bench/pool/nightly-cost-2026-11-03-to-2026-11-19.tsv
+    bench/pool/pool.py selftest                                      # offline, no gh call
 """
 
 import argparse
@@ -108,6 +109,13 @@ def planted(jvmargs):
     dispatch of the nightly that plants one tests the alert job: it checks only the functions
     the fault reaches, its mismatches are expected, and it is no night."""
     return "vfdlibm.fault=" in jvmargs
+
+
+def fault_runs(todo, found):
+    """The ids of the runs among the jobs (date, run, job) whose log says (one reading each in
+    found, or None) that a JVM of theirs planted a fault."""
+    return {run for (_, run, _), f in zip(todo, found)
+            if f and any(planted(one.get("jvmargs", "")) for one in f["species"])}
 
 
 def host_of(repo):
@@ -379,8 +387,7 @@ def fetch(args):
                  " jobs' rows without them."
                  % (unlogged, len(todo), FIRST_FAILURE[0] if FIRST_FAILURE else "none said"))
     # A run that planted a fault is a test of the alert, and is no night: out of both files.
-    faulty = {run for (_, run, _), f in zip(todo, found)
-              if f and any(planted(one.get("jvmargs", "")) for one in f["species"])}
+    faulty = fault_runs(todo, found)
     if faulty:
         print("left out, a fault was planted: run %s" % ", ".join(map(str, sorted(faulty))),
               file=sys.stderr)
@@ -757,6 +764,65 @@ def cost(args):
     print("JDK: %s." % ("; ".join(jdks) if jdks else "none recorded"))
 
 
+def selftest(args):
+    """Checks the readers and the fault-run rule on rows made up here, with no gh call: a
+    night that planted a fault is left out by fetch's rule and by cost, a night that did not
+    stays, and what a log's lines say is read as the cost file's cells."""
+    import io
+    import contextlib
+    import tempfile
+
+    def log(jvmargs, code):
+        stamp = "2026-11-19T10:00:00.0Z "
+        return [stamp + "== sweep-exp-256: java --add-modules x Sweep ...",
+                stamp + "sweep exp at 256 bits, --stripe 0/2: 2147483648 high words",
+                stamp + "jdk: OpenJDK 64-Bit Server VM 25 (amd64)",
+                stamp + "jvm args: " + jvmargs,
+                stamp + "swept 2147483648 high words (6442450944 inputs) in 300.0 s: 7/s",
+                stamp + "== sweep-exp-256: exit %d" % code]
+
+    plain = species_runs(log("--add-modules=x", 0))
+    assert len(plain) == 1 and plain[0]["seconds"] == "300.0" and plain[0]["bits"] == "256"
+    assert plain[0]["jdk"].endswith("(amd64)") and plain[0]["exit"] == "0", plain
+    hit = species_runs(log("--add-modules=x -Dvfdlibm.fault=exp.dropCorrection", 1))
+    assert hit[0]["exit"] == "1" and planted(hit[0]["jvmargs"]), hit
+    assert not planted(plain[0]["jvmargs"])
+
+    # fetch's rule: the run whose reading planted a fault goes, the other stays.
+    todo = [("d", 1, {}), ("d", 1, {}), ("d", 2, {}), ("d", 3, {})]
+    found = [{"species": plain}, {"species": hit}, {"species": plain}, None]
+    assert fault_runs(todo, found) == {1}, fault_runs(todo, found)
+
+    # cost's rule: the same two nights as rows, the faulty one named and not counted.
+    def job_row(date, run, name, jvmargs, wall=600):
+        cells = dict(zip(COST_COLUMNS, ["-"] * len(COST_COLUMNS)))
+        cells.update(date=date, run=str(run), attempt="1", event="schedule", commit="abc",
+                     job=str(run * 10 + len(name)), name=name, conclusion="success",
+                     jvm="MaxVectorSize=32 UseAVX=2", started="2026-11-19T10:00:00Z",
+                     wall=str(wall), mode="sweep", function="exp", species="256", bits="256",
+                     words="2147483648", inputs="6442450944", seconds="300.0", exit="0",
+                     jdk="JDK", jvmargs=jvmargs)
+        return "\t".join(cells[c] for c in COST_COLUMNS)
+
+    lines = ["\t".join(COST_COLUMNS),
+             job_row("2026-11-18", 1, "sweep (exp, stripe 0/2)", "--add-modules=x"),
+             job_row("2026-11-19", 2, "sweep (exp, stripe 0/2)",
+                     "--add-modules=x -Dvfdlibm.fault=exp.dropCorrection"),
+             job_row("2026-11-20", 3, "sweep (exp, stripe 0/2)", "--add-modules=x")]
+    with tempfile.TemporaryDirectory() as tmp:
+        path = os.path.join(tmp, "cost.tsv")
+        with open(path, "w", encoding="ascii") as out:
+            out.write("\n".join(lines) + "\n")
+        text = io.StringIO()
+        with contextlib.redirect_stdout(text):
+            cost(argparse.Namespace(file=path, by_cpu=False))
+    said = text.getvalue()
+    assert said.startswith("2 jobs of 2 nights, 2026-11-18 to 2026-11-20;"), said[:80]
+    assert "Left out, a fault was planted in them: 2026-11-19, run 2." in said, said[-400:]
+    assert "| 2026-11-19 |" not in said
+    print("pool.py selftest: the fault-run rule and the log readers passed")
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     commands = parser.add_subparsers(dest="command", required=True)
@@ -792,6 +858,8 @@ def main():
     c.add_argument("--by-cpu", action="store_true",
                    help="split the sweep and fuzz tables by CPU model, not by vector width")
     c.set_defaults(run=cost)
+    st = commands.add_parser("selftest", help="check the readers and the fault-run rule offline")
+    st.set_defaults(run=selftest)
     args = parser.parse_args()
     args.run(args)
 
