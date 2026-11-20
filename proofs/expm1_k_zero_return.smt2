@@ -25,10 +25,11 @@
 ;     itself in any binade, and no other double of its binade or the next ones, every
 ;     normal binade at once. That is e - (+0) = e and v - (+0) = v for normal e and v.
 ;     The hinge, H15, is that c is a zero: a double less one step of its binade is
-;     another double, so with a nonzero c the two steps fail.
+;     another double (checked in binade 2^-1), so with a c of one step of e's binade
+;     the first step fails.
 ;
 ; What is not machine-checked:
-;   - That e and v = fl(r*e) are normal or zero on the lanes, never subnormal: for
+;   - That e and v = fl(r*e) are nonzero and normal on the lanes: for
 ;     2^-54 <= |x| < 0.35, hxs is at least 2^-109 and e and r*e are of the order of x^2
 ;     and x^3 times constants near one, far above 2^-1022. Those bounds rest on the
 ;     polynomial and are sampled (ProofsTest.l11KZeroReturnIsTheInnerTermsForm).
@@ -38,8 +39,8 @@
 ;   - That the port computes these forms, and line 189's last operation from them: the
 ;     code's text.
 ;
-; Constants: none of Expm1's is used. The claim is about c alone; a nonzero c refutes
-; it, and c = -0 its step at a zero e.
+; Constants: none of Expm1's is used. The claim is about c alone; a c of one step of
+; e's binade refutes it, and c = -0 its step at a zero e.
 ;
 ; The logic is ALL: section B's products S * M * sn are nonlinear.
 ;

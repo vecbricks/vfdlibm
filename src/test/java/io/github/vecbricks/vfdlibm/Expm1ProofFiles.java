@@ -184,8 +184,10 @@ final class Expm1ProofFiles {
         ;     once. So hi = x, lo = +0 and r = x, and for a zero x of either sign likewise. Then
         ;     hi - r is x - x, +0 (the rule for like signs, pinned at sampled doubles while
         ;     rendering, or a zero difference of like-signed zeros), and c = +0 - (+0) = +0.
-        ;     With t = -0 the first step fails at x = -0. The lanes' ends, %s and
-        ;     %s, are rendered from Expm1's words, decoded and admitted.
+        ;     With t = -0 the first step fails at x = -0 and nowhere else: that check refutes
+        ;     the step as stated for every x, and x = -0 is a lane whose r nothing reads. The
+        ;     ends of the lanes that are read, %s and %s, are
+        ;     rendered from Expm1's words, decoded and admitted.
         ;   - Section C (H14): the two witnesses %s and %s
         ;     have the high word 0x%x, so line 162's test leaves them unreduced; there the
         ;     formula's fl(fl(x*invln2) + h) rounds into binade 2^0 with x's sign, so its cast is
@@ -386,10 +388,11 @@ final class Expm1ProofFiles {
         ;     itself in any binade, and no other double of its binade or the next ones, every
         ;     normal binade at once. That is e - (+0) = e and v - (+0) = v for normal e and v.
         ;     The hinge, H15, is that c is a zero: a double less one step of its binade is
-        ;     another double, so with a nonzero c the two steps fail.
+        ;     another double (checked in binade 2^-1), so with a c of one step of e's binade
+        ;     the first step fails.
         ;
         ; What is not machine-checked:
-        ;   - That e and v = fl(r*e) are normal or zero on the lanes, never subnormal: for
+        ;   - That e and v = fl(r*e) are nonzero and normal on the lanes: for
         ;     2^-54 <= |x| < 0.35, hxs is at least 2^-109 and e and r*e are of the order of x^2
         ;     and x^3 times constants near one, far above 2^-1022. Those bounds rest on the
         ;     polynomial and are sampled (ProofsTest.l11KZeroReturnIsTheInnerTermsForm).
@@ -399,8 +402,8 @@ final class Expm1ProofFiles {
         ;   - That the port computes these forms, and line 189's last operation from them: the
         ;     code's text.
         ;
-        ; Constants: none of Expm1's is used. The claim is about c alone; a nonzero c refutes
-        ; it, and c = -0 its step at a zero e.
+        ; Constants: none of Expm1's is used. The claim is about c alone; a c of one step of
+        ; e's binade refutes it, and c = -0 its step at a zero e.
         ;
         ; The logic is ALL: section B's products S * M * sn are nonlinear.
         """);

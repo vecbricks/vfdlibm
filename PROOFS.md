@@ -587,17 +587,19 @@ against `Exp`'s, with `Expm1.LN2_HI_UP`, the planted fault's value, refuted (sec
 the machine-checked parts of L2 (`proofs/exp_near_band.smt2`) and L5
 (`proofs/exp_half_sign.smt2`), rendered from `Exp`, check steps 1 and 2 for expm1 as they stand;
 step 3 (section B): the zero products, `x - (+0) = x` for a zero `x` of either sign and for
-every nonzero normal double, every binade at once, and `c = +0`, with `t = -0` refuted; and H14
-(section C): at the two witnesses the high word is `0x3fd62e42`, the formula's sum rounds into
-binade 2^0, so its cast is `+-1`, and each rounding of the C as written and of the C reduced
-with that `k` is evaluated, the two results differing, while at the word's top double of either
-sign the cast is `+-1` too and the same two chains end in one double. Informal above:
-`fl(x - (-a)) = fl(x + a)` (R4), one rational in this encoding, so with no check to write;
-that `x - x = +0` for a nonzero `x` (R5), pinned at sampled doubles while rendering, as in L6's file; that `StrictMath.expm1` is
-the forced computation at the witnesses (a test, the oracle being in no solver), that they are
-the first from the word's top and how many doubles differ (a scalar run); a subnormal `x` less
-`+0`, which no lane reads; the casts of `+0.0` and of a double in binade 2^0, and that the port
-computes these steps, the code's text.
+every nonzero normal double, every binade at once, and `c = +0`; with `t = -0` the step fails
+at `x = -0` alone, a lane whose `r` nothing reads, so that check refutes the step as stated for
+every `x`, not on the lanes L11 uses; and H14 (section C): at the two witnesses the high word is
+`0x3fd62e42`, the formula's sum rounds into binade 2^0, so its cast is `+-1`, and each rounding
+of the C as written and of the C reduced with that `k` is evaluated, the two results differing,
+while at the word's top double of either sign the cast is `+-1` too and the same two chains end
+in one double. Informal above: `fl(x - (-a)) = fl(x + a)` (R4), one rational in this encoding,
+so with no check to write; that `x - x = +0` for a nonzero `x` (R5), pinned at sampled doubles
+while rendering, as in L6's file; that `StrictMath.expm1` is the forced computation at the
+witnesses (a test, the oracle being in no solver), that they are the first from the word's top
+and how many doubles differ (a scalar run); a subnormal `x` less `+0`, which no lane reads; the
+casts of `+0.0` and of a double in binade 2^0, and that the port computes these steps, the
+code's text.
 
 ### L11. The k == 0 return is x - e with e = (x*(e-c)-c)-hxs and c = +0
 
@@ -623,8 +625,9 @@ boundaries.
 **Encoding.** `proofs/expm1_k_zero_return.smt2`, rendered by `Expm1ProofFiles`. Machine-checked
 there: both (R3) steps, `e - (+0) = e` and `v - (+0) = v`, for a zero of either sign and for
 every nonzero normal double, every binade at once; that the zero product `r*fl(e - c)` has the
-sign `r*e` has; and H15 as a hinge: a double less one step of its binade is another double, so
-a nonzero `c` breaks both steps. With `c = -0` the step fails only at `e = -0`, which no lane
-has, so that check refutes (R3) as stated for every `e`, not the lemma on its lanes. Informal
-above: that `e` and `fl(r*e)` are nonzero and never subnormal on the lanes (bounds on the
+sign `r*e` has; and H15 as a hinge: a double less one step of its binade is another double
+(checked in binade 2^-1), so with a `c` of one step of `e`'s binade the first step fails. With
+`c = -0` the step fails only at `e = -0`, which no lane has, so that check refutes (R3) as
+stated for every `e`, not the lemma on its lanes. Informal above: that `e` and `fl(r*e)` are
+nonzero and normal on the lanes (bounds on the
 polynomial, sampled by the hinge test), H15 itself (L10), and the code's text.
