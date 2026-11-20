@@ -123,29 +123,9 @@ from the two of four. `--by-cpu` splits the last two tables by CPU model and its
 - **The fuzz's millions of inputs a second.** A fuzz runs for a set time, so its cost is
   `fuzz-seconds` times the species; the rate says what the time buys.
 
-What the 17 nights say:
-
-- The nights since expm1 joined, 5 to 19 November, 43 jobs each (one of them the alert job,
-  skipped when nothing fails), cost 347 to 372 runner-minutes, 5.8 to 6.2 runner-hours, and
-  370 to 394 minutes started. The first two nights, 35 jobs and four functions, cost 272 and
-  285. A night of 43 jobs spans 50 to 58 minutes, once 77.
-- By job kind, the median fuzz jobs of a night take 137 minutes, the x86 sweep jobs 118 and
-  the Arm jobs 105; each is its own column's median, so they are no one night's split. The
-  plan, proofs and alert jobs together are under one minute.
-- By what the jobs do, as means over the 17 nights: fuzzing is 168 minutes a night (129 in the
-  fuzz jobs and 39 in the Arm jobs), sweeping 162 (109 on x86, 53 on Arm), and setup, build
-  and the rest 21. The fuzz is the largest part of a night.
-- By function, a night costs 62 minutes for log, 68 for log10, 69 for exp, 79 for log1p and 84
-  for expm1.
-- The 128-bit slice is 15% of the x86 sweep jobs' time, 17 minutes a night, for 1/32 of the
-  high words. Scaled to every high word, the sweeps' own seconds are, by the median of each
-  group in the fourth table, 67.5 (log) to 262 (expm1) minutes at 128 bits on a 256-bit
-  machine, 6.6 to 13.2 at 256 bits there, and 7.2 to 13.4 at 128 bits on Arm. These are what
-  the nightly's jobs took, to size the night with; they say nothing about one body being
-  faster than another.
-- An x86 draw is not one machine to size by: the fourth table's ranges for one species widen
-  with the draws. `--by-cpu` shows which CPU gave which, and keeps the EPYC 9V74's draws
-  without AVX-512 apart from those with it.
+What the nights say is quoted in `SKILLS.md`, "The nightly sweep and fuzz", under "Its cost,
+measured", from `cost --since 2026-11-05`, the 15 nights of five functions; `cost` alone counts
+all 17, whose first two ran four functions, so its means differ from those.
 
 ## Adding nights
 

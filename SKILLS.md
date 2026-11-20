@@ -559,9 +559,10 @@ a settled question.
 - **Its cost, measured (the logs of 3 to 19 November 2026).** The first sizing was a laptop's,
   from a sample of high words, before any night had run; the nights' own logs replaced it.
   `bench/pool/pool.py cost --since 2026-11-05
-  bench/pool/nightly-cost-2026-11-03-to-2026-11-19.tsv` prints every figure here
-  (`bench/pool/README.md`, "What a night costs"). Those are the 15 nights of five functions,
-  from the night expm1 joined; the two nights before them ran four, at 272 and 285 runner-minutes.
+  bench/pool/nightly-cost-2026-11-03-to-2026-11-19.tsv` prints the tables the figures here are
+  read or summed from (`bench/pool/README.md`, "What a night costs"); a sum is of its rows.
+  Those are the 15 nights of five functions, from the night expm1 joined; the two nights
+  before them ran four, at 272 and 285 runner-minutes.
   The figures are what the nightly's jobs took on whatever machine each drew, to size the night
   with, and no comparison of one body with another.
   - A night costs 347 to 372 runner-minutes, 5.8 to 6.2 runner-hours. By the median of each
@@ -577,7 +578,7 @@ a settled question.
   - A sweep job takes 10.9 minutes by the median and 19.8 at most, a fuzz job 12.6 and 17.0, an
     Arm job 3.8 and 12.1 (the first shard of a function, which also fuzzes).
   - One runner sweeping every high word of a function takes, by the median, at 256 bits on a
-    256-bit x86 machine, 6.6 minutes for log, 8.2 for log10, 9.3 for exp, 12.5 for expm1 and
+    256-bit x86 machine, 6.5 minutes for log, 8.2 for log10, 9.3 for exp, 12.5 for expm1 and
     13.2 for log1p; at 128 bits on the same machine 67.5, 88.2, 80.7, 262.1 and 199.5; and at
     128 bits on Arm, natively, 7.2, 9.5, 9.7, 13.4 and 12.7. An x86 draw with 512-bit vectors
     is faster and its range wide (exp at 512 bits: 3.5 to 7.1 minutes), and `--by-cpu` splits
@@ -615,11 +616,14 @@ a settled question.
     minutes (the night's 54 against the fuzz's 138 over 3 slots, 46). At 13 functions of the
     average 72 minutes, that is 13/5 of the night's medians (sweep 309, fuzz 359, Arm 273: 941
     runner-minutes, 15.7 hours; 13 times 72 is 936), the old slots 8, 3 and 4 give 120 minutes
-    of fuzz and a span of 128. Slots 5, 6 and 4, the best
-    split of 15 by this model, give 62, 60 and 68, a span of 76 (and 34 for five functions,
-    from 24, 23 and 26). So the defaults keep `fuzz-seconds` 240, `nights` 1, `shards` 2 and
-    `arm-shards` 4, and `max-parallel` is 5 for the sweep, 6 for the fuzz and 4 for Arm. The 14
-    minutes below 90 hold about three functions beyond the average, at 4.8 minutes each.
+    of fuzz and a span of 128. Slots 5, 6 and 4, the best split of 15 by this model, give 62,
+    60 and 68, a span of 76 (and 34 for five functions, from 24, 23 and 26). The model is
+    linear and counts no whole waves of jobs, so 76 is a lower bound; the sweep's 62, plus its
+    longest job, 19.8, plus the 8 minutes, gives 90 as the upper. The 8 minutes are one fit
+    (54 against 46). So the defaults keep `fuzz-seconds` 240, `nights` 1, `shards` 2
+    and `arm-shards` 4, and `max-parallel` is 5 for the sweep, 6 for the fuzz and 4 for Arm. At
+    13 functions the span is within 90 by the upper bound, with no room above it: each further
+    average function adds about 5 minutes (Arm's 273 over 13 functions and 4 slots).
   - **What gives when it does not fit,** cheapest first, with what each buys at 13 functions
     (the table's means times 2.6): `fuzz-seconds` 120 saves 224 runner-minutes a night (172 in
     the fuzz jobs, 52 in Arm's) and halves what a species is fuzzed; `nights` 2 saves 192, 124
