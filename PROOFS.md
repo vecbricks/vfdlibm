@@ -576,8 +576,8 @@ against the far form's `hi` and `lo`, at both ends of the band and 65536 seeded 
 `ProofsTest.l10UnreducedLanesKeepXWithZeroCorrection` (step 3's `hi`, `lo`, `r` and `c`, by bits,
 over both ends of `2^-54 <= |x| <= 0x3fd62e42_ffffffff`, the whole word of `0.5 ln2` (about
 `0.3466`), their neighbours inside that range and 65536 draws over the binades `2^-54` to
-`2^-2`, those above that top dropped, both signs); `ProofsTest.l10KIsForcedByTheHighWordTest` (H14: `k = +-1` from the
-formula at the two witnesses, where the C reduced with it, `Expm1Test.cExpm1(x, true)`, is not
+`2^-2`, those above that top dropped, both signs); `ProofsTest.l10KIsForcedByTheHighWordTest`
+(H14: `k = +-1` from the formula at the two witnesses, where the C reduced with it, `Expm1Test.cExpm1(x, true)`, is not
 `StrictMath.expm1`, the C as written is, and the doubles above each witness to the word's top
 double, where the unforced `k` happens to give the same double, are checked to be so). The
 transcription `Expm1Test.cExpm1` is itself checked against `StrictMath.expm1`
