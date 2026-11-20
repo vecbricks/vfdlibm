@@ -424,9 +424,11 @@ a settled question.
   and a sample of 199,804,321 `hu == 0` inputs with `1+x` between 0.5 and 2^1024 showed 0 bit
   differences against `StrictMath.log1p`. The C sent down its general polynomial path instead
   differs from the C as written all the same, on about one input in 2^29 of the windows
-  searched: 56 of the 2^35 doubles with `1+x` in `[2 - 3*2^-20, 2 + 2^-19)` (`k = 1`) and 20 of
-  the 15,032,385,536 with `1+x` in `(0.5 - 3*2^-22, 0.5 + 2^-21]` (`k = -1`); at each the C as
-  written is `StrictMath.log1p` and the general path gives the next double. The counts, the
+  searched: 56 of the 2^35 doubles of raw bits `[0x3feffffa_00000000, 0x3ff00002_00000000)`,
+  `1+x` in about `[2 - 3*2^-20, 2 + 2^-19)` (`k = 1`), and 20 of the 15,032,385,536 of raw bits
+  `[0xbfdffffe_00000000, 0xbfe00001_80000000)`, `1+x` in about `(0.5 - 3*2^-22, 0.5 + 2^-21]`
+  (`k = -1`); at each the C as written is `StrictMath.log1p` and the general path gives the
+  next double. The counts, the
   hosts and the commands are in `bench/results/log1p-hu0-search-laptop-2026-11-20.txt`, four
   of the witnesses in `Log1pTest.shortPathIsNotTheGeneralPath`. The other windows (one for each
   power of two of `1+x`) are not searched. A sample of 2^27.6 inputs was not expected to show

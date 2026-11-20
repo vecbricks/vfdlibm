@@ -101,9 +101,10 @@ tails equal); `ProofsTest.l1KIsForcedByTheHighWordTest` (H1: the formula gives `
 of the word, and at `0x3fd62e42_fefa3a08` the far form with `k = 1` is not exp);
 `ProofsTest.l1DomainWidenedByAWordIsRefuted` (the `sat` case below). **Vector tie.**
 `ExpTest.foldBoundaries` and `foldBoundariesAtMaxSpecies` run both arms (`VFdlibm.exp` and
-`Exp.expBlended`), unmasked and masked, against `StrictMath` at the words `0x3e300000 +- 1`,
-`0x3fd62e42`, `0x3fd62e43` and `0x3ff0a2b1`, `0x3ff0a2b2`, both signs, low words 0, `0xffffffff`
-and 1024 seeded, plus the 4096 doubles above `+-0.5 ln2`, at every width and `SPECIES_MAX`; with
+`Exp.expBlended`), unmasked and masked, against `StrictMath` at the words `0x3e2fffff`,
+`0x3e300000`, `0x3fd62e42`, `0x3fd62e43`, `0x3ff0a2b1` and `0x3ff0a2b2`, both signs, low words 0,
+`0xffffffff` and 1024 seeded, plus the 4096 doubles each side of `+-0.5 ln2`, at every width
+and `SPECIES_MAX`; with
 the `k` forcing removed it fails.
 
 **Encoding.** `proofs/exp_zero_reduction.smt2`, partly machine-checked. Checked: step 1's and
@@ -246,8 +247,8 @@ first: `fl(-q - x) = -fl(x + q)`, and `x + q` lies above the tie, so `one - ` it
 `0x1.0000000000003p0`. Of `x = m * 2^-53` for `m < 64`, 15 differ this way (`m = 5, 9, 13, ...`).
 
 **Test (scalar).** `ProofsTest.l4TinyLanesCannotBeFolded` asserts the three doubles. **Vector
-tie.** `ExpTest.foldBoundaries` covers the words `0x3e300000 +- 1` on both sides of the tiny
-lanes' edge, and the threshold cases (`ExpTest.thresholds()`) the 64 neighbours of `2^-28`:
+tie.** `ExpTest.foldBoundaries` covers the words `0x3e2fffff` and `0x3e300000`, on both sides of the
+tiny lanes' edge, and the threshold cases (`ExpTest.thresholds()`) the 64 neighbours of `2^-28`:
 the port's `one + x` there is checked against `StrictMath`.
 
 **Encoding.** `proofs/exp_tiny_counterexample.smt2`, machine-checked: at `x = 5 * 2^-53`
@@ -583,15 +584,18 @@ above each witness to the word's top double, where the unforced `k` happens to g
 double, are checked to be so). The
 transcription `Expm1Test.cExpm1` is itself checked against `StrictMath.expm1`
 (`Expm1Test.scalarTranscriptionIsStrictMath`). Statement (c) has no scalar test of its own: it
-is step 1, the C's far form operation by operation, and the vector tie runs its lanes
-(`Expm1Test.magnitudes`, `formSplits`, `sampledBitPatterns` and the hard cases, up to
-`o_threshold`).
-**Vector tie.** `Expm1Test.foldBoundaries` and
-`foldBoundariesAtMaxSpecies` run every arm, unmasked and masked, against `StrictMath` at the
-words `0x3c8fffff`, `0x3c900000`, `0x3fd62e42`, `0x3fd62e43`, `0x3ff0a2b1` and `0x3ff0a2b2`,
-both signs,
-low words 0, `0xffffffff` and 1024 seeded, plus the 4096 doubles each side of `+-0.5 ln2`, at
-every width and `SPECIES_MAX`.
+is step 1, the C's far form operation by operation, and only the vector tie below runs its
+lanes.
+**Vector tie.** `Expm1Test.foldBoundaries` and `foldBoundariesAtMaxSpecies` run every arm,
+unmasked and masked, against `StrictMath` at the words `0x3c8fffff`, `0x3c900000`,
+`0x3fd62e42`, `0x3fd62e43`, `0x3ff0a2b1` and `0x3ff0a2b2`, both signs, low words 0,
+`0xffffffff` and 1024 seeded, plus the 4096 doubles each side of `+-0.5 ln2`, at every width
+and `SPECIES_MAX`. For (c), the far form above `1.5 ln2`, the cases at every width are
+`Expm1Test.magnitudes` (every magnitude from `2^-60` to `2^10`, both signs, and `2^16` draws
+from 38 to `o_threshold`, where `k` reaches 1024),
+`formSplits` (the bands of `k` where the form changes, 19 to 21 and 55 to 58 times `ln2`, and
+`+-0.5` to `+-3 ln2`), `denseOverTheForms` (`-45` to `45`), `sampledBitPatterns` and the
+published hard cases.
 
 **Encoding.** `proofs/expm1_reduction.smt2`, rendered from `Expm1`'s constants and words by
 `Expm1ProofFiles`. Machine-checked there: H13, each of `Expm1`'s five values and two words
@@ -614,10 +618,12 @@ that a value rounds to no double in a binade further off than the next (the arit
 rationals); the casts of `+0.0` and of a double in binade 2^0; that `k` is forced to 0 on every
 lane of the word `0x3fd62e42` and below, of which section C checks four doubles (the formula's
 `k` would be wrong at the witnesses, the C as written is the oracle's) and the rest is the code's
-blend, which only `Expm1Test.foldBoundaries` runs (1026 low words per sign at each of its words
-and 4096 doubles each side of `+-0.5 ln2`; `l10KIsForcedByTheHighWordTest` scans the scalar
-transcription from each witness to the word's top and finds the forcing not needed there, which
-says nothing of the port); and that the port computes these steps, the code's text.
+blend, which `Expm1Test.foldBoundaries` samples densely (1026 low words per sign at each of its
+words and 4096 doubles each side of `+-0.5 ln2`) and `Expm1Test.thresholds()` touches (8
+doubles each side of `0.5 ln2`, and 64 around the word's first double); and
+`l10KIsForcedByTheHighWordTest` scans the scalar transcription from each witness to the word's
+top and finds the forcing not needed there, which says nothing of the port; and that the port
+computes these steps, the code's text.
 
 ### L11. The k == 0 return is x - e with e = (x*(e-c)-c)-hxs and c = +0
 
