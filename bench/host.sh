@@ -57,18 +57,26 @@ row_of() {
 string_of() { local key where string need; IFS='|' read -r key where string need <<<"$1"
   printf '%s\n' "$string"; }
 
-# Whether a model name and a flags line are a row's host.
-matches() {
-  local key where string need flag lc want
+# Whether a model name is a row's.
+name_matches() {
+  local key where string need lc want
   IFS='|' read -r key where string need <<<"$1"
   lc="${2,,}"; want="${string,,}"
   case "$where" in
-    end) [[ "$lc" == *"$want" ]] || return 1 ;;
-    any) [[ "$lc" == *"$want"* ]] || return 1 ;;
+    end) [[ "$lc" == *"$want" ]] ;;
+    any) [[ "$lc" == *"$want"* ]] ;;
     *) return 1 ;;
-  esac
-  for flag in $need; do grep -qw -- "$flag" <<<"$3" || return 1; done
-  return 0; }
+  esac; }
+
+# The flags a row requires that a flags line lacks, on one line; nothing when it has them all.
+missing_flags() {
+  local key where string need flag missing=""
+  IFS='|' read -r key where string need <<<"$1"
+  for flag in $need; do grep -qw -- "$flag" <<<"$2" || missing+="${missing:+ }$flag"; done
+  printf '%s' "$missing"; }
+
+# Whether a model name and a flags line are a row's host.
+matches() { name_matches "$1" "$2" && [ -z "$(missing_flags "$1" "$3")" ]; }
 
 # A model name as the check reads it: without the blanks that end it.
 trim() { sed 's/[[:space:]]*$//' <<<"$1"; }
@@ -85,12 +93,17 @@ classify() {
 # The check of one host: the key, the model name, the flags line. Prints what
 # benchmark.yml's probe step has always printed.
 expect() {
-  local row cpu
+  local row cpu missing
   if ! row="$(row_of "$1")"; then echo "::error::Unknown host '$1'"; return 1; fi
   cpu="$(trim "$2")"
   echo "Host: $1, CPU: $cpu"
-  if ! matches "$row" "$cpu" "$3"; then
+  if ! name_matches "$row" "$cpu"; then
     echo "::error::CPU mismatch on host $1! Expected '$(string_of "$row")' but got '$cpu'"
+    return 1
+  fi
+  missing="$(missing_flags "$row" "$3")"
+  if [ -n "$missing" ]; then
+    echo "::error::CPU mismatch on host $1! '$cpu' lacks the flags '$missing'"
     return 1
   fi
   return 0; }
@@ -188,7 +201,7 @@ self_test() {
   env="$(mktemp)"
   for key in $(keys); do
     n=$((n + 1)); : > "$env"
-    GITHUB_ENV="$env" "$0" --expect "$key" > /dev/null; got=$?
+    GITHUB_ENV="$env" bash "${BASH_SOURCE[0]}" --expect "$key" > /dev/null; got=$?
     line="$(cat "$env")"
     if [ "$key" = "$here" ]; then
       want="EXPECTED_CPU=$(string_of "$(row_of "$key")")"
@@ -208,6 +221,16 @@ self_test() {
   check - 'Test CPU 1 Processor' "$avx2"
   check - 'Test CPU 1 Processor' "$avx2 avx512f"
   check - 'Test CPU 1 Processor' "$avx2 avx512f avx512dq_x"
+  n=$((n + 1)); out="$(expect testhost 'Test CPU 1 Processor' "$avx2 avx512f")"; got=$?
+  want="::error::CPU mismatch on host testhost! 'Test CPU 1 Processor' lacks the flags"
+  want+=" 'avx512dq'"
+  if [ "$got" != 1 ] || [ "$(tail -n 1 <<<"$out")" != "$want" ]; then
+    echo "host.sh: missing flags ended with $got and printed '$out'" >&2; failed=1
+  fi
+  n=$((n + 1)); out="$(expect testhost 'Test CPU 1 Processor' "$avx512")"; got=$?
+  if [ "$got" != 0 ]; then
+    echo "host.sh: a host with its flags ended with $got and printed '$out'" >&2; failed=1
+  fi
 
   if [ "$failed" != 0 ]; then echo "host.sh: self-test FAILED" >&2; return 1; fi
   echo "host.sh: self-test passed, $n checks"; }

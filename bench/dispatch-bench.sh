@@ -45,10 +45,10 @@
 # failed before its CPU check ran (the job fetches bench/host.sh first, and a fetch can fail) says
 # nothing about the machine, so it is retried an hour later like a miss, and counts as an
 # attempt; three such runs in a row stop the script. Exit status: 0 on success, 1 when the run
-# failed other than on the CPU check (for a pair, also when a row is slower) or three times in a
-# row before it, 2 when GitHub could not be asked or bench/host.sh, which must sit beside this
-# script, could not be run, 3 when --attempts ran out without drawing the host, 64 on a usage
-# error.
+# failed other than on the CPU check (for a pair, also when a row is slower), or before it three
+# times in a row or on the last attempt, 2 when GitHub could not be asked or bench/host.sh,
+# which must sit beside this script, could not be run, 3 when --attempts ran out without drawing
+# the host, 64 on a usage error.
 #
 # Then fetch the results: gh run download <run id> -R vecbricks/vfdlibm -n bench-results, and
 # save them as bench/results/<function>-<host>-<date>.txt (AGENTS.md, "Measurements, not
@@ -158,16 +158,18 @@ bench() {
         return 3; fi
       echo "$(t) $N: CPU check failed (not $H), retry in an hour"; sleep 3600; continue
     fi
-    # The check passed, or the run was cancelled: a failure elsewhere, not to be retried.
-    if [ "$probe" = success ] || [ "$c" = cancelled ]; then return 1; fi
-    # The check did not run: a step before it failed, and the machine is not known.
+    # Retried only when the check was skipped in a failed run: a step before it failed, and
+    # the machine is not known. Anything else is a failure not to be retried: the check passed,
+    # the run was cancelled, or no job started (a run with no steps, a startup failure).
+    if [ "$probe" != skipped ] || [ "$c" != failure ]; then return 1; fi
     early=$((early + 1))
     if [ $early -ge 3 ]; then
       echo "$(t) $N: run $m failed before its CPU check, the third in a row, stopping"
       return 1; fi
+    # Out of attempts on such a run is a failure, not status 3: no CPU was seen to be another.
     if [ -n "$A" ] && [ "$n" -ge "$A" ]; then
       echo "$(t) $N: run $m failed before its CPU check on attempt $n of $A; no attempts left"
-      return 3; fi
+      return 1; fi
     echo "$(t) $N: run $m failed before its CPU check, retry in an hour"; sleep 3600
   done; }
 if [ -n "$P" ]; then check_base || exit $?; fi

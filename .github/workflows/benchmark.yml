@@ -76,6 +76,10 @@ jobs:
           sparse-checkout: bench/host.sh
           sparse-checkout-cone-mode: false
           path: probe
+      # A probe step that fails is a CPU miss to the dispatcher, which then tries again hourly,
+      # so a script that is not there to run must fail a step of its own.
+      - name: Check the probe's script
+        run: test -x probe/bench/host.sh && bash -n probe/bench/host.sh
       - name: Probe the machine's CPU
         env:
           HOST: ${{ inputs.host }}
