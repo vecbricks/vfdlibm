@@ -1,7 +1,8 @@
 name: Release
 
-# Publishes io.github.vecbricks:vfdlibm to Maven Central from a tag, behind the gates CI and the
-# nightly run and behind an approval; and, as a dry run, does everything up to the upload.
+# Publishes io.github.vecbricks:vfdlibm to Maven Central from a tag, behind ci.yml's jobs, the
+# nightly's proofs job (not its sweep and fuzz: look at the last nightly before a tag) and an
+# approval; and, as a dry run, does everything up to the upload.
 #
 # A real run needs all of: this repository, a ref that is a tag v<version>, and either the push
 # of that tag or a dispatch on it with dry-run unticked. Anything else is a dry run: a dispatch
@@ -41,7 +42,8 @@ name: Release
 # its default, false, so the upload is validated at Central and waits there for the owner to
 # publish or drop it. A published version cannot be taken back.
 #
-# The actions are pinned by commit, with the version each commit is in a comment.
+# The actions of this file's own jobs are pinned by commit, with the version each commit is in a
+# comment; the jobs of ci.yml, called here as they are, use the majors that file names.
 
 on:
   push:
@@ -58,6 +60,10 @@ on:
       - .github/workflows/release.yml
       - dev/jar-check.sh
       - dev/release-version.sh
+      - .github/workflows/ci.yml
+      - LICENSE
+      - NOTICE
+      - src/main/**
 
 permissions:
   contents: read
@@ -188,7 +194,8 @@ jobs:
       - name: Keep what was built
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: release-bundle
+          # Signed with the key made for this run, not the release key: never a release.
+          name: dry-run-bundle
           path: |
             target/*.jar
             target/*.pom
@@ -210,7 +217,8 @@ jobs:
     environment: central
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
-      # No cache: what is uploaded is built from what this job downloads. server-id writes a
+      # No cache. This job builds its own jars from its own checkout and downloads nothing from
+      # bundle (whose files are signed with a throwaway key). server-id writes a
       # settings.xml whose server `central`, the id pom.xml's publishingServerId names, takes
       # its username and password from the two environment variables named here; gpg-passphrase
       # only names the variable its passphrase entry points at, and no key is given to the
@@ -240,12 +248,19 @@ jobs:
           exit "$missing"
       - name: Check the tag against the pom once more
         run: dev/release-version.sh "$GITHUB_REF_NAME"
-      - name: Build, sign and upload to Central
+      # verify builds and signs and uploads nothing, so the jars are checked before deploy
+      # builds them again and uploads.
+      - name: Build and sign
+        env:
+          MAVEN_GPG_KEY: ${{ secrets.MAVEN_GPG_KEY }}
+          MAVEN_GPG_PASSPHRASE: ${{ secrets.MAVEN_GPG_PASSPHRASE }}
+        run: mvn -B --no-transfer-progress -Prelease -DskipTests -Dgpg.signer=bc verify
+      - name: Check the jars before the upload
+        run: dev/jar-check.sh --release
+      - name: Upload to Central
         env:
           CENTRAL_USERNAME: ${{ secrets.CENTRAL_USERNAME }}
           CENTRAL_PASSWORD: ${{ secrets.CENTRAL_PASSWORD }}
           MAVEN_GPG_KEY: ${{ secrets.MAVEN_GPG_KEY }}
           MAVEN_GPG_PASSPHRASE: ${{ secrets.MAVEN_GPG_PASSPHRASE }}
         run: mvn -B --no-transfer-progress -Prelease -DskipTests -Dgpg.signer=bc deploy
-      - name: Check the jar that was uploaded
-        run: dev/jar-check.sh --release
