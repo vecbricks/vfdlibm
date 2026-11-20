@@ -461,9 +461,8 @@ final class ProofFiles {
     // binades up to 2^52, down to the lowest normal one's scale, 2^-1074, and sd = 1 from 2^52
     // up. Any such scale is admitted, more than the binades, which only makes an unsat stronger.
     // Each neighbour is its own check, and each is stated once per side of the scale: with
-    // either side free in one check cvc5 took 6 to 13 seconds on a busy machine (a load of 60
-    // on 24 cores), past dev/prove.sh's limit of 10, and on the same machine it decided each
-    // half in at most 2.4 seconds.
+    // either side free in one check cvc5 answered unknown at dev/prove.sh's limit on a busy
+    // machine, and it decides each half well inside it there.
     String nearVars = "(declare-const S Int) (declare-const M Int) (declare-const S2 Int)"
         + " (declare-const M2 Int) (declare-const sn Int) (declare-const sd Int)";
     String dbl = "(jdouble.S.in S) (jdouble.M.in M)";

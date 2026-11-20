@@ -597,9 +597,10 @@ in one double. Informal above: `fl(x - (-a)) = fl(x + a)` (R4), one rational in 
 so with no check to write; that `x - x = +0` for a nonzero `x` (R5), pinned at sampled doubles
 while rendering, as in L6's file; that `StrictMath.expm1` is the forced computation at the
 witnesses (a test, the oracle being in no solver), that they are the first from the word's top
-and how many doubles differ (a scalar run); a subnormal `x` less `+0`, which no lane reads; the
-casts of `+0.0` and of a double in binade 2^0, and that the port computes these steps, the
-code's text.
+and how many doubles differ (a scalar run); a subnormal `x` less `+0`, which no lane reads;
+that a value rounds to no double in a binade further off than the next (the arithmetic of
+rationals); the casts of `+0.0` and of a double in binade 2^0, and that the port computes these
+steps, the code's text.
 
 ### L11. The k == 0 return is x - e with e = (x*(e-c)-c)-hxs and c = +0
 
@@ -629,5 +630,5 @@ sign `r*e` has; and H15 as a hinge: a double less one step of its binade is anot
 (checked in binade 2^-1), so with a `c` of one step of `e`'s binade the first step fails. With
 `c = -0` the step fails only at `e = -0`, which no lane has, so that check refutes (R3) as
 stated for every `e`, not the lemma on its lanes. Informal above: that `e` and `fl(r*e)` are
-nonzero and normal on the lanes (bounds on the
-polynomial, sampled by the hinge test), H15 itself (L10), and the code's text.
+nonzero and normal on the lanes (bounds on the polynomial, sampled by the hinge test, which
+asserts it), the binades further off than the next, H15 itself (L10), and the code's text.

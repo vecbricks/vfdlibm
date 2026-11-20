@@ -57,14 +57,14 @@
 ;     in a binade further off than the next one (the arithmetic of rationals); and that
 ;     the port computes these steps: the code's text.
 ;
-; Constants. Section A is tight to every constant it names: a changed one fails its
-; check. No claim of section B is tight to ln2_hi or ln2_lo beyond their sign and
-; finiteness. Section C's cast holds for a range of invln2 (its margin is that of
-; exp_zero_reduction.smt2's section C), and its chains evaluate whatever Q1..Q5 Expm1
-; holds and compare the results with no source value, so with a Q moved by one ulp the
-; file renders anew and passes as long as the witnesses still differ and the controls
-; still agree. Expm1Test.constantsAreTheSourcesBits pins them all to the source's hex,
-; and ProofFilesTest this file to its rendering.
+; Constants. Section A is tight to every constant it names: each one with one added to
+; its bits, or to the word, is refuted. No claim of section B is tight to ln2_hi or
+; ln2_lo beyond their sign and finiteness. Section C's cast holds for a range of invln2
+; (its margin is that of exp_zero_reduction.smt2's section C), and its chains evaluate
+; whatever Q1..Q5 Expm1 holds and compare the results with no source value, so with a Q
+; moved by one ulp the file renders anew and passes as long as the witnesses still
+; differ and the controls still agree. Expm1Test.constantsAreTheSourcesBits pins them
+; all to the source's hex, and ProofFilesTest this file to its rendering.
 ;
 ; The logic is ALL: section B's products S * M * sn are nonlinear. Section C's checks
 ; carry their own non-vacuity: each asserts that the named double is not admitted, or
@@ -85,9 +85,21 @@
 (check-sat)
 (pop 1)
 
+(echo "refuted: invln2 plus one is not exp's invln2: expect sat")
+(push 1)
+(assert (not (= (+ 4609176140021203710 1) 4609176140021203710)))
+(check-sat)
+(pop 1)
+
 (echo "expm1's ln2_hi, 0x3fe62e42_fee00000, is exp's ln2HI[0]: expect unsat")
 (push 1)
 (assert (not (= 4604418534311723008 4604418534311723008)))
+(check-sat)
+(pop 1)
+
+(echo "refuted: ln2_hi plus one is not exp's ln2HI[0]: expect sat")
+(push 1)
+(assert (not (= (+ 4604418534311723008 1) 4604418534311723008)))
 (check-sat)
 (pop 1)
 
@@ -97,9 +109,21 @@
 (check-sat)
 (pop 1)
 
+(echo "refuted: ln2_lo plus one is not exp's ln2LO[0]: expect sat")
+(push 1)
+(assert (not (= (+ 4461442080421002358 1) 4461442080421002358)))
+(check-sat)
+(pop 1)
+
 (echo "expm1's -ln2_lo, 0xbdea39ef_35793c76, is exp's ln2LO[1]: expect unsat")
 (push 1)
 (assert (not (= (- 4761929956433773450) (- 4761929956433773450))))
+(check-sat)
+(pop 1)
+
+(echo "refuted: -ln2_lo plus one is not exp's ln2LO[1]: expect sat")
+(push 1)
+(assert (not (= (+ (- 4761929956433773450) 1) (- 4761929956433773450))))
 (check-sat)
 (pop 1)
 
@@ -109,15 +133,33 @@
 (check-sat)
 (pop 1)
 
+(echo "refuted: HALF_BITS plus one is not exp's HALF_BITS: expect sat")
+(push 1)
+(assert (not (= (+ 4602678819172646912 1) 4602678819172646912)))
+(check-sat)
+(pop 1)
+
 (echo "expm1's HX_HALF_LN2, 0x3fd62e42, is exp's HX_HALF_LN2: expect unsat")
 (push 1)
 (assert (not (= 1071001154 1071001154)))
 (check-sat)
 (pop 1)
 
+(echo "refuted: HX_HALF_LN2 plus one is not exp's HX_HALF_LN2: expect sat")
+(push 1)
+(assert (not (= (+ 1071001154 1) 1071001154)))
+(check-sat)
+(pop 1)
+
 (echo "expm1's HX_THREE_HALVES_LN2, 0x3ff0a2b2, is exp's HX_THREE_HALVES_LN2: expect unsat")
 (push 1)
 (assert (not (= 1072734898 1072734898)))
+(check-sat)
+(pop 1)
+
+(echo "refuted: HX_THREE_HALVES_LN2 plus one is not exp's HX_THREE_HALVES_LN2: expect sat")
+(push 1)
+(assert (not (= (+ 1072734898 1) 1072734898)))
 (check-sat)
 (pop 1)
 

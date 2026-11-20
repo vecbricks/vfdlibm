@@ -673,6 +673,10 @@ class ProofsTest {
           * (Expm1.Q4 + hxs * Expm1.Q5))));
       double t = 3.0 - r1 * hfx;
       double e = hxs * ((r1 - t) / (6.0 - r * t));
+      // The encoding checks e - (+0) and v - (+0) for zeros and for normal doubles; that e
+      // and v = r*e are normal here, never subnormal, is this bound.
+      assertTrue(Math.abs(e) >= Double.MIN_NORMAL, at);
+      assertTrue(Math.abs(r * e) >= Double.MIN_NORMAL, at);
       assertEquals(bits(e), bits(e - c), at);
       assertEquals(bits(r * e), bits(r * (e - c) - c), at);
       double inner = (r * (e - c) - c) - hxs;

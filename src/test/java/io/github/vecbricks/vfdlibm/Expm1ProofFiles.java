@@ -213,14 +213,14 @@ final class Expm1ProofFiles {
         ;     in a binade further off than the next one (the arithmetic of rationals); and that
         ;     the port computes these steps: the code's text.
         ;
-        ; Constants. Section A is tight to every constant it names: a changed one fails its
-        ; check. No claim of section B is tight to ln2_hi or ln2_lo beyond their sign and
-        ; finiteness. Section C's cast holds for a range of invln2 (its margin is that of
-        ; exp_zero_reduction.smt2's section C), and its chains evaluate whatever Q1..Q5 Expm1
-        ; holds and compare the results with no source value, so with a Q moved by one ulp the
-        ; file renders anew and passes as long as the witnesses still differ and the controls
-        ; still agree. Expm1Test.constantsAreTheSourcesBits pins them all to the source's hex,
-        ; and ProofFilesTest this file to its rendering.
+        ; Constants. Section A is tight to every constant it names: each one with one added to
+        ; its bits, or to the word, is refuted. No claim of section B is tight to ln2_hi or
+        ; ln2_lo beyond their sign and finiteness. Section C's cast holds for a range of invln2
+        ; (its margin is that of exp_zero_reduction.smt2's section C), and its chains evaluate
+        ; whatever Q1..Q5 Expm1 holds and compare the results with no source value, so with a Q
+        ; moved by one ulp the file renders anew and passes as long as the witnesses still
+        ; differ and the controls still agree. Expm1Test.constantsAreTheSourcesBits pins them
+        ; all to the source's hex, and ProofFilesTest this file to its rendering.
         ;
         ; The logic is ALL: section B's products S * M * sn are nonlinear. Section C's checks
         ; carry their own non-vacuity: each asserts that the named double is not admitted, or
@@ -252,6 +252,8 @@ final class Expm1ProofFiles {
             Expm1.HX_THREE_HALVES_LN2, Exp.HX_THREE_HALVES_LN2)}) {
       check(out, "expm1's " + c.name() + ", " + c.value() + ", is exp's " + c.exps(), "unsat",
           body("(assert (not (= " + lit(c.expm1()) + " " + lit(c.exp()) + ")))"));
+      check(out, "refuted: " + c.name() + " plus one is not exp's " + c.exps(), "sat",
+          body("(assert (not (= (+ " + lit(c.expm1()) + " 1) " + lit(c.exp()) + ")))"));
     }
     check(out, "refuted: LN2_HI_UP, " + hex(lnHiUp) + ", the fault's, is not exp's ln2HI[0]",
         "sat",
