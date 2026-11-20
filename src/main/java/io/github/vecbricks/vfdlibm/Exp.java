@@ -73,7 +73,7 @@ import jdk.incubator.vector.VectorSpecies;
  * 64 at 256 bits under {@code -XX:UseAVX=2} ({@code bench/asm/README.md}). The folded body has
  * been timed once, as a pair against its base on the Xeon Platinum 8573C ({@code
  * bench/results/exp-onediv-xeon8573c-2026-11-03.txt}): on common data its 256-bit and 512-bit
- * rows are 1.33x to 1.48x faster by the median of five rounds, and no row is slower.
+ * rows are 1.33x to 1.48x faster by the median of five rounds, and no vector row is slower.
  *
  * <p>{@link #expCore} and {@link #expRare} split the finish arm into its branch-free part and its
  * rare-lane mask, for {@code ExpBenchmark}'s experiment with two vectors per loop iteration.

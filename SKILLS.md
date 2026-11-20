@@ -259,7 +259,7 @@ a settled question.
   against its base on the Xeon Platinum 8573C
   (`bench/results/exp-onediv-xeon8573c-2026-11-03.txt`, five rounds a side), the folded body is
   1.33x to 1.48x faster by the median on common data at 256 and 512 bits and 1.18x to 1.31x on
-  mixed data, and no row is slower.
+  mixed data, and no vector row is slower.
 - **Laptop first, then the EPYC.** The `D2L` boxing never showed under the laptop's default
   flags, where AVX512DQ is present; it showed only under `-XX:UseAVX=2`. Run a new port's
   benchmark under both before calling it done.
