@@ -403,8 +403,8 @@ final class Survey {
   private static void header(PrintWriter w, Mutants.Port port, String note, boolean append,
       int count, long seed, String stripe, Tally[] in, long unchanged) {
     w.printf("# Survey of %s's one-step mutants (dev/survey/README.md): the inputs on"
-        + " which each%n# mutant of the C's transcription differs from StrictMath.%s.%n",
-        port.id(), port.id());
+        + " which each%n# mutant of the C's transcription differs from StrictMath.%n",
+        port.id());
     if (!note.isEmpty()) {
       w.println("# " + note);
     }
@@ -530,7 +530,9 @@ final class Survey {
           int layer = inSuite.count[m] > 0 || inHard.count[m] > 0 ? 0 : inFuzz.count[m] > 0 ? 1
               : inSweep.count[m] > 0 ? 2 : inSearch.count[m] > 0 ? 3 : 4;
           caughtBy[layer]++;
-          long example = layer == 0 ? inSuite.example[m] : layer == 1 ? inFuzz.example[m]
+          long example = layer == 0
+              ? (inSuite.count[m] > 0 ? inSuite.example[m] : inHard.example[m])
+              : layer == 1 ? inFuzz.example[m]
               : layer == 2 ? inSweep.example[m] : inSearch.example[m];
           w.printf("%s\t%s\t%d\t%d\t%d\t%s\t%d\t%d\t%s\t%s%n",
               mutants[m].name(), mutants[m].kind(), inSuite.count[m], inHard.count[m],
