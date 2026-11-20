@@ -29,9 +29,9 @@
 # (the hourly retry goes on until the host is drawn). For epyc9v45, a draw of about one in eighteen
 # that is recorded whenever drawn but never waited for, it defaults to 18: an hourly try for
 # about a day, which draws it at least once with a chance of about 64%, each miss costing a
-# minute of runner time, since the check is the job's first step after it fetches the check's
-# script. --attempts 1 is a single
-# opportunistic try. Running out of attempts is exit status 3, not a failure of the run.
+# minute of runner time, since the check comes first in the job, after only the fetch of its
+# script and that script's own test. --attempts 1 is a single opportunistic try. Running out
+# of attempts is exit status 3, not a failure of the run.
 #
 # --base <base> makes each run a pair (bench/pair.sh in the workflow): the benchmarks on <base>
 # and on the dispatched <ref> as head, alternating, on one machine. <base> is a branch or tag of
@@ -174,7 +174,10 @@ bench() {
       echo "$(t) $N: run $m could not use $B's bench/host.sh; no benchmark ran, stopping"
       return 1; fi
     if [ "$probe" != skipped ] || [ "$c" != failure ] \
-        || ! grep -qx "skipped Check the probe's script" <<<"$steps"; then return 1; fi
+        || ! grep -qx "skipped Check the probe's script" <<<"$steps"; then
+      failed=$(sed -n 's/^failure //p' <<<"$steps" | tr '\n' ';' | sed 's/;$//')
+      echo "$(t) $N: run $m ended as $c, its failed steps: ${failed:-none}; stopping"
+      return 1; fi
     early=$((early + 1))
     if [ $early -ge 3 ]; then
       echo "$(t) $N: run $m failed before its CPU check, the third in a row, stopping"

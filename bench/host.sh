@@ -22,7 +22,9 @@
 #
 # A string here is never relaxed (SKILLS.md, "Where headline numbers come from"): a run on
 # another CPU is not comparable with the results before it. Changing the hosts is a decision
-# for the owner, and it is a new row, not a looser string.
+# for the owner, and it is a new row, not a looser string. A row's key is also a choice of
+# benchmark.yml's host input (the self-test compares the two), and bench/dispatch-bench.sh
+# names epyc9v45 for its default of 18 attempts: a host nobody waits for needs its line there.
 
 # Names are compared ignoring case, by ASCII's rules whatever the caller's locale is.
 export LC_ALL=C
@@ -203,7 +205,7 @@ self_test() {
   # header; for every other key it fails and writes nothing.
   local here env line
   here="$(classify "$(this_cpu)" "$(this_flags)")" || here="-"
-  env="$(mktemp)"
+  if ! env="$(mktemp)"; then echo "host.sh: no temporary file for the self-test" >&2; return 1; fi
   for key in $(keys); do
     n=$((n + 1)); : > "$env"
     GITHUB_ENV="$env" bash "${BASH_SOURCE[0]}" --expect "$key" > /dev/null; got=$?
