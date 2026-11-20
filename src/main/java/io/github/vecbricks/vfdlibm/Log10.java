@@ -36,7 +36,8 @@ import jdk.incubator.vector.VectorSpecies;
  * ({@code k >= 0}) or {@code [0.5, 1)} ({@code k < 0}), and with {@code y = k + i} return {@code
  * (y*log10_2lo + ivln10*log(x)) + y*log10_2hi}, {@code log} being e_log.c's {@code
  * __ieee754_log} of the rescaled {@code x}. Every operation is the C's, in the C's order, with no
- * fused multiply-add and no reassociation, so no lemma of {@code PROOFS.md} is needed.
+ * fused multiply-add and no reassociation, so no lemma of its own is needed; what it rests on
+ * through {@link Log#logCore}, L6 to L8, is in {@code PROOFS.md}'s log10 section.
  *
  * <p>The {@code log} of the rescaled {@code x} is {@link Log#logCore}, the only entry into {@code
  * Log} this class uses: e_log.c's common path in every lane, which is the C's result for a
