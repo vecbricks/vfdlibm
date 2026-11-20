@@ -57,9 +57,11 @@
 # which must sit beside this script, could not be run, 3 when --attempts ran out without drawing
 # the host, 64 on a usage error.
 #
-# Then fetch the results: gh run download <run id> -R vecbricks/vfdlibm -n bench-results, and
-# save them as bench/results/<function>-<host>-<date>.txt (AGENTS.md, "Measurements, not
-# adjectives").
+# Then make the results file: bench/record.py write --run <run id> downloads the run's artifact
+# and writes one file a benchmark class (<function>-<host>-<date>.txt; a pair's is named
+# <function>-pair-...) but for its title, reason and reading, and bench/record.py check <file>
+# --run <run id> checks the file before it is committed (AGENTS.md, "Measurements, not
+# adjectives"; bench/record.py's header says the rest).
 
 R=vecbricks/vfdlibm; H=epyc7763; A=""; P=""
 # The host keys are bench/host.sh's, the table benchmark.yml checks the machine against, read
