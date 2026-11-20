@@ -50,13 +50,15 @@ a settled question.
   passes on code that runs as a per-lane Java loop. Only the allocation rate tells them apart:
   `gc.alloc.rate.norm` near 0 B/op means the body ran unboxed; a box is kilobytes per op (exp's
   128-bit rows allocate 1.36 to 1.90 MB per 1024 doubles). Read `-prof gc` on every row.
-- **CI checks it.** `bench/alloc-check.py` runs every benchmark method named `*256` or
-  `*Preferred`, on `inputs=common` and `mixed`, one fork under `-prof gc` with the body inlined,
-  and fails if any measured iteration reaches 1 B/op; the `alloc` job of `ci.yml` runs it at the
-  x86 runner's flags, under `-XX:UseAVX=2`, and on Arm (below). On the laptop, under load, C2
-  finished exp's body within the first one-second iteration and later ones read about 0.02
-  B/op, so three warmup seconds leave two to spare; a row that fails only in its first
-  iteration means C2 was late.
+- **CI checks it.** `bench/alloc-check.py` runs every method named `*256` or `*Preferred` of a
+  class named `*Benchmark`, on `inputs=common` and `mixed`, one fork under `-prof gc` with the
+  body inlined, and fails if any measured iteration reaches 1 B/op; the `alloc` job of `ci.yml`
+  runs it at the x86 runner's flags, under `-XX:UseAVX=2`, and on Arm (below). On the laptop,
+  under load, C2 finished exp's body within the first one-second iteration and later ones read
+  about 0.02 B/op, so three warmup seconds leave two to spare; a row that fails only in its
+  first iteration means C2 was late. `ExpKindsBench` is left out by its class name: its rows
+  call the bodies `ExpBenchmark`'s rows call; `--include` and `--inputs` check it on its own
+  inputs values.
   Left out: 128 bits (masks box at two lanes on x86, below) and 512 bits (software on AVX2; the
   preferred arm covers it where it is real). Mixed inputs were left out too until the per-lane
   finish stopped allocating (below); common data alone never runs a rare path, so it could not

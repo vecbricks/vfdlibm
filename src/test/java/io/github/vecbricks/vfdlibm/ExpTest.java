@@ -11,6 +11,8 @@ package io.github.vecbricks.vfdlibm;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
+import java.lang.reflect.Field;
+import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.SplittableRandom;
@@ -363,6 +365,144 @@ class ExpTest {
       assertBits(Double.doubleToRawLongBits(strict[i]), want[i]);
       assertBits(Double.doubleToRawLongBits(want[i]), pair256[i]);
       assertBits(Double.doubleToRawLongBits(want[i]), pairPreferred[i]);
+    }
+  }
+
+  /**
+   * {@code ExpKindsBench}'s inputs are what its Javadoc says: {@code common} and {@code mixed}
+   * are {@code ExpBenchmark}'s arrays by raw bits, {@code none} is {@code mixed} with no input
+   * replaced, every other kind is {@code mixed} with each rare input replaced by that kind's one
+   * value, the counts are the ones quoted, and every row returns {@code StrictMath.exp}'s bits
+   * on every kind.
+   */
+  @Test
+  void kindsBenchInputsAreOneKindAtMixedsPlaces() throws ReflectiveOperationException {
+    // ExpBenchmark keeps its inputs private; they are read here rather than through its rows,
+    // since two rare inputs can share a result (any overflow gives infinity).
+    Field in = ExpBenchmark.class.getDeclaredField("in");
+    in.setAccessible(true);
+    for (String inputs : new String[] {"common", "mixed"}) {
+      ExpBenchmark bench = new ExpBenchmark();
+      bench.inputs = inputs;
+      bench.setUp();
+      double[] want = (double[]) in.get(bench);
+      double[] got = kindsBench(inputs).inputs();
+      assertEquals(want.length, got.length);
+      for (int i = 0; i < want.length; i++) {
+        assertBits(Double.doubleToRawLongBits(want[i]), got[i]);
+      }
+    }
+    double[] common = kindsBench("common").inputs();
+    double[] mixed = kindsBench("mixed").inputs();
+    Map<String, Double> kinds = new LinkedHashMap<>();
+    kinds.put("nan", Double.NaN);
+    kinds.put("overflow", 800.0);
+    kinds.put("underflow", -750.0);
+    kinds.put("subnormal", -708.5);
+    int[] ofKind = new int[kinds.size()];
+    boolean[] rare4 = new boolean[mixed.length / 4];
+    boolean[] rare8 = new boolean[mixed.length / 8];
+    for (int i = 0; i < mixed.length; i++) {
+      assertEquals(true, Math.abs(common[i]) <= 20.0, "common at " + i);
+      if (Math.abs(mixed[i]) <= 20.0) {
+        continue;
+      }
+      rare4[i / 4] = true;
+      rare8[i / 8] = true;
+      int kind = 0;
+      for (double value : kinds.values()) {
+        if (Double.doubleToRawLongBits(value) == Double.doubleToRawLongBits(mixed[i])) {
+          ofKind[kind]++;
+        }
+        kind++;
+      }
+    }
+    assertEquals("[20, 17, 19, 10]", Arrays.toString(ofKind));
+    assertEquals(62, countTrue(rare4));
+    assertEquals(56, countTrue(rare8));
+    for (Map.Entry<String, Double> kind : kinds.entrySet()) {
+      ExpKindsBench bench = kindsBench(kind.getKey());
+      double[] xs = bench.inputs();
+      long only = Double.doubleToRawLongBits(kind.getValue());
+      for (int i = 0; i < xs.length; i++) {
+        boolean isRare = !(Math.abs(mixed[i]) <= 20.0);
+        assertBits(isRare ? only : Double.doubleToRawLongBits(mixed[i]), xs[i]);
+      }
+      assertKindsRows(bench);
+    }
+    // none is the draws mixed makes, with nothing replaced: repeat them here.
+    SplittableRandom random = new SplittableRandom(1L);
+    double[] none = kindsBench("none").inputs();
+    for (int i = 0; i < none.length; i++) {
+      double drawn = random.nextDouble(-20.0, 20.0);
+      if (random.nextInt(16) == 0) {
+        random.nextInt(4);
+      }
+      assertBits(Double.doubleToRawLongBits(drawn), none[i]);
+      if (Math.abs(mixed[i]) <= 20.0) {
+        assertBits(Double.doubleToRawLongBits(mixed[i]), none[i]);
+      }
+    }
+    assertKindsRows(kindsBench("none"));
+    assertKindsRows(kindsBench("common"));
+    assertKindsRows(kindsBench("mixed"));
+    // At another rate every kind still has its rare inputs where mixed has them, and only there.
+    double[] none4 = kindsBench("none", 4).inputs();
+    double[] mixed4 = kindsBench("mixed", 4).inputs();
+    int rareAt4 = 0;
+    for (int i = 0; i < none4.length; i++) {
+      rareAt4 += differ(mixed4[i], none4[i]) ? 1 : 0;
+    }
+    assertEquals(true, rareAt4 > mixed.length / 8, "rare inputs at oneIn=4: " + rareAt4);
+    for (String kind : kinds.keySet()) {
+      double[] xs = kindsBench(kind, 4).inputs();
+      for (int i = 0; i < xs.length; i++) {
+        assertEquals(differ(mixed4[i], none4[i]), differ(xs[i], none4[i]), kind + " at " + i);
+      }
+    }
+    ExpKindsBench bad = new ExpKindsBench();
+    bad.inputs = "common";
+    bad.oneIn = 0;
+    assertThrows(IllegalArgumentException.class, bad::setUp);
+    bad.inputs = "tiny";
+    bad.oneIn = 16;
+    assertThrows(IllegalArgumentException.class, bad::setUp);
+  }
+
+  private static boolean differ(double a, double b) {
+    return Double.doubleToRawLongBits(a) != Double.doubleToRawLongBits(b);
+  }
+
+  private static int countTrue(boolean[] flags) {
+    int count = 0;
+    for (boolean flag : flags) {
+      count += flag ? 1 : 0;
+    }
+    return count;
+  }
+
+  private static ExpKindsBench kindsBench(String inputs) {
+    return kindsBench(inputs, 16);
+  }
+
+  private static ExpKindsBench kindsBench(String inputs, int oneIn) {
+    ExpKindsBench bench = new ExpKindsBench();
+    bench.inputs = inputs;
+    bench.oneIn = oneIn;
+    bench.setUp();
+    return bench;
+  }
+
+  private static void assertKindsRows(ExpKindsBench bench) {
+    double[] strict = bench.scalarStrictMath().clone();
+    double[][] rows = {
+      bench.finish256().clone(), bench.finishPreferred().clone(),
+      bench.blended256().clone(), bench.blendedPreferred().clone()
+    };
+    for (double[] row : rows) {
+      for (int i = 0; i < strict.length; i++) {
+        assertBits(Double.doubleToRawLongBits(strict[i]), row[i]);
+      }
     }
   }
 
