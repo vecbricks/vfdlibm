@@ -142,8 +142,10 @@ libraries go in `readings/`, with each source's licence named; never notes on GP
 
 ## Changes
 
-Changes go through pull requests on branches, never straight to `main`. Each function comes in its
-own PR, paired with the Varka PR that emits it. Commit messages and PR descriptions end with
+Changes go through pull requests on branches, never straight to `main` (the owner's two
+release commits, made by `dev/release.sh`, are the one exception: "Releases"). Each function
+comes in its own PR, paired with the Varka PR that emits it. Commit messages and PR descriptions
+end with
 `Generated-by: <tool> (<model and version>)` when AI tooling was used (Apache's convention); no
 `Co-Authored-By`.
 
@@ -168,20 +170,27 @@ and pass `dev/jar-check.sh --release`. The steps:
 
 1. In a pull request, move the `Unreleased` lines under a `## [<version>]` heading of
    `CHANGELOG.md`, and add its `[<version>]:` link line.
-2. On an up-to-date `main`, `dev/release.sh <version>` (its two commits, "Release" and "Start",
-   are the one thing that goes to `main` without a pull request, and only the owner's) checks the
-   tree, sets the pom's version,
+2. On an up-to-date `main`, `dev/release.sh <version>` checks the tree, sets the pom's version
+   (from any `-SNAPSHOT`, so a minor is released the same way),
    its `<scm><tag>` and `project.build.outputTimestamp` (so that the jars are reproducible), runs
    `mvn -B -Prelease -Dgpg.skip=true clean verify` with every test and `dev/jar-check.sh
    --release` on the jars, commits "Release <version>", tags `v<version>` and commits the next
-   `-SNAPSHOT`. It pushes nothing; `dev/release.sh --check <version>` only checks, and
+   `-SNAPSHOT`: the two commits, "Release" and "Start", go to `main` without a pull request, end
+   with a `Generated-by:` line that `RELEASE_GENERATED_BY` sets (empty: no line), and touch only
+   the pom and the changelog. It pushes nothing; `dev/release.sh --check <version>` only checks, and
    `dev/release.sh --self-test` runs the script's own checks in scratch repositories (CI runs
    it in `release.yml`'s `version` job).
-3. `git checkout v<version> && mvn -B -Prelease deploy` builds the sources and Javadoc jars,
-   signs them with the owner's key and uploads them to Central's portal; publish the deployment
-   there. Then `git checkout main && git push origin main v<version>`; the push of the tag runs
-   the dry run, which checks that the tag is `v<version>`, the pom says `<version>` and the
-   tagged commit is on `main` (`dev/release-version.sh`).
+3. `git push origin main v<version>`. The push of the tag runs the dry run, which checks that
+   the tag is `v<version>`, the pom says `<version>` and the tagged commit is on `main`
+   (`dev/release-version.sh`), and builds the release's jars as a release would; ci.yml's jobs
+   and the proofs under both solvers run on it too. Wait for it and for CI to be green: nothing
+   is uploaded yet, and a red tag is dropped by deleting it on origin and here.
+4. `git checkout v<version> && mvn -B -Prelease clean deploy` builds the sources and Javadoc
+   jars, signs them with the owner's key and uploads them to Central's portal; publish the
+   deployment there, then `git checkout main`. The jars `dev/release.sh` checked and the jars
+   this uploads are one build twice: the build is reproducible (`project.build.outputTimestamp`),
+   which is the link between them, and signing is the one step the dry run does not cover (it
+   signs with a key of its own, without gpg or an agent).
 
 What the owner needs once, on the machine that releases: the namespace `io.github.vecbricks`
 verified at the Central portal, a user token in `~/.m2/settings.xml` as the server `central`

@@ -23,16 +23,20 @@
 # verify` with every test and dev/jar-check.sh --release on the jars it builds, commits
 # "Release <version>", tags v<version>, and commits the next -SNAPSHOT (with <scm><tag> back
 # at HEAD). A failure on the way puts the tree back. It pushes nothing and deploys nothing: it
-# prints the two commands the owner runs, `mvn -B -Prelease deploy` on the tag, which signs with
-# the owner's key and uploads to Central, and the push. AGENTS.md, "Releases".
+# prints what the owner runs next: the push of main and the tag, then, once the dry run
+# (.github/workflows/release.yml) and CI are green on the tag, `mvn -B -Prelease clean deploy` on
+# the tag, which signs with the owner's key and uploads to Central. The jars that deploy builds
+# are those this script checked because the build is reproducible (project.build.outputTimestamp
+# in pom.xml). AGENTS.md, "Releases".
 #
-# Its commits end with a Generated-by line, as the project's commits do; RELEASE_GENERATED_BY
-# replaces the line's value (default: Claude Code (Sonnet 5.5), the tool that wrote this script).
+# Its commits end with a Generated-by line, as the project's commits do (CLAUDE.md);
+# RELEASE_GENERATED_BY replaces the line's value (default: Claude Code (Sonnet 5.5), the tool
+# that wrote this script) and, set to the empty string, leaves the line out.
 # Exit status: 0 when it passed, 1 when it refused, 2 for a usage error or a missing tool.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-GENERATED_BY="${RELEASE_GENERATED_BY:-Claude Code (Sonnet 5.5)}"
+GENERATED_BY="${RELEASE_GENERATED_BY-Claude Code (Sonnet 5.5)}"
 
 usage() { sed -n '/^# Prepares a release/,/^# Exit status/p' "$0" | sed 's/^# \{0,1\}//'; }
 fail() { echo "refusing: $*" >&2; exit 1; }
@@ -82,13 +86,23 @@ checks() {
     || fail "CHANGELOG.md has no '## [$version]' section: move the Unreleased lines under it"
   grep -q "^\[$dotted\]: " CHANGELOG.md || fail "CHANGELOG.md has no [$version] link line"
   current="$(dev/release-version.sh --version)"
-  [ "$current" = "$version-SNAPSHOT" ] \
-    || fail "the pom is at $current; a release of $version starts from $version-SNAPSHOT"
+  [[ "$current" == *-SNAPSHOT ]] \
+    || fail "the pom is at $current; a release starts from a -SNAPSHOT, which it sets to $version"
   [[ "$next" == *-SNAPSHOT ]] || usage_error "the next version must end in -SNAPSHOT: '$next'"
 }
 
 # commit <message>: the project's commit trailer on a commit the script makes.
-commit() { git commit -q -am "$1" -m "Generated-by: $GENERATED_BY"; }
+# Only the two files a release changes: a build that touched another tracked file fails here.
+commit() {
+  local others
+  others="$(git diff --name-only | grep -v -x -e pom.xml -e CHANGELOG.md || true)"
+  [ -z "$others" ] || { echo "refusing: the build changed $others" >&2; return 1; }
+  if [ -n "$GENERATED_BY" ]; then
+    git commit -q pom.xml CHANGELOG.md -m "$1" -m "Generated-by: $GENERATED_BY"
+  else
+    git commit -q pom.xml CHANGELOG.md -m "$1"
+  fi
+}
 
 release() {
   local version="$1" next="$2" tag="v$1" start
@@ -123,9 +137,11 @@ release() {
 
 Release $version is committed and tagged $tag locally; main is at $next.
 Review it:   git log --oneline -3 && git show $tag --stat
-Then, as the owner (Central token and signing key needed, see AGENTS.md, "Releases"):
-  git checkout $tag && mvn -B -Prelease deploy && git checkout main
+Then, as the owner (Central token, signing key and GPG_TTY needed, see AGENTS.md, "Releases"):
   git push origin main $tag
+  (wait for the Release dry run and CI to go green on the tag)
+  git checkout $tag && mvn -B -Prelease clean deploy && git checkout main
+  (publish the deployment at the Central portal)
 To drop the release before pushing:  git tag -d $tag && git reset --hard $start
 EOF
 }
@@ -225,9 +241,9 @@ POM
                         && git commit -q -am x && git push -q origin main 2> /dev/null)
                       expect "a heading that matches only if dots are any character" 1 \
                         "no '## [0.1.0]' section" --check 0.1.0
-  scratch pomver;     (cd "$here" && sed -i 's/>0.1.0-SNAPSHOT</>0.9.9-SNAPSHOT</' pom.xml \
+  scratch pomver;     (cd "$here" && sed -i 's/>0.1.0-SNAPSHOT</>0.9.9</' pom.xml \
                         && git commit -q -am x && git push -q origin main 2> /dev/null)
-                      expect "a pom at another version" 1 "the pom is at 0.9.9-SNAPSHOT" \
+                      expect "a pom that is no snapshot" 1 "the pom is at 0.9.9" \
                         --check 0.1.0
 
   # The release itself, under the stub mvn: a commit, a tag, the next snapshot, nothing pushed.
