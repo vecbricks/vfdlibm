@@ -95,8 +95,8 @@ jobs:
           if ! probe/bench/host.sh --self-test; then
             echo "::error::bench/host.sh fails its self-test on this ref"; exit 1
           fi
-          # The keys are read whole first: in a pipe, grep -q leaves at its match, and the
-          # script, still writing, would end on a broken pipe and fail the pipeline.
+          # The keys are read whole first, so that the check does not rest on how a pipe whose
+          # reader leaves at its match ends under the step's shell options.
           keys="$(probe/bench/host.sh --keys)"
           if ! grep -qxF -- "$HOST" <<<"$keys"; then
             echo "::error::bench/host.sh has no row for host '$HOST'"; exit 1
