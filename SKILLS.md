@@ -80,8 +80,9 @@ a settled question.
   it passes back the `InlineSmallCode` the JVM has with the tiers on, 2500 against 1000 on the
   laptop's JDK 25, since that limit of C2's inlining drops with them).
   It prints each distinct `PrintIntrinsics` line with its count, then the refused calls that
-  name the library or `NodeCountInliningCutoff`, then the other refused calls into the Vector
-  API. CI runs it after a failing check, so the job's log holds C2's account.
+  name the library, `NodeCountInliningCutoff` or a refused intrinsic, then the other refused
+  calls into the Vector API. CI runs it after a failing check, so the job's log holds C2's
+  account.
 - **Ask C2 what it refused.** `-XX:+UnlockDiagnosticVMOptions -XX:+PrintIntrinsics`, or scoped
   to the library, `-XX:CompileCommand=PrintIntrinsics,io.github.vecbricks.vfdlibm.*::*`. Add
   `-Xbatch` when lines must be attributed to one shape: compiles then happen on the calling

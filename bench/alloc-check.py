@@ -41,6 +41,7 @@ import collections
 import json
 import os
 import re
+import signal
 import subprocess
 import sys
 
@@ -79,19 +80,20 @@ RESULT = "target/alloc-check.json"
 # the rerun's C2 inlines as the failing run's did, as far as this script knows. PrintIntrinsics'
 # lines are kept whole, each cut at its "**", since a line of C2's can land in the middle of
 # one of JMH's. Of PrintInlining's refusals, each cut at its "@ <bci>", two lists: those naming
-# the library or the node count, which are the ones that box a port's vectors and are printed
-# in full; and those naming the Vector API, printed up to WHY_LINES, without the retries of a
-# late inline ("trying again").
+# the library, the node count or a refused intrinsic, which are the ones that box a port's
+# vectors and are printed in full; and the others naming the Vector API, up to WHY_LINES. A
+# line carries every attempt at its call site, so one that repeats itself is cut at WHY_WIDTH.
 WHY = ("-XX:-TieredCompilation"
        " -XX:CompileCommand=PrintIntrinsics,io.github.vecbricks.vfdlibm.*::*"
        " -XX:+UnlockDiagnosticVMOptions -XX:+PrintInlining")
 NOT_INTRINSIFIED = re.compile(r"\*\* .*")
 REFUSED = re.compile(r"@ \d+ .*failed to inline.*")
-REFUSED_FIRST = re.compile(r"vfdlibm|NodeCountInliningCutoff")
+REFUSED_FIRST = re.compile(r"vfdlibm|NodeCountInliningCutoff|failed to inline \(intrinsic\)")
 REFUSED_API = re.compile(r"jdk\.incubator\.vector|VectorSupport")
 WHY_LINES = 40
-# The rows --why reruns at most, and the seconds one rerun may take: when every row fails, the
-# first few say why, and a hung fork must not hold a CI job.
+WHY_WIDTH = 200
+# The rows --why reruns at most, and the seconds one rerun may take: when every row fails, a
+# few say why (one per benchmark method first), and a hung fork must not hold a CI job.
 WHY_ROWS = 8
 WHY_TIMEOUT = 600
 # One fork; warmup long enough for C2 to finish the body before the first measured iteration,
@@ -107,14 +109,32 @@ def mvn_jmh(mvn, jmh_args, capture=False, check=True, timeout=None):
     capture is False (the output goes to the terminal), True (stdout is returned) or "all"
     (stdout and stderr are returned as one text). The child gets no stdin: exec:exec would pass
     this script's on to JMH. Captured bytes that do not decode are replaced, not raised on:
-    with "all", a line of the JVM's can cut one of JMH's in two."""
+    with "all", a line of the JVM's can cut one of JMH's in two. Maven runs in a process group
+    of its own, and past timeout seconds the whole group is killed, JMH and its fork with it,
+    before subprocess.TimeoutExpired is raised."""
     command = [mvn, "-B", "--no-transfer-progress", "-q", "-Pjmh", "test-compile", "exec:exec",
                f"-Djmh.args={jmh_args}"]
     print("Running:", " ".join(command), flush=True)
-    return subprocess.run(command, check=check, text=True, errors="replace", timeout=timeout,
-                          stdin=subprocess.DEVNULL,
-                          stdout=subprocess.PIPE if capture else None,
-                          stderr=subprocess.STDOUT if capture == "all" else None)
+    try:
+        process = subprocess.Popen(command, text=True, errors="replace", start_new_session=True,
+                                   stdin=subprocess.DEVNULL,
+                                   stdout=subprocess.PIPE if capture else None,
+                                   stderr=subprocess.STDOUT if capture == "all" else None)
+    except OSError as e:
+        sys.exit(f"FAIL: cannot run {mvn} ({e.strerror}); name a Maven with --mvn")
+    try:
+        out, _ = process.communicate(timeout=timeout)
+    except BaseException:
+        # A timeout, or this script interrupted: leave no JMH behind.
+        try:
+            os.killpg(process.pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
+        process.wait()
+        raise
+    if check and process.returncode != 0:
+        raise subprocess.CalledProcessError(process.returncode, command, output=out)
+    return subprocess.CompletedProcess(command, process.returncode, stdout=out)
 
 
 def list_benchmarks(mvn, include):
@@ -190,9 +210,15 @@ def why(mvn, path, threshold):
     rows = failing(path, threshold)
     if not rows:
         print(f"No row of {path} allocated {threshold} B/op or more; if the check failed, a"
-              " row was missing, see its own output.")
+              " row was missing or had no gc.alloc.rate.norm, see its own output.")
     if len(rows) > WHY_ROWS:
-        print(f"{len(rows)} rows failed; asking about the first {WHY_ROWS}.")
+        # One row of each benchmark method first, its last (mixed data, which runs the rare
+        # paths too), so that eight slots reach as many bodies as they can.
+        last = {row["benchmark"]: row for row in rows}
+        first = list(last.values())
+        rows = first + [row for row in rows if all(row is not chosen for chosen in first)]
+        print(f"{len(rows)} rows failed; asking about {WHY_ROWS} of them, one of each"
+              " benchmark method first.")
     for row in rows[:WHY_ROWS]:
         name, inputs = row["benchmark"], row.get("params", {}).get("inputs")
         print(f"\n== {name} [inputs={inputs}]", flush=True)
@@ -220,24 +246,27 @@ def why(mvn, path, threshold):
             print("\n".join(lines[-40:]))
             continue
         print(alloc[-1])
-        # JMH prints a score under 0.001 as "~ 10^-4" with non-ASCII signs; any score that is
-        # not a plain number is such a one, and under every threshold in use.
+        # JMH prints a score under 0.001 as an approximation, with its sign for "about"; such
+        # a score is under every threshold in use. Any other text that is no number is not
+        # judged, and no notice is printed for it.
         try:
             boxed = float(alloc[-1].split()[-2]) >= threshold
         except (IndexError, ValueError):
-            boxed = False
+            boxed = "\u2248" not in alloc[-1]
         if not boxed:
             print(f"This run read under {threshold} B/op: the row did not box this time, so"
                   " the lines below do not explain the failure. If only the first iteration"
                   " of the failing run allocated, C2 was late there (SKILLS.md).")
         print("PrintIntrinsics, each distinct line with its count:")
         counted(m.group(0) for m in map(NOT_INTRINSIFIED.search, lines) if m)
-        refused = [m.group(0) for m in map(REFUSED.search, lines) if m]
-        print("PrintInlining, C2's refused calls that name the library or the node count:")
+        refused = [" ".join(m.group(0).split())[:WHY_WIDTH]
+                   for m in map(REFUSED.search, lines) if m]
+        print("PrintInlining, C2's refused calls that name the library, the node count or a"
+              " refused intrinsic:")
         counted(line for line in refused if REFUSED_FIRST.search(line))
         print("PrintInlining, C2's other refused calls into the Vector API:")
         counted((line for line in refused if not REFUSED_FIRST.search(line)
-                 and REFUSED_API.search(line) and "trying again" not in line), WHY_LINES)
+                 and REFUSED_API.search(line)), WHY_LINES)
 
 
 def check(path, threshold, expected=None):
@@ -299,6 +328,9 @@ def main():
                          " --preferred-only and --no-run do not apply")
         why(args.mvn, RESULT, args.threshold)
         return
+    if args.no_run and (args.include or args.preferred_only):
+        parser.error("--no-run checks every row of the existing result; --include and"
+                     " --preferred-only do not apply")
     include = args.include or (PREFERRED if args.preferred_only else INCLUDE)
     expected = None
     if not args.no_run:
