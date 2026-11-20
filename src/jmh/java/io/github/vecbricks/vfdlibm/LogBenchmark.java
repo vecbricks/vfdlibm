@@ -42,8 +42,11 @@ import org.openjdk.jmh.annotations.Warmup;
  * add {@code -jvmArgsAppend -XX:CompileCommand=inline,io.github.vecbricks.vfdlibm.*::*}.
  *
  * <p>{@code bench/alloc-check.py} runs the vector benchmarks named {@code *256} and
- * {@code *Preferred} on {@code common} inputs and fails if any allocates, which means the body
- * boxed. A new arm named that way is checked with no further change.
+ * {@code *Preferred} on {@code common} and {@code mixed} inputs and fails if any allocates, which
+ * means the body boxed. A new arm named that way is checked with no further change. The
+ * {@code *Max} rows, at {@code DoubleVector.SPECIES_MAX}, are not checked: the finish arm boxes
+ * there on mixed data (bench/results/max-finish-laptop-2026-11-20.txt); they are here to
+ * measure that.
  */
 @State(Scope.Thread)
 @BenchmarkMode(Mode.AverageTime)
@@ -58,6 +61,7 @@ public class LogBenchmark {
   private static final VectorSpecies<Double> S256 = DoubleVector.SPECIES_256;
   private static final VectorSpecies<Double> S512 = DoubleVector.SPECIES_512;
   private static final VectorSpecies<Double> SP = DoubleVector.SPECIES_PREFERRED;
+  private static final VectorSpecies<Double> SMAX = DoubleVector.SPECIES_MAX;
 
   @Param({"common", "mixed"})
   public String inputs;
@@ -117,6 +121,14 @@ public class LogBenchmark {
   public double[] finishPreferred() {
     for (int i = 0; i < N; i += SP.length()) {
       Log.log(DoubleVector.fromArray(SP, in, i), null).intoArray(out, i);
+    }
+    return out;
+  }
+
+  @Benchmark
+  public double[] finishMax() {
+    for (int i = 0; i < N; i += SMAX.length()) {
+      Log.log(DoubleVector.fromArray(SMAX, in, i), null).intoArray(out, i);
     }
     return out;
   }

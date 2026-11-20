@@ -1,0 +1,693 @@
+# The finish arm at DoubleVector.SPECIES_MAX on the owner's laptop, 20 November 2026: what
+# each port's *Max rows allocate, and a finish with constant lane indices that allocates nothing
+#
+# LAPTOP NUMBERS, NOT HEADLINES, AND ALLOCATION READINGS, NOT TIMINGS. The laptop was shared
+# with many other builds while these ran (load averages of 55 to 96 on 24 logical cores, below),
+# so the ns/op in JMH's tables at the end mean nothing and nothing may be quoted from them.
+# gc.alloc.rate.norm does not depend on the load once C2 has compiled the body: a boxed body
+# allocates the same bytes on every pass, an unboxed one JMH's own few hundredths of a byte.
+#
+# Why:         bench/alloc-check.py leaves the *Max rows out because exp's finish boxes at
+#              SPECIES_MAX on mixed data (exp-finish-laptop-2026-11-02.txt). Issue 37 asks
+#              whether that holds for every port, Log's finish among them, whose loop is a
+#              counted one where the others walk the mask's set bits, and whether some finish
+#              allocates nothing there. LogBenchmark, Log1pBenchmark and Expm1Benchmark had no
+#              *Max rows until the commit below.
+# Commit:      99bfc26 (the *Max rows of LogBenchmark, Log1pBenchmark and Expm1Benchmark),
+#              rebased from 229472a, which added them to main a5683c3 and is what the runs
+#              were made on; the five ports are main's. The runs were made on that code before
+#              the benchmarks' Javadoc was written; no statement differs.
+# Candidate:   that commit with each port's finish loop changed as the diff below changes
+#              Exp's, uncommitted: issue 37 leaves the choice of a finish to its owner, so
+#              the ports are not changed here.
+# JDK:         OpenJDK 64-Bit Server VM, 25.0.5.1+2-1-26.04.1-Ubuntu
+# CPU:         AMD Ryzen AI 9 HX PRO 370 w/ Radeon 890M (24 logical cores, two core types)
+# CPU flags:   avx2, avx512f and avx512dq present
+# Vector:      default flags: MaxVectorSize=64 UseAVX=3 (SPECIES_MAX is 512 bits, 8 lanes);
+#              as AVX2: -XX:UseAVX=2 -XX:MaxVectorSize=32 (SPECIES_MAX is 256 bits, 4 lanes)
+# Datapath:    26.9 / 67.8 / 58.3 lane-ops/ns at 128 / 256 / 512 bits; 256:128 = 2.52
+#              (control), 512:256 = 0.86 (bench/datapath.sh, read that day under such a load)
+# Kernel:      7.0.0-43-generic
+# Load:        main's finish, default flags: 55.40, 55.83, 58.53 at start;
+#                91.07, 73.44, 65.24 at end
+#              main's finish, as AVX2: 91.07, 73.44, 65.24 at start;
+#                96.35, 90.50, 75.81 at end
+#              candidate, default flags: 66.54, 63.39, 58.64 at start;
+#                74.07, 72.28, 64.25 at end
+#              candidate, as AVX2: 74.07, 72.28, 64.25 at start;
+#                54.92, 66.11, 64.49 at end
+# JMH 1.37:    -f 1 -wi 5 -w 2s -i 3 -r 1s -prof gc -foe true -p inputs=common,mixed
+#              -jvmArgsAppend "-XX:CompileCommand=inline,io.github.vecbricks.vfdlibm.*::*"
+#              (the body inlined into the loop, as Varka emits it), with
+#              "-XX:UseAVX=2 -XX:MaxVectorSize=32" appended for the AVX2 runs. These are
+#              bench/alloc-check.py's options with ten seconds of warmup for its three: under
+#              this load C2 was still compiling when three seconds had passed (section 3).
+# Command:     mvn -B -q -Pjmh test-compile exec:exec
+#              -Djmh.args=".*Benchmark\.\w+Max$ <the options above> -rf json"
+# Array:       1024 doubles; common and mixed as each benchmark class describes them: no lane
+#              of common data takes a rare path, and one input in 16 of mixed data does.
+#
+# Reading:
+# - On main, every port's finish arm allocates at SPECIES_MAX on mixed data and only there:
+#   30912 B/op at 512 bits for exp, expm1 and log1p and 30432 for log and log10, and 36992 and
+#   36672 as an AVX2 host. Log's counted loop allocates as the others' loop does, so giving
+#   the other ports Log's loop (the issue's candidate (a)) would change nothing.
+# - No other arm allocates there: the blended rows of exp, expm1, log1p and log10 (log has no
+#   blendedMax row) and the guarded rows of log1p and expm1 read under 0.5 B/op on common and
+#   on mixed data, under both flag sets.
+# - With constant lane indices for the first eight lanes (the issue's candidate (b), the diff
+#   below), every *Max row of every port reads under 0.5 B/op, on mixed data too, under both
+#   flag sets (section 2).
+# - The rows the allocation check gates on, *256 and *Preferred, still end under 1 B/op with
+#   the candidate (section 3). That run had the check's own three-second warmup, and under
+#   this load 38 of its 140 rows, the *Max rows among them, allocated in their first measured
+#   iteration (31) or their first two (7) while C2 finished; every row's third iteration
+#   reads under 0.4 B/op. A boxed body does not decay: main's finishMax reads the same bytes
+#   in all three iterations. So the
+#   candidate is not shown here to pass the check as the check is run, only not to box; a
+#   run on a quiet machine is owed before a port's finish is changed.
+# - The candidate cannot change a result: it visits the same lanes and makes the same
+#   StrictMath call. ExpTest, LogTest, Log10Test, Log1pTest and Expm1Test passed with it
+#   (228 tests, among them each port's at SPECIES_MAX). It was not run through mvn verify,
+#   the planted faults or the nightly's sweep.
+# - Candidate (c), reinterpreting to the named species of the same size around the loop, was
+#   not tried: (b) passed first.
+#
+# The candidate, as it changes Exp.finish (the other four ports' loops change the same way,
+# each with its own StrictMath call; in Log the eight tests and the loop replace the counted
+# loop):
+#
+#            // array: lane and withLane are lane extract and insert. C2 intrinsifies them at a
+#            // variable lane index for the fixed shapes only; at SPECIES_MAX this loop still boxes.
+#            long rareLanes = rare.toLong();
+#   +        int lanes = x.length();
+#   +        if (lanes > 0 && (rareLanes & 1L) != 0) {
+#   +          result = result.withLane(0, StrictMath.exp(x.lane(0)));
+#   +        }
+#   +        if (lanes > 1 && (rareLanes & 2L) != 0) {
+#   +          result = result.withLane(1, StrictMath.exp(x.lane(1)));
+#   +        }
+#   +        if (lanes > 2 && (rareLanes & 4L) != 0) {
+#   +          result = result.withLane(2, StrictMath.exp(x.lane(2)));
+#   +        }
+#   +        if (lanes > 3 && (rareLanes & 8L) != 0) {
+#   +          result = result.withLane(3, StrictMath.exp(x.lane(3)));
+#   +        }
+#   +        if (lanes > 4 && (rareLanes & 16L) != 0) {
+#   +          result = result.withLane(4, StrictMath.exp(x.lane(4)));
+#   +        }
+#   +        if (lanes > 5 && (rareLanes & 32L) != 0) {
+#   +          result = result.withLane(5, StrictMath.exp(x.lane(5)));
+#   +        }
+#   +        if (lanes > 6 && (rareLanes & 64L) != 0) {
+#   +          result = result.withLane(6, StrictMath.exp(x.lane(6)));
+#   +        }
+#   +        if (lanes > 7 && (rareLanes & 128L) != 0) {
+#   +          result = result.withLane(7, StrictMath.exp(x.lane(7)));
+#   +        }
+#   +        rareLanes &= ~0xffL;
+#            while (rareLanes != 0) {
+#              int lane = Long.numberOfTrailingZeros(rareLanes);
+#              rareLanes &= rareLanes - 1;
+#
+# 1. main's ports: gc.alloc.rate.norm in B/op (one op is 1024 doubles), the minimum, average
+#    and maximum of three measured iterations
+#
+#                                            default flags, 512 bits        as AVX2, 256 bits
+# Benchmark                    inputs         min       avg       max       min       avg       max
+ExpBenchmark.blendedMax        common        0.091     0.112     0.137     0.068     0.091     0.107
+ExpBenchmark.blendedMax        mixed         0.049     0.086     0.113     0.235     0.286     0.337
+ExpBenchmark.finishMax         common        0.032     0.042     0.054     0.084     0.093     0.103
+ExpBenchmark.finishMax         mixed     30912.130 30912.233 30912.302 36992.341 36992.402 36992.481
+Expm1Benchmark.blendedMax      common        0.149     0.161     0.182     0.293     0.309     0.323
+Expm1Benchmark.blendedMax      mixed         0.141     0.179     0.216     0.135     0.258     0.325
+Expm1Benchmark.finishMax       common        0.091     0.140     0.191     0.146     0.202     0.248
+Expm1Benchmark.finishMax       mixed     30912.212 30912.264 30912.314 36992.317 36992.575 36992.842
+Expm1Benchmark.guardedMax      common        0.055     0.066     0.082     0.147     0.178     0.223
+Expm1Benchmark.guardedMax      mixed         0.051     0.069     0.087     0.123     0.286     0.450
+Log10Benchmark.blendedMax      common        0.069     0.101     0.143     0.164     0.192     0.212
+Log10Benchmark.blendedMax      mixed         0.072     0.074     0.077     0.110     0.174     0.251
+Log10Benchmark.finishMax       common        0.047     0.071     0.098     0.159     0.225     0.299
+Log10Benchmark.finishMax       mixed     30432.184 30432.192 30432.203 36672.398 36672.473 36672.572
+Log1pBenchmark.blendedMax      common        0.040     0.047     0.056     0.090     0.118     0.143
+Log1pBenchmark.blendedMax      mixed         0.075     0.086     0.100     0.308     0.341     0.387
+Log1pBenchmark.finishMax       common        0.055     0.075     0.108     0.148     0.199     0.260
+Log1pBenchmark.finishMax       mixed     30912.111 30912.276 30912.417 36992.206 36992.526 36992.744
+Log1pBenchmark.guardedMax      common        0.093     0.099     0.106     0.145     0.229     0.272
+Log1pBenchmark.guardedMax      mixed         0.046     0.069     0.091     0.330     0.373     0.432
+LogBenchmark.finishMax         common        0.088     0.101     0.128     0.061     0.072     0.088
+LogBenchmark.finishMax         mixed     30432.209 30432.335 30432.409 36672.272 36672.417 36672.705
+
+# 2. The candidate: the same rows
+#
+#                                            default flags, 512 bits        as AVX2, 256 bits
+# Benchmark                    inputs         min       avg       max       min       avg       max
+ExpBenchmark.blendedMax        common        0.051     0.062     0.079     0.075     0.130     0.225
+ExpBenchmark.blendedMax        mixed         0.097     0.109     0.118     0.095     0.117     0.142
+ExpBenchmark.finishMax         common        0.022     0.032     0.048     0.036     0.073     0.125
+ExpBenchmark.finishMax         mixed         0.040     0.050     0.059     0.086     0.128     0.164
+Expm1Benchmark.blendedMax      common        0.073     0.085     0.100     0.207     0.236     0.277
+Expm1Benchmark.blendedMax      mixed         0.078     0.101     0.115     0.226     0.329     0.478
+Expm1Benchmark.finishMax       common        0.062     0.113     0.140     0.187     0.222     0.239
+Expm1Benchmark.finishMax       mixed         0.130     0.153     0.195     0.207     0.238     0.264
+Expm1Benchmark.guardedMax      common        0.080     0.097     0.123     0.124     0.169     0.197
+Expm1Benchmark.guardedMax      mixed         0.057     0.092     0.129     0.104     0.132     0.188
+Log10Benchmark.blendedMax      common        0.044     0.050     0.060     0.136     0.150     0.161
+Log10Benchmark.blendedMax      mixed         0.069     0.107     0.127     0.134     0.144     0.157
+Log10Benchmark.finishMax       common        0.053     0.103     0.173     0.066     0.127     0.178
+Log10Benchmark.finishMax       mixed         0.118     0.143     0.161     0.084     0.109     0.137
+Log1pBenchmark.blendedMax      common        0.067     0.093     0.121     0.101     0.126     0.158
+Log1pBenchmark.blendedMax      mixed         0.043     0.058     0.084     0.087     0.130     0.163
+Log1pBenchmark.finishMax       common        0.054     0.070     0.084     0.081     0.100     0.129
+Log1pBenchmark.finishMax       mixed         0.136     0.143     0.158     0.077     0.086     0.099
+Log1pBenchmark.guardedMax      common        0.034     0.049     0.066     0.062     0.067     0.073
+Log1pBenchmark.guardedMax      mixed         0.030     0.042     0.064     0.068     0.086     0.111
+LogBenchmark.finishMax         common        0.037     0.041     0.043     0.046     0.051     0.054
+LogBenchmark.finishMax         mixed         0.058     0.083     0.113     0.059     0.065     0.075
+
+# 3. The candidate, the rows bench/alloc-check.py gates on and the *Max rows, with the check's
+#    own options (-f 1 -wi 3 -w 1s -i 3 -r 1s, common and mixed), an hour earlier on the same
+#    machine at load averages near 60: every measured iteration. An early iteration at 1 B/op
+#    or more is C2 not yet finished; no row's third iteration is.
+#
+# default flags                     inputs     iteration 1   iteration 2   iteration 3
+ExpBenchmark.blended256           common          0.067         0.053         0.066
+ExpBenchmark.blended256           mixed           0.073         0.051         0.054
+ExpBenchmark.blendedMax           common          0.056         0.046         0.060
+ExpBenchmark.blendedMax           mixed           0.054         0.053         0.096
+ExpBenchmark.blendedPreferred     common          0.050         0.042         0.047
+ExpBenchmark.blendedPreferred     mixed           0.041         0.048         0.067
+ExpBenchmark.finish256            common          0.027         0.046         0.025
+ExpBenchmark.finish256            mixed           0.049         0.032         0.033
+ExpBenchmark.finishMax            common          0.015         0.015         0.015
+ExpBenchmark.finishMax            mixed           0.041         0.038         0.040
+ExpBenchmark.finishPreferred      common          0.019         0.021         0.016
+ExpBenchmark.finishPreferred      mixed           0.038         0.037         0.041
+Expm1Benchmark.blended256         common          0.209         0.324         0.149
+Expm1Benchmark.blended256         mixed           0.160         0.126         0.123
+Expm1Benchmark.blendedMax         common          0.064         0.085         0.055
+Expm1Benchmark.blendedMax         mixed           0.059         0.051         0.053
+Expm1Benchmark.blendedPreferred   common        848.323         0.079         0.067
+Expm1Benchmark.blendedPreferred   mixed       12436.800         0.088         0.072
+Expm1Benchmark.finish256          common          0.203         0.187         0.181
+Expm1Benchmark.finish256          mixed           0.123         0.159         0.282
+Expm1Benchmark.finishMax          common       1112.530         0.063         0.051
+Expm1Benchmark.finishMax          mixed     1844759.751      2264.171         0.187
+Expm1Benchmark.finishPreferred    common    1846293.285      4522.311         0.074
+Expm1Benchmark.finishPreferred    mixed      685201.227         0.081         0.138
+Expm1Benchmark.guarded256         common       1804.655         0.127         0.114
+Expm1Benchmark.guarded256         mixed           0.167         0.190         0.149
+Expm1Benchmark.guardedMax         common      33237.885         0.105         0.101
+Expm1Benchmark.guardedMax         mixed       47951.390         0.124         0.076
+Expm1Benchmark.guardedPreferred   common          0.131         0.117         0.064
+Expm1Benchmark.guardedPreferred   mixed     1080444.573         0.091         0.088
+Log10Benchmark.blended256         common          0.090         0.093         0.088
+Log10Benchmark.blended256         mixed        4699.245         0.075         0.127
+Log10Benchmark.blendedMax         common          0.053         0.042         0.049
+Log10Benchmark.blendedMax         mixed        1156.048         0.083         0.118
+Log10Benchmark.blendedPreferred   common          0.075         0.069         0.065
+Log10Benchmark.blendedPreferred   mixed        2487.765         0.120         0.132
+Log10Benchmark.finish256          common          0.073         0.071         0.114
+Log10Benchmark.finish256          mixed           0.101         0.132         0.213
+Log10Benchmark.finishMax          common          0.043         0.036         0.054
+Log10Benchmark.finishMax          mixed           0.069         0.115         0.074
+Log10Benchmark.finishPreferred    common       4902.928         0.061         0.044
+Log10Benchmark.finishPreferred    mixed           0.100         0.111         0.047
+Log1pBenchmark.blended256         common          0.068         0.073         0.062
+Log1pBenchmark.blended256         mixed           0.093         0.127         0.094
+Log1pBenchmark.blendedMax         common          0.069         0.047         0.061
+Log1pBenchmark.blendedMax         mixed           0.057         0.059         0.049
+Log1pBenchmark.blendedPreferred   common          0.056         0.067         0.065
+Log1pBenchmark.blendedPreferred   mixed         564.307         0.054         0.068
+Log1pBenchmark.finish256          common          0.098         0.107         0.089
+Log1pBenchmark.finish256          mixed           0.141         0.158         0.101
+Log1pBenchmark.finishMax          common          0.052         0.048         0.055
+Log1pBenchmark.finishMax          mixed        6025.141         0.071         0.058
+Log1pBenchmark.finishPreferred    common          0.046         0.038         0.035
+Log1pBenchmark.finishPreferred    mixed           0.108         0.095         0.090
+Log1pBenchmark.guarded256         common          0.098         0.120         0.065
+Log1pBenchmark.guarded256         mixed           0.082         0.077         0.065
+Log1pBenchmark.guardedMax         common    1530868.569      1011.167         0.092
+Log1pBenchmark.guardedMax         mixed           0.063         0.043         0.033
+Log1pBenchmark.guardedPreferred   common          0.062         0.054         0.067
+Log1pBenchmark.guardedPreferred   mixed           0.150         0.088         0.054
+LogBenchmark.blended256           common          0.045         0.049         0.053
+LogBenchmark.blended256           mixed           0.058         0.060         0.046
+LogBenchmark.blendedPreferred     common          0.040         0.036         0.039
+LogBenchmark.blendedPreferred     mixed           0.045         0.045         0.052
+LogBenchmark.finish256            common          0.036         0.035         0.040
+LogBenchmark.finish256            mixed           0.044         0.047         0.057
+LogBenchmark.finishMax            common          0.035         0.029         0.031
+LogBenchmark.finishMax            mixed           0.052         0.057         0.063
+LogBenchmark.finishPreferred      common    1380862.723       369.994         0.043
+LogBenchmark.finishPreferred      mixed           0.085         0.065         0.064
+
+# as AVX2                           inputs     iteration 1   iteration 2   iteration 3
+ExpBenchmark.blended256           common          0.124         0.102         0.122
+ExpBenchmark.blended256           mixed           0.074         0.080         0.088
+ExpBenchmark.blendedMax           common          0.072         0.138         0.077
+ExpBenchmark.blendedMax           mixed           0.086         0.186         0.099
+ExpBenchmark.blendedPreferred     common       7677.719         0.160         0.130
+ExpBenchmark.blendedPreferred     mixed           0.208         0.162         0.203
+ExpBenchmark.finish256            common          0.043         0.033         0.032
+ExpBenchmark.finish256            mixed           0.077         0.067         0.083
+ExpBenchmark.finishMax            common          0.053         0.046         0.041
+ExpBenchmark.finishMax            mixed           0.069         0.087         0.076
+ExpBenchmark.finishPreferred      common          0.070         0.069         0.072
+ExpBenchmark.finishPreferred      mixed           0.057         0.073         0.068
+Expm1Benchmark.blended256         common    3114822.017     28960.976         0.190
+Expm1Benchmark.blended256         mixed           0.116         0.120         0.149
+Expm1Benchmark.blendedMax         common          0.223         0.184         0.125
+Expm1Benchmark.blendedMax         mixed           0.208         0.147         0.210
+Expm1Benchmark.blendedPreferred   common          0.093         0.122         0.182
+Expm1Benchmark.blendedPreferred   mixed        3422.748         0.221         0.133
+Expm1Benchmark.finish256          common          0.081         0.117         0.139
+Expm1Benchmark.finish256          mixed           0.138         0.108         0.101
+Expm1Benchmark.finishMax          common          0.194         0.106         0.168
+Expm1Benchmark.finishMax          mixed           0.141         0.117         0.163
+Expm1Benchmark.finishPreferred    common          0.163         0.205         0.099
+Expm1Benchmark.finishPreferred    mixed       42420.361         0.234         0.270
+Expm1Benchmark.guarded256         common          0.340         0.108         0.115
+Expm1Benchmark.guarded256         mixed        5407.001         0.121         0.151
+Expm1Benchmark.guardedMax         common          0.132         0.115         0.196
+Expm1Benchmark.guardedMax         mixed      284700.980         0.119         0.104
+Expm1Benchmark.guardedPreferred   common          0.173         0.119         0.106
+Expm1Benchmark.guardedPreferred   mixed           0.129         0.086         0.082
+Log10Benchmark.blended256         common          0.082         0.062         0.123
+Log10Benchmark.blended256         mixed        4191.052         0.134         0.229
+Log10Benchmark.blendedMax         common          0.109         0.072         0.072
+Log10Benchmark.blendedMax         mixed           0.100         0.102         0.145
+Log10Benchmark.blendedPreferred   common          0.110         0.105         0.129
+Log10Benchmark.blendedPreferred   mixed           0.173         0.133         0.161
+Log10Benchmark.finish256          common          0.161         0.100         0.145
+Log10Benchmark.finish256          mixed       13512.370         0.267         0.116
+Log10Benchmark.finishMax          common          0.156         0.082         0.116
+Log10Benchmark.finishMax          mixed        1232.610         0.133         0.200
+Log10Benchmark.finishPreferred    common      25931.681         0.085         0.143
+Log10Benchmark.finishPreferred    mixed           0.193         0.121         0.252
+Log1pBenchmark.blended256         common      16964.027         0.189         0.355
+Log1pBenchmark.blended256         mixed       40443.448         0.108         0.106
+Log1pBenchmark.blendedMax         common    2836566.025     26030.383         0.242
+Log1pBenchmark.blendedMax         mixed     2836172.901      6511.972         0.142
+Log1pBenchmark.blendedPreferred   common      54120.509         0.158         0.186
+Log1pBenchmark.blendedPreferred   mixed        1072.070         0.159         0.145
+Log1pBenchmark.finish256          common          0.137         0.165         0.098
+Log1pBenchmark.finish256          mixed           0.164         0.171         0.147
+Log1pBenchmark.finishMax          common          0.056         0.073         0.106
+Log1pBenchmark.finishMax          mixed           0.170         0.169         0.176
+Log1pBenchmark.finishPreferred    common       2992.963         0.118         0.120
+Log1pBenchmark.finishPreferred    mixed           0.117         0.096         0.134
+Log1pBenchmark.guarded256         common          0.077         0.097         0.138
+Log1pBenchmark.guarded256         mixed       21028.463         0.099         0.091
+Log1pBenchmark.guardedMax         common          0.080         0.068         0.083
+Log1pBenchmark.guardedMax         mixed           0.132         0.094         0.083
+Log1pBenchmark.guardedPreferred   common          0.086         0.091         0.104
+Log1pBenchmark.guardedPreferred   mixed          37.694         0.158         0.090
+LogBenchmark.blended256           common          0.091         0.070         0.066
+LogBenchmark.blended256           mixed           0.107         0.072         0.087
+LogBenchmark.blendedPreferred     common          0.107         0.176         0.126
+LogBenchmark.blendedPreferred     mixed           0.117         0.086         0.108
+LogBenchmark.finish256            common          0.070         0.059         0.085
+LogBenchmark.finish256            mixed           0.088         0.067         0.066
+LogBenchmark.finishMax            common          0.048         0.048         0.073
+LogBenchmark.finishMax            mixed        4495.952         0.088         0.086
+LogBenchmark.finishPreferred      common          0.114         0.105         0.097
+LogBenchmark.finishPreferred      mixed           0.094         0.203         0.086
+
+# JMH's summary table: main's ports, default flags. Its ns/op are not timings (see the top).
+
+Benchmark                                  (inputs)  Mode  Cnt      Score        Error   Units
+ExpBenchmark.blendedMax                      common  avgt    3  16198.333 +/-  61014.082   ns/op
+ExpBenchmark.blendedMax:gc.alloc.rate        common  avgt    3      0.006 +/-      0.002  MB/sec
+ExpBenchmark.blendedMax:gc.alloc.rate.norm   common  avgt    3      0.112 +/-      0.420    B/op
+ExpBenchmark.blendedMax:gc.count             common  avgt    3        ~ 0               counts
+ExpBenchmark.blendedMax                       mixed  avgt    3  12368.406 +/-  85910.116   ns/op
+ExpBenchmark.blendedMax:gc.alloc.rate         mixed  avgt    3      0.007 +/-      0.001  MB/sec
+ExpBenchmark.blendedMax:gc.alloc.rate.norm    mixed  avgt    3      0.086 +/-      0.597    B/op
+ExpBenchmark.blendedMax:gc.count              mixed  avgt    3        ~ 0               counts
+ExpBenchmark.finishMax                       common  avgt    3   6023.462 +/-  30090.748   ns/op
+ExpBenchmark.finishMax:gc.alloc.rate         common  avgt    3      0.007 +/-      0.001  MB/sec
+ExpBenchmark.finishMax:gc.alloc.rate.norm    common  avgt    3      0.042 +/-      0.210    B/op
+ExpBenchmark.finishMax:gc.count              common  avgt    3        ~ 0               counts
+ExpBenchmark.finishMax                        mixed  avgt    3  33540.535 +/- 237873.401   ns/op
+ExpBenchmark.finishMax:gc.alloc.rate          mixed  avgt    3   1003.444 +/-   8873.432  MB/sec
+ExpBenchmark.finishMax:gc.alloc.rate.norm     mixed  avgt    3  30912.233 +/-      1.650    B/op
+ExpBenchmark.finishMax:gc.count               mixed  avgt    3      1.000               counts
+ExpBenchmark.finishMax:gc.time                mixed  avgt    3      6.000                   ms
+Expm1Benchmark.blendedMax                    common  avgt    3  23310.467 +/-  49605.265   ns/op
+Expm1Benchmark.blendedMax:gc.alloc.rate      common  avgt    3      0.007 +/-      0.001  MB/sec
+Expm1Benchmark.blendedMax:gc.alloc.rate.norm common  avgt    3      0.161 +/-      0.333    B/op
+Expm1Benchmark.blendedMax:gc.count           common  avgt    3        ~ 0               counts
+Expm1Benchmark.blendedMax                     mixed  avgt    3  25810.639 +/-  97954.445   ns/op
+Expm1Benchmark.blendedMax:gc.alloc.rate       mixed  avgt    3      0.007 +/-      0.001  MB/sec
+Expm1Benchmark.blendedMax:gc.alloc.rate.norm  mixed  avgt    3      0.179 +/-      0.686    B/op
+Expm1Benchmark.blendedMax:gc.count            mixed  avgt    3        ~ 0               counts
+Expm1Benchmark.finishMax                     common  avgt    3  20303.616 +/- 133715.675   ns/op
+Expm1Benchmark.finishMax:gc.alloc.rate       common  avgt    3      0.007 +/-      0.001  MB/sec
+Expm1Benchmark.finishMax:gc.alloc.rate.norm  common  avgt    3      0.140 +/-      0.921    B/op
+Expm1Benchmark.finishMax:gc.count            common  avgt    3        ~ 0               counts
+Expm1Benchmark.finishMax                      mixed  avgt    3  38200.332 +/- 133210.506   ns/op
+Expm1Benchmark.finishMax:gc.alloc.rate        mixed  avgt    3    788.932 +/-   2807.973  MB/sec
+Expm1Benchmark.finishMax:gc.alloc.rate.norm   mixed  avgt    3  30912.264 +/-      0.934    B/op
+Expm1Benchmark.finishMax:gc.count             mixed  avgt    3      2.000               counts
+Expm1Benchmark.finishMax:gc.time              mixed  avgt    3     47.000                   ms
+Expm1Benchmark.guardedMax                    common  avgt    3   9614.033 +/-  38312.794   ns/op
+Expm1Benchmark.guardedMax:gc.alloc.rate      common  avgt    3      0.007 +/-      0.001  MB/sec
+Expm1Benchmark.guardedMax:gc.alloc.rate.norm common  avgt    3      0.066 +/-      0.256    B/op
+Expm1Benchmark.guardedMax:gc.count           common  avgt    3        ~ 0               counts
+Expm1Benchmark.guardedMax                     mixed  avgt    3  10024.568 +/-  48153.139   ns/op
+Expm1Benchmark.guardedMax:gc.alloc.rate       mixed  avgt    3      0.007 +/-      0.001  MB/sec
+Expm1Benchmark.guardedMax:gc.alloc.rate.norm  mixed  avgt    3      0.069 +/-      0.329    B/op
+Expm1Benchmark.guardedMax:gc.count            mixed  avgt    3        ~ 0               counts
+Log10Benchmark.blendedMax                    common  avgt    3  14775.379 +/- 102555.519   ns/op
+Log10Benchmark.blendedMax:gc.alloc.rate      common  avgt    3      0.007 +/-      0.001  MB/sec
+Log10Benchmark.blendedMax:gc.alloc.rate.norm common  avgt    3      0.101 +/-      0.696    B/op
+Log10Benchmark.blendedMax:gc.count           common  avgt    3        ~ 0               counts
+Log10Benchmark.blendedMax                     mixed  avgt    3  10847.989 +/-   7864.623   ns/op
+Log10Benchmark.blendedMax:gc.alloc.rate       mixed  avgt    3      0.007 +/-      0.001  MB/sec
+Log10Benchmark.blendedMax:gc.alloc.rate.norm  mixed  avgt    3      0.074 +/-      0.048    B/op
+Log10Benchmark.blendedMax:gc.count            mixed  avgt    3        ~ 0               counts
+Log10Benchmark.finishMax                     common  avgt    3  10308.703 +/-  68014.843   ns/op
+Log10Benchmark.finishMax:gc.alloc.rate       common  avgt    3      0.007 +/-      0.001  MB/sec
+Log10Benchmark.finishMax:gc.alloc.rate.norm  common  avgt    3      0.071 +/-      0.469    B/op
+Log10Benchmark.finishMax:gc.count            common  avgt    3        ~ 0               counts
+Log10Benchmark.finishMax                      mixed  avgt    3  27695.547 +/-  24535.207   ns/op
+Log10Benchmark.finishMax:gc.alloc.rate        mixed  avgt    3   1044.744 +/-    937.332  MB/sec
+Log10Benchmark.finishMax:gc.alloc.rate.norm   mixed  avgt    3  30432.192 +/-      0.173    B/op
+Log10Benchmark.finishMax:gc.count             mixed  avgt    3      2.000               counts
+Log10Benchmark.finishMax:gc.time              mixed  avgt    3     39.000                   ms
+Log1pBenchmark.blendedMax                    common  avgt    3   6738.695 +/-  22479.581   ns/op
+Log1pBenchmark.blendedMax:gc.alloc.rate      common  avgt    3      0.007 +/-      0.001  MB/sec
+Log1pBenchmark.blendedMax:gc.alloc.rate.norm common  avgt    3      0.047 +/-      0.155    B/op
+Log1pBenchmark.blendedMax:gc.count           common  avgt    3        ~ 0               counts
+Log1pBenchmark.blendedMax                     mixed  avgt    3  12490.107 +/-  34890.848   ns/op
+Log1pBenchmark.blendedMax:gc.alloc.rate       mixed  avgt    3      0.007 +/-      0.001  MB/sec
+Log1pBenchmark.blendedMax:gc.alloc.rate.norm  mixed  avgt    3      0.086 +/-      0.236    B/op
+Log1pBenchmark.blendedMax:gc.count            mixed  avgt    3        ~ 0               counts
+Log1pBenchmark.finishMax                     common  avgt    3  10922.884 +/-  75026.818   ns/op
+Log1pBenchmark.finishMax:gc.alloc.rate       common  avgt    3      0.007 +/-      0.001  MB/sec
+Log1pBenchmark.finishMax:gc.alloc.rate.norm  common  avgt    3      0.075 +/-      0.518    B/op
+Log1pBenchmark.finishMax:gc.count            common  avgt    3        ~ 0               counts
+Log1pBenchmark.finishMax                      mixed  avgt    3  39851.572 +/- 408817.021   ns/op
+Log1pBenchmark.finishMax:gc.alloc.rate        mixed  avgt    3    999.873 +/-  13338.073  MB/sec
+Log1pBenchmark.finishMax:gc.alloc.rate.norm   mixed  avgt    3  30912.276 +/-      2.815    B/op
+Log1pBenchmark.finishMax:gc.count             mixed  avgt    3      2.000               counts
+Log1pBenchmark.finishMax:gc.time              mixed  avgt    3     52.000                   ms
+Log1pBenchmark.guardedMax                    common  avgt    3  14515.101 +/-  16295.809   ns/op
+Log1pBenchmark.guardedMax:gc.alloc.rate      common  avgt    3      0.006 +/-      0.002  MB/sec
+Log1pBenchmark.guardedMax:gc.alloc.rate.norm common  avgt    3      0.099 +/-      0.126    B/op
+Log1pBenchmark.guardedMax:gc.count           common  avgt    3        ~ 0               counts
+Log1pBenchmark.guardedMax                     mixed  avgt    3   9968.143 +/-  61007.190   ns/op
+Log1pBenchmark.guardedMax:gc.alloc.rate       mixed  avgt    3      0.007 +/-      0.001  MB/sec
+Log1pBenchmark.guardedMax:gc.alloc.rate.norm  mixed  avgt    3      0.069 +/-      0.416    B/op
+Log1pBenchmark.guardedMax:gc.count            mixed  avgt    3        ~ 0               counts
+LogBenchmark.finishMax                       common  avgt    3  14950.933 +/-  59297.572   ns/op
+LogBenchmark.finishMax:gc.alloc.rate         common  avgt    3      0.006 +/-      0.001  MB/sec
+LogBenchmark.finishMax:gc.alloc.rate.norm    common  avgt    3      0.101 +/-      0.415    B/op
+LogBenchmark.finishMax:gc.count              common  avgt    3        ~ 0               counts
+LogBenchmark.finishMax                        mixed  avgt    3  49013.609 +/- 285777.695   ns/op
+LogBenchmark.finishMax:gc.alloc.rate          mixed  avgt    3    641.936 +/-   4641.959  MB/sec
+LogBenchmark.finishMax:gc.alloc.rate.norm     mixed  avgt    3  30432.335 +/-      2.007    B/op
+LogBenchmark.finishMax:gc.count               mixed  avgt    3      1.000               counts
+LogBenchmark.finishMax:gc.time                mixed  avgt    3      9.000                   ms
+
+# JMH's summary table: main's ports, as AVX2. Its ns/op are not timings (see the top).
+
+Benchmark                                  (inputs)  Mode  Cnt      Score        Error   Units
+ExpBenchmark.blendedMax                      common  avgt    3  13180.867 +/-  53182.628   ns/op
+ExpBenchmark.blendedMax:gc.alloc.rate        common  avgt    3      0.007 +/-      0.001  MB/sec
+ExpBenchmark.blendedMax:gc.alloc.rate.norm   common  avgt    3      0.091 +/-      0.378    B/op
+ExpBenchmark.blendedMax:gc.count             common  avgt    3        ~ 0               counts
+ExpBenchmark.blendedMax                       mixed  avgt    3  41762.960 +/- 137154.395   ns/op
+ExpBenchmark.blendedMax:gc.alloc.rate         mixed  avgt    3      0.006 +/-      0.001  MB/sec
+ExpBenchmark.blendedMax:gc.alloc.rate.norm    mixed  avgt    3      0.286 +/-      0.930    B/op
+ExpBenchmark.blendedMax:gc.count              mixed  avgt    3        ~ 0               counts
+ExpBenchmark.finishMax                       common  avgt    3  13420.319 +/-  26005.063   ns/op
+ExpBenchmark.finishMax:gc.alloc.rate         common  avgt    3      0.006 +/-      0.001  MB/sec
+ExpBenchmark.finishMax:gc.alloc.rate.norm    common  avgt    3      0.093 +/-      0.172    B/op
+ExpBenchmark.finishMax:gc.count              common  avgt    3        ~ 0               counts
+ExpBenchmark.finishMax                        mixed  avgt    3  58410.578 +/- 198898.290   ns/op
+ExpBenchmark.finishMax:gc.alloc.rate          mixed  avgt    3    616.005 +/-   2027.615  MB/sec
+ExpBenchmark.finishMax:gc.alloc.rate.norm     mixed  avgt    3  36992.402 +/-      1.305    B/op
+ExpBenchmark.finishMax:gc.count               mixed  avgt    3      2.000               counts
+ExpBenchmark.finishMax:gc.time                mixed  avgt    3     33.000                   ms
+Expm1Benchmark.blendedMax                    common  avgt    3  44717.171 +/-  41913.843   ns/op
+Expm1Benchmark.blendedMax:gc.alloc.rate      common  avgt    3      0.007 +/-      0.001  MB/sec
+Expm1Benchmark.blendedMax:gc.alloc.rate.norm common  avgt    3      0.309 +/-      0.284    B/op
+Expm1Benchmark.blendedMax:gc.count           common  avgt    3        ~ 0               counts
+Expm1Benchmark.blendedMax                     mixed  avgt    3  37613.459 +/- 281950.878   ns/op
+Expm1Benchmark.blendedMax:gc.alloc.rate       mixed  avgt    3      0.007 +/-      0.001  MB/sec
+Expm1Benchmark.blendedMax:gc.alloc.rate.norm  mixed  avgt    3      0.258 +/-      1.943    B/op
+Expm1Benchmark.blendedMax:gc.count            mixed  avgt    3        ~ 0               counts
+Expm1Benchmark.finishMax                     common  avgt    3  29322.709 +/- 135129.717   ns/op
+Expm1Benchmark.finishMax:gc.alloc.rate       common  avgt    3      0.007 +/-      0.001  MB/sec
+Expm1Benchmark.finishMax:gc.alloc.rate.norm  common  avgt    3      0.202 +/-      0.941    B/op
+Expm1Benchmark.finishMax:gc.count            common  avgt    3        ~ 0               counts
+Expm1Benchmark.finishMax                      mixed  avgt    3  82650.203 +/- 679358.204   ns/op
+Expm1Benchmark.finishMax:gc.alloc.rate        mixed  avgt    3    494.155 +/-   4371.933  MB/sec
+Expm1Benchmark.finishMax:gc.alloc.rate.norm   mixed  avgt    3  36992.575 +/-      4.785    B/op
+Expm1Benchmark.finishMax:gc.count             mixed  avgt    3      1.000               counts
+Expm1Benchmark.finishMax:gc.time              mixed  avgt    3     14.000                   ms
+Expm1Benchmark.guardedMax                    common  avgt    3  25845.186 +/- 108758.315   ns/op
+Expm1Benchmark.guardedMax:gc.alloc.rate      common  avgt    3      0.007 +/-      0.001  MB/sec
+Expm1Benchmark.guardedMax:gc.alloc.rate.norm common  avgt    3      0.178 +/-      0.723    B/op
+Expm1Benchmark.guardedMax:gc.count           common  avgt    3        ~ 0               counts
+Expm1Benchmark.guardedMax                     mixed  avgt    3  41719.842 +/- 431527.252   ns/op
+Expm1Benchmark.guardedMax:gc.alloc.rate       mixed  avgt    3      0.007 +/-      0.001  MB/sec
+Expm1Benchmark.guardedMax:gc.alloc.rate.norm  mixed  avgt    3      0.286 +/-      2.982    B/op
+Expm1Benchmark.guardedMax:gc.count            mixed  avgt    3        ~ 0               counts
+Log10Benchmark.blendedMax                    common  avgt    3  27808.072 +/-  62847.428   ns/op
+Log10Benchmark.blendedMax:gc.alloc.rate      common  avgt    3      0.007 +/-      0.001  MB/sec
+Log10Benchmark.blendedMax:gc.alloc.rate.norm common  avgt    3      0.192 +/-      0.459    B/op
+Log10Benchmark.blendedMax:gc.count           common  avgt    3        ~ 0               counts
+Log10Benchmark.blendedMax                     mixed  avgt    3  25382.606 +/- 187719.454   ns/op
+Log10Benchmark.blendedMax:gc.alloc.rate       mixed  avgt    3      0.007 +/-      0.001  MB/sec
+Log10Benchmark.blendedMax:gc.alloc.rate.norm  mixed  avgt    3      0.174 +/-      1.305    B/op
+Log10Benchmark.blendedMax:gc.count            mixed  avgt    3        ~ 0               counts
+Log10Benchmark.finishMax                     common  avgt    3  32565.686 +/- 182968.255   ns/op
+Log10Benchmark.finishMax:gc.alloc.rate       common  avgt    3      0.006 +/-      0.001  MB/sec
+Log10Benchmark.finishMax:gc.alloc.rate.norm  common  avgt    3      0.225 +/-      1.283    B/op
+Log10Benchmark.finishMax:gc.count            common  avgt    3        ~ 0               counts
+Log10Benchmark.finishMax                      mixed  avgt    3  68461.414 +/- 244694.025   ns/op
+Log10Benchmark.finishMax:gc.alloc.rate        mixed  avgt    3    519.019 +/-   1846.915  MB/sec
+Log10Benchmark.finishMax:gc.alloc.rate.norm   mixed  avgt    3  36672.473 +/-      1.633    B/op
+Log10Benchmark.finishMax:gc.count             mixed  avgt    3      2.000               counts
+Log10Benchmark.finishMax:gc.time              mixed  avgt    3     63.000                   ms
+Log1pBenchmark.blendedMax                    common  avgt    3  17099.641 +/-  71795.692   ns/op
+Log1pBenchmark.blendedMax:gc.alloc.rate      common  avgt    3      0.007 +/-      0.001  MB/sec
+Log1pBenchmark.blendedMax:gc.alloc.rate.norm common  avgt    3      0.118 +/-      0.489    B/op
+Log1pBenchmark.blendedMax:gc.count           common  avgt    3        ~ 0               counts
+Log1pBenchmark.blendedMax                     mixed  avgt    3  50178.033 +/- 128389.314   ns/op
+Log1pBenchmark.blendedMax:gc.alloc.rate       mixed  avgt    3      0.006 +/-      0.002  MB/sec
+Log1pBenchmark.blendedMax:gc.alloc.rate.norm  mixed  avgt    3      0.341 +/-      0.756    B/op
+Log1pBenchmark.blendedMax:gc.count            mixed  avgt    3        ~ 0               counts
+Log1pBenchmark.finishMax                     common  avgt    3  28790.553 +/- 152557.834   ns/op
+Log1pBenchmark.finishMax:gc.alloc.rate       common  avgt    3      0.007 +/-      0.001  MB/sec
+Log1pBenchmark.finishMax:gc.alloc.rate.norm  common  avgt    3      0.199 +/-      1.039    B/op
+Log1pBenchmark.finishMax:gc.count            common  avgt    3        ~ 0               counts
+Log1pBenchmark.finishMax                      mixed  avgt    3  76113.721 +/- 752990.738   ns/op
+Log1pBenchmark.finishMax:gc.alloc.rate        mixed  avgt    3    632.056 +/-   8772.066  MB/sec
+Log1pBenchmark.finishMax:gc.alloc.rate.norm   mixed  avgt    3  36992.526 +/-      5.159    B/op
+Log1pBenchmark.finishMax:gc.count             mixed  avgt    3      3.000               counts
+Log1pBenchmark.finishMax:gc.time              mixed  avgt    3     59.000                   ms
+Log1pBenchmark.guardedMax                    common  avgt    3  33133.382 +/- 194220.636   ns/op
+Log1pBenchmark.guardedMax:gc.alloc.rate      common  avgt    3      0.007 +/-      0.001  MB/sec
+Log1pBenchmark.guardedMax:gc.alloc.rate.norm common  avgt    3      0.229 +/-      1.324    B/op
+Log1pBenchmark.guardedMax:gc.count           common  avgt    3        ~ 0               counts
+Log1pBenchmark.guardedMax                     mixed  avgt    3  54173.236 +/- 136220.141   ns/op
+Log1pBenchmark.guardedMax:gc.alloc.rate       mixed  avgt    3      0.006 +/-      0.001  MB/sec
+Log1pBenchmark.guardedMax:gc.alloc.rate.norm  mixed  avgt    3      0.373 +/-      0.972    B/op
+Log1pBenchmark.guardedMax:gc.count            mixed  avgt    3        ~ 0               counts
+LogBenchmark.finishMax                       common  avgt    3  10486.622 +/-  37165.056   ns/op
+LogBenchmark.finishMax:gc.alloc.rate         common  avgt    3      0.007 +/-      0.001  MB/sec
+LogBenchmark.finishMax:gc.alloc.rate.norm    common  avgt    3      0.072 +/-      0.254    B/op
+LogBenchmark.finishMax:gc.count              common  avgt    3        ~ 0               counts
+LogBenchmark.finishMax                        mixed  avgt    3  60516.721 +/- 656865.654   ns/op
+LogBenchmark.finishMax:gc.alloc.rate          mixed  avgt    3    700.295 +/-   5656.287  MB/sec
+LogBenchmark.finishMax:gc.alloc.rate.norm     mixed  avgt    3  36672.417 +/-      4.548    B/op
+LogBenchmark.finishMax:gc.count               mixed  avgt    3      2.000               counts
+LogBenchmark.finishMax:gc.time                mixed  avgt    3     25.000                   ms
+
+# JMH's summary table: the candidate, default flags. Its ns/op are not timings (see the top).
+
+Benchmark                                  (inputs)  Mode  Cnt      Score        Error   Units
+ExpBenchmark.blendedMax                      common  avgt    3   8969.599 +/-  37456.692   ns/op
+ExpBenchmark.blendedMax:gc.alloc.rate        common  avgt    3      0.007 +/-      0.002  MB/sec
+ExpBenchmark.blendedMax:gc.alloc.rate.norm   common  avgt    3      0.062 +/-      0.272    B/op
+ExpBenchmark.blendedMax:gc.count             common  avgt    3        ~ 0               counts
+ExpBenchmark.blendedMax                       mixed  avgt    3  15730.424 +/-  30475.817   ns/op
+ExpBenchmark.blendedMax:gc.alloc.rate         mixed  avgt    3      0.007 +/-      0.001  MB/sec
+ExpBenchmark.blendedMax:gc.alloc.rate.norm    mixed  avgt    3      0.109 +/-      0.195    B/op
+ExpBenchmark.blendedMax:gc.count              mixed  avgt    3        ~ 0               counts
+ExpBenchmark.finishMax                       common  avgt    3   4588.025 +/-  37869.546   ns/op
+ExpBenchmark.finishMax:gc.alloc.rate         common  avgt    3      0.007 +/-      0.001  MB/sec
+ExpBenchmark.finishMax:gc.alloc.rate.norm    common  avgt    3      0.032 +/-      0.261    B/op
+ExpBenchmark.finishMax:gc.count              common  avgt    3        ~ 0               counts
+ExpBenchmark.finishMax                        mixed  avgt    3   7246.695 +/-  26379.425   ns/op
+ExpBenchmark.finishMax:gc.alloc.rate          mixed  avgt    3      0.007 +/-      0.001  MB/sec
+ExpBenchmark.finishMax:gc.alloc.rate.norm     mixed  avgt    3      0.050 +/-      0.178    B/op
+ExpBenchmark.finishMax:gc.count               mixed  avgt    3        ~ 0               counts
+Expm1Benchmark.blendedMax                    common  avgt    3  12320.873 +/-  36171.119   ns/op
+Expm1Benchmark.blendedMax:gc.alloc.rate      common  avgt    3      0.007 +/-      0.001  MB/sec
+Expm1Benchmark.blendedMax:gc.alloc.rate.norm common  avgt    3      0.085 +/-      0.247    B/op
+Expm1Benchmark.blendedMax:gc.count           common  avgt    3        ~ 0               counts
+Expm1Benchmark.blendedMax                     mixed  avgt    3  14554.425 +/-  54228.674   ns/op
+Expm1Benchmark.blendedMax:gc.alloc.rate       mixed  avgt    3      0.007 +/-      0.001  MB/sec
+Expm1Benchmark.blendedMax:gc.alloc.rate.norm  mixed  avgt    3      0.101 +/-      0.370    B/op
+Expm1Benchmark.blendedMax:gc.count            mixed  avgt    3        ~ 0               counts
+Expm1Benchmark.finishMax                     common  avgt    3  16335.415 +/- 116493.396   ns/op
+Expm1Benchmark.finishMax:gc.alloc.rate       common  avgt    3      0.007 +/-      0.001  MB/sec
+Expm1Benchmark.finishMax:gc.alloc.rate.norm  common  avgt    3      0.113 +/-      0.797    B/op
+Expm1Benchmark.finishMax:gc.count            common  avgt    3        ~ 0               counts
+Expm1Benchmark.finishMax                      mixed  avgt    3  22150.180 +/-  97315.328   ns/op
+Expm1Benchmark.finishMax:gc.alloc.rate        mixed  avgt    3      0.007 +/-      0.001  MB/sec
+Expm1Benchmark.finishMax:gc.alloc.rate.norm   mixed  avgt    3      0.153 +/-      0.661    B/op
+Expm1Benchmark.finishMax:gc.count             mixed  avgt    3        ~ 0               counts
+Expm1Benchmark.guardedMax                    common  avgt    3  14047.523 +/-  62000.968   ns/op
+Expm1Benchmark.guardedMax:gc.alloc.rate      common  avgt    3      0.007 +/-      0.001  MB/sec
+Expm1Benchmark.guardedMax:gc.alloc.rate.norm common  avgt    3      0.097 +/-      0.420    B/op
+Expm1Benchmark.guardedMax:gc.count           common  avgt    3        ~ 0               counts
+Expm1Benchmark.guardedMax                     mixed  avgt    3  13365.001 +/-  99121.035   ns/op
+Expm1Benchmark.guardedMax:gc.alloc.rate       mixed  avgt    3      0.007 +/-      0.001  MB/sec
+Expm1Benchmark.guardedMax:gc.alloc.rate.norm  mixed  avgt    3      0.092 +/-      0.659    B/op
+Expm1Benchmark.guardedMax:gc.count            mixed  avgt    3        ~ 0               counts
+Log10Benchmark.blendedMax                    common  avgt    3   7293.849 +/-  23352.259   ns/op
+Log10Benchmark.blendedMax:gc.alloc.rate      common  avgt    3      0.007 +/-      0.001  MB/sec
+Log10Benchmark.blendedMax:gc.alloc.rate.norm common  avgt    3      0.050 +/-      0.161    B/op
+Log10Benchmark.blendedMax:gc.count           common  avgt    3        ~ 0               counts
+Log10Benchmark.blendedMax                     mixed  avgt    3  15505.830 +/-  86634.027   ns/op
+Log10Benchmark.blendedMax:gc.alloc.rate       mixed  avgt    3      0.007 +/-      0.001  MB/sec
+Log10Benchmark.blendedMax:gc.alloc.rate.norm  mixed  avgt    3      0.107 +/-      0.598    B/op
+Log10Benchmark.blendedMax:gc.count            mixed  avgt    3        ~ 0               counts
+Log10Benchmark.finishMax                     common  avgt    3  14972.450 +/- 165973.387   ns/op
+Log10Benchmark.finishMax:gc.alloc.rate       common  avgt    3      0.007 +/-      0.001  MB/sec
+Log10Benchmark.finishMax:gc.alloc.rate.norm  common  avgt    3      0.103 +/-      1.137    B/op
+Log10Benchmark.finishMax:gc.count            common  avgt    3        ~ 0               counts
+Log10Benchmark.finishMax                      mixed  avgt    3  20764.800 +/-  59306.451   ns/op
+Log10Benchmark.finishMax:gc.alloc.rate        mixed  avgt    3      0.007 +/-      0.001  MB/sec
+Log10Benchmark.finishMax:gc.alloc.rate.norm   mixed  avgt    3      0.143 +/-      0.402    B/op
+Log10Benchmark.finishMax:gc.count             mixed  avgt    3        ~ 0               counts
+Log1pBenchmark.blendedMax                    common  avgt    3  13418.106 +/-  72970.524   ns/op
+Log1pBenchmark.blendedMax:gc.alloc.rate      common  avgt    3      0.007 +/-      0.001  MB/sec
+Log1pBenchmark.blendedMax:gc.alloc.rate.norm common  avgt    3      0.093 +/-      0.497    B/op
+Log1pBenchmark.blendedMax:gc.count           common  avgt    3        ~ 0               counts
+Log1pBenchmark.blendedMax                     mixed  avgt    3   8373.631 +/-  59703.652   ns/op
+Log1pBenchmark.blendedMax:gc.alloc.rate       mixed  avgt    3      0.007 +/-      0.001  MB/sec
+Log1pBenchmark.blendedMax:gc.alloc.rate.norm  mixed  avgt    3      0.058 +/-      0.415    B/op
+Log1pBenchmark.blendedMax:gc.count            mixed  avgt    3        ~ 0               counts
+Log1pBenchmark.finishMax                     common  avgt    3  10082.583 +/-  38333.584   ns/op
+Log1pBenchmark.finishMax:gc.alloc.rate       common  avgt    3      0.007 +/-      0.001  MB/sec
+Log1pBenchmark.finishMax:gc.alloc.rate.norm  common  avgt    3      0.070 +/-      0.273    B/op
+Log1pBenchmark.finishMax:gc.count            common  avgt    3        ~ 0               counts
+Log1pBenchmark.finishMax                      mixed  avgt    3  20894.069 +/-  32476.399   ns/op
+Log1pBenchmark.finishMax:gc.alloc.rate        mixed  avgt    3      0.007 +/-      0.001  MB/sec
+Log1pBenchmark.finishMax:gc.alloc.rate.norm   mixed  avgt    3      0.143 +/-      0.230    B/op
+Log1pBenchmark.finishMax:gc.count             mixed  avgt    3        ~ 0               counts
+Log1pBenchmark.guardedMax                    common  avgt    3   7113.016 +/-  43029.796   ns/op
+Log1pBenchmark.guardedMax:gc.alloc.rate      common  avgt    3      0.007 +/-      0.001  MB/sec
+Log1pBenchmark.guardedMax:gc.alloc.rate.norm common  avgt    3      0.049 +/-      0.295    B/op
+Log1pBenchmark.guardedMax:gc.count           common  avgt    3        ~ 0               counts
+Log1pBenchmark.guardedMax                     mixed  avgt    3   6061.711 +/-  49694.321   ns/op
+Log1pBenchmark.guardedMax:gc.alloc.rate       mixed  avgt    3      0.007 +/-      0.001  MB/sec
+Log1pBenchmark.guardedMax:gc.alloc.rate.norm  mixed  avgt    3      0.042 +/-      0.343    B/op
+Log1pBenchmark.guardedMax:gc.count            mixed  avgt    3        ~ 0               counts
+LogBenchmark.finishMax                       common  avgt    3   5904.848 +/-   8122.692   ns/op
+LogBenchmark.finishMax:gc.alloc.rate         common  avgt    3      0.007 +/-      0.001  MB/sec
+LogBenchmark.finishMax:gc.alloc.rate.norm    common  avgt    3      0.041 +/-      0.062    B/op
+LogBenchmark.finishMax:gc.count              common  avgt    3        ~ 0               counts
+LogBenchmark.finishMax                        mixed  avgt    3  11934.492 +/-  74164.878   ns/op
+LogBenchmark.finishMax:gc.alloc.rate          mixed  avgt    3      0.007 +/-      0.001  MB/sec
+LogBenchmark.finishMax:gc.alloc.rate.norm     mixed  avgt    3      0.083 +/-      0.513    B/op
+LogBenchmark.finishMax:gc.count               mixed  avgt    3        ~ 0               counts
+
+# JMH's summary table: the candidate, as AVX2. Its ns/op are not timings (see the top).
+
+Benchmark                                  (inputs)  Mode  Cnt      Score        Error   Units
+ExpBenchmark.blendedMax                      common  avgt    3  18935.264 +/- 222439.990   ns/op
+ExpBenchmark.blendedMax:gc.alloc.rate        common  avgt    3      0.007 +/-      0.001  MB/sec
+ExpBenchmark.blendedMax:gc.alloc.rate.norm   common  avgt    3      0.130 +/-      1.504    B/op
+ExpBenchmark.blendedMax:gc.count             common  avgt    3        ~ 0               counts
+ExpBenchmark.blendedMax                       mixed  avgt    3  16904.429 +/-  60959.192   ns/op
+ExpBenchmark.blendedMax:gc.alloc.rate         mixed  avgt    3      0.007 +/-      0.001  MB/sec
+ExpBenchmark.blendedMax:gc.alloc.rate.norm    mixed  avgt    3      0.117 +/-      0.433    B/op
+ExpBenchmark.blendedMax:gc.count              mixed  avgt    3        ~ 0               counts
+ExpBenchmark.finishMax                       common  avgt    3  10592.265 +/- 122359.696   ns/op
+ExpBenchmark.finishMax:gc.alloc.rate         common  avgt    3      0.007 +/-      0.001  MB/sec
+ExpBenchmark.finishMax:gc.alloc.rate.norm    common  avgt    3      0.073 +/-      0.843    B/op
+ExpBenchmark.finishMax:gc.count              common  avgt    3        ~ 0               counts
+ExpBenchmark.finishMax                        mixed  avgt    3  18605.873 +/- 103624.018   ns/op
+ExpBenchmark.finishMax:gc.alloc.rate          mixed  avgt    3      0.007 +/-      0.001  MB/sec
+ExpBenchmark.finishMax:gc.alloc.rate.norm     mixed  avgt    3      0.128 +/-      0.721    B/op
+ExpBenchmark.finishMax:gc.count               mixed  avgt    3        ~ 0               counts
+Expm1Benchmark.blendedMax                    common  avgt    3  34068.643 +/-  95949.530   ns/op
+Expm1Benchmark.blendedMax:gc.alloc.rate      common  avgt    3      0.007 +/-      0.001  MB/sec
+Expm1Benchmark.blendedMax:gc.alloc.rate.norm common  avgt    3      0.236 +/-      0.667    B/op
+Expm1Benchmark.blendedMax:gc.count           common  avgt    3        ~ 0               counts
+Expm1Benchmark.blendedMax                     mixed  avgt    3  47582.441 +/- 343284.781   ns/op
+Expm1Benchmark.blendedMax:gc.alloc.rate       mixed  avgt    3      0.007 +/-      0.001  MB/sec
+Expm1Benchmark.blendedMax:gc.alloc.rate.norm  mixed  avgt    3      0.329 +/-      2.408    B/op
+Expm1Benchmark.blendedMax:gc.count            mixed  avgt    3        ~ 0               counts
+Expm1Benchmark.finishMax                     common  avgt    3  32581.702 +/-  80703.657   ns/op
+Expm1Benchmark.finishMax:gc.alloc.rate       common  avgt    3      0.006 +/-      0.001  MB/sec
+Expm1Benchmark.finishMax:gc.alloc.rate.norm  common  avgt    3      0.222 +/-      0.543    B/op
+Expm1Benchmark.finishMax:gc.count            common  avgt    3        ~ 0               counts
+Expm1Benchmark.finishMax                      mixed  avgt    3  34616.843 +/-  72588.361   ns/op
+Expm1Benchmark.finishMax:gc.alloc.rate        mixed  avgt    3      0.007 +/-      0.002  MB/sec
+Expm1Benchmark.finishMax:gc.alloc.rate.norm   mixed  avgt    3      0.238 +/-      0.525    B/op
+Expm1Benchmark.finishMax:gc.count             mixed  avgt    3        ~ 0               counts
+Expm1Benchmark.guardedMax                    common  avgt    3  24487.825 +/- 104739.894   ns/op
+Expm1Benchmark.guardedMax:gc.alloc.rate      common  avgt    3      0.007 +/-      0.001  MB/sec
+Expm1Benchmark.guardedMax:gc.alloc.rate.norm common  avgt    3      0.169 +/-      0.722    B/op
+Expm1Benchmark.guardedMax:gc.count           common  avgt    3        ~ 0               counts
+Expm1Benchmark.guardedMax                     mixed  avgt    3  19125.344 +/- 127408.608   ns/op
+Expm1Benchmark.guardedMax:gc.alloc.rate       mixed  avgt    3      0.007 +/-      0.001  MB/sec
+Expm1Benchmark.guardedMax:gc.alloc.rate.norm  mixed  avgt    3      0.132 +/-      0.883    B/op
+Expm1Benchmark.guardedMax:gc.count            mixed  avgt    3        ~ 0               counts
+Log10Benchmark.blendedMax                    common  avgt    3  21656.310 +/-  34094.759   ns/op
+Log10Benchmark.blendedMax:gc.alloc.rate      common  avgt    3      0.007 +/-      0.001  MB/sec
+Log10Benchmark.blendedMax:gc.alloc.rate.norm common  avgt    3      0.150 +/-      0.230    B/op
+Log10Benchmark.blendedMax:gc.count           common  avgt    3        ~ 0               counts
+Log10Benchmark.blendedMax                     mixed  avgt    3  20951.494 +/-  27865.039   ns/op
+Log10Benchmark.blendedMax:gc.alloc.rate       mixed  avgt    3      0.007 +/-      0.001  MB/sec
+Log10Benchmark.blendedMax:gc.alloc.rate.norm  mixed  avgt    3      0.144 +/-      0.217    B/op
+Log10Benchmark.blendedMax:gc.count            mixed  avgt    3        ~ 0               counts
+Log10Benchmark.finishMax                     common  avgt    3  18390.283 +/- 149301.034   ns/op
+Log10Benchmark.finishMax:gc.alloc.rate       common  avgt    3      0.007 +/-      0.001  MB/sec
+Log10Benchmark.finishMax:gc.alloc.rate.norm  common  avgt    3      0.127 +/-      1.033    B/op
+Log10Benchmark.finishMax:gc.count            common  avgt    3        ~ 0               counts
+Log10Benchmark.finishMax                      mixed  avgt    3  15625.445 +/-  68744.087   ns/op
+Log10Benchmark.finishMax:gc.alloc.rate        mixed  avgt    3      0.007 +/-      0.001  MB/sec
+Log10Benchmark.finishMax:gc.alloc.rate.norm   mixed  avgt    3      0.109 +/-      0.483    B/op
+Log10Benchmark.finishMax:gc.count             mixed  avgt    3        ~ 0               counts
+Log1pBenchmark.blendedMax                    common  avgt    3  18032.296 +/-  75855.437   ns/op
+Log1pBenchmark.blendedMax:gc.alloc.rate      common  avgt    3      0.007 +/-      0.001  MB/sec
+Log1pBenchmark.blendedMax:gc.alloc.rate.norm common  avgt    3      0.126 +/-      0.531    B/op
+Log1pBenchmark.blendedMax:gc.count           common  avgt    3        ~ 0               counts
+Log1pBenchmark.blendedMax                     mixed  avgt    3  18829.434 +/- 101346.383   ns/op
+Log1pBenchmark.blendedMax:gc.alloc.rate       mixed  avgt    3      0.007 +/-      0.001  MB/sec
+Log1pBenchmark.blendedMax:gc.alloc.rate.norm  mixed  avgt    3      0.130 +/-      0.707    B/op
+Log1pBenchmark.blendedMax:gc.count            mixed  avgt    3        ~ 0               counts
+Log1pBenchmark.finishMax                     common  avgt    3  14411.812 +/-  66212.069   ns/op
+Log1pBenchmark.finishMax:gc.alloc.rate       common  avgt    3      0.007 +/-      0.001  MB/sec
+Log1pBenchmark.finishMax:gc.alloc.rate.norm  common  avgt    3      0.100 +/-      0.463    B/op
+Log1pBenchmark.finishMax:gc.count            common  avgt    3        ~ 0               counts
+Log1pBenchmark.finishMax                      mixed  avgt    3  12476.834 +/-  33015.094   ns/op
+Log1pBenchmark.finishMax:gc.alloc.rate        mixed  avgt    3      0.007 +/-      0.001  MB/sec
+Log1pBenchmark.finishMax:gc.alloc.rate.norm   mixed  avgt    3      0.086 +/-      0.216    B/op
+Log1pBenchmark.finishMax:gc.count             mixed  avgt    3        ~ 0               counts
+Log1pBenchmark.guardedMax                    common  avgt    3   9709.249 +/-  15069.073   ns/op
+Log1pBenchmark.guardedMax:gc.alloc.rate      common  avgt    3      0.007 +/-      0.001  MB/sec
+Log1pBenchmark.guardedMax:gc.alloc.rate.norm common  avgt    3      0.067 +/-      0.100    B/op
+Log1pBenchmark.guardedMax:gc.count           common  avgt    3        ~ 0               counts
+Log1pBenchmark.guardedMax                     mixed  avgt    3  12410.923 +/-  59536.221   ns/op
+Log1pBenchmark.guardedMax:gc.alloc.rate       mixed  avgt    3      0.007 +/-      0.001  MB/sec
+Log1pBenchmark.guardedMax:gc.alloc.rate.norm  mixed  avgt    3      0.086 +/-      0.413    B/op
+Log1pBenchmark.guardedMax:gc.count            mixed  avgt    3        ~ 0               counts
+LogBenchmark.finishMax                       common  avgt    3   7382.089 +/-  13040.378   ns/op
+LogBenchmark.finishMax:gc.alloc.rate         common  avgt    3      0.007 +/-      0.001  MB/sec
+LogBenchmark.finishMax:gc.alloc.rate.norm    common  avgt    3      0.051 +/-      0.090    B/op
+LogBenchmark.finishMax:gc.count              common  avgt    3        ~ 0               counts
+LogBenchmark.finishMax                        mixed  avgt    3   9423.918 +/-  22621.064   ns/op
+LogBenchmark.finishMax:gc.alloc.rate          mixed  avgt    3      0.007 +/-      0.001  MB/sec
+LogBenchmark.finishMax:gc.alloc.rate.norm     mixed  avgt    3      0.065 +/-      0.150    B/op
+LogBenchmark.finishMax:gc.count               mixed  avgt    3        ~ 0               counts
