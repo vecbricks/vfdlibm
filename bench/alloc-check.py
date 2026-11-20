@@ -21,11 +21,12 @@ preferred arm covers 512 bits on a host that has it). Mixed inputs are checked b
 the ones that run the rare lanes' paths, which common inputs never reach. The *Max rows, at
 SPECIES_MAX, and the *Boxed* rows are left out by INCLUDE's regex (see the comment there).
 
-With --why it runs nothing new through the check: it reads the last run's result and runs each
-row that failed once more (the first WHY_ROWS of them), under the JVM options the result
-records for that row, with C2 printing what it did not intrinsify and what it refused to inline
-(SKILLS.md, "Ask C2 what it refused"), each distinct line with its count. The rerun differs
-from the failing run in one thing besides the printing: C2 compiles alone, see WHY.
+With --why it runs nothing new through the check: it reads the last run's result and runs the
+rows that failed once more (WHY_ROWS of them at most, one of each benchmark method first),
+under the JVM options the result records for each row, with C2 printing what it did not
+intrinsify and what it refused to inline (SKILLS.md, "Ask C2 what it refused"), each distinct
+line with its count. A rerun measures one iteration, not three, and C2 compiles alone with the
+inlining limit it has in tiered mode (see WHY); nothing else differs from the failing run.
 
 Usage, from the repository root:
     bench/alloc-check.py                                  # the host's own flags
@@ -51,7 +52,9 @@ import sys
 # is smaller by its two doubles only, and one op holds twice as many. An unboxed row reads 0.01
 # to 0.03 B/op on the x86 hosts and 0.04 to 0.10 on GitHub's Arm runner
 # (bench/results/alloc-arm-2026-11-20.txt), JMH's own allocation spread over the ops. 1 B/op
-# sits between the two, some ten times over the highest unboxed reading.
+# sits between the two. The unboxed reading is a rate times the time of an op, so it grows with
+# a slow row: on Arm, 0.103 B/op at 14.7 us per op, and 1 B/op would be reached at about
+# 143 us per op with no vector boxed. A row that slow wants the threshold read again.
 THRESHOLD = 1.0
 
 # Not *Max: at SPECIES_MAX the finish arm boxes on mixed data, so finishMax would fail. Its lane
@@ -305,6 +308,10 @@ def check(path, threshold, expected=None):
 
 
 def main():
+    # A terminated script (timeout, a closed terminal) must not leave JMH running: turn the
+    # signals into an exit, which mvn_jmh answers by killing Maven's process group.
+    for name in ("SIGTERM", "SIGHUP"):
+        signal.signal(getattr(signal, name), lambda number, frame: sys.exit(128 + number))
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--mvn", default="mvn", help="the Maven to run (default: mvn)")
     parser.add_argument("--jvm-args", default="", help="extra options for the benchmark JVMs")
