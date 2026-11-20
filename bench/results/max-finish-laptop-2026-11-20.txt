@@ -52,16 +52,18 @@
 #   30912 B/op at 512 bits for exp, expm1 and log1p and 30432 for log and log10, and 36992 and
 #   36672 as an AVX2 host. Log's counted loop allocates as the others' loop does, so giving
 #   the other ports Log's loop (the issue's candidate (a)) would change nothing.
-# - No other arm allocates there: the blended rows of all five ports and the guarded rows of
-#   log1p and expm1 read under 0.5 B/op on common and on mixed data, under both flag sets.
+# - No other arm allocates there: the blended rows of exp, expm1, log1p and log10 (log has no
+#   blendedMax row) and the guarded rows of log1p and expm1 read under 0.5 B/op on common and
+#   on mixed data, under both flag sets.
 # - With constant lane indices for the first eight lanes (the issue's candidate (b), the diff
 #   below), every *Max row of every port reads under 0.5 B/op, on mixed data too, under both
 #   flag sets (section 2).
 # - The rows the allocation check gates on, *256 and *Preferred, still end under 1 B/op with
 #   the candidate (section 3). That run had the check's own three-second warmup, and under
-#   this load 38 of its 140 rows allocated in their first measured iteration or their first
-#   two while C2 finished; every row's third iteration reads under 0.4 B/op. A boxed body
-#   does not decay: main's finishMax reads the same bytes in all three iterations. So the
+#   this load 38 of its 140 rows, the *Max rows among them, allocated in their first measured
+#   iteration (31) or their first two (7) while C2 finished; every row's third iteration
+#   reads under 0.4 B/op. A boxed body does not decay: main's finishMax reads the same bytes
+#   in all three iterations. So the
 #   candidate is not shown here to pass the check as the check is run, only not to box; a
 #   run on a quiet machine is owed before a port's finish is changed.
 # - The candidate cannot change a result: it visits the same lanes and makes the same
