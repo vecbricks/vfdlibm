@@ -24,6 +24,9 @@
 # another CPU is not comparable with the results before it. Changing the hosts is a decision
 # for the owner, and it is a new row, not a looser string.
 
+# Names are compared ignoring case, by ASCII's rules whatever the caller's locale is.
+export LC_ALL=C
+
 # One host per line: key | where the string must sit | the string | flags the CPU must have.
 #
 # Each string is /proc/cpuinfo's model name as runs of that host printed it (SKILLS.md names the
