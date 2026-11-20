@@ -88,6 +88,27 @@
   </dependencies>
 
   <build>
+    <resources>
+      <!-- The licence and the notice travel with the classes, in the jar's META-INF/ (and in the
+           sources jar, which packs the same resources; the release profile puts them in the
+           Javadoc jar). NOTICE carries Sun's fdlibm notice, which
+           the ported sources keep in their headers and compiled classes do not.
+           dev/jar-check.sh requires both. Naming any resource replaces Maven's default, so
+           src/main/resources is named too: there is none today, and one added later is packed
+           (and then has to be allowed by dev/jar-check.sh, which fails on a file it does not
+           know). -->
+      <resource>
+        <directory>src/main/resources</directory>
+      </resource>
+      <resource>
+        <directory>${project.basedir}</directory>
+        <targetPath>META-INF</targetPath>
+        <includes>
+          <include>LICENSE</include>
+          <include>NOTICE</include>
+        </includes>
+      </resource>
+    </resources>
     <plugins>
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
@@ -383,6 +404,12 @@
         <artifactId>maven-jar-plugin</artifactId>
         <version>3.4.1</version>
         <configuration>
+          <!-- maven-compiler-plugin writes the module options it compiled with to
+               target/classes/META-INF/jpms.args, for its own later runs. It is no part of the
+               library, and dev/jar-check.sh fails a jar that holds it. -->
+          <excludes>
+            <exclude>META-INF/jpms.args</exclude>
+          </excludes>
           <archive>
             <manifestEntries>
               <Automatic-Module-Name>io.github.vecbricks.vfdlibm</Automatic-Module-Name>
@@ -434,6 +461,13 @@
          cut from tags; Varka pins a released version and never a snapshot. -->
     <profile>
       <id>release</id>
+      <properties>
+        <!-- Where maven-javadoc-plugin's jar goal writes the pages it then packs. The plugin
+             is not told this path: it is the default of the version pinned below, repeated
+             here. If a later version writes elsewhere, the Javadoc jar loses its licence files
+             and dev/jar-check.sh, which CI runs on this profile's jars, fails on it. -->
+        <vfdlibm.apidocs>${project.build.directory}/reports/apidocs</vfdlibm.apidocs>
+      </properties>
       <build>
         <plugins>
           <plugin>
@@ -444,6 +478,32 @@
               <execution>
                 <id>attach-sources</id>
                 <goals><goal>jar-no-fork</goal></goals>
+              </execution>
+            </executions>
+          </plugin>
+          <!-- The Javadoc jar packs the directory the pages are written to and no resources, so
+               the licence and the notice are put there before the pages are. -->
+          <plugin>
+            <groupId>org.apache.maven.plugins</groupId>
+            <artifactId>maven-resources-plugin</artifactId>
+            <version>3.3.1</version>
+            <executions>
+              <execution>
+                <id>licence-into-javadoc</id>
+                <phase>prepare-package</phase>
+                <goals><goal>copy-resources</goal></goals>
+                <configuration>
+                  <outputDirectory>${vfdlibm.apidocs}/META-INF</outputDirectory>
+                  <resources>
+                    <resource>
+                      <directory>${project.basedir}</directory>
+                      <includes>
+                        <include>LICENSE</include>
+                        <include>NOTICE</include>
+                      </includes>
+                    </resource>
+                  </resources>
+                </configuration>
               </execution>
             </executions>
           </plugin>
