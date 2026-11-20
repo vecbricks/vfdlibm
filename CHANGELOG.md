@@ -9,7 +9,7 @@ client must do. The contract of every version is the same: each lane of each fun
 
 ## [Unreleased]
 
-## [0.1.0] - unreleased
+## [0.1.0] - 2026-11-20
 
 ### Added
 
