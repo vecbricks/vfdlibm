@@ -77,21 +77,53 @@ WHOLE = 2 ** 32   # the high words of a whole sweep
 TIME = "%Y-%m-%dT%H:%M:%SZ"
 
 
-def gh(args, repo, check=True):
+# What gh said the first time a call that may fail did, for the message that counts them.
+FIRST_FAILURE = []
+
+
+def gh(args, repo, check=True, remember=True):
     """Runs gh on the repository; its output, or None when it fails and check is off."""
     cmd = ["gh"] + args + (["--repo", repo] if repo else [])
     done = subprocess.run(cmd, capture_output=True, text=True, errors="replace")
     if done.returncode != 0:
+        said = "%s failed: %s" % (" ".join(cmd), done.stderr.strip())
         if check:
-            sys.exit("%s failed: %s" % (" ".join(cmd), done.stderr.strip()))
+            sys.exit(said)
+        if remember and not FIRST_FAILURE:
+            FIRST_FAILURE.append(said)
         return None
     return done.stdout
 
 
+def host_of(repo):
+    """gh api's option for the host of a --repo given as HOST/OWNER/REPO, or none."""
+    parts = repo.split("/") if repo else []
+    return ["--hostname", parts[0]] if len(parts) == 3 else []
+
+
+def positive(text):
+    """An argument that must be a whole number above zero."""
+    value = int(text)
+    if value < 1:
+        raise argparse.ArgumentTypeError("%s is not above zero" % text)
+    return value
+
+
+def not_negative(kind):
+    """The type of an argument that must be a number of that kind, zero or above."""
+    def parse(text):
+        value = kind(text)
+        if not value >= 0:
+            raise argparse.ArgumentTypeError("%s is not zero or above" % text)
+        return value
+    return parse
+
+
 def kept(cache, name, ask):
     """The text the cache holds under the name, or what ask() returns, kept for the next time
-    unless it is None. A completed run's jobs and logs do not change, so nothing is asked for
-    twice, and a fetch that stopped goes on where it was."""
+    unless it is None. A completed run's jobs and logs do not change, so no answer gh gave
+    is asked for twice, and a fetch that stopped goes on where it was. What gh refused is
+    not kept, and is asked for again by the next fetch."""
     path = os.path.join(cache, name)
     if os.path.exists(path):
         with open(path, encoding="utf-8", errors="replace") as f:
@@ -121,16 +153,29 @@ def write_whole(path, header, rows):
     os.replace(path + ".part", path)
 
 
-def calls_left():
-    """The REST calls the account has left this hour and the time they are renewed, or None
-    when gh cannot say. Asking does not count against them."""
-    answer = gh(["api", "rate_limit", "--jq", ".resources.core | \"\\(.remaining) \\(.reset)\""],
-                None, check=False)
+def calls_left(repo):
+    """The REST calls the account has left this hour on the repository's host and the time
+    they are renewed. Asking does not count against them. A fetch that cannot learn the
+    number does not go on to spend it."""
+    answer = gh(["api"] + host_of(repo) + [
+        "rate_limit", "--jq", ".resources.core | \"\\(.remaining) \\(.reset)\""],
+        None, check=False, remember=False)
     try:
         left, renewed = answer.split()
         return int(left), int(renewed)
     except (AttributeError, ValueError):
-        return None
+        sys.exit("gh api rate_limit did not say how many REST calls are left; nothing more"
+                 " was asked for and no file was written")
+
+
+def keep_reserve(args, calls, have):
+    """Stops the fetch, to be run again later, when that many more calls would leave the
+    account fewer than --reserve; have says what the cache holds, for the message."""
+    left, renewed = calls_left(args.repo)
+    if left - calls < args.reserve:
+        sys.exit("%d REST calls are left and --reserve keeps %d; %s. Run the same command"
+                 " again after %s UTC; no file was written."
+                 % (left, args.reserve, have, time.strftime("%H:%M", time.gmtime(renewed))))
 
 
 def nights(repo, since, until):
@@ -156,9 +201,11 @@ def jobs_of(run, attempt, repo, cache):
 def log_of(job, repo, cache):
     """The job's log as the API gives it, one line per line of output behind its time, or
     None when the API gives none. It is one call; `gh run view --log` makes more."""
-    path = "repos/%s/actions/jobs/%s/logs" % (repo or "{owner}/{repo}", job)
+    # --repo is [HOST/]OWNER/REPO; the API's path takes the last two, and the host goes apart.
+    parts = repo.split("/") if repo else ["{owner}", "{repo}"]
+    path = "repos/%s/actions/jobs/%s/logs" % ("/".join(parts[-2:]), job)
     return kept(cache, "job-%s.log" % job, lambda: gh(
-        ["api", "--allow-escape-sequences", path], None, check=False))
+        ["api", "--allow-escape-sequences"] + host_of(repo) + [path], None, check=False))
 
 
 def records(job):
@@ -222,9 +269,11 @@ def cost_rows(date, run, info, job, found):
     species' cells for a job that ran none.
 
     A job that ran no step, skipped or cancelled while it waited for a runner, never started:
-    the API gives it a start all the same, the time it was created, so it gets "-" and 0."""
+    the API gives it a start all the same, the time it was created, so it gets "-" and 0. A
+    step with no conclusion, or an empty one, did not run."""
     ran = job.get("conclusion") != "skipped" and any(
-        s.get("conclusion") not in (None, "skipped", "cancelled") for s in job.get("steps") or [])
+        (s.get("conclusion") or "skipped") not in ("skipped", "cancelled")
+        for s in job.get("steps") or [])
     cells = {"date": date, "run": run, "attempt": info.get("attempt"),
              "event": info.get("event"), "commit": (info.get("headSha") or "")[:10],
              "job": job["databaseId"], "name": job["name"],
@@ -257,8 +306,16 @@ def fetch(args):
     """Writes one row per recording job of the nights asked for, as tab-separated values, to
     --out or the standard output, and with --cost a second file of every job's times and
     species runs."""
-    every = [(date, run, job, info)
-             for date, run, info in nights(args.repo, args.since, args.until)
+    keep_reserve(args, 1, "the list of runs is not read yet")
+    listed = nights(args.repo, args.since, args.until)
+    # A run's job list is a call or two when the cache does not hold it; they are counted
+    # against the reserve like the logs.
+    unlisted = sum(1 for _, run, info in listed if not os.path.exists(
+        os.path.join(args.cache, "run-%s-%s.json" % (run, info.get("attempt")))))
+    if unlisted:
+        keep_reserve(args, 2 * unlisted, "%d of %d runs' job lists are in %s"
+                     % (len(listed) - unlisted, len(listed), args.cache))
+    every = [(date, run, job, info) for date, run, info in listed
              for job in jobs_of(run, info.get("attempt"), args.repo, args.cache)]
     todo = [t[:3] for t in every if records(t[2])]
     if not todo:
@@ -274,18 +331,30 @@ def fetch(args):
     # keeps the reserve; what a batch read stays in the cache whether or not the next one runs.
     absent = [t for t in todo if not in_cache(t)]
     for start in range(0, len(absent), args.batch):
-        left = calls_left()
-        if left is not None and left[0] - args.batch < args.reserve:
-            sys.exit("%d REST calls are left and --reserve keeps %d; %d of %d logs are in %s."
-                     " Run the same command again after %s UTC; no file was written."
-                     % (left[0], args.reserve, len(todo) - len(absent) + start, len(todo),
-                        args.cache, time.strftime("%H:%M", time.gmtime(left[1]))))
+        batch = absent[start:start + args.batch]
+        keep_reserve(args, len(batch), "%d of %d logs are in %s"
+                     % (sum(1 for t in todo if in_cache(t)), len(todo), args.cache))
         if start:
             time.sleep(args.pause)
         with concurrent.futures.ThreadPoolExecutor(args.parallel) as pool:
-            list(pool.map(read_one, absent[start:start + args.batch]))
+            list(pool.map(read_one, batch))
+        # A batch that got no log at all is the API refusing, or a gh that cannot ask: the
+        # next batch would fare the same. Logs known to be gone are the one case to go on.
+        if not any(in_cache(t) for t in batch) and not args.without_logs:
+            sys.exit("none of a batch of %d logs could be read, so the fetch stopped and no"
+                     " file was written; the first failure: %s"
+                     % (len(batch), FIRST_FAILURE[0] if FIRST_FAILURE else "none said"))
     # A log the API did not give is not in the cache, and is not asked for a second time.
     found = [read_one(t) if in_cache(t) else None for t in todo]
+    # Such a job's rows would look like a job with nothing to say, so no file is written for
+    # them unless asked: logs that have expired leave the jobs' times, which are still worth
+    # having.
+    unlogged = sum(1 for f in found if f is None)
+    if unlogged and not args.without_logs:
+        sys.exit("%d of %d jobs' logs could not be read, so no file was written; the first"
+                 " failure: %s. If the logs are gone for good, --without-logs writes those"
+                 " jobs' rows without them."
+                 % (unlogged, len(todo), FIRST_FAILURE[0] if FIRST_FAILURE else "none said"))
     rows = sorted(row(date, run, job, f or {}) for (date, run, job), f in zip(todo, found))
     if args.cost:
         read_of = {job["databaseId"]: f or {} for (_, _, job), f in zip(todo, found)}
@@ -302,12 +371,10 @@ def fetch(args):
             print("\t".join(cells))
     unread = sum(1 for f in found if not f or "datapath" not in f)
     print("%d jobs of %d nights; %d without a reading" %
-          (len(rows), len({t[0] for t in todo}), unread), file=sys.stderr)
-    # A log gh could not give, expired or refused by the API's rate limit, leaves rows that
-    # look like a job with nothing to say: say so, and fail, so the files are not committed.
-    unlogged = sum(1 for f in found if f is None)
+          (len(rows), len({t[1] for t in todo}), unread), file=sys.stderr)
     if unlogged:
-        sys.exit("%d jobs' logs could not be read; the rows written lack them" % unlogged)
+        print("%d jobs' logs could not be read; their rows lack what a log says" % unlogged,
+              file=sys.stderr)
 
 
 def read(path, columns=COLUMNS):
@@ -355,7 +422,7 @@ def table(args):
     by_arch = collections.defaultdict(list)
     for r in rows:
         by_arch[arch(r)].append(r)
-    all_nights = len({r["date"] for r in rows})
+    all_nights = len({r["run"] for r in rows})   # a night is a run, as in cost
     runs = sorted(int(r["run"]) for r in rows)
     print("%d jobs of %d nights, %s to %s (runs %d to %d): %d x86, %d Arm, %d without a reading."
           % (len(rows), all_nights, min(r["date"] for r in rows), max(r["date"] for r in rows),
@@ -371,7 +438,7 @@ def table(args):
     print("|---|---|---|---|---|---|---|---|---|")
     for (cpu, f, dq, jvm), group in sorted(groups.items(), key=lambda g: (-len(g[1]), g[0])):
         print("| %s | %d | %.1f%% | %d | %s / %s | `%s` | %s / %s / %s | %s | %s |" % (
-            cpu, len(group), 100.0 * len(group) / len(x86), len({r["date"] for r in group}),
+            cpu, len(group), 100.0 * len(group) / len(x86), len({r["run"] for r in group}),
             f, dq, jvm, rates(group, "lanes128"), rates(group, "lanes256"),
             rates(group, "lanes512"), rates(group, "control", 2, " to "),
             rates(group, "wide", 2, " to ")))
@@ -387,7 +454,7 @@ def table(args):
     for (jvm, flags), group in sorted(groups.items(), key=lambda g: (-len(g[1]), g[0])):
         values = [float(r["lanes128"]) for r in group if r["lanes128"] != "-"]
         print("| `%s` | %d | %d | %s | %s |" % (
-            jvm, len(group), len({r["date"] for r in group}),
+            jvm, len(group), len({r["run"] for r in group}),
             span(values, 1, "-") if values else "-", flags))
 
     unusable = sum(1 for r in x86 if r["usable"] != "yes")
@@ -443,6 +510,15 @@ def cost(args):
     for r in rows:
         jobs.setdefault(r["job"], r)
     jobs = list(jobs.values())
+    # A run in which no sweep, fuzz or Arm job started, cancelled as its jobs waited or
+    # stopped by its plan, is no night: it is named at the end and left out, or it would
+    # lower every mean and the least.
+    busy = {j["run"] for j in jobs if function_of(j["name"]) and int(j["wall"]) > 0}
+    idle = sorted({(j["date"], int(j["run"])) for j in jobs if j["run"] not in busy})
+    jobs = [j for j in jobs if j["run"] in busy]
+    rows = [r for r in rows if r["run"] in busy]
+    if not jobs:
+        sys.exit("%s holds no sweep, fuzz or Arm job that ran" % args.file)
     # A night is a run, not a date: a night replayed by a dispatch on the same day is a second
     # night, named with its run where the date alone would not tell them apart.
     runs = sorted({(j["date"], int(j["run"])) for j in jobs})
@@ -496,12 +572,15 @@ def cost(args):
     print("Each of the least, median and most is its own column's, so a row of them is no one")
     print("night and its parts need not add up to its total.")
     print()
-    print("Runner-minutes a night by function, the mean over the nights that ran it.")
+    print("Runner-minutes a night by function, the mean over the nights in which a job of it")
+    print("ran.")
     print()
     print("| function | nights | %s | all |" % " | ".join(shown))
     print("|---|---|%s---|" % ("---|" * len(shown)))
     for f in functions:
-        mine = [j for j in jobs if function_of(j["name"]) == f]
+        mine = [j for j in jobs if function_of(j["name"]) == f and int(j["wall"]) > 0]
+        if not mine:
+            continue
         count = len({j["run"] for j in mine})
         cells = [sum(int(j["wall"]) for j in mine if kind(j["name"]) == k) / 60.0 / count
                  for k in shown]
@@ -550,7 +629,8 @@ def cost(args):
     else:
         where = machine
     done = [r for r in rows if r["exit"] == "0" and r["seconds"] != "-"
-            and float(r["seconds"]) > 0]
+            and float(r["seconds"]) > 0 and r["bits"] != "-"
+            and (r["inputs"] if r["mode"] == "fuzz" else r["words"]) not in ("-", "0")]
     sweeps = collections.defaultdict(list)
     for r in done:
         if r["mode"] == "sweep":
@@ -585,16 +665,21 @@ def cost(args):
     odd = sum(1 for r in rows if r["mode"] != "-" and r not in done)
     if odd:
         print()
-        print("%d species runs did not exit 0, or report no seconds, and are left out of the"
-              " last two tables; a run that reports no seconds, stopped by a timeout or a"
-              " cancel, has its time under \"the rest\" in the third." % odd)
+        print("%d species runs did not exit 0, or lack their seconds, bits or count, and are"
+              " left out of the last two tables; a run that reports no seconds, stopped by a"
+              " timeout or a cancel, has its time under \"the rest\" in the third." % odd)
     blank = sum(1 for j in jobs if function_of(j["name"]) and int(j["wall"]) > 0
                 and j["mode"] == "-")
     if blank:
         print()
-        print("%d sweep, fuzz or Arm jobs ran and have no species run in the file (a log that"
-              " could not be read): their time is in the nights' tables, as \"the rest\" in"
-              " the third, and the last two tables lack their runs." % blank)
+        print("%d sweep, fuzz or Arm jobs ran and have no species run in the file (the job"
+              " ended before its first, or its log could not be read): their time is in the"
+              " nights' tables, as \"the rest\" in the third, and the last two tables have"
+              " no run of theirs." % blank)
+    if idle:
+        print()
+        print("Left out, since no sweep, fuzz or Arm job of theirs started: %s." % "; ".join(
+            "%s, run %d" % night for night in idle))
     again = sorted({night_of[j["run"]] for j in jobs if j["attempt"] not in ("1", "-")})
     if again:
         print()
@@ -623,15 +708,18 @@ def main():
     f.add_argument("--repo", help="OWNER/REPO; default the checkout's repository")
     f.add_argument("--since", help="the first night, YYYY-MM-DD (UTC); default the earliest")
     f.add_argument("--until", help="the last night, YYYY-MM-DD (UTC); default the latest")
-    f.add_argument("--parallel", type=int, default=4, help="logs fetched at once (default 4)")
+    f.add_argument("--parallel", type=positive, default=4,
+                   help="logs fetched at once (default 4)")
+    f.add_argument("--without-logs", action="store_true",
+                   help="write the rows even when some jobs' logs cannot be read")
     f.add_argument("--cache", default="target/pool-cache", metavar="DIR",
                    help="where the runs' job lists and the jobs' logs are kept, so that none"
                         " is fetched twice (default target/pool-cache)")
-    f.add_argument("--batch", type=int, default=50,
+    f.add_argument("--batch", type=positive, default=50,
                    help="logs fetched between two looks at the calls left (default 50)")
-    f.add_argument("--pause", type=float, default=10.0,
+    f.add_argument("--pause", type=not_negative(float), default=10.0,
                    help="seconds to wait between batches (default 10)")
-    f.add_argument("--reserve", type=int, default=2000,
+    f.add_argument("--reserve", type=not_negative(int), default=2000,
                    help="stop when a batch would leave the account fewer REST calls than this"
                         " (default 2000)")
     f.add_argument("--out", metavar="FILE",

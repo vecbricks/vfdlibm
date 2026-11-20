@@ -25,17 +25,18 @@ when the logs are gone.
   5,000 calls an hour shared with everything else that uses `gh`: a call for the list of runs,
   a call or two per run for its jobs, and one call per job for its log, so about 700 calls
   for the 17 nights and 664 logs here.
-- So it keeps every answer under `--cache` (`target/pool-cache`, which git ignores) and asks
-  for none twice; it reads the logs 50 at a time (`--batch`) with 10 seconds between batches
-  (`--pause`); and before each batch it asks the API how many calls are left, which is free,
-  and stops when the batch would leave fewer than 2,000 (`--reserve`). A fetch that stopped
+- So it keeps every answer it gets under `--cache` (`target/pool-cache`, which git ignores)
+  and asks for none of them twice; it reads the logs 50 at a time (`--batch`) with 10 seconds
+  between batches (`--pause`); and before the job lists and before each batch it asks the API
+  how many calls are left, which is free, and stops when they would leave fewer than 2,000
+  (`--reserve`). It stops, too, when a whole batch got no log. A fetch that stopped
   writes no file and says when to run it again; the same command then goes on from the cache.
   `--out` and `--cost` are each written whole or not at all, which a shell's `>` is not: it
   empties the file before `fetch` starts.
 - It takes the first of each of the probe's lines in a job's log. The step runs before the
   build, and a later step prints the CPU again.
 - A night's date is the UTC day its run was created on. Every completed run of the workflow
-  counts, a dispatched one too.
+  counts as a night, a dispatched one too.
 - A job whose log is gone, or whose probe printed no line, keeps its row, with `-` in the cells
   it lacks; `table` counts it as "without a reading".
 
@@ -81,14 +82,18 @@ status, the `jdk` it printed and the JVM's own `jvmargs`, which hold `-XX:UseAVX
 
 The times here are not benchmark results, and no claim that one body is faster than another
 rests on them: they are the nightly's own programs on whatever machine each job drew, and
-`cost` ends with the commits and JDK builds the nights ran, a commit's nights as spans. The 17 nights ran two commits,
-f5dd1efbbf on 3 and 4 November and 0b31cd1e9a from 5 November, when expm1 joined.
+`cost` ends with the commits and JDK builds the nights ran, a commit's nights as spans. The 17
+nights ran two commits, f5dd1efbbf on 3 and 4 November and 0b31cd1e9a from 5 November, when
+expm1 joined.
 
-`fetch` fails, after writing, when a job's log could not be read, as when the logs have
-expired: rows from such a fetch lack those jobs' runs, and `cost` says how many jobs.
+`fetch` writes no file when a job's log could not be read, and says what `gh` answered the
+first time. Where the logs are gone for good, as after their 90 days, `--without-logs` writes
+the rows all the same, with the jobs' times and without their species runs, and `cost` says
+how many jobs have none.
 
 `cost` prints five tables. A night is a run, so a night replayed by a dispatch counts as a
-night of its own. `--by-cpu` splits the last two tables by CPU model and its widest vector.
+night of its own, and a run in which no sweep, fuzz or Arm job started is left out and
+named. `--by-cpu` splits the last two tables by CPU model and its widest vector.
 
 - **Runner-minutes a night by job kind.** A job's cost is its seconds from start to end; a
   night's is their sum over 60, beside the minutes the jobs started (each job's seconds
