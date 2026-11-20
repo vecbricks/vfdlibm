@@ -152,8 +152,9 @@ end with
 ## Releases
 
 vfdlibm is released to Maven Central as `io.github.vecbricks:vfdlibm`, the way vecbricks/jegg is.
-`CHANGELOG.md` is kept in the form of Keep a Changelog: each pull request adds its line under
-`Unreleased`.
+`CHANGELOG.md` is kept in the form of Keep a Changelog: a pull request that changes what a user
+sees (the API, a behaviour, a speed worth quoting) adds one line under `Unreleased`, in Added,
+Changed or Fixed; a change to tests, docs or the build alone does not.
 
 **The promise, while the version is 0.x.** A minor version may break the public API and a patch
 may not. Adding a function is a patch. Changing an arm (how a function reaches its result: the
@@ -191,6 +192,17 @@ and pass `dev/jar-check.sh --release`. The steps:
    this uploads are one build twice: the build is reproducible (`project.build.outputTimestamp`),
    which is the link between them, and signing is the one step the dry run does not cover (it
    signs with a key of its own, without gpg or an agent).
+
+   What the dry run cannot catch: the central plugin runs only at `deploy`, and Central's reply
+   to an upload exists only on a real upload. 0.1.0 was deployed with
+   `central-publishing-maven-plugin` 0.7.0, whose client failed after the upload with
+   `UnrecognizedPropertyException: Unrecognized field "warnings"` (its `DeploymentApiResponse`
+   knew six properties; Central's status reply had gained a seventh). The bundle was already
+   staged, and the owner published it by hand in the portal. The pom now pins 0.12.0 (the version
+   jegg uses; `autoPublish` still defaults to false, so an upload still waits at the portal for
+   the owner). A newer Central reply can break a pinned plugin the same way: if `deploy` fails
+   after the upload, look at the deployment in the portal before running it again, since a
+   second upload of the same version may be refused.
 
 What the owner needs once, on the machine that releases: the namespace `io.github.vecbricks`
 verified at the Central portal, a user token in `~/.m2/settings.xml` as the server `central`
