@@ -431,7 +431,7 @@ a settled question.
   a rate of 2^-29, so its silence said nothing; what settles such a question is every input of
   a window, which the scalar transcription `Log1pTest.cLog1p` and the program `Log1pShortPath`
   make cheap: 2^35 doubles took 207 s on 8 threads. The port keeps the C's operations, and no
-  lemma folds this path.
+  lemma folds this path (`PROOFS.md`, L12).
 
 ## What the log10 port taught
 

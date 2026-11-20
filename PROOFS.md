@@ -5,7 +5,9 @@ by operation, except where a lemma below proves that a different computation giv
 double for every input (`PLAN.md` section 6). Each lemma names its hypotheses (the input domain
 and each hinge condition, with the range where it holds and why the lanes are in it), the IEEE 754
 property it rests on, the proof, and the test that checks its hinges; that test fails if a hinge
-were false. The code carries a pointer to the lemma.
+were false. The code carries a pointer to the lemma. A port with no departure of its own
+(log10, log1p) has a section saying so; log10's names the lemmas it rests on through `log`,
+log1p's holds a counter-example, a statement and not a proof of a fold.
 
 The tests are of two kinds, and each lemma names both. Hinge tests in `ProofsTest` mostly check a
 lemma's hypotheses on scalar Java, where each operation is the same single rounding as a vector
@@ -638,3 +640,123 @@ the normal doubles and the zeros, and that `e` and `fl(r*e)` are nonzero and nor
 lanes (bounds on the polynomial, sampled by the hinge test, which asserts it) is what puts the
 lanes' values under it. Informal above: that bound, the binades further off than the next, H15
 itself (L10), and the code's text.
+
+## log10 (`Log10.java`, from `e_log10.c`)
+
+e_log10.c reads `k` from the high word, scaling a subnormal by `2^54` first (lines 76-82); sets
+`i = 1` when `k < 0` (85); rewrites the high word to `(hx&0x000fffff)|((0x3ff-i)<<20)` (86-88),
+which puts `x` in `[1, 2)` or `[0.5, 1)`; and returns `(y*log10_2lo + ivln10*log(x)) +
+y*log10_2hi` with `y = (double)(k+i)` and `log` e_log.c's `__ieee754_log` (87-90). The port
+computes these operations in the C's order, with no fused multiply-add and no reassociation, and
+**needs no lemma of its own**. Where its text is not the C's:
+
+- The C's `int` words stay `int` lanes, every test on them the C's signed `int` compare, and `y`
+  is an exact `I2D` (`|k+i|` is far below `2^53`), a vector instruction on every AVX2 host: no
+  step like L7 or L8 is taken.
+- `ivln10*log(x)` is written `log(x)*ivln10`: the same exact product, rounded once, so the same
+  double (R4); the sums are in the C's order.
+- The C's early returns (lines 77-79 and 83) are selected by masks whose tests are the C's (the
+  blended arm), or finished per lane by `StrictMath.log10` after the vector body (the finish
+  arm).
+
+**What it rests on.** The `log` of line 89 is `Log.logCore(xn)` for the rescaled `xn`: Log's own
+body, the same lines, with the rare paths and the rare-lane finish left out. So the lemmas of
+log hold for log10's lanes as they stand:
+
+- L6, the `k == 0` forms as the `k != 0` forms with `dk = +0`. Its H9 gives `f` finite and never
+  `-0` for any `xn` in `[0.5, 2)`, which every lane's is.
+- L7, `dk = (double)k` without `L2D`, with H11 from L8's bound on `k`.
+- L8, the C's int words in long lanes. Its H12, the sign bit of the argument clear, is supplied
+  by log10's rescale: the high word `(hx&0x000fffff)|((0x3ff-i)<<20)` has a clear sign bit and
+  the exponent field `0x3ff` or `0x3fe` whatever `x` is, so every lane's argument is a positive
+  normal finite double in `[0.5, 2)`, a NaN, an infinity, a zero or a negative `x` included.
+  These are the common lanes of `log` (e_log.c's tests at lines 100 and 107 false), where
+  `logCore` is the C's `__ieee754_log`. For a lane log10 returns early on, `logCore` still
+  computes the `log` of its rescaled argument, and the rare return replaces it.
+
+L9 is not used: the compare that finds `log`'s common lanes feeds a rare-lane mask that `logCore`
+never reads, and the subnormal compare belongs to the blended arm of `log`, which `logCore` is
+not.
+
+**Hinge tests.** Those of L6 to L8 (`ProofsTest.l6ZeroDkIsPositiveZero`,
+`l6FIsNeverNegativeZero`, `l6FoldedFormsAreTheKZeroForms`, `l6HingesRefuted`,
+`l7ExactConversionIsI2D`, `l8LongWordsAreTheCsInts`), which run on `Log`'s scalar words. The
+hypothesis that is log10's, that its argument is a positive normal finite double in `[0.5, 2)`,
+has no scalar test of its own: it follows from line 86's expression as the port writes it. On
+a common lane of log10 a lane outside `logCore`'s domain would take its unspecified value and
+so fail where that differs from `StrictMath.log10`; on a rare lane the result is replaced, so
+that lane's argument is checked by nothing, and nothing in its result depends on it.
+**Vector tie.** `Log10Test`, against `StrictMath.log10` by bits, at every width, both arms:
+e_log10.c's high-word tests and the split of line 85 at 1.0 (`thresholdsAndSpecials`,
+`insideTheBranchWords`), e_log.c's significand words, the subnormals and `[0.5, 2)`
+(`nearOneAndSubnormals`), sampled bit patterns, dense draws over every binade and the
+published hard cases. Only `masked` and `maxSpecies` run masked and at `SPECIES_MAX`, on
+`thresholds()`, and `everySubsetOfLanesRare` with every subset of a vector's lanes rare: the
+other cases are unmasked and at the `VectorWidth` shapes.
+
+**Encoding.** No file of its own. `proofs/log_zero_dk.smt2` (L6), `proofs/log_exact_dk.smt2` (L7)
+and `proofs/log_long_words.smt2` (L8) are rendered from `Log`'s constants and check these steps
+for log10 as they stand, `logCore` being the same body. Informal here: that `xn`'s sign bit and
+exponent field are as above (the expression of line 86, read off the code), that the write-back
+of the new high word, `I2L` then a shift left by 32, is the C's `__HI(x) =` because that word is
+never negative (so sign extension and zero extension agree, as in L8's proof), the
+commutativity of the product, and that the port computes these steps, the code's text.
+
+## log1p (`Log1p.java`, from `s_log1p.c`)
+
+s_log1p.c returns early for `x <= -1`, `|x| < 2^-29` and a non-finite `x` (lines 113-124 and
+128), takes `k = 0` and `f = x` for `-0.2929 < x < 0.41422` (125-126), and otherwise writes
+`1+x = 2^k * (1+f)` with `u = 1.0+x` and the correction `c` (129-150). Then `hu == 0` selects
+one of two ways to finish: for `|f| < 2^-20` the short path, `R = hfsq*(1.0-0.66666666666666666*f)`
+(lines 153-159), and otherwise the general polynomial path, `s = f/(2.0+f)` and the degree-14
+`R` in `s` (160-164). The port turns the C's branches into lane masks and computes each form
+with the C's operations in the C's order, with no fused multiply-add and no reassociation (the
+Javadoc of `Log1p`). **No lemma proves a departure, because it has none, and no lemma proves
+the `hu == 0` path:** the path is not redundant. The port keeps it as the C writes it, because
+the search below found that folding it into the general path is not exact.
+
+### L12. The hu == 0 path cannot be folded (a counter-example, not a fold)
+
+**Statement.** The short path (lines 156-158, the lanes with `hu == 0` and `f != 0`) and the
+general path (lines 160-164) do not give the same double for every input: sending those lanes
+down the general path, as a port that dropped the short path would, is not bit-identical.
+
+**Counter-example.** Four of the inputs found, `C` the C as written, which is `StrictMath.log1p`
+at each, and `general` the same C with lines 156-158 skipped:
+
+| `x` | `1+x` | `k` | `C` | `general` |
+| :--- | :--- | ---: | :--- | :--- |
+| `0x3feffffd_05263833` | just below 2 | 1 | `0x3fe62e41_818d4d28` | `0x3fe62e41_818d4d27` |
+| `0x3ff00001_6fcd0162` | just above 2 | 1 | `0x3fe62e44_6ec73310` | `0x3fe62e44_6ec7330f` |
+| `0xbfe00001_2cac6e81` | just below 0.5 | -1 | `0xbfe62e45_58532d03` | `0xbfe62e45_58532d04` |
+| `0xbfdffffe_92ae1567` | just above 0.5 | -1 | `0xbfe62e41_91a8577b` | `0xbfe62e41_91a8577c` |
+
+(`hu == 0` is reached by line 148's `hu = (0x00100000-hu)>>2` below a power of two and by
+`hu == 0` directly above it, so the four cover both normalisations.) The short path stops
+the series of `log1p(f)` at `f^3/3`, the general one does not, and the two round differently
+on about one input in `2^29` of these windows: of every double `x` whose raw bits lie
+in `[0x3feffffa_00000000, 0x3ff00002_00000000)` (`1+x` in `[2 - 3*2^-20, 2 + 2^-19)`, `2^35`
+doubles) 56, and of every `x` whose raw bits lie in `[0xbfdffffe_00000000, 0xbfe00001_80000000)`
+(`1+x` in `(0.5 - 3*2^-22, 0.5 + 2^-21]`, 15,032,385,536 doubles) 20. The `hu == 0` inputs near
+0.5 are `1+x` in `[0.5 - 3*2^-22, 0.5 + 2^-21)`, so the second range leaves out the input
+`x = -(0.5 + 3*2^-22)` and holds `x = -(0.5 - 2^-21)`, which is not on the path. The windows
+of the other powers of two of `1+x` are not searched. The counts, the sixteen differences each
+pass printed, the commands and the host are in
+`bench/results/log1p-hu0-search-laptop-2026-11-20.txt`; the two passes ran a scratch program
+kept in that file as text, not `Log1pShortPath`, which found exactly the witness in each of two
+slices of `2^24` doubles around one.
+
+**Test (scalar).** `Log1pTest.shortPathIsNotTheGeneralPath` asserts the four rows, each
+through `Log1pTest.cLog1p`, a transcription of s_log1p.c checked against `StrictMath.log1p`
+(`Log1pTest.scalarTranscriptionIsStrictMath`); it fails if the two paths agreed there.
+**Vector tie.** None that detects the fold. `Log1pTest.nearPowersOfTwo` draws, from `2^-30` to
+`2^60`, inputs where `|f| < 2^-20` and the C takes this path, and runs the port's short path
+against `StrictMath` at every width, but the inputs that differ are about one in `2^29` of
+them and no vector case holds one of the four above or a neighbour of one: a port that folded
+the path away would pass every vector case with near certainty. The four rows are checked on the
+scalar transcription only. A vector test of them, and a planted fault that folds the path,
+are not written.
+
+**Encoding.** None. The two results are Java's evaluation of the transcription, not a solver's,
+and the search is a program, so nothing here is machine-checked in `proofs/`; an evaluation of
+the chain like L4's is not written.

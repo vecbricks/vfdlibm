@@ -36,7 +36,9 @@ import jdk.incubator.vector.VectorSpecies;
  * {@code log1p(x) = k*ln2_hi + (f - (hfsq - (s*(hfsq+R) + (k*ln2_lo + c))))} with {@code s =
  * f/(2+f)} and the degree-14 polynomial {@code R} in {@code s}. For {@code -0.2929 < x < 0.41422}
  * the C takes {@code k = 0} and {@code f = x} with no reduction. Every operation is the C's, in the
- * C's order, with no fused multiply-add and no reassociation.
+ * C's order, with no fused multiply-add and no reassociation. The {@code hu == 0} path is the C's
+ * own and no lemma proves it: it is not redundant, and folding it into the general path is not
+ * exact ({@code PROOFS.md}, L12).
  *
  * <p>The C's {@code int} words stay {@code int}: {@code hx}, {@code ax}, {@code hu} and {@code k}
  * are {@link IntVector} lanes, with the double vector's lane count at half its bits, and every
