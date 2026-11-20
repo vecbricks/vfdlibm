@@ -749,13 +749,19 @@ slices of `2^24` doubles around one.
 **Test (scalar).** `Log1pTest.shortPathIsNotTheGeneralPath` asserts the four rows, each
 through `Log1pTest.cLog1p`, a transcription of s_log1p.c checked against `StrictMath.log1p`
 (`Log1pTest.scalarTranscriptionIsStrictMath`); it fails if the two paths agreed there.
-**Vector tie.** None that detects the fold. `Log1pTest.nearPowersOfTwo` draws, from `2^-30` to
-`2^60`, inputs where `|f| < 2^-20` and the C takes this path, and runs the port's short path
-against `StrictMath` at every width, but the inputs that differ are about one in `2^29` of
-them and no vector case holds one of the four above or a neighbour of one: a port that folded
-the path away would pass every vector case with near certainty. The four rows are checked on the
-scalar transcription only. A vector test of them, and a planted fault that folds the path,
-are not written.
+**Vector tie.** `Log1pTest.shortPathWitnessesThroughEveryArm`: the four rows and their neighbours
+one ulp each way, at every position of a vector, through every arm of `Log1p` (the public one,
+the blended, the guarded and the finish arm), at every width the host has, unmasked and masked,
+by raw bits against `StrictMath.log1p`. The random cases (`nearPowersOfTwo` and the rest) draw
+the inputs that differ about once in `2^29` and would not see a fold; this test does not rely
+on a draw. **Planted fault.** `log1p.foldShortPath` (`Log1p.FOLD_SHORT_PATH`) sends the lanes
+with `hu == 0` and `f != 0` down the general path, as a port that dropped the short path would,
+and keeps lines 154-155's `f == 0` returns; `Log1pTest.faultCatchers` requires the blended
+arm, the guarded arm and the public one to fail on the witnesses with it planted, at every
+width. The finish arm finishes the `hu == 0` lanes with `StrictMath.log1p`, so it cannot see the
+fold and is not asked to. The fuzz of the nightly cannot find this fault either (its inputs that
+differ are about one in `2^29` of a window), so `NightlyTest.fuzzCatchesThePlantedFault` leaves
+it out. With the fold planted the rest of `Log1pTest` passes: no other case reaches a witness.
 
 **Encoding.** None. The two results are Java's evaluation of the transcription, not a solver's,
 and the search is a program, so nothing here is machine-checked in `proofs/`; an evaluation of

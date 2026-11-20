@@ -125,6 +125,7 @@ final class Log1p {
   static final String CONSTANT_OFF_BY_ONE_ULP = "log1p.constantOffByOneUlp";
   static final String THRESHOLD_MOVED = "log1p.thresholdMoved";
   static final String GUARD_MISSES_NON_FINITE = "log1p.guardMissesNonFinite";
+  static final String FOLD_SHORT_PATH = "log1p.foldShortPath";
   /** Lp1 one ulp up, for {@link #CONSTANT_OFF_BY_ONE_ULP}. */
   private static final double LP1_UP = Double.longBitsToDouble(0x3FE55555_55555594L);
   // Read once into constants, so the body holds no call and an unplanted fault folds away.
@@ -138,6 +139,14 @@ final class Log1p {
    * rare paths and returns the polynomial's finite garbage there. The other arms are unchanged.
    */
   private static final boolean GUARD_MISSING_NON_FINITE = Faults.is(GUARD_MISSES_NON_FINITE);
+  /**
+   * The {@code hu == 0} path folded into the general one, for {@link #FOLD_SHORT_PATH}: a lane
+   * with {@code hu == 0} and {@code f != 0} keeps the general path's result (lines 160-164)
+   * instead of lines 156-158's, the fold PROOFS.md's L12 refutes. The {@code f == 0} returns
+   * (lines 154-155) are kept. Only the blended and guarded arms compute that path; the finish arm
+   * finishes those lanes with {@code StrictMath.log1p}, so the fold does not reach it.
+   */
+  private static final boolean FOLDING_SHORT_PATH = Faults.is(FOLD_SHORT_PATH);
 
   /** How the rare lanes are computed: blended always, blended behind a test, or per lane. */
   private static final int BLEND = 0;
@@ -275,7 +284,11 @@ final class Log1p {
       // c += k*ln2_lo is c + k*ln2_lo, which IEEE addition rounds as k*ln2_lo + c.
       DoubleVector exact = kLn2Hi.add(kLn2LoPlusC).blend(ZERO, kIsZero);
       near = near.blend(exact, f.compare(VectorOperators.EQ, ZERO));
-      result = result.blend(near, huIsZero.cast(species));
+      VectorMask<Double> takeNear = huIsZero.cast(species);
+      if (FOLDING_SHORT_PATH) {
+        takeNear = takeNear.and(f.compare(VectorOperators.EQ, ZERO));
+      }
+      result = result.blend(near, takeNear);
       // The early returns, lines 114-128; their masks are disjoint. Line 128: x+x.
       result = result.blend(x.add(x), nonFinite.cast(species));
       // Lines 119-123: x for |x| < 2^-54 (two54+x>zero holds for every such x), else

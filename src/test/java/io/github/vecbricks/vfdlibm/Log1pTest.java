@@ -435,6 +435,51 @@ class Log1pTest {
     assertTrue(shortPath > 1 << 12, "too few inputs on the hu == 0 path: " + shortPath);
   }
 
+  /** The four inputs of {@link #shortPathIsNotTheGeneralPath}: two of k = 1, two of k = -1. */
+  private static final long[] SHORT_PATH_WITNESS_BITS = {
+      0x3feffffd_05263833L, 0x3ff00001_6fcd0162L, 0xbfe00001_2cac6e81L, 0xbfdffffe_92ae1567L};
+
+  /**
+   * The four witnesses and their neighbours one ulp each way, repeated so that each takes every
+   * lane position of a vector of up to 8 lanes: in every arm, lane by lane, the C as written is
+   * {@code StrictMath.log1p} at all of them.
+   */
+  private static double[] shortPathWitnessInputs() {
+    double[] once = new double[3 * SHORT_PATH_WITNESS_BITS.length];
+    int next = 0;
+    for (long bits : SHORT_PATH_WITNESS_BITS) {
+      double x = Double.longBitsToDouble(bits);
+      once[next++] = x;
+      once[next++] = Math.nextUp(x);
+      once[next++] = Math.nextDown(x);
+    }
+    double[] xs = new double[0];
+    for (int lanes = 0; lanes < 8; lanes++) {
+      xs = Inputs.concat(xs, once);
+    }
+    return xs;
+  }
+
+  /**
+   * L12's vector tie: the four witnesses, where folding the {@code hu == 0} path into the general
+   * one is not exact, through every arm at every width, unmasked and masked, by raw bits against
+   * {@code StrictMath.log1p}. The planted fault {@link Log1p#FOLD_SHORT_PATH} folds that path and
+   * fails here ({@link #faultCatchers}); the random draws of the other cases hit one of these
+   * inputs about once in 2^29.
+   */
+  @ParameterizedTest
+  @EnumSource(VectorWidth.class)
+  void shortPathWitnessesThroughEveryArm(VectorWidth width) {
+    double[] xs = shortPathWitnessInputs();
+    assertLog1p(width.species(), xs);
+    long seed = 1400L + width.ordinal();
+    for (Map.Entry<String, BiFunction<DoubleVector, VectorMask<Double>, DoubleVector>> arm :
+        ARMS.entrySet()) {
+      Oracle.assertUnaryMasked(
+          arm.getKey(), width.species(), arm.getValue(), StrictMath::log1p, xs, seed++);
+    }
+  }
+
   /**
    * The {@code hu == 0} path is not the general path: at these inputs s_log1p.c as written is
    * {@code StrictMath.log1p} and the same C sent down its general polynomial path is the next
@@ -452,8 +497,7 @@ class Log1pTest {
    */
   @Test
   void shortPathIsNotTheGeneralPath() {
-    for (long bits : new long[] {0x3feffffd_05263833L, 0x3ff00001_6fcd0162L,
-        0xbfe00001_2cac6e81L, 0xbfdffffe_92ae1567L}) {
+    for (long bits : SHORT_PATH_WITNESS_BITS) {
       double x = Double.longBitsToDouble(bits);
       long want = Double.doubleToRawLongBits(StrictMath.log1p(x));
       assertTrue(takesShortPath(x), Oracle.hex(x));
@@ -484,6 +528,18 @@ class Log1pTest {
         PlantedFaultTest.assertCaught(Log1p.GUARD_MISSES_NON_FINITE, () -> Oracle.assertUnary(
             "Log1p.log1pGuarded", species, x -> Log1p.log1pGuarded(x, null), StrictMath::log1p,
             loneNaNInputs()))));
+    // The fold of the hu == 0 path reaches the arms that compute that path, the blended and the
+    // guarded arm and so the public one. The finish arm finishes those lanes with StrictMath, so
+    // it cannot see the fold and is left out; the check is the four inputs where the two paths
+    // differ, which no draw finds in a fault run's time.
+    catchers.put(Log1p.FOLD_SHORT_PATH, () -> forEachWidth(species -> {
+      for (String name : new String[] {
+          "VFdlibm.log1p", "Log1p.log1pBlended", "Log1p.log1pGuarded"}) {
+        BiFunction<DoubleVector, VectorMask<Double>, DoubleVector> arm = ARMS.get(name);
+        PlantedFaultTest.assertCaught(Log1p.FOLD_SHORT_PATH, () -> Oracle.assertUnary(
+            name, species, x -> arm.apply(x, null), StrictMath::log1p, shortPathWitnessInputs()));
+      }
+    }));
     return catchers;
   }
 
