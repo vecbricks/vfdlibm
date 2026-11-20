@@ -44,7 +44,10 @@ import org.openjdk.jmh.annotations.Warmup;
  *
  * <p>{@code bench/alloc-check.py} runs the vector benchmarks named {@code *256} and
  * {@code *Preferred} on {@code common} and {@code mixed} inputs and fails if any allocates, which
- * means the body boxed. A new arm named that way is checked with no further change.
+ * means the body boxed. A new arm named that way is checked with no further change. The
+ * {@code *Max} rows, at {@code DoubleVector.SPECIES_MAX}, are not checked: the finish arm boxes
+ * there on mixed data (bench/results/max-finish-laptop-2026-11-20.txt); they are here to
+ * measure that.
  */
 @State(Scope.Thread)
 @BenchmarkMode(Mode.AverageTime)
@@ -58,6 +61,7 @@ public class Log1pBenchmark {
   private static final VectorSpecies<Double> S256 = DoubleVector.SPECIES_256;
   private static final VectorSpecies<Double> S512 = DoubleVector.SPECIES_512;
   private static final VectorSpecies<Double> SP = DoubleVector.SPECIES_PREFERRED;
+  private static final VectorSpecies<Double> SMAX = DoubleVector.SPECIES_MAX;
 
   @Param({"common", "mixed"})
   public String inputs;
@@ -112,6 +116,14 @@ public class Log1pBenchmark {
   }
 
   @Benchmark
+  public double[] guardedMax() {
+    for (int i = 0; i < N; i += SMAX.length()) {
+      Log1p.log1pGuarded(DoubleVector.fromArray(SMAX, in, i), null).intoArray(out, i);
+    }
+    return out;
+  }
+
+  @Benchmark
   public double[] finish256() {
     for (int i = 0; i < N; i += S256.length()) {
       Log1p.log1pFinish(DoubleVector.fromArray(S256, in, i), null).intoArray(out, i);
@@ -136,6 +148,14 @@ public class Log1pBenchmark {
   }
 
   @Benchmark
+  public double[] finishMax() {
+    for (int i = 0; i < N; i += SMAX.length()) {
+      Log1p.log1pFinish(DoubleVector.fromArray(SMAX, in, i), null).intoArray(out, i);
+    }
+    return out;
+  }
+
+  @Benchmark
   public double[] blended256() {
     for (int i = 0; i < N; i += S256.length()) {
       Log1p.log1pBlended(DoubleVector.fromArray(S256, in, i), null).intoArray(out, i);
@@ -155,6 +175,14 @@ public class Log1pBenchmark {
   public double[] blendedPreferred() {
     for (int i = 0; i < N; i += SP.length()) {
       Log1p.log1pBlended(DoubleVector.fromArray(SP, in, i), null).intoArray(out, i);
+    }
+    return out;
+  }
+
+  @Benchmark
+  public double[] blendedMax() {
+    for (int i = 0; i < N; i += SMAX.length()) {
+      Log1p.log1pBlended(DoubleVector.fromArray(SMAX, in, i), null).intoArray(out, i);
     }
     return out;
   }
