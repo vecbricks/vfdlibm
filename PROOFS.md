@@ -618,8 +618,9 @@ that a value rounds to no double in a binade further off than the next (the arit
 rationals); the casts of `+0.0` and of a double in binade 2^0; that `k` is forced to 0 on every
 lane of the word `0x3fd62e42` and below, of which section C checks four doubles (the formula's
 `k` would be wrong at the witnesses, the C as written is the oracle's) and the rest is the code's
-blend, which `Expm1Test.foldBoundaries` samples densely (1026 low words per sign at each of its
-words and 4096 doubles each side of `+-0.5 ln2`) and `Expm1Test.thresholds()` touches (8
+blend, which `Expm1Test.foldBoundaries` samples (1026 low words per sign at each of its words,
+a sparse sample of the word's `2^32` doubles, and 4096 doubles each side of `+-0.5 ln2`, at the
+word's bottom, not near the witnesses at its top) and `Expm1Test.thresholds()` touches (8
 doubles each side of `0.5 ln2`, and 64 around the word's first double); and
 `l10KIsForcedByTheHighWordTest` scans the scalar transcription from each witness to the word's
 top and finds the forcing not needed there, which says nothing of the port; and that the port
