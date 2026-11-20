@@ -624,7 +624,12 @@ is `0x3fd62e42_fefa39ef`, about 17 million doubles below the witnesses at the wo
 `Expm1Test.thresholds()` touches (8 doubles each side of `0.5 ln2`, and 64 around the word's
 first double); and `l10KIsForcedByTheHighWordTest` scans the scalar transcription from each
 witness to the word's top and finds the forcing not needed there, which says nothing of the
-port; and that the port computes these steps, the code's text.
+port. The port's blend has a planted fault, `expm1.dropKForcing` (`Expm1.DROP_K_FORCING`),
+which gives every lane the formula's `k`: with it planted `Expm1Test`'s `thresholdsAndSpecials`,
+`foldBoundaries`, `foldBoundariesAtMaxSpecies`, `masked`, `maxSpecies` and `faultRunInputsPass`
+fail at every width, the first at `0x3fd62e42_ffffffcb`, and `Expm1Test.faultCatchers` requires
+every arm to fail on the thresholds and draws of `faultRunInputsPass`. Informal besides: that
+the port computes these steps, the code's text.
 
 ### L11. The k == 0 return is x - e with e = (x*(e-c)-c)-hxs and c = +0
 
