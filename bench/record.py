@@ -17,6 +17,7 @@ number by hand, and checks them in a file that is about to be committed.
 
     bench/record.py write --run 41915514750              # downloads the artifact (needs gh)
     bench/record.py write <artifact dir> [--out-dir bench/results] [--name exp-onediv]
+    bench/record.py write --run <id> --run <id of the re-run>    # one file, both runs
     bench/record.py check <results file> <artifact dir>  # or: check <results file> --run <id>
     bench/record.py --selftest
 
@@ -41,7 +42,13 @@ The hand-written parts are left as lines that hold MARKER, each saying what belo
 
 `check` reads a results file's header lines, tables and raw section and compares them with what
 `write` makes from the artifact, and fails if they differ or if a marker line is still there.
-It checks a file of one run: a file that keeps two runs is not checked by this script yet.
+A file of several runs is checked against all of them, given in the file's order.
+
+Several plain runs of one host, a run and its re-run (AGENTS.md asks for one when a claim rests
+on a ratio under about 1.3x), go in one file: the first run's file as above, then for each
+later run a line "# Run N of M of this file: ..." and that run's header, table and raw
+section. The file's name has the first run's date. Runs of two hosts or CPUs are refused, since
+a file is of one CPU; so is a pair among them.
 It compares values, not layout: a header line may be wrapped another way, a table's columns may
 be wider, and the file may hold header lines the workflow did not write (such as "Array").
 Exit status 1 lists the differences; 2 is an error (no artifact, no result in it, a file that
@@ -73,6 +80,8 @@ LOAD = re.compile(r"(\d+\.\d+ \d+\.\d+ \d+\.\d+) at (start|end)")
 CORES = re.compile(r" ?\(\d+ cores\)")
 PAIR_TITLE = re.compile(r"^# Pair: \S.*, base against head, \d{4}-\d{2}-\d{2} ")
 NAME_END = re.compile(r"-[^-]+-\d{4}-\d{2}-\d{2}\.txt$")
+RUN_LINE = "# Run %d of %d of this file: its header, its table and its raw output follow."
+RUN_LINE_RE = re.compile(r"^# Run \d+ of \d+ of this file: ")
 TABLE_HEAD = re.compile(r"^# Row\s+\S+\s+min\s+avg\s+max\s+\(ns/op\)$")
 RAW_NOTE = ["# Raw output of the run follows: the workflow's artifact from its first JMH line,"
             " with Maven's",
@@ -461,6 +470,40 @@ def files_of(directory, name=None):
     return files
 
 
+def joined_files(directories, name=None):
+    """{file name: lines} for one run, or for several plain runs of one host: the first run's
+    files, each followed by every later run's header, table and raw output of that class
+    under a RUN_LINE. A file holds one CPU, so the runs' Host and CPU lines must agree."""
+    first = files_of(directories[0], name)
+    if len(directories) == 1:
+        return first
+    seen = []
+    for d in directories:
+        lines, pair = artifact_lines(d)
+        if pair:
+            raise Problem("several runs go in one file only if each is a plain run, and %s is"
+                          " a pair's" % d)
+        header = dict((k, v) for k, v in plain_header(lines))
+        seen.append((header.get("Host"), header.get("CPU"), header.get("Run")))
+    if len({x[:2] for x in seen}) > 1 or len({x[2] for x in seen}) < len(seen):
+        raise Problem("several runs go in one file only if they are different runs of one host"
+                      " and CPU; these are %s" % "; ".join(" ".join(map(str, x)) for x in seen))
+    out = {file_name: list(lines) for file_name, lines in first.items()}
+    for n, d in enumerate(directories[1:], 2):
+        later = {NAME_END.sub("", file_name): lines
+                 for file_name, lines in files_of(d, name).items()}
+        for file_name, lines in out.items():
+            block = later.get(NAME_END.sub("", file_name))
+            if block is None:
+                raise Problem("run %d has no rows for %s, which the first run has" % (n, file_name))
+            # The later run's lines from its header on, without the places for hand-written
+            # text, which the file has once, above.
+            block = [l for l in block[block.index(header_block(block)[0]):] if MARKER not in l]
+            block = [l for i, l in enumerate(block) if not (l == "#" and block[i - 1] == "#")]
+            lines += ["#", RUN_LINE % (n, len(directories)), "#"] + block
+    return out
+
+
 # Checking a file.
 
 def tables_of(lines):
@@ -491,8 +534,11 @@ def split_file(lines):
                   " '# Pair:'")
 
 
-def check(path, directory):
-    """The differences between a results file and what the artifact gives, as lines."""
+def check(path, directories):
+    """The differences between a results file and what its runs' artifacts give, as lines:
+    the artifacts in the order of the file's runs."""
+    if isinstance(directories, str):
+        directories = [directories]
     with open(path, encoding="utf-8") as f:
         text = f.read()
     try:
@@ -502,6 +548,30 @@ def check(path, directory):
     actual = [l.rstrip() for l in text.split("\n")]
     while actual and not actual[-1]:
         actual.pop()
+    starts = [0] + [i for i, l in enumerate(actual) if RUN_LINE_RE.match(l)]
+    if len(starts) != len(directories):
+        return ["the file holds %d run%s (a later one starts at a '# Run N of M of this file:'"
+                " line), and %d artifact%s given"
+                % (len(starts), "" if len(starts) == 1 else "s", len(directories),
+                   " was" if len(directories) == 1 else "s were")]
+    if len(directories) > 1:
+        joined_files(directories)  # refuses runs that do not belong in one file
+    diffs = []
+    for n, (start, end, d) in enumerate(zip(starts, starts[1:] + [len(actual)], directories), 1):
+        part = actual[start:end]
+        if n > 1 and part[0] != RUN_LINE % (n, len(directories)):
+            diffs.append("run %d: its first line is not '%s'" % (n, RUN_LINE % (n, len(starts))))
+        while part and part[-1] in ("", "#"):
+            part.pop()
+        found = check_run(path, part, d, n == 1)
+        diffs += [("run %d: " % n if len(starts) > 1 else "") + x for x in found]
+    return diffs
+
+
+def check_run(path, actual, directory, first):
+    """One run of a file, its lines up to the next run's, against that run's artifact. The
+    first run's part has the file's title and hand-written text; a later one starts at its
+    RUN_LINE."""
     top, raw = split_file(actual)
     pair = artifact_lines(directory)[1]
     if pair != bool(PAIR_TITLE.match(raw[0])):
@@ -517,13 +587,13 @@ def check(path, directory):
                     % (", ".join(sorted(mine)) or "no benchmark")]
     expected = made[0][1]
     e_top, e_raw = split_file([l for l in expected if MARKER not in l])
-    diffs = ["line %d is a marker still to be replaced: %s" % (i + 1, l)
-             for i, l in enumerate(actual) if MARKER in l]
-    if actual[0] == expected[0]:
+    diffs = ["a marker is still to be replaced: %s" % l for l in actual if MARKER in l]
+    if first and actual[0] == expected[0]:
         diffs.append("line 1 is still the workflow's title, and the file has none of its own")
     suffix = NAME_END.search(made[0][0]).group(0)
-    if not os.path.basename(path).endswith(suffix):
-        diffs.append("the file's name does not end in %s, the run's host and date" % suffix)
+    if first and not os.path.basename(path).endswith(suffix):
+        diffs.append("the file's name does not end in %s, the first run's host and date"
+                     % suffix)
     have = {}
     for key, value in fields(header_block(top)):
         have.setdefault(key, []).append(value)
@@ -690,8 +760,8 @@ def selftest():
         assert found == ["line 1 is still the workflow's title, and the file has none of its"
                          " own"], found
         found = check(written(d, exp, name="exp-epyc7763-2026-11-20.txt"), d)
-        assert found == ["the file's name does not end in -xeon8573c-2026-11-20.txt, the run's"
-                         " host and date"], found
+        assert found == ["the file's name does not end in -xeon8573c-2026-11-20.txt, the first"
+                         " run's host and date"], found
         assert check(written(d, exp, name="exp-finish-xeon8573c-2026-11-20.txt"), d) == []
         # A hand-added header line of any form does not end the header.
         odd = [x for l in exp for x in ([l, "# CPU MHz:     3000"]
@@ -699,6 +769,49 @@ def selftest():
         assert check(written(d, odd), d) == []
         assert check(written(d, exp), d) == []
         assert check(written(d, log1p), d) == []
+        # A run and its re-run in one file: the second run's header, table and raw output
+        # under its line, each checked against its own artifact, in the file's order.
+        with tempfile.TemporaryDirectory() as again:
+            fake_plain(again)
+            with open(os.path.join(again, "bench-results.txt"), encoding="utf-8") as f:
+                rerun = f.read().replace("10.04", "10.24").replace("2026-11-20", "2026-11-21")
+            with open(os.path.join(again, "bench-results.txt"), "w", encoding="utf-8") as f:
+                f.write(rerun)
+            try:
+                joined_files([d, d])
+                raise AssertionError("one run twice")
+            except Problem:
+                pass
+            with open(os.path.join(again, "bench-results.txt"), "w", encoding="utf-8") as f:
+                f.write(rerun.replace("01234567 (main)", "01234567 (main)\n# Run:         r2"))
+            both = joined_files([d, again])
+            assert sorted(both) == sorted(files), sorted(both)
+            two = both["exp-xeon8573c-2026-11-20.txt"]
+            at = two.index("# Run 2 of 2 of this file: its header, its table and its raw output"
+                           " follow.")
+            assert two[:at - 1] == exp and two[at + 1:at + 3] == [
+                "#", "# Host:        xeon8573c (expected CPU 'INTEL(R) XEON(R) PLATINUM 8573C')"]
+            assert sum(MARKER in l for l in two) == 6 and len(tables_of(two)) == 2
+            assert "# ExpBenchmark.finish256  common         10.2         11.0         12.0" \
+                in two[at:], two[at:at + 20]
+            assert check(written(d, two), [d, again]) == []
+            found = check(written(d, two), [again, d])
+            assert found and all(x.startswith("run ") for x in found), found
+            found = check(written(d, two, lambda l: l.replace("  10.2  ", "  10.3  ")),
+                          [d, again])
+            assert len(found) == 1 and found[0].startswith("run 2: table 1"), found
+            found = check(written(d, two), d)
+            assert len(found) == 1 and "holds 2 runs" in found[0], found
+            found = check(written(d, exp), [d, again])
+            assert len(found) == 1 and "holds 1 run " in found[0], found
+            # Runs of two hosts are not one file's.
+            with open(os.path.join(again, "bench-results.txt"), "w", encoding="utf-8") as f:
+                f.write(rerun.replace("# Host:        xeon8573c", "# Host:        epyc7763"))
+            try:
+                joined_files([d, again])
+                raise AssertionError("two hosts in one file")
+            except Problem as e:
+                assert "one host" in str(e), e
         # Another wrapping and a hand-added header line are the same file.
         rewrapped = "\n".join(l for l in exp if MARKER not in l).replace(
             "\n#              avx512_flag06", " avx512_flag06").replace(
@@ -914,8 +1027,11 @@ def main():
         p = sub.add_parser(command)
         if command == "check":
             p.add_argument("file", help="the results file to check")
-        p.add_argument("artifact", nargs="?", help="the downloaded artifact's directory")
-        p.add_argument("--run", help="the run to download the artifact of, with gh")
+        p.add_argument("artifact", nargs="*",
+                       help="a downloaded artifact's directory; several for a file of"
+                            " several runs of one host, in the file's order")
+        p.add_argument("--run", action="append",
+                       help="a run to download the artifact of, with gh; may be repeated")
         p.add_argument("--repo", default="vecbricks/vfdlibm",
                        help="the repository of --run (default: %(default)s)")
         if command == "write":
@@ -930,21 +1046,24 @@ def main():
     if not args.command:
         parser.error("write, check or --selftest")
     if bool(args.artifact) == bool(args.run):
-        parser.error("give the artifact's directory or --run, one of them")
+        parser.error("give artifact directories or --run, one of the two")
     with tempfile.TemporaryDirectory(prefix="bench-record-") as scratch:
-        return act(args, find_artifact(args.artifact or download(args.run, args.repo, scratch)))
+        directories = args.artifact or [
+            download(run, args.repo, os.path.join(scratch, "%d-%s" % (i, run)))
+            for i, run in enumerate(args.run)]
+        return act(args, [find_artifact(d) for d in directories])
 
 
-def act(args, directory):
+def act(args, directories):
     if args.command == "check":
-        diffs = check(args.file, directory)
+        diffs = check(args.file, directories)
         for line in diffs:
             print(line)
         print("%s: %s" % (args.file, "differs from the artifact" if diffs
                           else "its header, tables and raw section are the artifact's"))
         return 1 if diffs else 0
     files = {os.path.join(args.out_dir, name): lines
-             for name, lines in files_of(directory, args.name).items()}
+             for name, lines in joined_files(directories, args.name).items()}
     there = [path for path in files if os.path.exists(path)]
     if there and not args.force:
         raise Problem("%s: there already, and nothing was written; pass --force to overwrite,"

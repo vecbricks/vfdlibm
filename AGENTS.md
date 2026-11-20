@@ -122,9 +122,9 @@ port teaches.
 - A host run becomes a results file with `bench/record.py write --run <run id>`, which writes
   the header, the min/avg/max tables and the raw section from the run's artifact, one file per
   benchmark class, and leaves marked lines for the title, the reason and the reading. No figure
-  of those parts is copied by hand: before a file of one run is committed,
-  `bench/record.py check <file> --run <run id>` must pass. A file that keeps two runs is
-  checked run by run before they are joined; the script does not check the joined file yet.
+  of those parts is copied by hand: before the file is committed,
+  `bench/record.py check <file> --run <run id>` must pass. A run and its re-run on one host go
+  in one file, with `--run <run id>` given once per run, in order, to `write` and to `check`.
 - When a change moves committed numbers, measure again and commit the new file, then requote
   every document from it, rather than patching quoted figures one by one.
 
