@@ -434,7 +434,8 @@ class Expm1Test {
    * has, over the thresholds and dense draws over the forms and the k = 56 band. The same inputs
    * pass in the normal run, through {@link #faultRunInputsPass}. {@link Expm1#DROP_K_FORCING} is
    * caught by the thresholds alone: with the forcing dropped, the doubles just below the top of
-   * word 0x3fd62e42 and just above 0.5 ln2 get k = +-1 (PROOFS.md, L10, H14).
+   * word 0x3fd62e42, which {@link #thresholds} takes around the next word's first double, and
+   * just above 0.5 ln2 get k = +-1 (PROOFS.md, L10, H14).
    */
   static Map<String, Executable> faultCatchers() {
     Map<String, Executable> catchers = new LinkedHashMap<>();

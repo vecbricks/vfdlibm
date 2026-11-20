@@ -621,15 +621,19 @@ lane of the word `0x3fd62e42` and below, of which section C checks four doubles 
 blend, which `Expm1Test.foldBoundaries` samples (1026 low words per sign at each of its words,
 a sparse sample of the word's `2^32` doubles, and 4096 doubles each side of `+-0.5 ln2`, which
 is `0x3fd62e42_fefa39ef`, about 17 million doubles below the witnesses at the word's top) and
-`Expm1Test.thresholds()` touches (8 doubles each side of `0.5 ln2`, and 64 around the word's
-first double); and `l10KIsForcedByTheHighWordTest` scans the scalar transcription from each
+`Expm1Test.thresholds()` touches (8 doubles each side of `0.5 ln2`, and 64 around the first
+doubles of this word and of the next, `0x3fd62e43_00000000`, whose neighbours below are the top
+of this word); and `l10KIsForcedByTheHighWordTest` scans the scalar transcription from each
 witness to the word's top and finds the forcing not needed there, which says nothing of the
 port. The port's blend has a planted fault, `expm1.dropKForcing` (`Expm1.DROP_K_FORCING`),
 which gives every lane the formula's `k`: with it planted `Expm1Test`'s `thresholdsAndSpecials`,
 `foldBoundaries`, `foldBoundariesAtMaxSpecies`, `masked`, `maxSpecies` and `faultRunInputsPass`
-fail at every width, the first at `0x3fd62e42_ffffffcb`, and `Expm1Test.faultCatchers` requires
-every arm to fail on the thresholds and draws of `faultRunInputsPass`. Informal besides: that
-the port computes these steps, the code's text.
+fail at every width: 13 of `thresholds()`' 20935 inputs differ, the lowest at
+`0x3fd62e42_ffffffcb` among the 64 below the word's top, and 822 of `foldBoundaries`' 28698, the
+lowest at `0x3fd62e42_fefa39f7`, 8 doubles above `0.5 ln2`. That list is a run of
+`-Dtest=Expm1Test` with the fault, which CI does not make; what CI checks is
+`Expm1Test.faultCatchers`, which requires every arm to fail at every width on the inputs of
+`faultRunInputsPass`. Informal besides: that the port computes these steps, the code's text.
 
 ### L11. The k == 0 return is x - e with e = (x*(e-c)-c)-hxs and c = +0
 
