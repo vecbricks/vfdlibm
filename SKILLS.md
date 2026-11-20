@@ -255,7 +255,11 @@ a settled question.
   11 blends to 2 and 5 mask spills to none; at 256 bits under `-XX:UseAVX=2`, from 107 to 64,
   with 11 blends to 2, 25 constant broadcasts to 12 and 4 spills to none
   (`bench/asm/README.md`). Before blending two of the C's forms, look for a proof that one covers
-  the other's lanes; count the result with `bench/asm/` before timing it.
+  the other's lanes; count the result with `bench/asm/` before timing it. Timed as a pair
+  against its base on the Xeon Platinum 8573C
+  (`bench/results/exp-onediv-xeon8573c-2026-11-03.txt`, five rounds a side), the folded body is
+  1.33x to 1.48x faster by the median on common data at 256 and 512 bits and 1.18x to 1.31x on
+  mixed data, and no vector row is slower.
 - **Laptop first, then the EPYC.** The `D2L` boxing never showed under the laptop's default
   flags, where AVX512DQ is present; it showed only under `-XX:UseAVX=2`. Run a new port's
   benchmark under both before calling it done.
