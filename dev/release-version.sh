@@ -11,6 +11,7 @@
 #
 #   dev/release-version.sh [<tag>]
 #   dev/release-version.sh --version
+#   dev/release-version.sh --help
 #   dev/release-version.sh --self-test
 #
 # A tag v<version> releases the pom's <version> when the two are equal, the version is not a
@@ -99,7 +100,7 @@ case "${1:-}" in
   --version) [ $# -eq 1 ] || die "--version takes no argument" ;;
   -*) die "unknown option $1" ;;
 esac
-[ $# -le 1 ] || die "usage: dev/release-version.sh [--version | --self-test | <tag>]"
+[ $# -le 1 ] || die "usage: dev/release-version.sh [--version | --self-test | --help | <tag>]"
 
 fields="$(pom_fields "$root/pom.xml")" || die "cannot read $root/pom.xml"
 version="$(echo "$fields" | sed -n 1p)"

@@ -14,8 +14,8 @@ name: Release
 #             v<version>, the version is no -SNAPSHOT, the pom's <scm><tag> is the tag, and the
 #             tagged commit is on main. With no tag it prints the version and passes.
 #   ci        ci.yml's own jobs, called as they are: verify in its four rows with the jar check,
-#             the proofs under Z3, the allocation check at the runner's flags and as AVX2. A tag
-#             does not start ci.yml by itself.
+#             the proofs under Z3, the allocation check at the runner's flags and as AVX2, and
+#             the bench scripts' tests. A tag does not start ci.yml by itself.
 #   proofs    Every proof under Z3 and cvc5, as nightly.yml's job of that name.
 #   bundle    What would be uploaded, built as `publish` builds it but with a signing key made
 #             for the run: the jar, the sources jar, the Javadoc jar and the pom, each with a
@@ -187,6 +187,10 @@ jobs:
             --quick-generate-key "vfdlibm release dry run" rsa3072 sign 1d
           key="$(gpg --batch --pinentry-mode loopback --passphrase "$passphrase" \
             --armor --export-secret-keys)"
+          # Maven gets a gpg home with no key, as publish has none: if the Bouncy Castle signer
+          # were not in use, signing would fail here and not after the approval.
+          mkdir -m 700 "$RUNNER_TEMP/no-gnupg"
+          GNUPGHOME="$RUNNER_TEMP/no-gnupg" \
           MAVEN_GPG_KEY="$key" MAVEN_GPG_PASSPHRASE="$passphrase" \
             mvn -B --no-transfer-progress -Prelease -DskipTests -Dgpg.signer=bc verify
       - name: Check that each file to upload is there and its signature verifies
@@ -257,11 +261,13 @@ jobs:
             fi
           done
           exit "$missing"
+      # That the tagged commit is on main is checked by the version job alone, which this job
+      # needs; this repeats the rest of the rule.
       - name: Check the tag against the pom once more
         run: dev/release-version.sh "$GITHUB_REF_NAME"
       # verify builds and signs and uploads nothing, so the jars are checked before deploy
-      # builds them again and uploads. The check covers the first build; the second is of the
-      # same checkout and the same command.
+      # builds them again and uploads. The check covers the first build; that the second is the
+      # same is assumed (one checkout, one command), not shown.
       - name: Build and sign
         env:
           MAVEN_GPG_KEY: ${{ secrets.MAVEN_GPG_KEY }}
