@@ -178,7 +178,9 @@ jobs:
               *" ${FAULT%%.*} "*) ;;
               *) echo "::error::fault takes a fault of one of: $all; not '$FAULT'"; exit 1 ;;
             esac
-            if ! grep -qF -- "-Dvfdlibm.fault=$FAULT</argLine>" pom.xml; then
+            # $FAULT is letters, digits and one dot here, so the dot is the only pattern
+            # character; the name ends at a space or the end of the element.
+            if ! grep -qE -- "-Dvfdlibm\.fault=${FAULT//./\\.}([ <]|$)" pom.xml; then
               echo "::error::pom.xml has no fault run for '$FAULT'"; exit 1
             fi
             reached=''
@@ -547,7 +549,9 @@ jobs:
               echo
               if [ "$FAULT_MISSED" = true ]; then
                 echo "**The planted fault was not caught**: every sweep and fuzz passed (the"
-                echo "job \`fault-caught\` failed for that)."
+                echo "job \`fault-caught\` failed for that). A narrow fault, one that only"
+                echo "some inputs show, is missed by every stripe and fuzz that does not draw"
+                echo "them: that is a run that did not sample it, not yet a gap in the checks."
                 echo
               fi
               echo "The run: $run_url"
