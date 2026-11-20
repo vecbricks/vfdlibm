@@ -18,7 +18,8 @@
 #   1. The jar holds META-INF/LICENSE and META-INF/NOTICE, byte for byte the files at the root of
 #      this checkout, and NOTICE names Sun Microsystems: compiled classes carry no notice. A
 #      sources jar or a Javadoc jar beside the jar (<name>-sources.jar, <name>-javadoc.jar, as
-#      the release profile builds them) must hold the same two files.
+#      the release profile builds them) must hold the same two files; one that is not there
+#      is said to be skipped.
 #   2. Its manifest names the module, Automatic-Module-Name: io.github.vecbricks.vfdlibm, and the
 #      jar has no module-info.class beside that name.
 #   3. Its classes are the ones of this checkout's src/main/java, each source file's class and
@@ -31,9 +32,9 @@
 #   4. A consumer compiled against the jar alone, with the module jdk.incubator.vector, runs and
 #      finds every lane of every public function equal to StrictMath's by raw bits, in the plain
 #      and the masked form, at the preferred species. It finds the functions by name through
-#      reflection, and fails if VFdlibm has a public method, by name and number of parameters,
-#      that it did not call, or if the jar has another public class. It is compiled and run
-#      twice: with the jar on the class path, and as a module that requires
+#      reflection, and fails if VFdlibm has a public method, by name and parameter types, that
+#      it did not call, or if the jar has another class a consumer can reach. It is compiled and
+#      run twice: with the jar on the class path, and as a module that requires
 #      io.github.vecbricks.vfdlibm with the jar on the module path.
 #
 # The consumer is no test of a function: the suite is. It shows that the jar loads and links for
@@ -71,6 +72,7 @@ tool() {
 JAR="$(tool jar)" || exit 2
 JAVAC="$(tool javac)" || exit 2
 JAVA="$(tool java)" || exit 2
+command -v cmp > /dev/null || die "no cmp on PATH"
 # The line of -version that holds the version: JAVA_TOOL_OPTIONS puts a notice before it.
 version_of() { "$1" -version 2>&1 | grep -m 1 -E '^(javac|openjdk|java) ' ; }
 "$JAVAC" --release "$RELEASE" -version > /dev/null 2>&1 \
@@ -134,7 +136,10 @@ if [ -f "$work/unpacked/META-INF/NOTICE" ]; then
 fi
 for kind in sources javadoc; do
   sibling="${jar%.jar}-$kind.jar"
-  [ -f "$sibling" ] || continue
+  if [ ! -f "$sibling" ]; then
+    echo "skip  no $kind jar beside the jar (the release profile builds one)"
+    continue
+  fi
   mkdir "$work/$kind" || die "cannot unpack"
   (cd "$work/$kind" && "$JAR" xf "$sibling" META-INF/LICENSE META-INF/NOTICE) \
     || die "cannot unpack $sibling"
@@ -169,6 +174,9 @@ fi
 # the directory alone would not tell them apart.
 sources=()
 for source in "$root/src/main/java/$PACKAGE_DIR"/*.java; do
+  # A package-info.java with no annotation compiles to no class; with one, to
+  # package-info.class. Either way it is not a type, and its class is allowed below.
+  [ "$(basename "$source")" = package-info.java ] && continue
   [ -f "$source" ] && sources+=("$(basename "$source" .java)")
 done
 [ ${#sources[@]} -gt 0 ] || die "no sources under $root/src/main/java/$PACKAGE_DIR"
@@ -183,6 +191,10 @@ while IFS= read -r class; do
     for source in "${sources[@]}"; do
       [ "$top" = "$source" ] && known=1
     done
+    if [ "$name" = package-info ] \
+        && [ -f "$root/src/main/java/$PACKAGE_DIR/package-info.java" ]; then
+      known=1
+    fi
   fi
   [ "$known" -eq 1 ] || strangers="$strangers$class"$'\n'
 done < "$work/classes"
@@ -219,6 +231,7 @@ package consumer;
 import io.github.vecbricks.vfdlibm.VFdlibm;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
+import java.util.Arrays;
 import java.util.Set;
 import java.util.TreeSet;
 import java.util.function.DoubleUnaryOperator;
@@ -245,8 +258,13 @@ public final class Consumer {
   /** VFdlibm's public static method of that name and those parameters, noted as called. */
   private static Method function(String name, Class<?>... parameters) throws Exception {
     Method method = VFdlibm.class.getMethod(name, parameters);
-    CALLED.add(name + "/" + parameters.length);
+    CALLED.add(signature(method));
     return method;
+  }
+
+  /** A method's name and parameter types, which tell overloads apart. */
+  private static String signature(Method method) {
+    return method.getName() + Arrays.toString(method.getParameterTypes());
   }
 
   /** Checks f(x) and f(x, live), found by name, against the oracle. */
@@ -283,25 +301,32 @@ public final class Consumer {
     }
   }
 
-  /** The public static methods of VFdlibm that were not called, as name/number of parameters. */
+  /** The public static methods of VFdlibm that were not called. */
   private static Set<String> uncalled() {
     Set<String> names = new TreeSet<>();
     for (Method method : VFdlibm.class.getDeclaredMethods()) {
       int modifiers = method.getModifiers();
       if (Modifier.isPublic(modifiers) && Modifier.isStatic(modifiers)) {
-        names.add(method.getName() + "/" + method.getParameterCount());
+        names.add(signature(method));
       }
     }
     names.removeAll(CALLED);
     return names;
   }
 
-  /** The jar's public classes other than VFdlibm, from the class names in the arguments. */
+  /**
+   * The jar's classes other than VFdlibm that a consumer can name, from the class names in the
+   * arguments: public ones, nested only in public ones.
+   */
   private static Set<String> otherPublicClasses(String[] args) throws Exception {
     Set<String> names = new TreeSet<>();
     for (int i = 1; i < args.length; i++) {
       Class<?> type = Class.forName(args[i], false, VFdlibm.class.getClassLoader());
-      if (Modifier.isPublic(type.getModifiers()) && type != VFdlibm.class) {
+      boolean reachable = type != VFdlibm.class;
+      for (Class<?> c = type; c != null; c = c.getEnclosingClass()) {
+        reachable &= Modifier.isPublic(c.getModifiers());
+      }
+      if (reachable) {
         names.add(args[i]);
       }
     }

@@ -48,10 +48,17 @@ jobs:
         run: >-
           mvn -B --no-transfer-progress verify
           "-Dvfdlibm.test.jvmArgs=${{ matrix.jvm-args }}"
-      # The jar verify built, read as a consumer has it: its licence files, its module name, its
-      # classes, and a consumer compiled against it alone, which runs at the runner's own flags
-      # in every row (512 or 256 bits on x86, 128 on Arm), whatever the row's tests ran at.
+      # The jars a release uploads, less their signatures: the release profile adds the sources
+      # jar and the Javadoc jar to the jar verify built. The tests have just run.
+      - name: Build the release profile's jars
+        run: >-
+          mvn -B --no-transfer-progress -Prelease -Dgpg.skip=true -DskipTests package
+      # The jar read as a consumer has it: its licence files (the other two jars' too), its
+      # module name, its classes, and a consumer compiled against it alone, which runs under
+      # this row's JVM options as the tests did.
       - name: Check the jar from outside
+        env:
+          JAVA_TOOL_OPTIONS: ${{ matrix.jvm-args }}
         run: dev/jar-check.sh
 
   # The SMT proofs under proofs/ (proofs/README.md), under the pinned Z3 that dev/prove.sh
