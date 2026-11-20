@@ -24,6 +24,8 @@ way.
 | `log_exact_dk.smt2` | log's L7: dk = (double)k without L2D | `LogProofFiles` |
 | `log_long_words.smt2` | log's L8: the C's int words in long lanes | `LogProofFiles` |
 | `log_range_compare.smt2` | log's L9: common and subnormal lanes by one compare | `LogProofFiles` |
+| `expm1_reduction.smt2` | expm1's L10: exp's constants, c = +0, the forced k | `Expm1ProofFiles` |
+| `expm1_k_zero_return.smt2` | expm1's L11: e - c and v - c with c = +0 | `Expm1ProofFiles` |
 
 - `java.smt2`: Java's `int` and `long` operators over SMT-LIB's integers, each as the JLS
   defines it, and doubles as `S * M * 2^E`, with round to nearest stated on the number line for
@@ -66,8 +68,19 @@ way.
     patterns; over integers with `int2bv`, as `exp_half_sign.smt2` is, both solvers answered
     `unknown` after a minute.
 
+- `expm1_*.smt2`: expm1's lemmas, rendered from `Expm1` by `Expm1ProofFiles` the same way; L10's
+  file also renders `Exp`'s constants, to hold expm1's to them. Besides the code's text they
+  leave informal:
+  - L10: `fl(x - (-a)) = fl(x + a)`, one rational in this encoding; that `x - x` is `+0` for a
+    nonzero `x`, pinned at sampled doubles while rendering; that `StrictMath.expm1` is the
+    forced computation at the witnesses, and that they are the first from the word's top
+    (`ProofsTest`'s and a scalar run); a subnormal `x` less `+0`; the casts; the binades further
+    off than the next.
+  - L11: that `e` and `fl(r*e)` are never subnormal (bounds on the polynomial, sampled); the
+    binades further off than the next.
+
   `exp_highword_compare.smt2` and `exp_tiny_counterexample.smt2` are `QF_NIA`; the other three
-  exp files and the four log files are `ALL`, each header saying why.
+  exp files, the four log files and the two expm1 files are `ALL`, each header saying why.
 
 ## Running them
 
@@ -147,7 +160,9 @@ does for its binades. A symbolic denominator multiplies two unknowns, and the so
 in a minute, and rests there on `java_check.smt2` refusing both neighbours of every double it
 checks.
 
-Zero is not in the prelude: a proof whose value can round to zero states its own case.
+Zero is not in the prelude: a proof whose value can round to zero states its own case, as
+`log_zero_dk.smt2` and the two expm1 files do, with the sign of an exact zero as functions of
+the operands' sign bits, pinned to the JVM over every pair of signed zeros.
 
 ## Adding a proof
 
@@ -176,7 +191,9 @@ Zero is not in the prelude: a proof whose value can round to zero states its own
 6. A planted fault shows a check can fail: change a definition in a copy of `java.smt2` (a half
    step dropped, a midpoint moved) and see the proof's checks come back with the wrong verdict.
 
-`ProofFiles` writes the rendered files (exp's through `ExpProofFiles`) and `ProofFilesTest` fails
+`ProofFiles` writes the rendered files (each port's through its own class, `ExpProofFiles`,
+`LogProofFiles`, `Expm1ProofFiles`; the checks several files share, the signs of an exact zero
+and "a nonzero double less +0 is itself", are `ProofFiles`' own) and `ProofFilesTest` fails
 when a committed one differs from its rendering; `mvn -q test -Dtest=ProofFilesTest
 -Dvfdlibm.proofs.regen=true` rewrites them.
 

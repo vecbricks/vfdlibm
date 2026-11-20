@@ -463,7 +463,8 @@ a settled question.
   s_expm1.c reduces exactly as e_exp.c does, with the same `invln2`, `ln2_hi`, `ln2_lo` and band
   words, so exp's far-form fold (L2), its forced `k = 0` (L1, step 1) and its sign-bit `halF`
   (L5) hold for expm1 once a test pins the five values to exp's (`PROOFS.md`, L10, H13); the
-  SMT files rendered from `Exp` then check expm1's steps too. The forcing still needs its own
+  SMT files rendered from `Exp` then check expm1's steps too, and `proofs/expm1_reduction.smt2`
+  holds the five values to exp's under the solvers as well. The forcing still needs its own
   witness: the C reduced with the formula's `k` first differs from `StrictMath.expm1` at
   `0x3fd62e42_ffffffec`, not at the word's top double, so a test of the top alone would pass
   without the forcing.

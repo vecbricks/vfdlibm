@@ -302,7 +302,7 @@ final class ExpProofFiles {
    * The operands are the doubles as Java holds them, so each check is ground and linear; a chain
    * of them evaluates a formula with every intermediate double checked rather than trusted.
    */
-  private static final class Chain {
+  static final class Chain {
     private final StringBuilder out;
     private final String at;
 
