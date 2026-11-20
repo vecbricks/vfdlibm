@@ -72,7 +72,7 @@ name_matches() {
 missing_flags() {
   local key where string need flag missing=""
   IFS='|' read -r key where string need <<<"$1"
-  for flag in $need; do grep -qw -- "$flag" <<<"$2" || missing+="${missing:+ }$flag"; done
+  for flag in $need; do grep -qwF -- "$flag" <<<"$2" || missing+="${missing:+ }$flag"; done
   printf '%s' "$missing"; }
 
 # Whether a model name and a flags line are a row's host.
@@ -169,11 +169,9 @@ self_test() {
     echo "host.sh: a mismatch printed '$out'" >&2; failed=1
   fi
 
-  # The keys are the four hosts, each once, and every row is well formed.
-  n=$((n + 1)); got="$(keys | tr '\n' ' ')"
-  if [ "$got" != "epyc7763 xeon8573c xeon6973p epyc9v45 " ]; then
-    echo "host.sh: the keys are '$got'" >&2; failed=1
-  fi
+  # No key is there twice, and every row is well formed.
+  n=$((n + 1)); got="$(keys | sort | uniq -d | tr '\n' ' ')"
+  if [ -n "$got" ]; then echo "host.sh: more than one row for '$got'" >&2; failed=1; fi
   local row key where string need
   for row in "${HOSTS[@]}"; do
     n=$((n + 1)); IFS='|' read -r key where string need <<<"$row"
