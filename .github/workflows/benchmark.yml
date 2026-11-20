@@ -75,18 +75,28 @@ jobs:
       # directory left the tree without its other files.
       - uses: actions/checkout@v5
         with:
-          sparse-checkout: bench/host.sh
+          sparse-checkout: |
+            bench/host.sh
+            .github/workflows/benchmark.yml
           sparse-checkout-cone-mode: false
           path: probe
       # A probe step that fails is a CPU miss to the dispatcher, which then tries again hourly,
-      # so a script that is not there to run, or that has no row for the host, must fail a step
-      # of its own.
+      # so a script that is not there to run, fails its own test (which reads this file's host
+      # choices, hence the second path above) or has no row for the host must fail a step of
+      # its own.
       - name: Check the probe's script
         env:
           HOST: ${{ inputs.host }}
         run: |
-          test -x probe/bench/host.sh && bash -n probe/bench/host.sh
-          probe/bench/host.sh --keys | grep -qxF -- "$HOST"
+          if ! [ -x probe/bench/host.sh ]; then
+            echo "::error::bench/host.sh is missing or not executable on this ref"; exit 1
+          fi
+          if ! probe/bench/host.sh --self-test; then
+            echo "::error::bench/host.sh fails its self-test on this ref"; exit 1
+          fi
+          if ! probe/bench/host.sh --keys | grep -qxF -- "$HOST"; then
+            echo "::error::bench/host.sh has no row for host '$HOST'"; exit 1
+          fi
       - name: Probe the machine's CPU
         env:
           HOST: ${{ inputs.host }}

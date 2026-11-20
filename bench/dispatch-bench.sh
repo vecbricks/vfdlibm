@@ -10,8 +10,8 @@
 # Dispatches .github/workflows/benchmark.yml on one benchmark host and waits for it. When the run
 # failed on its CPU check (the runner was not the host's CPU), it waits an hour and dispatches
 # again; it stops on success, on a failure anywhere else, or after --attempts dispatches. One
-# other failure is retried the same way, up to three times in a row: a run that failed while
-# fetching the check's script, before any step looked at the machine. The
+# other failure is retried the same way: a run that failed while fetching the check's script,
+# before any step looked at the machine; the third such run in a row stops the script. The
 # expected CPU is never relaxed (SKILLS.md, "Where headline numbers come from"). Run it
 # detached, for example with nohup, and read its log.
 #
@@ -60,8 +60,8 @@
 
 R=vecbricks/vfdlibm; H=epyc7763; A=""; P=""
 # The host keys are bench/host.sh's, the table benchmark.yml checks the machine against.
-# The script's own directory, through a link to it, since it may be started by one.
-KEYS=$("$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/host.sh" --keys) || {
+# Beside this script, as check_base's git is: the script is run by its path in the repository.
+KEYS=$("$(dirname "$0")/host.sh" --keys) || {
   echo "could not read bench/host.sh's keys" >&2; exit 2; }
 usage() {
   echo "usage: bench/dispatch-bench.sh [--host $(tr '\n' '|' <<<"$KEYS" | sed 's/|$//')]" \
@@ -164,10 +164,10 @@ bench() {
       echo "$(t) $N: CPU check failed (not $H), retry in an hour"; sleep 3600; continue
     fi
     # Retried only when, in a failed run, the check was skipped and so was the step before it
-    # that checks the fetched script: the fetch or the job's setup failed, and the machine is
-    # not known. Anything else is a failure not to be retried: the check passed, the fetched
-    # script cannot be run or lacks the host, the run was cancelled, or no job started (a run
-    # with no steps, a startup failure).
+    # that checks the fetched script: the fetch failed, and the machine is not known. Anything
+    # else is a failure not to be retried: the check passed, the fetched script cannot be run
+    # or lacks the host, the run was cancelled, or no job started (a run with no steps, a
+    # startup failure).
     if [ "$probe" != skipped ] || [ "$c" != failure ] \
         || ! grep -qx "skipped Check the probe's script" <<<"$steps"; then return 1; fi
     early=$((early + 1))
