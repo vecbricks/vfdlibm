@@ -759,9 +759,10 @@ with `hu == 0` and `f != 0` down the general path, as a port that dropped the sh
 and keeps lines 154-155's `f == 0` returns; `Log1pTest.faultCatchers` requires the blended
 arm, the guarded arm and the public one to fail on the witnesses with it planted, at every
 width. The finish arm finishes the `hu == 0` lanes with `StrictMath.log1p`, so it cannot see the
-fold and is not asked to. The fuzz of the nightly cannot find this fault either (its inputs that
-differ are about one in `2^29` of a window), so `NightlyTest.fuzzCatchesThePlantedFault` leaves
-it out. With the fold planted the rest of `Log1pTest` passes: no other case reaches a witness.
+fold and is not asked to. The nightly's fuzz is very unlikely to find this fault either (its
+inputs that differ are about one in `2^29` of a window), so
+`NightlyTest.fuzzCatchesThePlantedFault` leaves it out. With the fold planted the rest of
+`Log1pTest` passes: no other case reaches a witness.
 
 **Encoding.** None. The two results are Java's evaluation of the transcription, not a solver's,
 and the search is a program, so nothing here is machine-checked in `proofs/`; an evaluation of
