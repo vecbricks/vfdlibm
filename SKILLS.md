@@ -542,9 +542,19 @@ a settled question.
 - **When a night fails,** the `alert` job (the only one with `issues: write`) opens an issue
   labelled `nightly-failure`, or comments on the open one, with the run's link, the seed, each
   job's result, the dispatch inputs that replay the run (seed, `nights`, `shards`, `arm-shards`,
-  `night`, `slice-nights`, `slice-night`, `fuzz-seconds`), and for each mismatch file its replay
+  `night`, `slice-nights`, `slice-night`, `fuzz-seconds`, and `functions` and `fault` when the
+  run was given them), and for each mismatch file its replay
   and JVM arguments (an as-AVX2 fuzz replays only with `-XX:UseAVX=2 -XX:MaxVectorSize=32`), its
   total (or, when a killed JVM wrote none, the count it wrote) and its first mismatches; the
   artifacts `nightly-*` hold the rest. A dispatch with those inputs replays every job, Arm's
   too. That the job's `issues: write` and its `gh` calls work is verified by the first real
   failure, not before.
+- **The functions are named once,** in the plan job's `all`, from which it makes the sweep's,
+  the fuzz's and Arm's matrices; a new port joins the night there. The dispatch input
+  `functions` (names separated by commas) narrows a run to some of them, and `fault` plants one
+  of the ports' faults, as `-Dvfdlibm.fault=<name>` in every sweep and fuzz JVM, so a dispatch
+  can show the night catching it and the alert job at work without a real failure:
+  `gh workflow run nightly.yml -f fault=exp.dropCorrection -f functions=exp -f fuzz-seconds=5`.
+  The plan job refuses a fault that `pom.xml` gives no fault run, since a mistyped name would
+  plant nothing and pass. The issue such a run opens says in its title and first line that the
+  fault was planted. No such dispatch has been made yet.

@@ -25,6 +25,12 @@ name: Nightly
 # dispatch with those inputs (as the issue lists them) replays every job of the run, Arm's too.
 # Every mismatch file is uploaded as an artifact, its inputs one per line as
 # hard-cases/<function>.txt takes them.
+#
+# The functions are named once, in the plan job, which makes every matrix; the input `functions`
+# narrows them. The input `fault` plants a fault (Faults.java) in every sweep and fuzz JVM, so
+# that a dispatch can show the night catching it and the alert job opening its issue:
+#
+#   gh workflow run nightly.yml -f fault=exp.dropCorrection -f functions=exp -f fuzz-seconds=5
 
 on:
   schedule:
@@ -63,6 +69,14 @@ on:
         description: 'Fuzz: seconds per function and species, 1 to 900'
         required: false
         default: '240'
+      functions:
+        description: 'Functions to run, separated by commas; blank for every one'
+        required: false
+        default: ''
+      fault:
+        description: 'Test of the alert only: a fault to plant, as exp.dropCorrection; else blank'
+        required: false
+        default: ''
 
 permissions:
   contents: read
@@ -80,9 +94,15 @@ jobs:
       seed: ${{ steps.plan.outputs.seed }}
       sweep: ${{ steps.plan.outputs.sweep }}
       arm: ${{ steps.plan.outputs.arm }}
+      fuzz: ${{ steps.plan.outputs.fuzz }}
       fuzz-seconds: ${{ steps.plan.outputs.fuzz-seconds }}
+      fault: ${{ steps.plan.outputs.fault }}
+      fault-args: ${{ steps.plan.outputs.fault-args }}
       replay: ${{ steps.plan.outputs.replay }}
     steps:
+      # Only to check that a fault to plant is one pom.xml names.
+      - uses: actions/checkout@v5
+        if: ${{ inputs.fault != '' }}
       - name: Plan the night
         id: plan
         env:
@@ -94,16 +114,20 @@ jobs:
           SLICE_NIGHTS: ${{ inputs.slice-nights || '32' }}
           SLICE_NIGHT: ${{ inputs.slice-night }}
           FUZZ_SECONDS: ${{ inputs.fuzz-seconds || '240' }}
+          FUNCTIONS: ${{ inputs.functions }}
+          FAULT: ${{ inputs.fault }}
         run: |
+          # Every function of the night. A new port is added here and nowhere else in this file.
+          all='exp expm1 log log10 log1p'
           pow2() { [[ $1 =~ ^[0-9]+$ ]] && [ "$1" -ge 1 ] && [ $(($1 & ($1 - 1))) -eq 0 ]; }
           if [ -z "$SEED" ]; then
             SEED="0x$(od -An -N8 -tx8 /dev/urandom | tr -d ' \n')"
           elif ! [[ $SEED =~ ^0x[0-9a-fA-F]{1,16}$ ]]; then
             echo "::error::seed takes 0x and up to 16 hex digits, not '$SEED'"; exit 1
           fi
-          # A matrix holds at most 256 jobs: 5 functions times 32 shards is 160, and 64 shards
-          # would be 320, past the cap. A stripe count (nights or slice-nights times shards) is at
-          # most Sweep's 4096 chunks.
+          # A matrix holds at most 256 jobs: `all`'s 5 functions times 32 shards is 160, and 64
+          # shards would be 320, past the cap. A stripe count (nights or slice-nights times shards)
+          # is at most Sweep's 4096 chunks.
           for n in "$NIGHTS" "$SLICE_NIGHTS"; do
             for s in "$SHARDS" "$ARM_SHARDS"; do
               if ! pow2 "$n" || ! pow2 "$s" || [ "$s" -gt 32 ] || [ $((n * s)) -gt 4096 ]; then
@@ -128,11 +152,45 @@ jobs:
               || [ "$FUZZ_SECONDS" -gt 900 ]; then
             echo "::error::fuzz-seconds takes 1 to 900, not '$FUZZ_SECONDS'"; exit 1
           fi
+          # The functions input narrows the night; the night's order stays `all`'s.
+          functions="$all"
+          if [ -n "$FUNCTIONS" ]; then
+            if ! [[ $FUNCTIONS =~ ^[a-z0-9]+(,[a-z0-9]+)*$ ]]; then
+              echo "::error::functions takes names separated by commas, not '$FUNCTIONS'"; exit 1
+            fi
+            for f in ${FUNCTIONS//,/ }; do
+              case " $all " in
+                *" $f "*) ;;
+                *) echo "::error::functions takes some of: $all; not '$f'"; exit 1 ;;
+              esac
+            done
+            functions=''
+            for f in $all; do
+              case ",$FUNCTIONS," in *",$f,"*) functions="$functions${functions:+ }$f" ;; esac
+            done
+          fi
+          # A planted fault is a port's, <function>.<what>, and one of those pom.xml gives a
+          # fault run (PlantedFaultTest holds that list to the ports' faults): a mistyped name
+          # would plant nothing, and the run would pass as if the night had missed the fault.
+          fault_args=''
+          if [ -n "$FAULT" ]; then
+            if ! [[ $FAULT =~ ^[a-z][a-z0-9]*\.[A-Za-z][A-Za-z0-9]*$ ]]; then
+              echo "::error::fault takes <function>.<what>, not '$FAULT'"; exit 1
+            fi
+            case " $all " in
+              *" ${FAULT%%.*} "*) ;;
+              *) echo "::error::fault takes a fault of one of: $all; not '$FAULT'"; exit 1 ;;
+            esac
+            if ! grep -qF -- "-Dvfdlibm.fault=$FAULT</argLine>" pom.xml; then
+              echo "::error::pom.xml has no fault run for '$FAULT'"; exit 1
+            fi
+            fault_args="-Dvfdlibm.fault=$FAULT"
+          fi
           # One matrix entry per function and shard: the whole-sweep stripe, the slice's stripe
           # and the species the slice takes; on Arm the first shard also fuzzes.
           matrix() {
             local shards="$1" slice_species="$2" json='{"include":[' sep='' f j fuzz
-            for f in exp expm1 log log10 log1p; do
+            for f in $functions; do
               for ((j = 0; j < shards; j++)); do
                 if [ "$j" = 0 ]; then fuzz=true; else fuzz=false; fi
                 json="$json$sep{\"function\":\"$f\",\"shard\":$j"
@@ -144,9 +202,24 @@ jobs:
             done
             echo "$json]}"
           }
+          # The fuzz: each function at the runner's own flags and compiled as an AVX2 host. The
+          # salt gives each job its own inputs and names its artifact.
+          fuzz_matrix() {
+            local json='{"include":[' sep='' f
+            for f in $functions; do
+              json="$json$sep{\"function\":\"$f\",\"name\":\"runner flags\""
+              json="$json,\"jvm-args\":\"\",\"salt\":1}"
+              json="$json,{\"function\":\"$f\",\"name\":\"as AVX2\""
+              json="$json,\"jvm-args\":\"-XX:UseAVX=2 -XX:MaxVectorSize=32\",\"salt\":2}"
+              sep=','
+            done
+            echo "$json]}"
+          }
           replay="seed=$SEED nights=$NIGHTS shards=$SHARDS arm-shards=$ARM_SHARDS"
           replay="$replay night=$NIGHT slice-nights=$SLICE_NIGHTS slice-night=$SLICE_NIGHT"
           replay="$replay fuzz-seconds=$FUZZ_SECONDS"
+          if [ "$functions" != "$all" ]; then replay="$replay functions=${functions// /,}"; fi
+          if [ -n "$FAULT" ]; then replay="$replay fault=$FAULT"; fi
           echo "replay with the dispatch inputs: $replay"
           echo "sweep: night $NIGHT of $NIGHTS; x86 stripes $((NIGHT * SHARDS)) to" \
             "$((NIGHT * SHARDS + SHARDS - 1)) of $((NIGHTS * SHARDS)), Arm stripes" \
@@ -154,11 +227,19 @@ jobs:
             "$((NIGHTS * ARM_SHARDS)) per function"
           echo "slice (x86 128 bits, Arm max): night $SLICE_NIGHT of $SLICE_NIGHTS"
           echo "fuzz: $FUZZ_SECONDS s per function and species"
+          echo "functions: $functions"
+          if [ -n "$FAULT" ]; then
+            echo "::warning::the fault $FAULT is planted in every sweep and fuzz: this run tests" \
+              "the alert, and its mismatches are not the library's"
+          fi
           {
             echo "seed=$SEED"
             echo "sweep=$(matrix "$SHARDS" 128)"
             echo "arm=$(matrix "$ARM_SHARDS" max)"
+            echo "fuzz=$(fuzz_matrix)"
             echo "fuzz-seconds=$FUZZ_SECONDS"
+            echo "fault=$FAULT"
+            echo "fault-args=$fault_args"
             echo "replay=$replay"
           } >> "$GITHUB_OUTPUT"
 
@@ -193,6 +274,7 @@ jobs:
           STRIPE: ${{ matrix.stripe }}
           NIGHTLY_EXCEPT: ${{ matrix.slice-species }}
           SEED: ${{ needs.plan.outputs.seed }}
+          NIGHTLY_JVM_ARGS: ${{ needs.plan.outputs.fault-args }}
         run: dev/nightly.sh sweep "$FUNCTION" "stripe:$STRIPE" "$SEED"
       - name: Sweep the slice at 128 bits
         if: ${{ !cancelled() }}
@@ -201,6 +283,7 @@ jobs:
           STRIPE: ${{ matrix.slice }}
           SLICE_SPECIES: ${{ matrix.slice-species }}
           SEED: ${{ needs.plan.outputs.seed }}
+          NIGHTLY_JVM_ARGS: ${{ needs.plan.outputs.fault-args }}
         run: dev/nightly.sh sweep "$FUNCTION" "stripe:$STRIPE" "$SEED" "$SLICE_SPECIES"
       - name: Upload the logs and mismatches
         if: always()
@@ -219,16 +302,7 @@ jobs:
     strategy:
       fail-fast: false
       max-parallel: 3
-      matrix:
-        function: [exp, expm1, log, log10, log1p]
-        name: [runner flags, as AVX2]
-        include:
-          - name: runner flags
-            jvm-args: ''
-            salt: 1
-          - name: as AVX2
-            jvm-args: -XX:UseAVX=2 -XX:MaxVectorSize=32
-            salt: 2
+      matrix: ${{ fromJSON(needs.plan.outputs.fuzz) }}
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-java@v5
@@ -248,7 +322,7 @@ jobs:
           SECONDS_EACH: ${{ needs.plan.outputs.fuzz-seconds }}
           SEED: ${{ needs.plan.outputs.seed }}
           SALT: ${{ matrix.salt }}
-          NIGHTLY_JVM_ARGS: ${{ matrix.jvm-args }}
+          NIGHTLY_JVM_ARGS: ${{ matrix.jvm-args }} ${{ needs.plan.outputs.fault-args }}
         run: |
           seed="$(printf '0x%016x' $((SEED + SALT)))"
           dev/nightly.sh fuzz "$FUNCTION" "$SECONDS_EACH" "$seed"
@@ -290,6 +364,7 @@ jobs:
           STRIPE: ${{ matrix.stripe }}
           NIGHTLY_EXCEPT: ${{ matrix.slice-species }}
           SEED: ${{ needs.plan.outputs.seed }}
+          NIGHTLY_JVM_ARGS: ${{ needs.plan.outputs.fault-args }}
         run: dev/nightly.sh sweep "$FUNCTION" "stripe:$STRIPE" "$SEED"
       - name: Sweep the slice at max
         if: ${{ !cancelled() }}
@@ -298,6 +373,7 @@ jobs:
           STRIPE: ${{ matrix.slice }}
           SLICE_SPECIES: ${{ matrix.slice-species }}
           SEED: ${{ needs.plan.outputs.seed }}
+          NIGHTLY_JVM_ARGS: ${{ needs.plan.outputs.fault-args }}
         run: dev/nightly.sh sweep "$FUNCTION" "stripe:$STRIPE" "$SEED" "$SLICE_SPECIES"
       - name: Fuzz
         if: ${{ !cancelled() && matrix.fuzz }}
@@ -305,6 +381,7 @@ jobs:
           FUNCTION: ${{ matrix.function }}
           SECONDS_EACH: ${{ needs.plan.outputs.fuzz-seconds }}
           SEED: ${{ needs.plan.outputs.seed }}
+          NIGHTLY_JVM_ARGS: ${{ needs.plan.outputs.fault-args }}
         run: |
           seed="$(printf '0x%016x' $((SEED + 3)))"
           dev/nightly.sh fuzz "$FUNCTION" "$SECONDS_EACH" "$seed"
@@ -357,6 +434,7 @@ jobs:
           SHA: ${{ github.sha }}
           SEED: ${{ needs.plan.outputs.seed }}
           REPLAY: ${{ needs.plan.outputs.replay }}
+          FAULT: ${{ needs.plan.outputs.fault }}
           RESULTS: >-
             plan=${{ needs.plan.result }} sweep=${{ needs.sweep.result }}
             fuzz=${{ needs.fuzz.result }} arm=${{ needs.arm.result }}
@@ -364,7 +442,16 @@ jobs:
         run: |
           body=body.md
           run_url="$SERVER/$GH_REPO/actions/runs/$RUN_ID"
+          title="Nightly correctness run failed"
+          if [ -n "$FAULT" ]; then title="$title (a test: fault $FAULT planted)"; fi
           {
+            # Said first, so that a test of this job is not read as a failure of the library.
+            if [ -n "$FAULT" ]; then
+              echo "**A test of the alert, not a failure of the library.** The run was dispatched"
+              echo "with the fault \`$FAULT\` planted (\`-Dvfdlibm.fault=$FAULT\`) in every"
+              echo "sweep and fuzz, so the mismatches below are the planted fault's."
+              echo
+            fi
             echo "The nightly correctness run failed: $run_url"
             echo
             echo "Commit $SHA, seed \`${SEED:-none}\`. Jobs: $RESULTS."
@@ -419,6 +506,6 @@ jobs:
           if [ -n "$open" ]; then
             gh issue comment "$open" --body-file "$body"
           else
-            gh issue create --title "Nightly correctness run failed" \
+            gh issue create --title "$title" \
               --label nightly-failure --body-file "$body"
           fi
