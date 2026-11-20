@@ -123,12 +123,8 @@ jobs:
           all='exp expm1 log log10 log1p'
           # A number here has no leading zero, which bash's arithmetic would read as octal, and
           # at most five digits, more than any limit below.
-          number() {
-            [[ $1 =~ ^(0|[1-9][0-9]{0,4})$ ]] && return 0
-            echo "::error::a number is written without a leading zero, in at most five digits:" \
-              "not '$1'"
-            return 1
-          }
+          number() { [[ $1 =~ ^(0|[1-9][0-9]{0,4})$ ]]; }
+          plain='(a number has no leading zero)'
           pow2() { number "$1" && [ "$1" -ge 1 ] && [ $(($1 & ($1 - 1))) -eq 0 ]; }
           if [ -z "$SEED" ]; then
             SEED="0x$(od -An -N8 -tx8 /dev/urandom | tr -d ' \n')"
@@ -197,7 +193,7 @@ jobs:
             for s in "$SHARDS" "$ARM_SHARDS"; do
               if ! pow2 "$n" || ! pow2 "$s" || [ "$s" -gt 32 ] || [ $((n * s)) -gt 4096 ]; then
                 echo "::error::nights, slice-nights and the shards take powers of two, the" \
-                  "shards at most 32, a nights count times a shard count at most 4096"
+                  "shards at most 32, a nights count times a shard count at most 4096 $plain"
                 exit 1
               fi
               if [ $((count * s)) -gt 256 ]; then
@@ -211,16 +207,17 @@ jobs:
           if [ -z "$NIGHT" ]; then NIGHT=$((days % NIGHTS)); fi
           if [ -z "$SLICE_NIGHT" ]; then SLICE_NIGHT=$((days % SLICE_NIGHTS)); fi
           if ! number "$NIGHT" || [ "$NIGHT" -ge "$NIGHTS" ]; then
-            echo "::error::night takes 0 to $((NIGHTS - 1)), not '$NIGHT'"; exit 1
+            echo "::error::night takes 0 to $((NIGHTS - 1)), not '$NIGHT' $plain"; exit 1
           fi
           if ! number "$SLICE_NIGHT" || [ "$SLICE_NIGHT" -ge "$SLICE_NIGHTS" ]; then
-            echo "::error::slice-night takes 0 to $((SLICE_NIGHTS - 1)), not '$SLICE_NIGHT'"
+            echo "::error::slice-night takes 0 to $((SLICE_NIGHTS - 1)), not '$SLICE_NIGHT'" \
+              "$plain"
             exit 1
           fi
           # The fuzz job runs up to 4 species (128, 256, 512, max) in its 90 minutes.
           if ! number "$FUZZ_SECONDS" || [ "$FUZZ_SECONDS" -lt 1 ] \
               || [ "$FUZZ_SECONDS" -gt 900 ]; then
-            echo "::error::fuzz-seconds takes 1 to 900, not '$FUZZ_SECONDS'"; exit 1
+            echo "::error::fuzz-seconds takes 1 to 900, not '$FUZZ_SECONDS' $plain"; exit 1
           fi
           # One matrix entry per function and shard: the whole-sweep stripe, the slice's stripe
           # and the species the slice takes; on Arm the first shard also fuzzes.
@@ -448,8 +445,8 @@ jobs:
 
   # A run with a planted fault whose sweeps and fuzzes all pass has missed the fault
   # (dev/nightly.sh fails on any mismatch): this job fails then, so that the run is red and the
-  # alert job reports it. It claims nothing else: when a job did fail, the mismatch files the
-  # issue lists say whether it was the fault.
+  # alert job reports it. Its passing claims nothing: when a job did fail, the mismatch files
+  # the issue lists say whether it was the fault, and the issue says so when there is none.
   fault-caught:
     needs: [plan, sweep, fuzz, arm]
     if: always() && inputs.fault != '' && needs.plan.result == 'success'
@@ -515,7 +512,6 @@ jobs:
             label=nightly-fault-test
             about="A nightly run with a planted fault, a test of the alert job"
             title="Nightly run with a planted fault (a test of the alert job)"
-            RESULTS="$RESULTS fault-caught=$FAULT_CAUGHT"
           fi
           {
             # Said first, so that a test of this job is not read as a failure of the library.
@@ -526,8 +522,8 @@ jobs:
               echo "mismatch below is the planted fault's and not the library's."
               echo
               if [ "$FAULT_CAUGHT" = failure ]; then
-                echo "**The planted fault was not caught**: every sweep and fuzz passed"
-                echo "(\`fault-caught=failure\`)."
+                echo "**The planted fault was not caught**: every sweep and fuzz passed (the"
+                echo "job \`fault-caught\` failed for that)."
                 echo
               fi
               echo "The run: $run_url"
@@ -560,10 +556,12 @@ jobs:
               echo '```'
               echo
             done
-            if [ "$found" = 0 ] && [ -n "$FAULT" ]; then
-              echo "No mismatch file records a mismatch: no job that ran caught the planted"
-              echo "fault. See the run's logs for a job that failed for another reason (a build,"
-              echo "a timeout)."
+            if [ "$found" = 0 ] && [ "$FAULT_CAUGHT" = failure ]; then
+              echo "No mismatch file records a mismatch."
+            elif [ "$found" = 0 ] && [ -n "$FAULT" ]; then
+              echo "**The planted fault was not caught**: no mismatch file records a mismatch,"
+              echo "and a job failed for another reason (a build, a timeout). See the run's"
+              echo "logs."
             elif [ "$found" = 0 ]; then
               echo "No mismatch file records a mismatch: a job failed for another reason (a"
               echo "build, a timeout, a proof). See the run's logs."
