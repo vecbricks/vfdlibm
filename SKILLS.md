@@ -212,7 +212,9 @@ a settled question.
   `bench/dispatch-bench.sh --host <host>` dispatches it and, when the run failed on that check,
   waits an hour and dispatches again, until a run passes, fails on something else, or (for the
   9V45, or with `--attempts`) the attempts run out (`bench/dispatch-epyc.sh` is the same with
-  `--host epyc7763`). Other CPUs (the EPYC 9V74, the Xeon Platinum 8370C) are common draws, and
+  `--host epyc7763`). A run that failed while fetching the script, before any step looked at
+  the machine, is tried again too, three times in a row at most, each counting as an attempt.
+  Other CPUs (the EPYC 9V74, the Xeon Platinum 8370C) are common draws, and
   accepting one would put a result on a different machine from every result before it. If a
   host stays scarce for days, changing the hosts is a decision for the owner, not a change to
   the check.

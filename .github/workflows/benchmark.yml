@@ -65,8 +65,10 @@ jobs:
       INLINE: -XX:CompileCommand=inline,io.github.vecbricks.vfdlibm.*::*
     steps:
       # First, before any setup beyond fetching the one script: a job checks its own machine,
-      # since every job is a new VM. bench/dispatch-bench.sh looks for the probe step's exact
-      # name among a failed run's failed steps. bench/host.sh holds each host's CPU string and
+      # since every job is a new VM. bench/dispatch-bench.sh reads the conclusions of the two
+      # steps named "Probe the machine's CPU" and "Check the probe's script", by those exact
+      # names: a failed probe is a CPU miss, and both skipped in a failed run is a fetch that
+      # failed; it tries again after either. bench/host.sh holds each host's CPU string and
       # says how it is matched; CI runs its self-test. The whole tree is checked out further
       # down, after the checks that cost seconds. The script goes to a directory of its own,
       # which the later checkout removes: a second checkout over a sparse one in the same
@@ -77,9 +79,14 @@ jobs:
           sparse-checkout-cone-mode: false
           path: probe
       # A probe step that fails is a CPU miss to the dispatcher, which then tries again hourly,
-      # so a script that is not there to run must fail a step of its own.
+      # so a script that is not there to run, or that has no row for the host, must fail a step
+      # of its own.
       - name: Check the probe's script
-        run: test -x probe/bench/host.sh && bash -n probe/bench/host.sh
+        env:
+          HOST: ${{ inputs.host }}
+        run: |
+          test -x probe/bench/host.sh && bash -n probe/bench/host.sh
+          probe/bench/host.sh --keys | grep -qxF -- "$HOST"
       - name: Probe the machine's CPU
         env:
           HOST: ${{ inputs.host }}
