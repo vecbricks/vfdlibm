@@ -432,12 +432,17 @@ class Expm1Test {
   /**
    * expm1's faults, each with the check that must catch it: every arm, at each width the host
    * has, over the thresholds and dense draws over the forms and the k = 56 band. The same inputs
-   * pass in the normal run, through {@link #faultRunInputsPass}.
+   * pass in the normal run, through {@link #faultRunInputsPass}. {@link Expm1#DROP_K_FORCING} is
+   * caught by the thresholds alone: with the forcing dropped, the doubles just below the top of
+   * word 0x3fd62e42, which {@link #thresholds} takes around the next word's first double, get
+   * k = +-1, as do some doubles above 0.5 ln2 in magnitude, from the eighth up for positive x and
+   * the first up for negative x (PROOFS.md, L10, H14).
    */
   static Map<String, Executable> faultCatchers() {
     Map<String, Executable> catchers = new LinkedHashMap<>();
     for (String fault : new String[] {
-        Expm1.DROP_CORRECTION, Expm1.CONSTANT_OFF_BY_ONE_ULP, Expm1.THRESHOLD_MOVED}) {
+        Expm1.DROP_CORRECTION, Expm1.CONSTANT_OFF_BY_ONE_ULP, Expm1.THRESHOLD_MOVED,
+        Expm1.DROP_K_FORCING}) {
       catchers.put(fault, () -> forEachWidth(species -> ARMS.forEach((name, arm) ->
           PlantedFaultTest.assertCaught(fault, () -> Oracle.assertUnary(
               name, species, x -> arm.apply(x, null), StrictMath::expm1, faultRunInputs())))));

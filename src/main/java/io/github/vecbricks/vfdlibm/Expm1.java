@@ -75,10 +75,12 @@ import jdk.incubator.vector.VectorSpecies;
  * </ul>
  *
  * <p>All three are exact. {@link #expm1}, which {@code VFdlibm.expm1} calls, is the guarded arm,
- * provisionally, as for log1p, whose rare paths are as cheap in vector form. No arm has been
- * timed: the runs on the benchmark hosts decide, each for its own instruction set, the AVX-512
- * hosts first ({@code HARDWARE.md}), and the other two arms are kept so the choice can be
- * measured.
+ * provisionally, as for log1p, whose rare paths are as cheap in vector form. Each arm was timed
+ * once on two hosts ({@code bench/results/expm1-xeon8573c-2026-11-04.txt} and {@code
+ * expm1-epyc7763-2026-11-04.txt}): every arm is within 1.3x of the others on every native row, so
+ * no direction is read ({@code SKILLS.md}); further runs on the benchmark hosts decide, each for
+ * its own instruction set, the AVX-512 hosts first ({@code HARDWARE.md}), and the other two
+ * arms are kept so the choice can be re-measured.
  */
 final class Expm1 {
 
@@ -125,6 +127,7 @@ final class Expm1 {
   static final String CONSTANT_OFF_BY_ONE_ULP = "expm1.constantOffByOneUlp";
   static final String THRESHOLD_MOVED = "expm1.thresholdMoved";
   static final String GUARD_MISSES_FILTER = "expm1.guardMissesFilter";
+  static final String DROP_K_FORCING = "expm1.dropKForcing";
   /** ln2_hi one ulp up, for {@link #CONSTANT_OFF_BY_ONE_ULP}. */
   private static final double LN2_HI_UP = Double.longBitsToDouble(0x3fe62e42_fee00001L);
   // Read once into constants, so the body holds no call and an unplanted fault folds away.
@@ -144,6 +147,13 @@ final class Expm1 {
    * garbage ({@code k} saturates). The other arms are unchanged.
    */
   private static final boolean GUARD_MISSING_FILTER = Faults.is(GUARD_MISSES_FILTER);
+  /**
+   * Drops the forcing of {@code k = 0} on the lanes line 162's test leaves unreduced, for {@link
+   * #DROP_K_FORCING}: every lane takes the formula's {@code k}, which is {@code +-1} on the part
+   * of word {@code 0x3fd62e42} above {@code 0.5 ln2}, where the C keeps {@code k = 0}
+   * (PROOFS.md, L10, H14).
+   */
+  private static final boolean DROPPING_K_FORCING = Faults.is(DROP_K_FORCING);
 
   /** How the rare lanes are computed: blended always, blended behind a test, or per lane. */
   private static final int BLEND = 0;
@@ -226,7 +236,9 @@ final class Expm1 {
     // never kept; a positive x up to o_threshold is kept, with k up to 1024.
     DoubleVector halF = (DoubleVector) bits.and(Long.MIN_VALUE).or(HALF_BITS)
         .viewAsFloatingLanes();
-    DoubleVector kArg = DoubleVector.zero(species).blend(x.mul(INVLN2).add(halF), reduced);
+    DoubleVector kFormula = x.mul(INVLN2).add(halF);
+    DoubleVector kArg =
+        DROPPING_K_FORCING ? kFormula : DoubleVector.zero(species).blend(kFormula, reduced);
     IntVector k = (IntVector) kArg.convertShape(VectorOperators.D2I, intSpecies, 0);
     DoubleVector t = (DoubleVector) k.convertShape(VectorOperators.I2D, species, 0);
     LongVector kLong = (LongVector) k.convertShape(VectorOperators.I2L, longSpecies, 0);
