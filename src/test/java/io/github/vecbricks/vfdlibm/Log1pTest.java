@@ -5,11 +5,25 @@
  * is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either
  * express or implied. See the License for the specific language governing permissions and
  * limitations under the License.
+ *
+ * cLog1p below transcribes fdlibm 5.3's s_log1p.c (reference/fdlibm-5.3/s_log1p.c), which
+ * carries this notice:
+ *
+ * ====================================================
+ * Copyright (C) 1993 by Sun Microsystems, Inc. All rights reserved.
+ *
+ * Developed at SunSoft, a Sun Microsystems, Inc. business.
+ * Permission to use, copy, modify, and distribute this
+ * software is freely granted, provided that this notice
+ * is preserved.
+ * ====================================================
  */
 package io.github.vecbricks.vfdlibm;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -263,6 +277,189 @@ class Log1pTest {
 
   private static void assertBits(long want, double got) {
     assertEquals(Long.toHexString(want), Long.toHexString(Double.doubleToRawLongBits(got)));
+  }
+
+  // ---------------------------------------------------------------------------------------------
+  // The C, in scalar Java
+
+  /** {@code __HI(x)}. */
+  private static int hi(double x) {
+    return (int) (Double.doubleToRawLongBits(x) >>> 32);
+  }
+
+  /** {@code __HI(u) = hi}. */
+  private static double withHi(double u, int hi) {
+    return Double.longBitsToDouble(
+        ((long) hi << 32) | (Double.doubleToRawLongBits(u) & Lanes.LOW_WORD));
+  }
+
+  /**
+   * s_log1p.c's {@code log1p}, lines 109 to 164, line by line in scalar Java, with the port's
+   * constants. With {@code generalPathOnly}, an input of the {@code hu == 0} path whose {@code f}
+   * is not zero skips lines 156 to 158 and takes the general polynomial path, lines 160 to 164:
+   * the computation a port that folded the short path away would make. {@link Log1pShortPath}
+   * compares the two.
+   */
+  static double cLog1p(double x, boolean generalPathOnly) {
+    double hfsq;
+    double f = 0;
+    double c = 0;
+    double s;
+    double z;
+    double r;
+    double u;
+    int k;
+    int hx;
+    int hu = 0;
+    int ax;
+
+    hx = hi(x);
+    ax = hx & 0x7fffffff;
+
+    k = 1;
+    if (hx < Log1p.HX_BELOW_SQRT2_M1) {
+      if (ax >= Log1p.AX_MINUS_ONE) {
+        if (x == -1.0) {
+          return -Log1p.TWO54 / Log1p.ZERO;
+        } else {
+          // The C's (x-x)/(x-x): an invalid operation, whose NaN's bits the C leaves to the
+          // hardware; StrictMath.log1p gives Double.NaN for every such x, as the port does
+          // (SKILLS.md, "An invalid operation's NaN is not the hardware's").
+          return Double.NaN;
+        }
+      }
+      if (ax < Log1p.AX_TINY) {
+        if (Log1p.TWO54 + x > Log1p.ZERO && ax < Log1p.AX_TINIEST) {
+          return x;
+        } else {
+          return x - x * x * 0.5;
+        }
+      }
+      if (hx > 0 || hx <= Log1p.HX_NEGATIVE_K_ZERO) {
+        k = 0;
+        f = x;
+        hu = 1;
+      }
+    }
+    if (hx >= Log1p.HX_NON_FINITE) {
+      return x + x;
+    }
+    if (k != 0) {
+      if (hx < Log1p.HX_HUGE) {
+        u = 1.0 + x;
+        hu = hi(u);
+        k = (hu >> 20) - 1023;
+        c = (k > 0) ? 1.0 - (u - x) : x - (u - 1.0);
+        c /= u;
+      } else {
+        u = x;
+        hu = hi(u);
+        k = (hu >> 20) - 1023;
+        c = 0;
+      }
+      hu &= 0x000fffff;
+      if (hu < Log1p.HU_SQRT2) {
+        u = withHi(u, hu | 0x3ff00000);
+      } else {
+        k += 1;
+        u = withHi(u, hu | 0x3fe00000);
+        hu = (0x00100000 - hu) >> 2;
+      }
+      f = u - 1.0;
+    }
+    hfsq = 0.5 * f * f;
+    if (hu == 0) {
+      if (f == Log1p.ZERO) {
+        if (k == 0) {
+          return Log1p.ZERO;
+        } else {
+          c += k * Log1p.LN2_LO;
+          return k * Log1p.LN2_HI + c;
+        }
+      }
+      if (!generalPathOnly) {
+        r = hfsq * (1.0 - Log1p.TWO_THIRDS * f);
+        if (k == 0) {
+          return f - r;
+        } else {
+          return k * Log1p.LN2_HI - ((r - (k * Log1p.LN2_LO + c)) - f);
+        }
+      }
+    }
+    s = f / (2.0 + f);
+    z = s * s;
+    r = z * (Log1p.LP1 + z * (Log1p.LP2 + z * (Log1p.LP3 + z * (Log1p.LP4 + z * (Log1p.LP5 + z
+        * (Log1p.LP6 + z * Log1p.LP7))))));
+    if (k == 0) {
+      return f - (hfsq - s * (hfsq + r));
+    } else {
+      return k * Log1p.LN2_HI - ((hfsq - (s * (hfsq + r) + (k * Log1p.LN2_LO + c))) - f);
+    }
+  }
+
+  /** Whether {@link #cLog1p} reaches line 156 at {@code x}: {@code hu == 0} with f not zero. */
+  static boolean takesShortPath(double x) {
+    int hx = hi(x);
+    if (hx < Log1p.HX_BELOW_SQRT2_M1
+        && ((hx & 0x7fffffff) >= Log1p.AX_MINUS_ONE || (hx & 0x7fffffff) < Log1p.AX_TINY
+            || hx > 0 || hx <= Log1p.HX_NEGATIVE_K_ZERO)) {
+      return false;
+    }
+    if (hx >= Log1p.HX_NON_FINITE) {
+      return false;
+    }
+    double u = hx < Log1p.HX_HUGE ? 1.0 + x : x;
+    int hu = hi(u) & 0x000fffff;
+    boolean lowZero = (int) Double.doubleToRawLongBits(u) == 0;
+    return hu < Log1p.HU_SQRT2 ? hu == 0 && !lowZero : (0x00100000 - hu) >> 2 == 0;
+  }
+
+  /**
+   * The scalar transcription {@link #cLog1p} is the oracle's computation, bit for bit, on every
+   * input this suite has: the thresholds, the hard cases, sampled bit patterns, the draws near
+   * the powers of two of {@code 1+x} where the {@code hu == 0} path runs, and negative x.
+   */
+  @Test
+  void scalarTranscriptionIsStrictMath() {
+    double[] xs = Inputs.concat(thresholds(), Inputs.hardCases("log1p"), loneNaNInputs(),
+        Inputs.sampled(4900L, 1 << 16), Inputs.uniform(4901L, 1 << 16, Math.nextUp(-1.0), 3.0),
+        Inputs.magnitudes(4902L, 1 << 16, -60, 60), Log1pShortPath.nearPowersOfTwo(4903L, 1 << 8));
+    int shortPath = 0;
+    for (double x : xs) {
+      assertEquals(Double.doubleToRawLongBits(StrictMath.log1p(x)),
+          Double.doubleToRawLongBits(cLog1p(x, false)), Oracle.hex(x));
+      if (takesShortPath(x)) {
+        shortPath++;
+      }
+    }
+    assertTrue(shortPath > 1 << 12, "too few inputs on the hu == 0 path: " + shortPath);
+  }
+
+  /**
+   * The {@code hu == 0} path is not the general path: at these inputs s_log1p.c as written is
+   * {@code StrictMath.log1p} and the same C sent down its general polynomial path is the next
+   * double. So no lemma folds line 156's path into lines 160 to 164 (PROOFS.md, step 5 of issue
+   * 36): the fold is not exact.
+   *
+   * <p>How they were found, with the counts, in {@value Log1pShortPath#RESULTS}: every double whose
+   * raw bits lie in the window of {@code 1+x} around 2, {@code [0x3feffffa_00000000,
+   * 0x3ff00002_00000000)}, 2^35 doubles, gave 56 differences, and the window around 0.5,
+   * {@code [0xbfdffffe_00000000, 0xbfe00001_80000000)}, 15,032,385,536 doubles, gave 20, each
+   * pair of results through {@link #cLog1p} with and without {@code generalPathOnly}. These four
+   * are among those printed there: two of {@code k = 1}, one of them above 1 ({@code 1+x} just
+   * above 2, {@code hu == 0} directly) and one below ({@code 1+x} just below 2, {@code hu =
+   * (0x00100000-hu)>>2} is 0); and two of {@code k = -1}, the same two ways at 0.5.
+   */
+  @Test
+  void shortPathIsNotTheGeneralPath() {
+    for (long bits : new long[] {0x3feffffd_05263833L, 0x3ff00001_6fcd0162L,
+        0xbfe00001_2cac6e81L, 0xbfdffffe_92ae1567L}) {
+      double x = Double.longBitsToDouble(bits);
+      long want = Double.doubleToRawLongBits(StrictMath.log1p(x));
+      assertTrue(takesShortPath(x), Oracle.hex(x));
+      assertEquals(want, Double.doubleToRawLongBits(cLog1p(x, false)), Oracle.hex(x));
+      assertNotEquals(want, Double.doubleToRawLongBits(cLog1p(x, true)), Oracle.hex(x));
+    }
   }
 
   // ---------------------------------------------------------------------------------------------
