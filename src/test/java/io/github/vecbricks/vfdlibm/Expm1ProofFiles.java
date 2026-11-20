@@ -50,7 +50,12 @@ final class Expm1ProofFiles {
   // expm1_reduction.smt2: L10
 
   /** L10's H14 witnesses: the first doubles from the top of the word where a free k differs. */
-  static final long[] WITNESSES = {0x3fd62e42_ffffffecL, 0xbfd62e42_fffffff3L};
+  private static final long[] WITNESSES = {0x3fd62e42_ffffffecL, 0xbfd62e42_fffffff3L};
+
+  /** L10's H14 witnesses, positive then negative, a copy: the hinge test reads them here. */
+  static long[] witnesses() {
+    return WITNESSES.clone();
+  }
 
   /** Controls: the word's top double, either sign, where a free k gives the C's double. */
   private static final long[] CONTROLS = {0x3fd62e42_ffffffffL, 0xbfd62e42_ffffffffL};

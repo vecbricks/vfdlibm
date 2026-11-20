@@ -572,9 +572,9 @@ against the far form's `hi` and `lo`, at both ends of the band and 65536 seeded 
 over both ends of `2^-54 <= |x| < 0.5 ln2`, their neighbours and 65536 draws over every binade,
 both signs); `ProofsTest.l10KIsForcedByTheHighWordTest` (H14: `k = +-1` from the formula at the
 two witnesses, where the C reduced with it, `Expm1Test.cExpm1(x, true)`, is not
-`StrictMath.expm1`, the C as written is, and the doubles above the positive witness, where the
-unforced `k` happens to give the same double, are checked to be so). The transcription
-`Expm1Test.cExpm1` is itself checked against `StrictMath.expm1`
+`StrictMath.expm1`, the C as written is, and the doubles above each witness to the word's top
+double, where the unforced `k` happens to give the same double, are checked to be so). The
+transcription `Expm1Test.cExpm1` is itself checked against `StrictMath.expm1`
 (`Expm1Test.scalarTranscriptionIsStrictMath`). **Vector tie.** `Expm1Test.foldBoundaries` and
 `foldBoundariesAtMaxSpecies` run every arm, unmasked and masked, against `StrictMath` at the
 words `0x3c900000 +- 1`, `0x3fd62e42`, `0x3fd62e43`, `0x3ff0a2b1` and `0x3ff0a2b2`, both signs,
@@ -629,6 +629,9 @@ every nonzero normal double, every binade at once; that the zero product `r*fl(e
 sign `r*e` has; and H15 as a hinge: a double less one step of its binade is another double
 (checked in binade 2^-1), so with a `c` of one step of `e`'s binade the first step fails. With
 `c = -0` the step fails only at `e = -0`, which no lane has, so that check refutes (R3) as
-stated for every `e`, not the lemma on its lanes. Informal above: that `e` and `fl(r*e)` are
-nonzero and normal on the lanes (bounds on the polynomial, sampled by the hinge test, which
-asserts it), the binades further off than the next, H15 itself (L10), and the code's text.
+stated for every `e`, not the lemma on its lanes. The lemma itself needs no bound on `e` or
+`fl(r*e)`: (R3) holds for every double. The solver's "a double less +0 is itself" check covers
+the normal doubles and the zeros, and that `e` and `fl(r*e)` are nonzero and normal on the
+lanes (bounds on the polynomial, sampled by the hinge test, which asserts it) is what puts the
+lanes' values under it. Informal above: that bound, the binades further off than the next, H15
+itself (L10), and the code's text.

@@ -639,7 +639,7 @@ class ProofsTest {
    */
   @Test
   void l10KIsForcedByTheHighWordTest() {
-    for (long b : Expm1ProofFiles.WITNESSES) {
+    for (long b : Expm1ProofFiles.witnesses()) {
       double x = Double.longBitsToDouble(b);
       String at = Oracle.hex(x);
       assertEquals(x > 0 ? 1 : -1, (int) kArg(x), at);
@@ -648,7 +648,7 @@ class ProofsTest {
     }
     // Above each, to the top of the word, the unforced k still gives the right double: these
     // are the first witnesses, so the test of the word's top doubles alone would miss them.
-    for (long w : Expm1ProofFiles.WITNESSES) {
+    for (long w : Expm1ProofFiles.witnesses()) {
       for (long low = 0xffffffffL; low > (w & Lanes.LOW_WORD); low--) {
         double x = Double.longBitsToDouble((w & ~Lanes.LOW_WORD) | low);
         assertEquals(bits(StrictMath.expm1(x)), bits(Expm1Test.cExpm1(x, true)), Oracle.hex(x));

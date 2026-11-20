@@ -174,7 +174,11 @@ the operands' sign bits, pinned to the JVM over every pair of signed zeros.
 2. The claim as `unsat` checks, and `sat` checks that its domain admits its boundary inputs, that
    each binade it names is reached, and that a constant changed by one is refuted. A constant the
    claim holds for a range of (exp's `invln2`, `P1..P5`, expm1's `Q1..Q5`) cannot be refuted so:
-   the header says which constants those are and why, and a test pins each to its source.
+   the header says which constants those are and why, and a test pins each to its source. A
+   claim that two rendered constants are equal (`expm1_reduction.smt2`'s section A) is a ground
+   comparison, and a `sat` check of the same terms with one changed would hold whenever the
+   `unsat` one does, so it shows nothing: that file says so, and `ProofsTest.l10ReductionIsExps`
+   is the other side of it.
 3. A definition it needs that the prelude lacks goes in `java.smt2`, with a check in
    `ProofFiles.javaCheck()` that pins it to the JVM's results at both signs and at the edges,
    each double's neighbours refused. A wrong definition with the right name would let a proof

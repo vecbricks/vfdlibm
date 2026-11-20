@@ -467,8 +467,8 @@ a settled question.
   under the solvers as well, and checks the unreduced lanes' step and the forcing of `k = 0`
   itself, as exp's L1 does for exp. The forcing still needs its own
   witness: the C reduced with the formula's `k` first differs from `StrictMath.expm1` at
-  `0x3fd62e42_ffffffec`, not at the word's top double, so a test of the top alone would pass
-  without the forcing.
+  `0x3fd62e42_ffffffec`, and for negative x at `0xbfd62e42_fffffff3`, not at the word's top
+  double, so a test of the top alone would pass without the forcing.
 - **A scalar transcription of the C in the test sources pays for itself.** `Expm1Test.cExpm1`
   is s_expm1.c line by line in Java, checked against `StrictMath.expm1`; with one switch it is
   the C reduced without the forcing, which finds the hinge witnesses. An earlier scratch
