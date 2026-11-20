@@ -12,7 +12,9 @@ a settled question.
 - **The options.** `-f 2 -wi 3 -w 2s -i 5 -r 2s -prof gc`: two forks, five measured two-second
   iterations each, and the allocation profiler on every run. Report each row's minimum, average
   and maximum over the ten iterations, as `bench/results/*.txt` do, and keep JMH's summary table
-  with its `gc.alloc.rate.norm` rows beside them.
+  with its `gc.alloc.rate.norm` rows beside them. CI, `bench/pair.sh` and `bench/alloc-check.py`
+  add `-foe true`, and so should a run by hand: without it a benchmark whose `setUp` throws
+  prints `<failure>`, the run goes on and exits 0, and its row is missing from a green run.
 - **Inline the body, as Varka emits it.** A port's body is larger than C2 inlines by default, so
   a call from the benchmark loop is a real call, and a real call passes its vectors as heap
   objects. Run with `-jvmArgsAppend -XX:CompileCommand=inline,io.github.vecbricks.vfdlibm.*::*`
