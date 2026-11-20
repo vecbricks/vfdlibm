@@ -5,9 +5,10 @@ name: Benchmark
 # 8573C and the Intel Xeon 6973P-C (AVX-512), the AMD EPYC 9V45 (Zen 5, full-width AVX-512, a
 # rare draw that nobody waits for) and the AMD EPYC 7763 (Zen 3, AVX2). Dispatch it with
 # bench/dispatch-bench.sh, which dispatches again an hour later whenever a run fails the CPU
-# check (a bounded number of times for the 9V45). The host input picks one of the four; each
-# host's CPU string is fixed below, on purpose, with no free-text input to change it: a run on
-# another CPU is not comparable with the results before it.
+# check (a bounded number of times for the 9V45) or fails to fetch the check's script. The host
+# input picks one of the four; each host's CPU string is fixed in bench/host.sh, on purpose,
+# with no free-text input to change it: a run on another CPU is not comparable with the results
+# before it.
 #
 # With a base, the job is a pair instead (bench/pair.sh): the benchmarks on the base and on the
 # head in alternating rounds on this one machine, and a verdict per row.
@@ -64,35 +65,49 @@ jobs:
       JMH_OPTIONS: -f 2 -wi 3 -w 2s -i 5 -r 2s -prof gc
       INLINE: -XX:CompileCommand=inline,io.github.vecbricks.vfdlibm.*::*
     steps:
-      # First, before any setup: a job checks its own machine, since every job is a new VM.
-      # bench/dispatch-bench.sh looks for this step's exact name among a failed run's failed
-      # steps. Each host's string is /proc/cpuinfo's model name as runs of that host printed it
-      # (SKILLS.md names the runs), matched ignoring case, since Azure VMs have reported Intel
-      # names in capitals ("INTEL(R) XEON(R) PLATINUM 8573C"). The two EPYC strings are the full
-      # names the runs printed and must end the model name, so that a longer model number cannot
-      # pass; the two Xeon strings have no recorded full form, so they may sit anywhere in it.
-      - name: Probe the machine's CPU
+      # First, before any setup beyond fetching the one script: a job checks its own machine,
+      # since every job is a new VM. bench/dispatch-bench.sh reads the conclusions of the two
+      # steps named "Probe the machine's CPU" and "Check the probe's script", by those exact
+      # names, and of the fetch's, "Fetch the probe's script": a failed probe is a CPU miss, and
+      # a failed fetch with both the others skipped is a fetch that failed; it tries again after
+      # either. bench/host.sh holds each host's CPU string and
+      # says how it is matched; CI runs its self-test. The whole tree is checked out further
+      # down, after the checks that cost seconds. The script goes to a directory of its own,
+      # which the later checkout removes: a second checkout over a sparse one in the same
+      # directory left the tree without its other files.
+      - name: Fetch the probe's script
+        uses: actions/checkout@v5
+        with:
+          sparse-checkout: |
+            bench/host.sh
+            .github/workflows/benchmark.yml
+          sparse-checkout-cone-mode: false
+          path: probe
+      # A probe step that fails is a CPU miss to the dispatcher, which then tries again hourly,
+      # so a script that is not there to run, fails its own test (which reads this file's host
+      # choices, hence the second path above) or has no row for the host must fail a step of
+      # its own.
+      - name: Check the probe's script
         env:
           HOST: ${{ inputs.host }}
         run: |
-          case "$HOST" in
-            epyc7763) expected='AMD EPYC 7763 64-Core Processor'; at_end=1 ;;
-            xeon8573c) expected='INTEL(R) XEON(R) PLATINUM 8573C'; at_end=0 ;;
-            xeon6973p) expected='Intel(R) Xeon(R) 6973P-C'; at_end=0 ;;
-            epyc9v45) expected='AMD EPYC 9V45 96-Core Processor'; at_end=1 ;;
-            *) echo "::error::Unknown host '$HOST'"; exit 1 ;;
-          esac
-          cpu="$(grep -m1 'model name' /proc/cpuinfo | sed 's/.*: //; s/[[:space:]]*$//')"
-          echo "Host: $HOST, CPU: $cpu"
-          lc="${cpu,,}"; want="${expected,,}"
-          if [ "$at_end" = 1 ]; then ok() { [[ "$lc" == *"$want" ]]; }
-          else ok() { [[ "$lc" == *"$want"* ]]; }; fi
-          if ! ok; then
-            echo "::error::CPU mismatch on host $HOST! Expected '$expected' but got '$cpu'"
-            exit 1
+          if ! [ -r probe/bench/host.sh ]; then
+            echo "::error::bench/host.sh is missing on this ref"; exit 1
           fi
-          echo "EXPECTED_CPU=$expected" >> "$GITHUB_ENV"
-      # A pair's free-text inputs, checked before any setup so that a typo costs seconds: the
+          if ! bash probe/bench/host.sh --self-test; then
+            echo "::error::bench/host.sh fails its self-test on this ref"; exit 1
+          fi
+          # The keys are read whole first, so that the check does not rest on how a pipe whose
+          # reader leaves at its match ends under the step's shell options.
+          keys="$(bash probe/bench/host.sh --keys)"
+          if ! grep -qxF -- "$HOST" <<<"$keys"; then
+            echo "::error::bench/host.sh has no row for host '$HOST'"; exit 1
+          fi
+      - name: Probe the machine's CPU
+        env:
+          HOST: ${{ inputs.host }}
+        run: bash probe/bench/host.sh --expect "$HOST"
+      # A pair's free-text inputs, checked before the setup so that a typo costs seconds: the
       # same rules as bench/pair.sh's, which checks them again.
       - name: Check the pair inputs
         if: inputs.base != ''

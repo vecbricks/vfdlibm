@@ -192,23 +192,31 @@ a settled question.
   October to 2 November) and 15 of 109 option-matrix jobs on 28 October drew it. So
   `bench/dispatch-bench.sh --host epyc9v45` stops after 18 dispatches, an hourly try for about a
   day (at one in eighteen, a draw with a chance of about 64%; at the recent rates, almost
-  surely), with exit status 3 if none drew it; `--attempts 1` is a single opportunistic try. A
-  miss costs about a minute of runner time, since the CPU check is the job's first step. No
-  decision waits on a 9V45 file; when one exists, it is read with the other AVX-512 hosts.
+  surely), with exit status 3 if none drew it (1 if the last try failed before the CPU check);
+  `--attempts 1` is a single opportunistic try. The CPU check comes first in the job,
+  after only the fetch of its script and that script's own test; what a miss costs on the
+  current workflow has not been measured. No decision waits on a 9V45 file; when
+  one exists, it is read with the other AVX-512 hosts.
 - **The benchmark fails on any other CPU, and is retried, never relaxed.**
   `.github/workflows/benchmark.yml` takes a `host` input with exactly four choices and maps each
-  to a model-name string fixed in the file, as runs of that host printed it, matched ignoring
+  to a model-name string fixed in `bench/host.sh`'s table (the workflow's probe step runs
+  `bench/host.sh --expect <host>`, and CI runs `bench/host.sh --self-test`, which classifies
+  every kind of machine in the pool's census), as runs of that host printed it, matched ignoring
   case: `INTEL(R) XEON(R) PLATINUM 8573C` (Varka's fork runs 41465323581, 41255932044 and
   41241977271, in capitals as Azure printed it), `Intel(R) Xeon(R) 6973P-C` (vfdlibm run
   41442062308), `AMD EPYC 9V45 96-Core Processor` (Varka's fork runs 41486339971, 41446843041,
   41329377429) and `AMD EPYC 7763 64-Core Processor` (`bench/results/exp-epyc7763-2026-11-02.txt`).
-  It checks `/proc/cpuinfo` before anything else and fails unless the model name ends with the
-  host's string, for the two EPYCs, whose full names the runs printed, or contains it, for the
-  two Xeons, whose full names no run has recorded;
+  It checks `/proc/cpuinfo` before anything but the fetch of that script and a step that runs
+  the script's self-test and looks for the host's key in it, and fails unless the
+  model name ends with the host's string, for the two EPYCs, whose full names the runs printed, or
+  contains it, for the two Xeons, whose full names no run had recorded then (the pool's census,
+  `bench/pool/`, has since printed both as whole names);
   `bench/dispatch-bench.sh --host <host>` dispatches it and, when the run failed on that check,
   waits an hour and dispatches again, until a run passes, fails on something else, or (for the
   9V45, or with `--attempts`) the attempts run out (`bench/dispatch-epyc.sh` is the same with
-  `--host epyc7763`). Other CPUs (the EPYC 9V74, the Xeon Platinum 8370C) are common draws, and
+  `--host epyc7763`). A run that failed while fetching the script, before any step looked at
+  the machine, is tried again too, each counting as an attempt; the third in a row stops it.
+  Other CPUs (the EPYC 9V74, the Xeon Platinum 8370C) are common draws, and
   accepting one would put a result on a different machine from every result before it. If a
   host stays scarce for days, changing the hosts is a decision for the owner, not a change to
   the check.
