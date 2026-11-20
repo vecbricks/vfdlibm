@@ -65,7 +65,7 @@ else
   found=()
   for candidate in "$root"/target/*.jar; do
     case "$candidate" in
-      *-sources.jar|*-javadoc.jar|*-tests.jar|*-test-sources.jar) ;;
+      *-sources.jar|*-javadoc.jar|*-tests.jar) ;;
       *) [ -f "$candidate" ] && found+=("$candidate") ;;
     esac
   done
