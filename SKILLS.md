@@ -568,13 +568,15 @@ a settled question.
   that compute through it. log's three faults also fail log10, which calls `Log.logCore` (on the
   laptop, a two-second fuzz at 256 bits of each function under each function's `dropCorrection`
   failed its own function, and log10 under log's, and nothing else; a three-second one of log10
-  under each of log's three faults failed every time); the plan job's `reach` holds that map, and
-  a port that computes through another adds a line to it. When every sweep and fuzz of such a run
-  passes, the job `fault-caught` fails, so a missed fault is a red run with an issue and not a
-  green one. Its passing says only that some job failed: the mismatch files the issue lists say
-  whether that was the fault, in which functions, and the issue says so when none records a
-  mismatch. The issue has its own label, `nightly-fault-test`, in another colour, and opens by
-  saying that the fault was planted, so it is never mixed with a night's `nightly-failure` issue;
-  a fault dispatch whose plan job fails opens none. The run shares the night's concurrency group,
-  where a new run replaces one that is waiting: dispatch it when no night is running or waiting.
-  No such dispatch has been made yet.
+  under each of log's three faults failed every time; each is
+  `NIGHTLY_JVM_ARGS=-Dvfdlibm.fault=<name> dev/nightly.sh fuzz <function> 3 0x1235 256`, whose
+  exit status 1 is the failure); the plan job's `reach` holds that map, and a port that computes
+  through another adds a line to it. When every sweep and fuzz of such a run passes, the job
+  `fault-caught` fails, so a missed fault is a red run with an issue and not a green one. Its
+  passing says only that some job failed: the mismatch files the issue lists say whether that was
+  the fault, in which functions, and the issue says so when none records a mismatch. The issue
+  has its own label, `nightly-fault-test`, in another colour, and opens by saying that the fault
+  was planted, so it is never mixed with a night's `nightly-failure` issue; a fault dispatch
+  whose plan job fails opens none. The run shares the night's concurrency group, where a new run
+  replaces one that is waiting: dispatch it when no night is running or waiting. Close the test's
+  issue once read: a later test comments on an open one. No such dispatch has been made yet.
