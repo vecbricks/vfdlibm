@@ -739,6 +739,44 @@ lanes (bounds on the polynomial, sampled by the hinge test, which asserts it) is
 lanes' values under it. Informal above: that bound, the binades further off than the next, H15
 itself (L10), and the code's text.
 
+### L15. expm1's words in long lanes, as Varka emits them
+
+Varka's emitted kernel (`VarkaMathPort.expm1`) computes `Expm1.expm1Blended`'s operations with
+the C's `int` words in long lanes, as `Log` holds its words (L8), since a kernel's high-word tests
+are L3's compares of `|x|`'s bits and its `k` is the long `I2L` of the `D2I`. The doubles are the
+same operations in the same order; this lemma covers the words.
+
+**Statement.** Let `k` be the C's `int k` (from L10's reduction) widened to a long. On a lane
+with `2 <= k < 20`, the long `0x3ff00000 - (0x200000 >>> k)` is the C's `0x3ff00000 -
+(0x200000>>k)` widened; on a lane with `20 <= k <= 56`, the long `(0x3ff - k) << 20` is the C's
+`(0x3ff-k)<<20` widened; and for every long `w` whose low 32 bits are the C's word `W`, `w << 32`
+is the bits of the double whose high word is `W` and whose low word is 0, the C's `t = one;
+__HI(t) = W`. The tests of `k`, `k <= -2`, `k > 56`, `2 <= k < 20`, `k == 1`, `k == -1` and `k ==
+0`, are the C's on the long.
+
+**Hypotheses.**
+- (H16) The words are read only on the lanes whose form uses them: `Expm1` picks `t`'s word by
+  the masks of `k`, and a word computed on any other lane is never kept, whatever the shift count
+  there.
+
+**Proof.** For `2 <= k < 20`, `0x200000 >> k` is a positive int below `2^20`, so the arithmetic
+and the logical shift agree (JLS 15.19) and the difference lies in `(0x3fe00000, 0x3ff00000)`,
+inside 32 bits. For `20 <= k <= 56`, `0x3ff - k` lies in `[0x3c9, 0x3eb]` and its shift by 20 in
+`[0x3c900000, 0x3eb00000]`, below `2^31`, so no int overflows and the long is the int widened.
+`w << 32` keeps `w`'s low 32 bits as the high word and shifts the rest out, with zeros below, so
+the bits above `W` in `w` are irrelevant. `k` is an `int` widened, so each compare with an int
+constant has the int compare's answer. No IEEE property is used.
+
+**Hinge tests (scalar).** `ProofsTest.l15LongWordsAreExpm1sInts`: for every `k` from -1100 to
+1100, the long words against the C's int words on the lanes that read them and the long tests
+against the int tests; and the two shifts at `k = 40`, a lane of the `20 <= k <= 56` form, which
+does not read that word, where they differ (H16 needed). **Vector tie.** Varka's
+`VarkaMathPortSuite` runs the emitted kernel against `VFdlibm.expm1` and `Expm1.expm1Blended` by
+raw bits, on 2^24 sampled inputs and the fixed vectors at each `k` form's edge.
+
+**Encoding.** None; the steps are integer ranges, checked exhaustively over every `k` the
+reduction gives, which L10 bounds by `|x| < 2^31 ln2` on the lanes kept.
+
 ## log10 (`Log10.java`, from `e_log10.c`)
 
 e_log10.c reads `k` from the high word, scaling a subnormal by `2^54` first (lines 76-82); sets
@@ -1354,3 +1392,6 @@ special beside lanes the core computes.
 `atan2.infOrderSwapped` (`y` infinite wins over `x` infinite), `atan2.dropPiLo`, `atan2.zeroSignOfX`
 (`x < 0` by value for `y = +-0`, so `-0.0` is positive), `atan2.diagonalInf` (`pi_o_4` in every
 quadrant) and `atan2.noSignFlip`.
+
+**Encoding.** None; the two steps are (R3), stated, as L1's `x - (+0) = x`, which
+`proofs/exp_zero_reduction.smt2` checks per binade for the nonzero case.

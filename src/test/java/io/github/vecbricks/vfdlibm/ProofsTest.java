@@ -885,4 +885,42 @@ class ProofsTest {
     assertThrows(ArithmeticException.class,
         () -> IntVector.broadcast(ints, 1).div(IntVector.zero(ints)));
   }
+
+  // L15: expm1's words in long lanes, as Varka emits them.
+
+  /**
+   * L15: for every k from -1100 to 1100, the long words and tests Varka's kernel computes are the
+   * C's int words and tests widened, on the lanes that read them; and at a k where the two
+   * shifts differ, the word is one no form keeps.
+   */
+  @Test
+  void l15LongWordsAreExpm1sInts() {
+    for (int k = -1100; k <= 1100; k++) {
+      long kl = k;
+      String at = "k = " + k;
+      boolean far = k <= -2 || k > Expm1.K_FAR;
+      boolean mid = k >= 2 && k < Expm1.K_SPLIT;
+      boolean high = k >= Expm1.K_SPLIT && !far;
+      assertEquals(far, kl <= -2 || kl > Expm1.K_FAR, at);
+      assertEquals(mid, kl >= 2 && kl < Expm1.K_SPLIT, at);
+      if (mid) {
+        int word = 0x3ff00000 - (0x200000 >> k);
+        long longWord = 0x3ff00000L - (0x200000L >>> kl);
+        assertEquals((long) word, longWord, at);
+        assertEquals(Lanes.fromHiBits(word), longWord << 32, at);
+      }
+      if (high) {
+        int word = (0x3ff - k) << 20;
+        long longWord = (0x3ffL - kl) << 20;
+        assertEquals((long) word, longWord, at);
+        assertEquals(Lanes.fromHiBits(word), longWord << 32, at);
+      }
+      if (!mid && !high) {
+        assertEquals(Lanes.fromHiBits(0x3ff00000), 0x3ff00000L << 32, at);
+      }
+    }
+    // k = 40, a lane of the high form, which does not read the mid word: an int shift takes the
+    // count modulo 32 and a long one modulo 64, so the words differ there, and H16 is needed.
+    assertNotEquals((long) (0x200000 >> 40), 0x200000L >>> 40L);
+  }
 }
