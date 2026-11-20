@@ -182,6 +182,10 @@ a settled question.
   proposed as a host on 2 November 2026 and dropped before any run. The lesson stands for any new
   host: read its flags in a run's log before naming it for an instruction set; every results
   header has an `AVX-512:` line (`avx512f=yes avx512dq=yes` or `no`) and a `Datapath:` line.
+  Three runs were too few to describe the pool: of the 9V74's 104 draws in the nightly's
+  jobs of 3 to 19 November, 98 expose AVX-512 and run at `UseAVX=3`, their 512-bit lanes at
+  0.90 to 0.91 of the 256-bit rate (`HARDWARE.md`, "What the pool gives"). Whether that makes it
+  a host again is the owner's decision.
 - **The EPYC 9V45 is recorded whenever drawn, and nobody waits for it.** It is the one
   full-width 512-bit datapath in the pool (512:256 of 1.99), and a scarce draw: one in eighteen
   in Varka's survey of 11 September 2026, though 7 of Varka's last 30 benchmark dispatches (31
