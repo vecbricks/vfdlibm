@@ -28,7 +28,8 @@ name: Nightly
 #
 # The functions are named once, in the plan job, which makes every matrix; the input `functions`
 # narrows them. The input `fault` plants a fault (Faults.java) in every sweep and fuzz JVM, so
-# that a dispatch can show the night catching it and the alert job opening its issue:
+# that a dispatch can show the night catching it and the alert job opening its issue, which is
+# labelled nightly-fault-test and not nightly-failure:
 #
 #   gh workflow run nightly.yml -f fault=exp.dropCorrection -f functions=exp -f fuzz-seconds=5
 
@@ -81,8 +82,10 @@ on:
 permissions:
   contents: read
 
+# A dispatch that plants a fault has a group of its own: in one group, a second such dispatch
+# would cancel a scheduled night that was waiting behind the first.
 concurrency:
-  group: nightly
+  group: nightly${{ inputs.fault && '-fault' || '' }}
   cancel-in-progress: false
 
 jobs:
@@ -117,7 +120,8 @@ jobs:
           FUNCTIONS: ${{ inputs.functions }}
           FAULT: ${{ inputs.fault }}
         run: |
-          # Every function of the night. A new port is added here and nowhere else in this file.
+          # Every function of the night: each matrix and each check below reads this list, so a
+          # new port is added here (the comments that name the functions aside).
           all='exp expm1 log log10 log1p'
           pow2() { [[ $1 =~ ^[0-9]+$ ]] && [ "$1" -ge 1 ] && [ $(($1 & ($1 - 1))) -eq 0 ]; }
           if [ -z "$SEED" ]; then
@@ -125,14 +129,21 @@ jobs:
           elif ! [[ $SEED =~ ^0x[0-9a-fA-F]{1,16}$ ]]; then
             echo "::error::seed takes 0x and up to 16 hex digits, not '$SEED'"; exit 1
           fi
-          # A matrix holds at most 256 jobs: `all`'s 5 functions times 32 shards is 160, and 64
-          # shards would be 320, past the cap. A stripe count (nights or slice-nights times shards)
-          # is at most Sweep's 4096 chunks.
+          # A matrix holds at most 256 jobs, one per function and shard: with 5 functions 32
+          # shards are 160 and 64 would be 320, past the cap. The check counts `all`, so it holds
+          # as the list grows. A stripe count (nights or slice-nights times shards) is at most
+          # Sweep's 4096 chunks.
+          count="$(wc -w <<< "$all")"
           for n in "$NIGHTS" "$SLICE_NIGHTS"; do
             for s in "$SHARDS" "$ARM_SHARDS"; do
               if ! pow2 "$n" || ! pow2 "$s" || [ "$s" -gt 32 ] || [ $((n * s)) -gt 4096 ]; then
                 echo "::error::nights, slice-nights and the shards take powers of two, the" \
                   "shards at most 32, a nights count times a shard count at most 4096"
+                exit 1
+              fi
+              if [ $((count * s)) -gt 256 ]; then
+                echo "::error::$s shards of $count functions are $((count * s)) jobs, past the" \
+                  "256 a matrix holds"
                 exit 1
               fi
             done
@@ -169,17 +180,21 @@ jobs:
               case ",$FUNCTIONS," in *",$f,"*) functions="$functions${functions:+ }$f" ;; esac
             done
           fi
-          # A planted fault is a port's, <function>.<what>, and one of those pom.xml gives a
-          # fault run (PlantedFaultTest holds that list to the ports' faults): a mistyped name
-          # would plant nothing, and the run would pass as if the night had missed the fault.
+          # A planted fault is <function>.<what>, of a function this run checks, and one of those
+          # pom.xml gives a fault run (PlantedFaultTest holds that list to the ports' faults). A
+          # mistyped name would plant nothing, and a fault of a function left out would be
+          # planted where no job looks: either run would pass as if the night had missed it.
           fault_args=''
           if [ -n "$FAULT" ]; then
             if ! [[ $FAULT =~ ^[a-z][a-z0-9]*\.[A-Za-z][A-Za-z0-9]*$ ]]; then
               echo "::error::fault takes <function>.<what>, not '$FAULT'"; exit 1
             fi
-            case " $all " in
+            case " $functions " in
               *" ${FAULT%%.*} "*) ;;
-              *) echo "::error::fault takes a fault of one of: $all; not '$FAULT'"; exit 1 ;;
+              *)
+                echo "::error::fault takes a fault of a function of this run ($functions)," \
+                  "not '$FAULT'"
+                exit 1 ;;
             esac
             if ! grep -qF -- "-Dvfdlibm.fault=$FAULT</argLine>" pom.xml; then
               echo "::error::pom.xml has no fault run for '$FAULT'"; exit 1
@@ -413,7 +428,11 @@ jobs:
     needs: [plan, sweep, fuzz, arm, proofs]
     # A job past its timeout fails; a cancelled one is reported too, since nothing here cancels
     # a nightly by itself (cancel-in-progress is off).
-    if: always() && (contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled'))
+    # A dispatch whose plan job failed opens no issue: its inputs were refused, which the
+    # run's own error says to whoever dispatched it.
+    if: >-
+      always() && (contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled'))
+      && (github.event_name == 'schedule' || needs.plan.result == 'success')
     runs-on: ubuntu-latest
     permissions:
       issues: write
@@ -442,14 +461,24 @@ jobs:
         run: |
           body=body.md
           run_url="$SERVER/$GH_REPO/actions/runs/$RUN_ID"
+          # A run with a planted fault has a label and so an issue of its own: a real failure
+          # is never a comment under a test's issue, nor a test under a real failure's.
+          label=nightly-failure
+          about="The nightly correctness run failed"
           title="Nightly correctness run failed"
-          if [ -n "$FAULT" ]; then title="$title (a test: fault $FAULT planted)"; fi
+          if [ -n "$FAULT" ]; then
+            label=nightly-fault-test
+            about="A nightly run with a planted fault, a test of the alert job"
+            title="Nightly run with a planted fault (a test of the alert job)"
+          fi
           {
             # Said first, so that a test of this job is not read as a failure of the library.
             if [ -n "$FAULT" ]; then
-              echo "**A test of the alert, not a failure of the library.** The run was dispatched"
-              echo "with the fault \`$FAULT\` planted (\`-Dvfdlibm.fault=$FAULT\`) in every"
-              echo "sweep and fuzz, so the mismatches below are the planted fault's."
+              echo "**A test of the alert job.** The run was dispatched with the fault"
+              echo "\`$FAULT\` planted (\`-Dvfdlibm.fault=$FAULT\`) in every sweep and fuzz."
+              echo "Mismatches of \`${FAULT%%.*}\` below are expected and are not the library's;"
+              echo "anything else that failed, and a run that lists no such mismatch, is to be"
+              echo "read as a failure."
               echo
             fi
             echo "The nightly correctness run failed: $run_url"
@@ -499,13 +528,11 @@ jobs:
             printf '\n(cut at 60000 characters; the artifacts hold the rest)\n' >> body.cut
             mv body.cut "$body"
           fi
-          gh label create nightly-failure --color B60205 --force \
-            --description "The nightly correctness run failed"
-          open="$(gh issue list --label nightly-failure --state open --limit 1 \
+          gh label create "$label" --color B60205 --force --description "$about"
+          open="$(gh issue list --label "$label" --state open --limit 1 \
             --json number --jq '.[0].number // empty')"
           if [ -n "$open" ]; then
             gh issue comment "$open" --body-file "$body"
           else
-            gh issue create --title "$title" \
-              --label nightly-failure --body-file "$body"
+            gh issue create --title "$title" --label "$label" --body-file "$body"
           fi

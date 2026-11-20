@@ -547,14 +547,17 @@ a settled question.
   and JVM arguments (an as-AVX2 fuzz replays only with `-XX:UseAVX=2 -XX:MaxVectorSize=32`), its
   total (or, when a killed JVM wrote none, the count it wrote) and its first mismatches; the
   artifacts `nightly-*` hold the rest. A dispatch with those inputs replays every job, Arm's
-  too. That the job's `issues: write` and its `gh` calls work is verified by the first real
-  failure, not before.
+  too. That the job's `issues: write` and its `gh` calls work has not been verified: no night
+  has failed, and no fault has been planted in one (next entry).
 - **The functions are named once,** in the plan job's `all`, from which it makes the sweep's,
   the fuzz's and Arm's matrices; a new port joins the night there. The dispatch input
   `functions` (names separated by commas) narrows a run to some of them, and `fault` plants one
-  of the ports' faults, as `-Dvfdlibm.fault=<name>` in every sweep and fuzz JVM, so a dispatch
-  can show the night catching it and the alert job at work without a real failure:
+  of their faults, as `-Dvfdlibm.fault=<name>` in every sweep and fuzz JVM, so a dispatch can
+  show the night catching it and the alert job at work without a real failure:
   `gh workflow run nightly.yml -f fault=exp.dropCorrection -f functions=exp -f fuzz-seconds=5`.
-  The plan job refuses a fault that `pom.xml` gives no fault run, since a mistyped name would
-  plant nothing and pass. The issue such a run opens says in its title and first line that the
-  fault was planted. No such dispatch has been made yet.
+  The plan job refuses a fault that `pom.xml` gives no fault run, or whose function the run
+  leaves out, since either would plant nothing a job could catch and pass; a dispatch whose
+  inputs the plan job refuses opens no issue. A run with a fault has its own concurrency group
+  and its own label, `nightly-fault-test`: its issue, or its comment on the open issue of that
+  label, opens by saying that the fault was planted, and is never mixed with a
+  `nightly-failure` issue. No such dispatch has been made yet.
