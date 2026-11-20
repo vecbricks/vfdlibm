@@ -14,14 +14,14 @@
 #
 # <jar> defaults to the one jar under target/ that is not a sources, javadoc or tests jar, so
 # after `mvn -B verify` (or `mvn -B -DskipTests package`) it needs no argument; a jar downloaded
-# from Central is checked by naming it. The checks:
+# from Central is checked by naming it, from the checkout of its release's tag. The checks:
 #
 #   1. The jar holds META-INF/LICENSE and META-INF/NOTICE, byte for byte the files at the root of
 #      this checkout, and NOTICE names Sun Microsystems: compiled classes carry no notice. A
 #      sources jar or a Javadoc jar beside the jar (<name>-sources.jar, <name>-javadoc.jar, as
 #      the release profile builds them) must hold the same two files. One that is not there
-#      is said to be skipped, or, with --release, fails: CI and the release workflow build
-#      that profile's jars first and pass --release.
+#      is said to be skipped, or, with --release, fails: CI builds that profile's jars first
+#      and passes --release.
 #   2. Its manifest names the module, Automatic-Module-Name: io.github.vecbricks.vfdlibm, and the
 #      jar has no module-info.class beside that name.
 #   3. Its classes are the ones of this checkout's src/main/java, each source file's class and
@@ -73,7 +73,8 @@ while [ $# -gt 0 ]; do
     *) break ;;
   esac
 done
-[ $# -le 1 ] || die "usage: dev/jar-check.sh [--release | --self-test] [<jar>]"
+[ $# -le 1 ] && [ $((release_jars + self_test)) -le 1 ] \
+  || die "usage: dev/jar-check.sh [--release | --self-test] [<jar>]"
 
 # The consumer's JVM options, taken out of the environment so that jar and javac do not read
 # them, nor print their notice of it on every call.
