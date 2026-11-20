@@ -632,7 +632,7 @@ class ProofsTest {
   }
 
   /**
-   * L10 (c): k must be forced to 0 by the high-word test. At the top of word 0x3fd62e42 the
+   * H14: k must be forced to 0 by the high-word test. At the top of word 0x3fd62e42 the
    * formula gives k = +-1, and at the first such doubles from the top whose result it changes,
    * {@code 0x3fd62e42_ffffffec} and {@code 0xbfd62e42_fffffff3}, the C reduced with that k is not
    * StrictMath.expm1, while the C as written is.

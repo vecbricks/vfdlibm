@@ -223,8 +223,8 @@ class Expm1Test {
   }
 
   /**
-   * Every magnitude from 2^-60 to 2^10, both signs, the unreduced band below 0.5 ln2 densely,
-   * and the large positive x up to the overflow threshold, where k reaches 1024.
+   * Draws spread over the binades 2^-60 to 2^10, both signs, the unreduced band below 0.5 ln2
+   * densely, and the large positive x up to the overflow threshold, where k reaches 1024.
    */
   @ParameterizedTest
   @EnumSource(VectorWidth.class)

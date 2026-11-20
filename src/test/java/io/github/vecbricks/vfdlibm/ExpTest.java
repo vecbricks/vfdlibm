@@ -242,8 +242,8 @@ class ExpTest {
 
   /**
    * Every high word of {@link #FOLD_WORDS}, both signs, with the low words 0 and 0xffffffff and
-   * 1024 seeded ones, and the doubles just above 0.5 ln2: the inputs where lemmas L1 and L2 of
-   * PROOFS.md would first break.
+   * 1024 seeded ones, and the 4096 doubles each side of +-0.5 ln2: the inputs where lemmas L1
+   * and L2 of PROOFS.md would first break.
    */
   static double[] foldBoundaries() {
     SplittableRandom random = new SplittableRandom(700L);
@@ -259,8 +259,8 @@ class ExpTest {
         }
       }
     }
-    // The part of word 0x3fd62e42 above 0.5 ln2, where the formula alone would give k = +-1
-    // and about one result in 14 would differ (PROOFS.md, L1): its first 4096 doubles.
+    // 4096 doubles each side of +-0.5 ln2: above it, in word 0x3fd62e42, the formula alone
+    // would give k = +-1 and about one result in 14 would differ (PROOFS.md, L1).
     double halfLn2 = 0.5 * LN2;
     return Inputs.concat(xs, Inputs.around(halfLn2, 4096), Inputs.around(-halfLn2, 4096));
   }

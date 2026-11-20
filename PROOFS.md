@@ -101,9 +101,10 @@ tails equal); `ProofsTest.l1KIsForcedByTheHighWordTest` (H1: the formula gives `
 of the word, and at `0x3fd62e42_fefa3a08` the far form with `k = 1` is not exp);
 `ProofsTest.l1DomainWidenedByAWordIsRefuted` (the `sat` case below). **Vector tie.**
 `ExpTest.foldBoundaries` and `foldBoundariesAtMaxSpecies` run both arms (`VFdlibm.exp` and
-`Exp.expBlended`), unmasked and masked, against `StrictMath` at the words `0x3e300000 +- 1`,
-`0x3fd62e42`, `0x3fd62e43` and `0x3ff0a2b1`, `0x3ff0a2b2`, both signs, low words 0, `0xffffffff`
-and 1024 seeded, plus the 4096 doubles above `+-0.5 ln2`, at every width and `SPECIES_MAX`; with
+`Exp.expBlended`), unmasked and masked, against `StrictMath` at the words `0x3e2fffff`,
+`0x3e300000`, `0x3fd62e42`, `0x3fd62e43`, `0x3ff0a2b1` and `0x3ff0a2b2`, both signs, low words 0,
+`0xffffffff` and 1024 seeded, plus the 4096 doubles each side of `+-0.5 ln2`, at every width
+and `SPECIES_MAX`; with
 the `k` forcing removed it fails.
 
 **Encoding.** `proofs/exp_zero_reduction.smt2`, partly machine-checked. Checked: step 1's and
@@ -246,8 +247,8 @@ first: `fl(-q - x) = -fl(x + q)`, and `x + q` lies above the tie, so `one - ` it
 `0x1.0000000000003p0`. Of `x = m * 2^-53` for `m < 64`, 15 differ this way (`m = 5, 9, 13, ...`).
 
 **Test (scalar).** `ProofsTest.l4TinyLanesCannotBeFolded` asserts the three doubles. **Vector
-tie.** `ExpTest.foldBoundaries` covers the words `0x3e300000 +- 1` on both sides of the tiny
-lanes' edge, and the threshold cases (`ExpTest.thresholds()`) the 64 neighbours of `2^-28`:
+tie.** `ExpTest.foldBoundaries` covers the words `0x3e2fffff` and `0x3e300000`, on both sides of the
+tiny lanes' edge, and the threshold cases (`ExpTest.thresholds()`) the 64 neighbours of `2^-28`:
 the port's `one + x` there is checked against `StrictMath`.
 
 **Encoding.** `proofs/exp_tiny_counterexample.smt2`, machine-checked: at `x = 5 * 2^-53`
@@ -535,10 +536,12 @@ any `k`, `D2I` saturating when `fl(fl(x*invln2) + h)` truncates outside `int`'s 
 
 **Hypotheses.**
 - (H13) s_expm1.c's `invln2`, `ln2_hi` and `ln2_lo` are e_exp.c's `invln2`, `ln2HI[0]` and
-  `ln2LO[0]`, bit for bit, and its band words `0x3fd62e42` and `0x3FF0A2B2` are e_exp.c's (lines
-  119-121 against e_exp.c's tables; `Expm1Test.constantsAreTheSourcesBits` and
-  `ExpTest.constantsAreTheSourcesBits` pin each to its file's hex, and
-  `ProofsTest.l10ReductionIsExps` pins one to the other). So L2 and L5, which use
+  `ln2LO[0]`, bit for bit, and its band words `0x3fd62e42` and `0x3FF0A2B2` are e_exp.c's (the
+  constants are lines 119-121 of s_expm1.c and the words lines 162-163, against e_exp.c's tables
+  and its lines 128-129; `Expm1Test.constantsAreTheSourcesBits` pins Expm1's constants and
+  words to the source, `ExpTest.constantsAreTheSourcesBits` Exp's constants and
+  `ExpTest.intWordsAreTheSources` Exp's words, and `ProofsTest.l10ReductionIsExps` pins one to
+  the other). So L2 and L5, which use
   nothing but those values and words, hold for expm1's lanes as written.
 - (H14) `k` is forced to 0 on the unreduced lanes by line 162's own test, as in L1's H1: at the
   top of word `0x3fd62e42` the formula gives `k = +-1`, and the C reduced with that `k` returns
@@ -548,9 +551,10 @@ any `k`, `D2I` saturating when `fl(fl(x*invln2) + h)` truncates outside `int`'s 
 
 **Proof.**
 1. (c) is the C's far form, operation by operation, with `h` for `(xsb==0)?0.5:-0.5` by L5
-   (line 141's `xsb` is line 113's of e_exp.c, the sign bit; the C's ternary and e_exp.c's
-   `halF[xsb]` are the same two doubles) and `x*invln2` for `invln2*x`, the same rounding of the
-   same exact product.
+   (line 141's `xsb`, `hx&0x80000000`, and line 113's of e_exp.c, `(hx>>31)&1`, are both the
+   sign bit of the high word, and s_expm1.c tests it only against zero; the C's ternary and
+   e_exp.c's `halF[xsb]` are the same two doubles) and `x*invln2` for `invln2*x`, the same
+   rounding of the same exact product.
 2. (a): L2 gives `k = 1 - 2*xsb`, `hi = x - ln2HI[xsb]` and `lo = ln2LO[xsb]` (H13). For `xsb =
    0` that is line 165, `hi = x - ln2_hi, lo = ln2_lo, k = 1`. For `xsb = 1`, `ln2HI[1] =
    -ln2_hi` bit for bit (L2's H5), and `fl(x - (-ln2_hi)) = fl(x + ln2_hi)` by (R4), both being
@@ -571,17 +575,27 @@ The tiny lanes, `hx < 0x3c900000`, also get `k = 0` and `r = x` and are then rep
 **Hinge tests (scalar).** `ProofsTest.l10ReductionIsExps` (H13, and the C's negative near form
 against the far form's `hi` and `lo`, at both ends of the band and 65536 seeded draws);
 `ProofsTest.l10UnreducedLanesKeepXWithZeroCorrection` (step 3's `hi`, `lo`, `r` and `c`, by bits,
-over both ends of `2^-54 <= |x| < 0.5 ln2`, their neighbours and 65536 draws over every binade,
-both signs); `ProofsTest.l10KIsForcedByTheHighWordTest` (H14: `k = +-1` from the formula at the
-two witnesses, where the C reduced with it, `Expm1Test.cExpm1(x, true)`, is not
-`StrictMath.expm1`, the C as written is, and the doubles above each witness to the word's top
-double, where the unforced `k` happens to give the same double, are checked to be so). The
+over both ends of `2^-54 <= |x| <= 0x3fd62e42_ffffffff`, the whole word of `0.5 ln2` (about
+`0.3466`), their neighbours inside that range and 65536 draws over the binades `2^-54` to
+`2^-2`, those above that top dropped, both signs); `ProofsTest.l10KIsForcedByTheHighWordTest`
+(H14: `k = +-1` from the formula at the two witnesses, where the C reduced with it,
+`Expm1Test.cExpm1(x, true)`, is not `StrictMath.expm1`, the C as written is, and the doubles
+above each witness to the word's top double, where the unforced `k` happens to give the same
+double, are checked to be so). The
 transcription `Expm1Test.cExpm1` is itself checked against `StrictMath.expm1`
-(`Expm1Test.scalarTranscriptionIsStrictMath`). **Vector tie.** `Expm1Test.foldBoundaries` and
-`foldBoundariesAtMaxSpecies` run every arm, unmasked and masked, against `StrictMath` at the
-words `0x3c900000 +- 1`, `0x3fd62e42`, `0x3fd62e43`, `0x3ff0a2b1` and `0x3ff0a2b2`, both signs,
-low words 0, `0xffffffff` and 1024 seeded, plus the 4096 doubles each side of `+-0.5 ln2`, at
-every width and `SPECIES_MAX`.
+(`Expm1Test.scalarTranscriptionIsStrictMath`). Statement (c) has no scalar test of its own: it
+is step 1, the C's far form operation by operation, and only the vector tie below runs its
+lanes.
+**Vector tie.** `Expm1Test.foldBoundaries` and `foldBoundariesAtMaxSpecies` run every arm,
+unmasked and masked, against `StrictMath` at the words `0x3c8fffff`, `0x3c900000`,
+`0x3fd62e42`, `0x3fd62e43`, `0x3ff0a2b1` and `0x3ff0a2b2`, both signs, low words 0,
+`0xffffffff` and 1024 seeded, plus the 4096 doubles each side of `+-0.5 ln2`, at every width
+and `SPECIES_MAX`. For (c), the far form above `1.5 ln2`, the cases at every width are
+`Expm1Test.magnitudes` (draws spread over the binades `2^-60` to `2^10`, both signs, and `2^16`
+draws from 38 to `o_threshold`, where `k` reaches 1024),
+`formSplits` (the bands of `k` where the form changes, 19 to 21 and 55 to 58 times `ln2`, and
+`+-0.5` to `+-3 ln2`), `denseOverTheForms` (`-45` to `45`), `sampledBitPatterns` and the
+published hard cases.
 
 **Encoding.** `proofs/expm1_reduction.smt2`, rendered from `Expm1`'s constants and words by
 `Expm1ProofFiles`. Machine-checked there: H13, each of `Expm1`'s five values and two words
@@ -604,7 +618,13 @@ that a value rounds to no double in a binade further off than the next (the arit
 rationals); the casts of `+0.0` and of a double in binade 2^0; that `k` is forced to 0 on every
 lane of the word `0x3fd62e42` and below, of which section C checks four doubles (the formula's
 `k` would be wrong at the witnesses, the C as written is the oracle's) and the rest is the code's
-blend and the hinge test; and that the port computes these steps, the code's text.
+blend, which `Expm1Test.foldBoundaries` samples (1026 low words per sign at each of its words,
+a sparse sample of the word's `2^32` doubles, and 4096 doubles each side of `+-0.5 ln2`, which
+is `0x3fd62e42_fefa39ef`, about 17 million doubles below the witnesses at the word's top) and
+`Expm1Test.thresholds()` touches (8 doubles each side of `0.5 ln2`, and 64 around the word's
+first double); and `l10KIsForcedByTheHighWordTest` scans the scalar transcription from each
+witness to the word's top and finds the forcing not needed there, which says nothing of the
+port; and that the port computes these steps, the code's text.
 
 ### L11. The k == 0 return is x - e with e = (x*(e-c)-c)-hxs and c = +0
 
@@ -690,9 +710,12 @@ that lane's argument is checked by nothing, and nothing in its result depends on
 e_log10.c's high-word tests and the split of line 85 at 1.0 (`thresholdsAndSpecials`,
 `insideTheBranchWords`), e_log.c's significand words, the subnormals and `[0.5, 2)`
 (`nearOneAndSubnormals`), sampled bit patterns, dense draws over every binade and the
-published hard cases. Only `masked` and `maxSpecies` run masked and at `SPECIES_MAX`, on
-`thresholds()`, and `everySubsetOfLanesRare` with every subset of a vector's lanes rare: the
-other cases are unmasked and at the `VectorWidth` shapes.
+published hard cases. The cases run unmasked at the `VectorWidth` shapes, with these
+exceptions: `masked` runs the arms masked, at those shapes, on its own inputs; `maxSpecies`
+runs `SPECIES_MAX`, unmasked and masked; `everySubsetOfLanesRare` (at the shapes and at
+`SPECIES_MAX`) runs every subset of a vector's lanes rare, unmasked and masked; and
+`exactPowersOfTenGiveTheirExponent` runs the powers of ten at the preferred species and
+`SPECIES_MAX`.
 
 **Encoding.** No file of its own. `proofs/log_zero_dk.smt2` (L6), `proofs/log_exact_dk.smt2` (L7)
 and `proofs/log_long_words.smt2` (L8) are rendered from `Log`'s constants and check these steps
@@ -739,9 +762,10 @@ in `[0x3feffffa_00000000, 0x3ff00002_00000000)` (`1+x` in `[2 - 3*2^-20, 2 + 2^-
 doubles) 56, and of every `x` whose raw bits lie in `[0xbfdffffe_00000000, 0xbfe00001_80000000)`
 (`1+x` in `(0.5 - 3*2^-22, 0.5 + 2^-21]`, 15,032,385,536 doubles) 20. The `hu == 0` inputs near
 0.5 are `1+x` in `[0.5 - 3*2^-22, 0.5 + 2^-21)`, so the second range leaves out the input
-`x = -(0.5 + 3*2^-22)` and holds `x = -(0.5 - 2^-21)`, which is not on the path. The windows
-of the other powers of two of `1+x` are not searched. The counts, the sixteen differences each
-pass printed, the commands and the host are in
+`x = -(0.5 + 3*2^-22)` and holds two inputs that are not on the path, `x = -(0.5 - 2^-21)`
+(raw bits `0xbfdffffe_00000000`) and the next double, whose `1+x` rounds to `0.5 + 2^-21`, where
+`hu = 1`. The windows of the other powers of two of `1+x` are not searched. The counts, the
+sixteen differences each pass printed, the commands and the host are in
 `bench/results/log1p-hu0-search-laptop-2026-11-20.txt`; the two passes ran a scratch program
 kept in that file as text, not `Log1pShortPath`, which found exactly the witness in each of two
 slices of `2^24` doubles around one.

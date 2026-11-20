@@ -33,10 +33,11 @@ import java.util.stream.LongStream;
  * {@code range from to threads} runs every double whose raw bits are in {@code [from, to)}.
  *
  * <p>The {@code hu == 0} path runs only for x with {@code 1+x} within a few units of 2^-20
- * (relative) of a power of two, {@code 1+x} in [2^m - 3*2^(m-20), 2^m * (1 + 2^-20)): a window
- * of 2^33 to 2^35 doubles for each m (the C leaves {@code x} in (-0.2929, 0.41422) with {@code
- * hu = 1}, so m = 0 has none). {@link #K1_FROM} to {@link #K1_TO} is the window of m = 1, where
- * {@code k = 1}, and {@link #KM1_FROM} to {@link #KM1_TO} that of m = -1, where {@code k = -1}.
+ * (relative) of a power of two, {@code 1+x} in [2^m - 3*2^(m-21), 2^m * (1 + 2^-20)): a window
+ * of 4 to 5*2^32 doubles for each m >= 2, 2^35 for m = 1, 3.5*2^32 for m = -1 and 5*2^(m+32)
+ * below (the C leaves x in (-0.2929, 0.41422) with {@code hu = 1}, so m = 0 has none). {@link
+ * #K1_FROM} to {@link #K1_TO} is the window of m = 1, where {@code k = 1}, and {@link
+ * #KM1_FROM} to {@link #KM1_TO} that of m = -1, where {@code k = -1}.
  * The counts in {@value #RESULTS} are over those two windows, and the other windows are not
  * searched. The long passes there ran a scratch program with the same transcription (its
  * constants as literals); this program is its committed form, and was run over two slices of

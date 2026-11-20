@@ -485,8 +485,8 @@ class Log1pTest {
   /**
    * The {@code hu == 0} path is not the general path: at these inputs s_log1p.c as written is
    * {@code StrictMath.log1p} and the same C sent down its general polynomial path is the next
-   * double. So no lemma folds line 156's path into lines 160 to 164 (PROOFS.md, step 5 of issue
-   * 36): the fold is not exact.
+   * double. So no lemma folds line 156's path into lines 160 to 164 (PROOFS.md, L12): the fold
+   * is not exact.
    *
    * <p>How they were found, with the counts, in {@value Log1pShortPath#RESULTS}: every double whose
    * raw bits lie in the window of {@code 1+x} around 2, {@code [0x3feffffa_00000000,

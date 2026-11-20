@@ -13,14 +13,24 @@
 #              C sent down its general path gives the next double. So no lemma folds the
 #              hu == 0 path into the general one (issue 36, step 5, settled negatively).
 # Windows:     The hu == 0 path runs where f = u-1 is within 2^-20 of zero after the
-#              normalisation, that is for 1+x in [2^m - 3*2^(m-20), 2^m * (1 + 2^-20)), a window
-#              of 2^33 to 2^35 doubles for each power of two 2^m of 1+x. The C leaves x in
-#              (-0.2929, 0.41422) with hu = 1, so m = 0 has none. Searched here, every double:
+#              normalisation, that is for 1+x in [2^m - 3*2^(m-21), 2^m * (1 + 2^-20)), a window
+#              of 4 to 5*2^32 doubles for each m >= 2 (5*2^32 up to m = 20, fewer above, where
+#              the part of x above 2^m has twice the ulp), 2^35 for m = 1, 3.5*2^32 for
+#              m = -1 and 5*2^(m+32) for m <= -2, for each power of two 2^m of 1+x. The C
+#              leaves x in (-0.2929, 0.41422) with hu = 1, so m = 0 has none. Searched here,
+#              every double whose raw bits lie in:
 #                k = 1  : 1+x in [2 - 3*2^-20, 2 + 2^-19):  raw bits [0x3feffffa_00000000,
-#                         0x3ff00002_00000000), 2^35 = 34,359,738,368 doubles, 56 differ
-#                k = -1 : 1+x in (0.5 - 3*2^-22, 0.5 + 2^-21]: raw bits [0xbfdffffe_00000000,
-#                         0xbfe00001_80000000), 15,032,385,536 doubles, 20 differ; the
-#                         window's lowest input, x = -(0.5 + 3*2^-22), is not in the range
+#                         0x3ff00002_00000000), 2^35 = 34,359,738,368 doubles, 56 differ (one
+#                         input of the window, x = 0x3feffff9_ffffffff, whose exact 1+x ties
+#                         to the window's lower end, is outside the range, and
+#                         x = 0x3ff00001_ffffffff, whose 1+x ties up to 2 + 2^-19, is inside
+#                         it and not on the path)
+#                k = -1 : 1+x in [0.5 - 3*2^-22, 0.5 + 2^-21), less its lowest input: raw bits
+#                         [0xbfdffffe_00000000, 0xbfe00001_80000000), 15,032,385,536
+#                         doubles, 20 differ; the window's lowest input,
+#                         x = -(0.5 + 3*2^-22), is not in the range, and the range's first
+#                         two inputs, 0xbfdffffe_00000000 and 0xbfdffffe_00000001, whose
+#                         1+x rounds to 0.5 + 2^-21, are in it and not on the path
 #              Not searched: the windows of every other m.
 # Programs:    The two long passes ran a scratch program, Proto.java, at the end of this file; it
 #              reads nothing from the repository. Its transcription of s_log1p.c is the one now
@@ -30,7 +40,7 @@
 #              same computation; it was run over two slices of 2^24 doubles, each around a
 #              witness the long passes printed, and found exactly that witness in each (output
 #              below). The long passes were not repeated with it.
-# Commit:      the commit that adds Log1pShortPath and this file (git log -- this file).
+# Commit:      0294a9e, which adds Log1pShortPath and this file.
 # JDK:         OpenJDK 64-Bit Server VM, 25.0.5.1+2-1-26.04.1-Ubuntu
 # CPU:         AMD Ryzen AI 9 HX PRO 370 w/ Radeon 890M (24 logical cores, two core types)
 # CPU flags:   avx2, avx512f and avx512dq present; the programs are scalar Java
