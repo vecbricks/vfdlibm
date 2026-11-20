@@ -43,7 +43,7 @@ import jdk.incubator.vector.VectorSpecies;
  *   <li>The reduction is exp's, and so are its folds (L10): every lane takes the far form,
  *       which gives the near band's {@code k}, {@code hi} and {@code lo} exactly (exp's L2, for
  *       the same constants and words); a lane that is not reduced gets {@code k = 0}, forced by
- *       the C's high-word test, so {@code r = x} and {@code c = +0} (exp's L1, step 1); and
+ *       the C's high-word test, so {@code r = x} and {@code c = +0} (L10, step 3 and H14); and
  *       {@code (xsb==0)?0.5:-0.5} is 0.5 with {@code x}'s sign bit (exp's L5).
  *   <li>The {@code k == 0} return, {@code x - (x*e-hxs)}, is computed as the other forms' {@code
  *       x - e} after {@code e = (x*(e-c)-c)-hxs}, with {@code c = +0} on those lanes (L11).
@@ -219,7 +219,7 @@ final class Expm1 {
     //   and k exactly (exp's L2).
     // - A lane that is not reduced (line 162's test false) gets k = 0, forced by that test: the
     //   sum is replaced by 0 before the cast, so t = +0, hi = x, lo = +0, and then x = hi - lo is
-    //   x itself and c = (hi-x)-lo is +0 (exp's L1, step 1). The C leaves k = 0 and x there.
+    //   x itself and c = (hi-x)-lo is +0 (L10, step 3 and H14). The C leaves k = 0 and x there.
     // D2I truncates toward zero like the C's int cast, and I2D is exact. A NaN gives 0, and the
     // cast saturates when the sum it converts, x*invln2 +- 0.5, truncates outside int's range
     // (about |x| >= 2^31 ln2), but those lanes are rare, returned early by the C, and their k is

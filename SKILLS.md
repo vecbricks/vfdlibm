@@ -461,12 +461,15 @@ a settled question.
 
 - **A reduction shared with another port inherits its proofs through a pinned hinge.**
   s_expm1.c reduces exactly as e_exp.c does, with the same `invln2`, `ln2_hi`, `ln2_lo` and band
-  words, so exp's far-form fold (L2), its forced `k = 0` (L1, step 1) and its sign-bit `halF`
-  (L5) hold for expm1 once a test pins the five values to exp's (`PROOFS.md`, L10, H13); the
-  SMT files rendered from `Exp` then check expm1's steps too. The forcing still needs its own
+  words, so exp's far-form fold (L2) and its sign-bit `halF` (L5) hold for expm1 once a test
+  pins the five values to exp's (`PROOFS.md`, L10, H13), and the SMT files rendered from `Exp`
+  check those steps for expm1 too; `proofs/expm1_reduction.smt2` holds the values to exp's
+  under the solvers as well, and checks the unreduced lanes' step (`c = +0`) and, at four
+  doubles, that the formula's `k` would be wrong there; the forcing over the whole word is the
+  port's blend and a hinge test. The forcing still needs its own
   witness: the C reduced with the formula's `k` first differs from `StrictMath.expm1` at
-  `0x3fd62e42_ffffffec`, not at the word's top double, so a test of the top alone would pass
-  without the forcing.
+  `0x3fd62e42_ffffffec`, and for negative x at `0xbfd62e42_fffffff3`, not at the word's top
+  double, so a test of the top alone would pass without the forcing.
 - **A scalar transcription of the C in the test sources pays for itself.** `Expm1Test.cExpm1`
   is s_expm1.c line by line in Java, checked against `StrictMath.expm1`; with one switch it is
   the C reduced without the forcing, which finds the hinge witnesses. An earlier scratch

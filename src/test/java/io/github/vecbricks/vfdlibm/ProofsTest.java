@@ -639,18 +639,20 @@ class ProofsTest {
    */
   @Test
   void l10KIsForcedByTheHighWordTest() {
-    for (long b : new long[] {0x3fd62e42_ffffffecL, 0xbfd62e42_fffffff3L}) {
+    for (long b : Expm1ProofFiles.witnesses()) {
       double x = Double.longBitsToDouble(b);
       String at = Oracle.hex(x);
       assertEquals(x > 0 ? 1 : -1, (int) kArg(x), at);
       assertEquals(bits(StrictMath.expm1(x)), bits(Expm1Test.cExpm1(x, false)), at);
       assertNotEquals(bits(StrictMath.expm1(x)), bits(Expm1Test.cExpm1(x, true)), at);
     }
-    // Above them, to the top of the word, the unforced k still gives the right double: these
+    // Above each, to the top of the word, the unforced k still gives the right double: these
     // are the first witnesses, so the test of the word's top doubles alone would miss them.
-    for (long low = 0xffffffffL; low > 0xffffffecL; low--) {
-      double x = Double.longBitsToDouble(0x3fd62e42_00000000L | low);
-      assertEquals(bits(StrictMath.expm1(x)), bits(Expm1Test.cExpm1(x, true)), Oracle.hex(x));
+    for (long w : Expm1ProofFiles.witnesses()) {
+      for (long low = 0xffffffffL; low > (w & Lanes.LOW_WORD); low--) {
+        double x = Double.longBitsToDouble((w & ~Lanes.LOW_WORD) | low);
+        assertEquals(bits(StrictMath.expm1(x)), bits(Expm1Test.cExpm1(x, true)), Oracle.hex(x));
+      }
     }
   }
 
@@ -673,6 +675,10 @@ class ProofsTest {
           * (Expm1.Q4 + hxs * Expm1.Q5))));
       double t = 3.0 - r1 * hfx;
       double e = hxs * ((r1 - t) / (6.0 - r * t));
+      // The encoding checks e - (+0) and v - (+0) for zeros and for normal doubles; that e
+      // and v = r*e are normal here, never subnormal, is this bound.
+      assertTrue(Math.abs(e) >= Double.MIN_NORMAL, at);
+      assertTrue(Math.abs(r * e) >= Double.MIN_NORMAL, at);
       assertEquals(bits(e), bits(e - c), at);
       assertEquals(bits(r * e), bits(r * (e - c) - c), at);
       double inner = (r * (e - c) - c) - hxs;

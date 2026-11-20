@@ -14,7 +14,9 @@ import static io.github.vecbricks.vfdlibm.ExpProofFiles.hex;
 import static io.github.vecbricks.vfdlibm.ExpProofFiles.mant;
 import static io.github.vecbricks.vfdlibm.ExpProofFiles.near;
 import static io.github.vecbricks.vfdlibm.ExpProofFiles.pow2;
+import static io.github.vecbricks.vfdlibm.ProofFiles.bool;
 import static io.github.vecbricks.vfdlibm.ProofFiles.check;
+import static io.github.vecbricks.vfdlibm.ProofFiles.equations;
 import static io.github.vecbricks.vfdlibm.ProofFiles.lit;
 
 import java.util.ArrayList;
@@ -34,16 +36,6 @@ final class LogProofFiles {
 
   // ---------------------------------------------------------------------------------------------
   // log_zero_dk.smt2: L6
-
-  /** An SMT-LIB boolean literal. */
-  private static String bool(boolean b) {
-    return b ? "true" : "false";
-  }
-
-  /** Whether a double's sign bit is set: a zero's sign as the file's booleans hold it. */
-  private static boolean negative(double d) {
-    return Double.doubleToRawLongBits(d) < 0;
-  }
 
   /**
    * {@code log_zero_dk.smt2}, lemma L6: the k != 0 forms with dk = +0 are the k == 0 forms. The
@@ -117,30 +109,11 @@ final class LogProofFiles {
 
         ; Section A: the sign of an exact zero, true for -0. z.sub sx sy is the sign of x - y and
         ; z.add sx sy that of x + y for zeros x and y; z.mul is a zero product's.
-        (define-fun z.sub ((sx Bool) (sy Bool)) Bool (and sx (not sy)))
-        (define-fun z.add ((sx Bool) (sy Bool)) Bool (and sx sy))
-        (define-fun z.mul ((sx Bool) (sy Bool)) Bool (xor sx sy))
         """);
-    var zeros = new ArrayList<String>();
-    for (double a : new double[] {0.0, -0.0}) {
-      for (double b : new double[] {0.0, -0.0}) {
-        String sa = bool(negative(a));
-        String sb = bool(negative(b));
-        zeros.add("(= (z.sub " + sa + " " + sb + ") " + bool(negative(a - b)) + ")");
-        zeros.add("(= (z.add " + sa + " " + sb + ") " + bool(negative(a + b)) + ")");
-        zeros.add("(= (z.mul " + sa + " " + sb + ") " + bool(negative(a * b)) + ")");
-      }
-      zeros.add("(= (z.mul " + bool(negative(a)) + " false) " + bool(negative(a * Log.LN2_HI))
-          + ")");
-      zeros.add("(= (z.mul " + bool(negative(a)) + " false) " + bool(negative(a * Log.LN2_LO))
-          + ")");
-    }
+    out.append(ProofFiles.ZERO_SIGNS);
+    List<String> zeros = ProofFiles.zeroSignEquations(Log.LN2_HI, Log.LN2_LO);
     // x - x is +0 for a nonzero x, either sign: the rule for like signs, at sampled doubles.
-    for (double x : new double[] {1.0, -1.0, 0.4142, -0.2929, 0x1p-53, -0x1p-1074, 1e300}) {
-      if (negative(x - x)) {
-        throw new IllegalStateException("x - x is -0 at " + x);
-      }
-    }
+    ProofFiles.requireLikeSignedDifferencesArePositiveZero();
     equations(out, "the zero signs are Java's, and +-0 * ln2_hi, ln2_lo", zeros);
     out.append("""
 
@@ -182,41 +155,7 @@ final class LogProofFiles {
         ; exact difference is the double S * M * 2^E or its negation, a / b with a = S * M * sn
         ; and b = sd.
         """);
-    check(out, "a double, either sign, is a double jdouble.near admits for itself, any binade",
-        "unsat", body("(declare-const S Int) (declare-const M Int)",
-            "(declare-const sn Int) (declare-const sd Int)",
-            "(assert (and (< 0 sn) (< 0 sd) (jdouble.S.in S) (jdouble.M.in M)))",
-            "(assert (not (jdouble.near (* S M sn) sd S M sn sd)))"));
-    // A binade is the scale sn / sd with one side 1, as java.smt2 passes it. Any such scale
-    // down to the lowest normal binade's, 2^-1074, is admitted: more than the binades, which
-    // only makes an unsat stronger. Each neighbour is its own check, which both solvers decide
-    // at once; one disjunction of the three took cvc5 a minute.
-    String nearVars = "(declare-const S Int) (declare-const M Int) (declare-const S2 Int)"
-        + " (declare-const M2 Int) (declare-const sn Int) (declare-const sd Int)";
-    String scale = "(< 0 sn) (< 0 sd) (or (= sn 1) (= sd 1))";
-    String dbl = "(jdouble.S.in S) (jdouble.M.in M)";
-    String atLowest = "(<= sd (* jdouble.SUB sn))";
-    check(out, "a double, either sign, rounds to no other double of its binade, every binade",
-        "unsat", body(nearVars, "(assert (and " + scale + " " + atLowest + " " + dbl + "))",
-            "(assert (and (jdouble.near (* S M sn) sd S2 M2 sn sd)"
-                + " (not (and (= S2 S) (= M2 M)))))"));
-    check(out, "nor to one of the binade above it, every binade", "unsat", body(nearVars,
-        "(assert (and " + scale + " " + atLowest + " " + dbl + "))",
-        "(assert (jdouble.near (* S M sn) sd S2 M2 (* 2 sn) sd))"));
-    String aboveLowest = "(<= (* 2 sd) (* jdouble.SUB sn))";
-    check(out, "nor to one of the binade below it, every binade above the lowest", "unsat",
-        body(nearVars, "(assert (and " + scale + " " + aboveLowest + " " + dbl + "))",
-            "(assert (jdouble.near (* S M sn) sd S2 M2 sn (* 2 sd)))"));
-    check(out, "nor, in the lowest binade, to a subnormal", "unsat", body(nearVars,
-        "(assert (and (= sn 1) (= sd jdouble.SUB) " + dbl + "))",
-        "(assert (jdouble.near.sub (* S M sn) sd S2 M2))"));
-    check(out, "not vacuous: the lowest binade's doubles are admitted for themselves", "sat",
-        body(nearVars, "(assert (and (= sn 1) (= sd jdouble.SUB) " + dbl + "))",
-            "(assert (jdouble.near (* S M sn) sd S M sn sd))"));
-    check(out, "refuted: a double less one step of its binade 2^-1 is itself", "sat", body(
-        "(declare-const M Int) (declare-const M2 Int)", "(assert (jdouble.M.in M))",
-        "(assert " + near("(- M 1)", pow2(53), "1", "M2", -1) + ")",
-        "(assert (not (= M2 M)))"));
+    ProofFiles.nonzeroLessZero(out);
 
     out.append("""
 
@@ -649,16 +588,5 @@ final class LogProofFiles {
     check(out, "refuted: COMMON_HI + 1 as the top", "sat", body(b64,
         "(assert (not (= (in.range b " + bv(lo) + " " + bv(hi + 1) + ") " + common + ")))"));
     return out.toString();
-  }
-
-  /** One check that every equation holds: unsat for the negation of their conjunction. */
-  private static void equations(StringBuilder out, String what, List<String> eqs) {
-    var lines = new ArrayList<String>();
-    lines.add("(assert (not (and");
-    for (String e : eqs) {
-      lines.addAll(ProofFiles.wrap("  " + e));
-    }
-    lines.add(")))");
-    check(out, what + ", on " + eqs.size() + " operand sets", "unsat", lines);
   }
 }

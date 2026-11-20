@@ -23,7 +23,7 @@ import org.junit.jupiter.api.Test;
 
 /**
  * The rendered files under {@code proofs/} are what {@link ProofFiles} renders: the prelude's
- * checks from the JVM's own results, and exp's and log's proofs from their constants. A
+ * checks from the JVM's own results, and exp's, log's and expm1's proofs from their constants. A
  * definition, an operand set or a constant that moves without its file fails here, rather than
  * leaving a committed check that no longer says what the code says. The
  * proofs themselves run under {@code dev/prove.sh}, which needs no JVM.

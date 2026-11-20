@@ -41,11 +41,16 @@ final class ExpProofFiles {
     return String.format("0x%08x", v);
   }
 
-  /** The body lines of a check, each wrapped to the column limit. */
+  /**
+   * The body lines of a check, each wrapped to the column limit; a string that holds line breaks
+   * of its own is split at them first, so each of its lines is wrapped as a line.
+   */
   static List<String> body(String... lines) {
     var out = new ArrayList<String>();
-    for (String l : lines) {
-      out.addAll(wrap(l));
+    for (String text : lines) {
+      for (String l : text.split("\n", -1)) {
+        out.addAll(wrap(l));
+      }
     }
     return out;
   }
@@ -302,7 +307,7 @@ final class ExpProofFiles {
    * The operands are the doubles as Java holds them, so each check is ground and linear; a chain
    * of them evaluates a formula with every intermediate double checked rather than trusted.
    */
-  private static final class Chain {
+  static final class Chain {
     private final StringBuilder out;
     private final String at;
 

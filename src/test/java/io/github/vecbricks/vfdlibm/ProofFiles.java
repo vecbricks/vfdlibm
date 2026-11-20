@@ -20,12 +20,11 @@ import java.util.function.LongBinaryOperator;
 
 /**
  * The rendered files under {@code proofs/}: the check of the prelude, {@code java.smt2}, against
- * the JVM, and exp's and log's proofs ({@link ExpProofFiles}, {@link LogProofFiles}), whose
- * constants come from the code. {@link ProofFilesTest} fails when a committed file differs from
- * what this renders, so a definition and the JVM results that pin it, or a constant and the proof
- * that uses it, cannot drift apart.
- * {@code java.smt2} itself, and the proofs whose constants are fdlibm's rather than computed, are
- * written by hand.
+ * the JVM, and exp's, log's and expm1's proofs ({@link ExpProofFiles}, {@link LogProofFiles},
+ * {@link Expm1ProofFiles}), whose constants come from the code. {@link ProofFilesTest} fails
+ * when a committed file differs from what this renders, so a definition and the JVM results that
+ * pin it, or a constant and the proof that uses it, cannot drift apart. {@code java.smt2} itself,
+ * and the proofs whose constants are fdlibm's rather than computed, are written by hand.
  *
  * <p>Every check is an {@code (echo "<what it shows>: expect sat|unsat")} followed by its
  * {@code (check-sat)} between {@code push} and {@code pop}; {@code dev/prove.sh} pairs each
@@ -49,6 +48,8 @@ final class ProofFiles {
     files.put("log_exact_dk.smt2", LogProofFiles.exactDk());
     files.put("log_long_words.smt2", LogProofFiles.longWords());
     files.put("log_range_compare.smt2", LogProofFiles.rangeCompare());
+    files.put("expm1_reduction.smt2", Expm1ProofFiles.reduction());
+    files.put("expm1_k_zero_return.smt2", Expm1ProofFiles.kZeroReturn());
     return files;
   }
 
@@ -372,7 +373,7 @@ final class ProofFiles {
   }
 
   /** One check that every equation holds: unsat for the negation of their conjunction. */
-  private static void equations(StringBuilder out, String what, List<String> eqs) {
+  static void equations(StringBuilder out, String what, List<String> eqs) {
     var lines = new ArrayList<String>();
     lines.add("(assert (not (and");
     for (String e : eqs) {
@@ -380,6 +381,123 @@ final class ProofFiles {
     }
     lines.add(")))");
     check(out, what + ", on " + eqs.size() + " operand sets", "unsat", lines);
+  }
+
+  // ---------------------------------------------------------------------------------------------
+  // Zero, which the prelude has no double for: what a proof whose value can be zero states
+
+  /**
+   * The sign of an exact zero (IEEE 754 6.3) as three functions of the operands' sign bits, true
+   * for {@code -0}: {@code z.sub sx sy} is the sign of {@code x - y} and {@code z.add sx sy} that
+   * of {@code x + y} for zeros {@code x} and {@code y}; {@code z.mul} is a zero product's.
+   * {@link #zeroSignEquations} pins them to the JVM.
+   */
+  static final String ZERO_SIGNS = """
+      (define-fun z.sub ((sx Bool) (sy Bool)) Bool (and sx (not sy)))
+      (define-fun z.add ((sx Bool) (sy Bool)) Bool (and sx sy))
+      (define-fun z.mul ((sx Bool) (sy Bool)) Bool (xor sx sy))
+      """;
+
+  /** An SMT-LIB boolean literal. */
+  static String bool(boolean b) {
+    return b ? "true" : "false";
+  }
+
+  /** Whether a double's sign bit is set: a zero's sign as {@link #ZERO_SIGNS}' booleans hold it. */
+  static boolean negative(double d) {
+    return Double.doubleToRawLongBits(d) < 0;
+  }
+
+  /**
+   * {@link #ZERO_SIGNS} against the JVM: the difference, sum and product of every pair of signed
+   * zeros, and the product of each zero with each of {@code positives}, a port's positive finite
+   * constants, as Java computes them while rendering.
+   */
+  static List<String> zeroSignEquations(double... positives) {
+    var zeros = new ArrayList<String>();
+    for (double a : new double[] {0.0, -0.0}) {
+      for (double b : new double[] {0.0, -0.0}) {
+        String sa = bool(negative(a));
+        String sb = bool(negative(b));
+        zeros.add("(= (z.sub " + sa + " " + sb + ") " + bool(negative(a - b)) + ")");
+        zeros.add("(= (z.add " + sa + " " + sb + ") " + bool(negative(a + b)) + ")");
+        zeros.add("(= (z.mul " + sa + " " + sb + ") " + bool(negative(a * b)) + ")");
+      }
+      for (double c : positives) {
+        if (!(c > 0) || !Double.isFinite(c)) {
+          throw new IllegalArgumentException("not a positive finite constant: " + c);
+        }
+        zeros.add("(= (z.mul " + bool(negative(a)) + " false) " + bool(negative(a * c)) + ")");
+      }
+    }
+    return zeros;
+  }
+
+  /**
+   * That {@code x - x} is {@code +0} for a nonzero {@code x} of either sign, the rule for like
+   * signs, at sampled doubles: a rendering that rests on it fails here if Java gave otherwise.
+   */
+  static void requireLikeSignedDifferencesArePositiveZero() {
+    for (double x : new double[] {1.0, -1.0, 0.4142, -0.2929, 0x1p-53, -0x1p-1074, 1e300}) {
+      if (negative(x - x)) {
+        throw new IllegalStateException("x - x is -0 at " + x);
+      }
+    }
+  }
+
+  /**
+   * The checks that a nonzero normal double, either sign, less {@code +0} is itself: the exact
+   * difference is the double, which {@code jdouble.near} admits for itself in any binade at once,
+   * and which rounds to no other double of its own binade or the ones next to it, every normal
+   * binade at once, the lowest one's next below being the subnormals. That {@code +0} less a
+   * double is its negation is the same check at the negated double, and not a check of its own.
+   */
+  static void nonzeroLessZero(StringBuilder out) {
+    check(out, "a double, either sign, is a double jdouble.near admits for itself, any binade",
+        "unsat", ExpProofFiles.body("(declare-const S Int) (declare-const M Int)",
+            "(declare-const sn Int) (declare-const sd Int)",
+            "(assert (and (< 0 sn) (< 0 sd) (jdouble.S.in S) (jdouble.M.in M)))",
+            "(assert (not (jdouble.near (* S M sn) sd S M sn sd)))"));
+    // A binade is the scale sn / sd with one side 1, as java.smt2 passes it: sn = 1 for the
+    // binades up to 2^52, down to the lowest normal one's scale, 2^-1074, and sd = 1 from 2^52
+    // up. Any such scale is admitted, more than the binades, which only makes an unsat stronger.
+    // Each neighbour is its own check, and each is stated once per side of the scale: with
+    // either side free in one check cvc5 answered unknown at dev/prove.sh's limit on a busy
+    // machine, and it decides each half well inside it there.
+    String nearVars = "(declare-const S Int) (declare-const M Int) (declare-const S2 Int)"
+        + " (declare-const M2 Int) (declare-const sn Int) (declare-const sd Int)";
+    String dbl = "(jdouble.S.in S) (jdouble.M.in M)";
+    String low = "(= sn 1) (< 0 sd) (<= sd jdouble.SUB)";
+    String high = "(= sd 1) (< 0 sn)";
+    String other = "(assert (and (jdouble.near (* S M sn) sd S2 M2 sn sd)"
+        + " (not (and (= S2 S) (= M2 M)))))";
+    check(out, "a double, either sign, rounds to no other of its binade, binades up to 2^52",
+        "unsat", ExpProofFiles.body(nearVars, "(assert (and " + low + " " + dbl + "))", other));
+    check(out, "nor in its binade from 2^52 up: with the one before, every binade", "unsat",
+        ExpProofFiles.body(nearVars, "(assert (and " + high + " " + dbl + "))", other));
+    String above = "(assert (jdouble.near (* S M sn) sd S2 M2 (* 2 sn) sd))";
+    check(out, "nor to one of the binade above it, binades up to 2^52", "unsat",
+        ExpProofFiles.body(nearVars, "(assert (and " + low + " " + dbl + "))", above));
+    check(out, "nor to one of the binade above it, binades from 2^52 up", "unsat",
+        ExpProofFiles.body(nearVars, "(assert (and " + high + " " + dbl + "))", above));
+    String below = "(assert (jdouble.near (* S M sn) sd S2 M2 sn (* 2 sd)))";
+    check(out, "nor to one of the binade below it, binades above the lowest up to 2^52", "unsat",
+        ExpProofFiles.body(nearVars,
+            "(assert (and (= sn 1) (< 0 sd) (<= (* 2 sd) jdouble.SUB) " + dbl + "))", below));
+    check(out, "nor to one of the binade below it, binades from 2^52 up", "unsat",
+        ExpProofFiles.body(nearVars, "(assert (and " + high + " " + dbl + "))", below));
+    check(out, "nor, in the lowest binade, to a subnormal", "unsat", ExpProofFiles.body(nearVars,
+        "(assert (and (= sn 1) (= sd jdouble.SUB) " + dbl + "))",
+        "(assert (jdouble.near.sub (* S M sn) sd S2 M2))"));
+    check(out, "not vacuous: the lowest binade's doubles are admitted for themselves", "sat",
+        ExpProofFiles.body(nearVars, "(assert (and (= sn 1) (= sd jdouble.SUB) " + dbl + "))",
+            "(assert (jdouble.near (* S M sn) sd S M sn sd))"));
+    check(out, "refuted: a double less one step of its binade 2^-1 is itself", "sat",
+        ExpProofFiles.body("(declare-const M Int) (declare-const M2 Int)",
+            "(assert (jdouble.M.in M))",
+            "(assert " + ExpProofFiles.near("(- M 1)", ExpProofFiles.pow2(53), "1", "M2", -1)
+                + ")",
+            "(assert (not (= M2 M)))"));
   }
 
   static void check(StringBuilder out, String what, String expect, List<String> body) {

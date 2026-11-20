@@ -67,8 +67,7 @@
   (or (and (jdouble.near k 1 S2 M2 1 4503599627370496) (not (and (= S2 1) (= M2 (* k
     4503599627370496)))))
   (jdouble.near k 1 S2 M2 1 9007199254740992)
-  (jdouble.near k 1 S2 M2 1
-    2251799813685248))))
+  (jdouble.near k 1 S2 M2 1 2251799813685248))))
 (check-sat)
 (pop 1)
 
@@ -80,8 +79,7 @@
   (or (and (jdouble.near k 1 S2 M2 1 4503599627370496) (not (and (= S2 (- 1)) (= M2 (* (- k)
     4503599627370496)))))
   (jdouble.near k 1 S2 M2 1 9007199254740992)
-  (jdouble.near k 1 S2 M2 1
-    2251799813685248))))
+  (jdouble.near k 1 S2 M2 1 2251799813685248))))
 (check-sat)
 (pop 1)
 
@@ -93,8 +91,7 @@
   (or (and (jdouble.near k 1 S2 M2 1 2251799813685248) (not (and (= S2 1) (= M2 (* k
     2251799813685248)))))
   (jdouble.near k 1 S2 M2 1 4503599627370496)
-  (jdouble.near k 1 S2 M2 1
-    1125899906842624))))
+  (jdouble.near k 1 S2 M2 1 1125899906842624))))
 (check-sat)
 (pop 1)
 
@@ -106,8 +103,7 @@
   (or (and (jdouble.near k 1 S2 M2 1 2251799813685248) (not (and (= S2 (- 1)) (= M2 (* (- k)
     2251799813685248)))))
   (jdouble.near k 1 S2 M2 1 4503599627370496)
-  (jdouble.near k 1 S2 M2 1
-    1125899906842624))))
+  (jdouble.near k 1 S2 M2 1 1125899906842624))))
 (check-sat)
 (pop 1)
 
@@ -119,8 +115,7 @@
   (or (and (jdouble.near k 1 S2 M2 1 1125899906842624) (not (and (= S2 1) (= M2 (* k
     1125899906842624)))))
   (jdouble.near k 1 S2 M2 1 2251799813685248)
-  (jdouble.near k 1 S2 M2 1
-    562949953421312))))
+  (jdouble.near k 1 S2 M2 1 562949953421312))))
 (check-sat)
 (pop 1)
 
@@ -132,8 +127,7 @@
   (or (and (jdouble.near k 1 S2 M2 1 1125899906842624) (not (and (= S2 (- 1)) (= M2 (* (- k)
     1125899906842624)))))
   (jdouble.near k 1 S2 M2 1 2251799813685248)
-  (jdouble.near k 1 S2 M2 1
-    562949953421312))))
+  (jdouble.near k 1 S2 M2 1 562949953421312))))
 (check-sat)
 (pop 1)
 
@@ -145,8 +139,7 @@
   (or (and (jdouble.near k 1 S2 M2 1 562949953421312) (not (and (= S2 1) (= M2 (* k
     562949953421312)))))
   (jdouble.near k 1 S2 M2 1 1125899906842624)
-  (jdouble.near k 1 S2 M2 1
-    281474976710656))))
+  (jdouble.near k 1 S2 M2 1 281474976710656))))
 (check-sat)
 (pop 1)
 
@@ -158,8 +151,7 @@
   (or (and (jdouble.near k 1 S2 M2 1 562949953421312) (not (and (= S2 (- 1)) (= M2 (* (- k)
     562949953421312)))))
   (jdouble.near k 1 S2 M2 1 1125899906842624)
-  (jdouble.near k 1 S2 M2 1
-    281474976710656))))
+  (jdouble.near k 1 S2 M2 1 281474976710656))))
 (check-sat)
 (pop 1)
 
@@ -171,8 +163,7 @@
   (or (and (jdouble.near k 1 S2 M2 1 281474976710656) (not (and (= S2 1) (= M2 (* k
     281474976710656)))))
   (jdouble.near k 1 S2 M2 1 562949953421312)
-  (jdouble.near k 1 S2 M2 1
-    140737488355328))))
+  (jdouble.near k 1 S2 M2 1 140737488355328))))
 (check-sat)
 (pop 1)
 
@@ -184,8 +175,7 @@
   (or (and (jdouble.near k 1 S2 M2 1 281474976710656) (not (and (= S2 (- 1)) (= M2 (* (- k)
     281474976710656)))))
   (jdouble.near k 1 S2 M2 1 562949953421312)
-  (jdouble.near k 1 S2 M2 1
-    140737488355328))))
+  (jdouble.near k 1 S2 M2 1 140737488355328))))
 (check-sat)
 (pop 1)
 
@@ -197,8 +187,7 @@
   (or (and (jdouble.near k 1 S2 M2 1 140737488355328) (not (and (= S2 1) (= M2 (* k
     140737488355328)))))
   (jdouble.near k 1 S2 M2 1 281474976710656)
-  (jdouble.near k 1 S2 M2 1
-    70368744177664))))
+  (jdouble.near k 1 S2 M2 1 70368744177664))))
 (check-sat)
 (pop 1)
 
@@ -210,8 +199,7 @@
   (or (and (jdouble.near k 1 S2 M2 1 140737488355328) (not (and (= S2 (- 1)) (= M2 (* (- k)
     140737488355328)))))
   (jdouble.near k 1 S2 M2 1 281474976710656)
-  (jdouble.near k 1 S2 M2 1
-    70368744177664))))
+  (jdouble.near k 1 S2 M2 1 70368744177664))))
 (check-sat)
 (pop 1)
 
@@ -223,8 +211,7 @@
   (or (and (jdouble.near k 1 S2 M2 1 70368744177664) (not (and (= S2 1) (= M2 (* k
     70368744177664)))))
   (jdouble.near k 1 S2 M2 1 140737488355328)
-  (jdouble.near k 1 S2 M2 1
-    35184372088832))))
+  (jdouble.near k 1 S2 M2 1 35184372088832))))
 (check-sat)
 (pop 1)
 
@@ -236,8 +223,7 @@
   (or (and (jdouble.near k 1 S2 M2 1 70368744177664) (not (and (= S2 (- 1)) (= M2 (* (- k)
     70368744177664)))))
   (jdouble.near k 1 S2 M2 1 140737488355328)
-  (jdouble.near k 1 S2 M2 1
-    35184372088832))))
+  (jdouble.near k 1 S2 M2 1 35184372088832))))
 (check-sat)
 (pop 1)
 
@@ -249,8 +235,7 @@
   (or (and (jdouble.near k 1 S2 M2 1 35184372088832) (not (and (= S2 1) (= M2 (* k
     35184372088832)))))
   (jdouble.near k 1 S2 M2 1 70368744177664)
-  (jdouble.near k 1 S2 M2 1
-    17592186044416))))
+  (jdouble.near k 1 S2 M2 1 17592186044416))))
 (check-sat)
 (pop 1)
 
@@ -262,8 +247,7 @@
   (or (and (jdouble.near k 1 S2 M2 1 35184372088832) (not (and (= S2 (- 1)) (= M2 (* (- k)
     35184372088832)))))
   (jdouble.near k 1 S2 M2 1 70368744177664)
-  (jdouble.near k 1 S2 M2 1
-    17592186044416))))
+  (jdouble.near k 1 S2 M2 1 17592186044416))))
 (check-sat)
 (pop 1)
 
@@ -275,8 +259,7 @@
   (or (and (jdouble.near k 1 S2 M2 1 17592186044416) (not (and (= S2 1) (= M2 (* k
     17592186044416)))))
   (jdouble.near k 1 S2 M2 1 35184372088832)
-  (jdouble.near k 1 S2 M2 1
-    8796093022208))))
+  (jdouble.near k 1 S2 M2 1 8796093022208))))
 (check-sat)
 (pop 1)
 
@@ -288,8 +271,7 @@
   (or (and (jdouble.near k 1 S2 M2 1 17592186044416) (not (and (= S2 (- 1)) (= M2 (* (- k)
     17592186044416)))))
   (jdouble.near k 1 S2 M2 1 35184372088832)
-  (jdouble.near k 1 S2 M2 1
-    8796093022208))))
+  (jdouble.near k 1 S2 M2 1 8796093022208))))
 (check-sat)
 (pop 1)
 
@@ -298,11 +280,9 @@
 (declare-const k Int) (declare-const S2 Int) (declare-const M2 Int)
 (assert (and (<= 512 k) (< k 1024)))
 (assert (or (not (jdouble.near k 1 1 (* k 8796093022208) 1 8796093022208))
-  (or (and (jdouble.near k 1 S2 M2 1 8796093022208) (not (and (= S2 1) (= M2 (* k
-    8796093022208)))))
+  (or (and (jdouble.near k 1 S2 M2 1 8796093022208) (not (and (= S2 1) (= M2 (* k 8796093022208)))))
   (jdouble.near k 1 S2 M2 1 17592186044416)
-  (jdouble.near k 1 S2 M2 1
-    4398046511104))))
+  (jdouble.near k 1 S2 M2 1 4398046511104))))
 (check-sat)
 (pop 1)
 
@@ -314,8 +294,7 @@
   (or (and (jdouble.near k 1 S2 M2 1 8796093022208) (not (and (= S2 (- 1)) (= M2 (* (- k)
     8796093022208)))))
   (jdouble.near k 1 S2 M2 1 17592186044416)
-  (jdouble.near k 1 S2 M2 1
-    4398046511104))))
+  (jdouble.near k 1 S2 M2 1 4398046511104))))
 (check-sat)
 (pop 1)
 
@@ -324,11 +303,9 @@
 (declare-const k Int) (declare-const S2 Int) (declare-const M2 Int)
 (assert (and (<= 1024 k) (< k 2048)))
 (assert (or (not (jdouble.near k 1 1 (* k 4398046511104) 1 4398046511104))
-  (or (and (jdouble.near k 1 S2 M2 1 4398046511104) (not (and (= S2 1) (= M2 (* k
-    4398046511104)))))
+  (or (and (jdouble.near k 1 S2 M2 1 4398046511104) (not (and (= S2 1) (= M2 (* k 4398046511104)))))
   (jdouble.near k 1 S2 M2 1 8796093022208)
-  (jdouble.near k 1 S2 M2 1
-    2199023255552))))
+  (jdouble.near k 1 S2 M2 1 2199023255552))))
 (check-sat)
 (pop 1)
 
@@ -340,8 +317,7 @@
   (or (and (jdouble.near k 1 S2 M2 1 4398046511104) (not (and (= S2 (- 1)) (= M2 (* (- k)
     4398046511104)))))
   (jdouble.near k 1 S2 M2 1 8796093022208)
-  (jdouble.near k 1 S2 M2 1
-    2199023255552))))
+  (jdouble.near k 1 S2 M2 1 2199023255552))))
 (check-sat)
 (pop 1)
 
@@ -350,11 +326,9 @@
 (declare-const k Int) (declare-const S2 Int) (declare-const M2 Int)
 (assert (and (<= 2048 k) (< k 4096)))
 (assert (or (not (jdouble.near k 1 1 (* k 2199023255552) 1 2199023255552))
-  (or (and (jdouble.near k 1 S2 M2 1 2199023255552) (not (and (= S2 1) (= M2 (* k
-    2199023255552)))))
+  (or (and (jdouble.near k 1 S2 M2 1 2199023255552) (not (and (= S2 1) (= M2 (* k 2199023255552)))))
   (jdouble.near k 1 S2 M2 1 4398046511104)
-  (jdouble.near k 1 S2 M2 1
-    1099511627776))))
+  (jdouble.near k 1 S2 M2 1 1099511627776))))
 (check-sat)
 (pop 1)
 
@@ -366,8 +340,7 @@
   (or (and (jdouble.near k 1 S2 M2 1 2199023255552) (not (and (= S2 (- 1)) (= M2 (* (- k)
     2199023255552)))))
   (jdouble.near k 1 S2 M2 1 4398046511104)
-  (jdouble.near k 1 S2 M2 1
-    1099511627776))))
+  (jdouble.near k 1 S2 M2 1 1099511627776))))
 (check-sat)
 (pop 1)
 
@@ -376,11 +349,9 @@
 (declare-const k Int) (declare-const S2 Int) (declare-const M2 Int)
 (assert (and (<= 4096 k) (< k 8192)))
 (assert (or (not (jdouble.near k 1 1 (* k 1099511627776) 1 1099511627776))
-  (or (and (jdouble.near k 1 S2 M2 1 1099511627776) (not (and (= S2 1) (= M2 (* k
-    1099511627776)))))
+  (or (and (jdouble.near k 1 S2 M2 1 1099511627776) (not (and (= S2 1) (= M2 (* k 1099511627776)))))
   (jdouble.near k 1 S2 M2 1 2199023255552)
-  (jdouble.near k 1 S2 M2 1
-    549755813888))))
+  (jdouble.near k 1 S2 M2 1 549755813888))))
 (check-sat)
 (pop 1)
 
@@ -392,8 +363,7 @@
   (or (and (jdouble.near k 1 S2 M2 1 1099511627776) (not (and (= S2 (- 1)) (= M2 (* (- k)
     1099511627776)))))
   (jdouble.near k 1 S2 M2 1 2199023255552)
-  (jdouble.near k 1 S2 M2 1
-    549755813888))))
+  (jdouble.near k 1 S2 M2 1 549755813888))))
 (check-sat)
 (pop 1)
 
@@ -403,8 +373,7 @@
 (assert (and (<= 8192 k) (< k 16384)))
 (assert (or (not (jdouble.near k 1 1 (* k 549755813888) 1 549755813888))
   (or (and (jdouble.near k 1 S2 M2 1 549755813888) (not (and (= S2 1) (= M2 (* k 549755813888)))))
- 
-    (jdouble.near k 1 S2 M2 1 1099511627776)
+  (jdouble.near k 1 S2 M2 1 1099511627776)
   (jdouble.near k 1 S2 M2 1 274877906944))))
 (check-sat)
 (pop 1)
@@ -417,8 +386,7 @@
   (or (and (jdouble.near k 1 S2 M2 1 549755813888) (not (and (= S2 (- 1)) (= M2 (* (- k)
     549755813888)))))
   (jdouble.near k 1 S2 M2 1 1099511627776)
-  (jdouble.near k 1 S2 M2 1
-    274877906944))))
+  (jdouble.near k 1 S2 M2 1 274877906944))))
 (check-sat)
 (pop 1)
 
@@ -428,8 +396,7 @@
 (assert (and (<= 16384 k) (< k 32768)))
 (assert (or (not (jdouble.near k 1 1 (* k 274877906944) 1 274877906944))
   (or (and (jdouble.near k 1 S2 M2 1 274877906944) (not (and (= S2 1) (= M2 (* k 274877906944)))))
- 
-    (jdouble.near k 1 S2 M2 1 549755813888)
+  (jdouble.near k 1 S2 M2 1 549755813888)
   (jdouble.near k 1 S2 M2 1 137438953472))))
 (check-sat)
 (pop 1)
@@ -442,8 +409,7 @@
   (or (and (jdouble.near k 1 S2 M2 1 274877906944) (not (and (= S2 (- 1)) (= M2 (* (- k)
     274877906944)))))
   (jdouble.near k 1 S2 M2 1 549755813888)
-  (jdouble.near k 1 S2 M2 1
-    137438953472))))
+  (jdouble.near k 1 S2 M2 1 137438953472))))
 (check-sat)
 (pop 1)
 
@@ -453,8 +419,7 @@
 (assert (and (<= 32768 k) (< k 65536)))
 (assert (or (not (jdouble.near k 1 1 (* k 137438953472) 1 137438953472))
   (or (and (jdouble.near k 1 S2 M2 1 137438953472) (not (and (= S2 1) (= M2 (* k 137438953472)))))
- 
-    (jdouble.near k 1 S2 M2 1 274877906944)
+  (jdouble.near k 1 S2 M2 1 274877906944)
   (jdouble.near k 1 S2 M2 1 68719476736))))
 (check-sat)
 (pop 1)
@@ -467,8 +432,7 @@
   (or (and (jdouble.near k 1 S2 M2 1 137438953472) (not (and (= S2 (- 1)) (= M2 (* (- k)
     137438953472)))))
   (jdouble.near k 1 S2 M2 1 274877906944)
-  (jdouble.near k 1 S2 M2 1
-    68719476736))))
+  (jdouble.near k 1 S2 M2 1 68719476736))))
 (check-sat)
 (pop 1)
 
@@ -478,8 +442,7 @@
 (assert (and (<= 65536 k) (< k 131072)))
 (assert (or (not (jdouble.near k 1 1 (* k 68719476736) 1 68719476736))
   (or (and (jdouble.near k 1 S2 M2 1 68719476736) (not (and (= S2 1) (= M2 (* k 68719476736)))))
- 
-    (jdouble.near k 1 S2 M2 1 137438953472)
+  (jdouble.near k 1 S2 M2 1 137438953472)
   (jdouble.near k 1 S2 M2 1 34359738368))))
 (check-sat)
 (pop 1)
@@ -492,8 +455,7 @@
   (or (and (jdouble.near k 1 S2 M2 1 68719476736) (not (and (= S2 (- 1)) (= M2 (* (- k)
     68719476736)))))
   (jdouble.near k 1 S2 M2 1 137438953472)
-  (jdouble.near k 1 S2 M2 1
-    34359738368))))
+  (jdouble.near k 1 S2 M2 1 34359738368))))
 (check-sat)
 (pop 1)
 
@@ -503,8 +465,7 @@
 (assert (and (<= 131072 k) (< k 262144)))
 (assert (or (not (jdouble.near k 1 1 (* k 34359738368) 1 34359738368))
   (or (and (jdouble.near k 1 S2 M2 1 34359738368) (not (and (= S2 1) (= M2 (* k 34359738368)))))
- 
-    (jdouble.near k 1 S2 M2 1 68719476736)
+  (jdouble.near k 1 S2 M2 1 68719476736)
   (jdouble.near k 1 S2 M2 1 17179869184))))
 (check-sat)
 (pop 1)
@@ -517,8 +478,7 @@
   (or (and (jdouble.near k 1 S2 M2 1 34359738368) (not (and (= S2 (- 1)) (= M2 (* (- k)
     34359738368)))))
   (jdouble.near k 1 S2 M2 1 68719476736)
-  (jdouble.near k 1 S2 M2 1
-    17179869184))))
+  (jdouble.near k 1 S2 M2 1 17179869184))))
 (check-sat)
 (pop 1)
 
@@ -528,8 +488,7 @@
 (assert (and (<= 262144 k) (< k 524288)))
 (assert (or (not (jdouble.near k 1 1 (* k 17179869184) 1 17179869184))
   (or (and (jdouble.near k 1 S2 M2 1 17179869184) (not (and (= S2 1) (= M2 (* k 17179869184)))))
- 
-    (jdouble.near k 1 S2 M2 1 34359738368)
+  (jdouble.near k 1 S2 M2 1 34359738368)
   (jdouble.near k 1 S2 M2 1 8589934592))))
 (check-sat)
 (pop 1)
@@ -542,8 +501,7 @@
   (or (and (jdouble.near k 1 S2 M2 1 17179869184) (not (and (= S2 (- 1)) (= M2 (* (- k)
     17179869184)))))
   (jdouble.near k 1 S2 M2 1 34359738368)
-  (jdouble.near k 1 S2 M2 1
-    8589934592))))
+  (jdouble.near k 1 S2 M2 1 8589934592))))
 (check-sat)
 (pop 1)
 
@@ -553,8 +511,7 @@
 (assert (and (<= 524288 k) (< k 1048576)))
 (assert (or (not (jdouble.near k 1 1 (* k 8589934592) 1 8589934592))
   (or (and (jdouble.near k 1 S2 M2 1 8589934592) (not (and (= S2 1) (= M2 (* k 8589934592)))))
- 
-    (jdouble.near k 1 S2 M2 1 17179869184)
+  (jdouble.near k 1 S2 M2 1 17179869184)
   (jdouble.near k 1 S2 M2 1 4294967296))))
 (check-sat)
 (pop 1)
@@ -567,8 +524,7 @@
   (or (and (jdouble.near k 1 S2 M2 1 8589934592) (not (and (= S2 (- 1)) (= M2 (* (- k)
     8589934592)))))
   (jdouble.near k 1 S2 M2 1 17179869184)
-  (jdouble.near k 1 S2 M2 1
-    4294967296))))
+  (jdouble.near k 1 S2 M2 1 4294967296))))
 (check-sat)
 (pop 1)
 
@@ -578,8 +534,7 @@
 (assert (and (<= 1048576 k) (< k 2097152)))
 (assert (or (not (jdouble.near k 1 1 (* k 4294967296) 1 4294967296))
   (or (and (jdouble.near k 1 S2 M2 1 4294967296) (not (and (= S2 1) (= M2 (* k 4294967296)))))
- 
-    (jdouble.near k 1 S2 M2 1 8589934592)
+  (jdouble.near k 1 S2 M2 1 8589934592)
   (jdouble.near k 1 S2 M2 1 2147483648))))
 (check-sat)
 (pop 1)
@@ -592,8 +547,7 @@
   (or (and (jdouble.near k 1 S2 M2 1 4294967296) (not (and (= S2 (- 1)) (= M2 (* (- k)
     4294967296)))))
   (jdouble.near k 1 S2 M2 1 8589934592)
-  (jdouble.near k 1 S2 M2 1
-    2147483648))))
+  (jdouble.near k 1 S2 M2 1 2147483648))))
 (check-sat)
 (pop 1)
 
@@ -603,8 +557,7 @@
 (assert (and (<= 2097152 k) (< k 4194304)))
 (assert (or (not (jdouble.near k 1 1 (* k 2147483648) 1 2147483648))
   (or (and (jdouble.near k 1 S2 M2 1 2147483648) (not (and (= S2 1) (= M2 (* k 2147483648)))))
- 
-    (jdouble.near k 1 S2 M2 1 4294967296)
+  (jdouble.near k 1 S2 M2 1 4294967296)
   (jdouble.near k 1 S2 M2 1 1073741824))))
 (check-sat)
 (pop 1)
@@ -617,8 +570,7 @@
   (or (and (jdouble.near k 1 S2 M2 1 2147483648) (not (and (= S2 (- 1)) (= M2 (* (- k)
     2147483648)))))
   (jdouble.near k 1 S2 M2 1 4294967296)
-  (jdouble.near k 1 S2 M2 1
-    1073741824))))
+  (jdouble.near k 1 S2 M2 1 1073741824))))
 (check-sat)
 (pop 1)
 
@@ -628,8 +580,7 @@
 (assert (and (<= 4194304 k) (< k 8388608)))
 (assert (or (not (jdouble.near k 1 1 (* k 1073741824) 1 1073741824))
   (or (and (jdouble.near k 1 S2 M2 1 1073741824) (not (and (= S2 1) (= M2 (* k 1073741824)))))
- 
-    (jdouble.near k 1 S2 M2 1 2147483648)
+  (jdouble.near k 1 S2 M2 1 2147483648)
   (jdouble.near k 1 S2 M2 1 536870912))))
 (check-sat)
 (pop 1)
@@ -642,8 +593,7 @@
   (or (and (jdouble.near k 1 S2 M2 1 1073741824) (not (and (= S2 (- 1)) (= M2 (* (- k)
     1073741824)))))
   (jdouble.near k 1 S2 M2 1 2147483648)
-  (jdouble.near k 1 S2 M2 1
-    536870912))))
+  (jdouble.near k 1 S2 M2 1 536870912))))
 (check-sat)
 (pop 1)
 
@@ -653,8 +603,7 @@
 (assert (and (<= 8388608 k) (< k 16777216)))
 (assert (or (not (jdouble.near k 1 1 (* k 536870912) 1 536870912))
   (or (and (jdouble.near k 1 S2 M2 1 536870912) (not (and (= S2 1) (= M2 (* k 536870912)))))
- 
-    (jdouble.near k 1 S2 M2 1 1073741824)
+  (jdouble.near k 1 S2 M2 1 1073741824)
   (jdouble.near k 1 S2 M2 1 268435456))))
 (check-sat)
 (pop 1)
@@ -664,8 +613,7 @@
 (declare-const k Int) (declare-const S2 Int) (declare-const M2 Int)
 (assert (and (< (- 16777216) k) (<= k (- 8388608))))
 (assert (or (not (jdouble.near k 1 (- 1) (* (- k) 536870912) 1 536870912))
-  (or (and (jdouble.near k 1 S2 M2 1 536870912) (not (and (= S2 (- 1)) (= M2 (* (- k)
-    536870912)))))
+  (or (and (jdouble.near k 1 S2 M2 1 536870912) (not (and (= S2 (- 1)) (= M2 (* (- k) 536870912)))))
   (jdouble.near k 1 S2 M2 1 1073741824)
   (jdouble.near k 1 S2 M2 1 268435456))))
 (check-sat)
@@ -677,8 +625,7 @@
 (assert (and (<= 16777216 k) (< k 33554432)))
 (assert (or (not (jdouble.near k 1 1 (* k 268435456) 1 268435456))
   (or (and (jdouble.near k 1 S2 M2 1 268435456) (not (and (= S2 1) (= M2 (* k 268435456)))))
- 
-    (jdouble.near k 1 S2 M2 1 536870912)
+  (jdouble.near k 1 S2 M2 1 536870912)
   (jdouble.near k 1 S2 M2 1 134217728))))
 (check-sat)
 (pop 1)
@@ -688,8 +635,7 @@
 (declare-const k Int) (declare-const S2 Int) (declare-const M2 Int)
 (assert (and (< (- 33554432) k) (<= k (- 16777216))))
 (assert (or (not (jdouble.near k 1 (- 1) (* (- k) 268435456) 1 268435456))
-  (or (and (jdouble.near k 1 S2 M2 1 268435456) (not (and (= S2 (- 1)) (= M2 (* (- k)
-    268435456)))))
+  (or (and (jdouble.near k 1 S2 M2 1 268435456) (not (and (= S2 (- 1)) (= M2 (* (- k) 268435456)))))
   (jdouble.near k 1 S2 M2 1 536870912)
   (jdouble.near k 1 S2 M2 1 134217728))))
 (check-sat)
@@ -701,8 +647,7 @@
 (assert (and (<= 33554432 k) (< k 67108864)))
 (assert (or (not (jdouble.near k 1 1 (* k 134217728) 1 134217728))
   (or (and (jdouble.near k 1 S2 M2 1 134217728) (not (and (= S2 1) (= M2 (* k 134217728)))))
- 
-    (jdouble.near k 1 S2 M2 1 268435456)
+  (jdouble.near k 1 S2 M2 1 268435456)
   (jdouble.near k 1 S2 M2 1 67108864))))
 (check-sat)
 (pop 1)
@@ -712,8 +657,7 @@
 (declare-const k Int) (declare-const S2 Int) (declare-const M2 Int)
 (assert (and (< (- 67108864) k) (<= k (- 33554432))))
 (assert (or (not (jdouble.near k 1 (- 1) (* (- k) 134217728) 1 134217728))
-  (or (and (jdouble.near k 1 S2 M2 1 134217728) (not (and (= S2 (- 1)) (= M2 (* (- k)
-    134217728)))))
+  (or (and (jdouble.near k 1 S2 M2 1 134217728) (not (and (= S2 (- 1)) (= M2 (* (- k) 134217728)))))
   (jdouble.near k 1 S2 M2 1 268435456)
   (jdouble.near k 1 S2 M2 1 67108864))))
 (check-sat)
@@ -725,8 +669,7 @@
 (assert (and (<= 67108864 k) (< k 134217728)))
 (assert (or (not (jdouble.near k 1 1 (* k 67108864) 1 67108864))
   (or (and (jdouble.near k 1 S2 M2 1 67108864) (not (and (= S2 1) (= M2 (* k 67108864)))))
- 
-    (jdouble.near k 1 S2 M2 1 134217728)
+  (jdouble.near k 1 S2 M2 1 134217728)
   (jdouble.near k 1 S2 M2 1 33554432))))
 (check-sat)
 (pop 1)
@@ -737,8 +680,7 @@
 (assert (and (< (- 134217728) k) (<= k (- 67108864))))
 (assert (or (not (jdouble.near k 1 (- 1) (* (- k) 67108864) 1 67108864))
   (or (and (jdouble.near k 1 S2 M2 1 67108864) (not (and (= S2 (- 1)) (= M2 (* (- k) 67108864)))))
- 
-    (jdouble.near k 1 S2 M2 1 134217728)
+  (jdouble.near k 1 S2 M2 1 134217728)
   (jdouble.near k 1 S2 M2 1 33554432))))
 (check-sat)
 (pop 1)
@@ -749,8 +691,7 @@
 (assert (and (<= 134217728 k) (< k 268435456)))
 (assert (or (not (jdouble.near k 1 1 (* k 33554432) 1 33554432))
   (or (and (jdouble.near k 1 S2 M2 1 33554432) (not (and (= S2 1) (= M2 (* k 33554432)))))
- 
-    (jdouble.near k 1 S2 M2 1 67108864)
+  (jdouble.near k 1 S2 M2 1 67108864)
   (jdouble.near k 1 S2 M2 1 16777216))))
 (check-sat)
 (pop 1)
@@ -761,8 +702,7 @@
 (assert (and (< (- 268435456) k) (<= k (- 134217728))))
 (assert (or (not (jdouble.near k 1 (- 1) (* (- k) 33554432) 1 33554432))
   (or (and (jdouble.near k 1 S2 M2 1 33554432) (not (and (= S2 (- 1)) (= M2 (* (- k) 33554432)))))
- 
-    (jdouble.near k 1 S2 M2 1 67108864)
+  (jdouble.near k 1 S2 M2 1 67108864)
   (jdouble.near k 1 S2 M2 1 16777216))))
 (check-sat)
 (pop 1)
@@ -773,8 +713,7 @@
 (assert (and (<= 268435456 k) (< k 536870912)))
 (assert (or (not (jdouble.near k 1 1 (* k 16777216) 1 16777216))
   (or (and (jdouble.near k 1 S2 M2 1 16777216) (not (and (= S2 1) (= M2 (* k 16777216)))))
- 
-    (jdouble.near k 1 S2 M2 1 33554432)
+  (jdouble.near k 1 S2 M2 1 33554432)
   (jdouble.near k 1 S2 M2 1 8388608))))
 (check-sat)
 (pop 1)
@@ -785,8 +724,7 @@
 (assert (and (< (- 536870912) k) (<= k (- 268435456))))
 (assert (or (not (jdouble.near k 1 (- 1) (* (- k) 16777216) 1 16777216))
   (or (and (jdouble.near k 1 S2 M2 1 16777216) (not (and (= S2 (- 1)) (= M2 (* (- k) 16777216)))))
- 
-    (jdouble.near k 1 S2 M2 1 33554432)
+  (jdouble.near k 1 S2 M2 1 33554432)
   (jdouble.near k 1 S2 M2 1 8388608))))
 (check-sat)
 (pop 1)
@@ -797,8 +735,7 @@
 (assert (and (<= 536870912 k) (< k 1073741824)))
 (assert (or (not (jdouble.near k 1 1 (* k 8388608) 1 8388608))
   (or (and (jdouble.near k 1 S2 M2 1 8388608) (not (and (= S2 1) (= M2 (* k 8388608)))))
- 
-    (jdouble.near k 1 S2 M2 1 16777216)
+  (jdouble.near k 1 S2 M2 1 16777216)
   (jdouble.near k 1 S2 M2 1 4194304))))
 (check-sat)
 (pop 1)
@@ -809,8 +746,7 @@
 (assert (and (< (- 1073741824) k) (<= k (- 536870912))))
 (assert (or (not (jdouble.near k 1 (- 1) (* (- k) 8388608) 1 8388608))
   (or (and (jdouble.near k 1 S2 M2 1 8388608) (not (and (= S2 (- 1)) (= M2 (* (- k) 8388608)))))
- 
-    (jdouble.near k 1 S2 M2 1 16777216)
+  (jdouble.near k 1 S2 M2 1 16777216)
   (jdouble.near k 1 S2 M2 1 4194304))))
 (check-sat)
 (pop 1)
@@ -821,8 +757,7 @@
 (assert (and (<= 1073741824 k) (< k 2147483648)))
 (assert (or (not (jdouble.near k 1 1 (* k 4194304) 1 4194304))
   (or (and (jdouble.near k 1 S2 M2 1 4194304) (not (and (= S2 1) (= M2 (* k 4194304)))))
- 
-    (jdouble.near k 1 S2 M2 1 8388608)
+  (jdouble.near k 1 S2 M2 1 8388608)
   (jdouble.near k 1 S2 M2 1 2097152))))
 (check-sat)
 (pop 1)
@@ -833,8 +768,7 @@
 (assert (and (< (- 2147483648) k) (<= k (- 1073741824))))
 (assert (or (not (jdouble.near k 1 (- 1) (* (- k) 4194304) 1 4194304))
   (or (and (jdouble.near k 1 S2 M2 1 4194304) (not (and (= S2 (- 1)) (= M2 (* (- k) 4194304)))))
- 
-    (jdouble.near k 1 S2 M2 1 8388608)
+  (jdouble.near k 1 S2 M2 1 8388608)
   (jdouble.near k 1 S2 M2 1 2097152))))
 (check-sat)
 (pop 1)
@@ -845,8 +779,7 @@
 (assert (and (<= 2147483648 k) (< k 4294967296)))
 (assert (or (not (jdouble.near k 1 1 (* k 2097152) 1 2097152))
   (or (and (jdouble.near k 1 S2 M2 1 2097152) (not (and (= S2 1) (= M2 (* k 2097152)))))
- 
-    (jdouble.near k 1 S2 M2 1 4194304)
+  (jdouble.near k 1 S2 M2 1 4194304)
   (jdouble.near k 1 S2 M2 1 1048576))))
 (check-sat)
 (pop 1)
@@ -857,8 +790,7 @@
 (assert (and (< (- 4294967296) k) (<= k (- 2147483648))))
 (assert (or (not (jdouble.near k 1 (- 1) (* (- k) 2097152) 1 2097152))
   (or (and (jdouble.near k 1 S2 M2 1 2097152) (not (and (= S2 (- 1)) (= M2 (* (- k) 2097152)))))
- 
-    (jdouble.near k 1 S2 M2 1 4194304)
+  (jdouble.near k 1 S2 M2 1 4194304)
   (jdouble.near k 1 S2 M2 1 1048576))))
 (check-sat)
 (pop 1)
@@ -869,8 +801,7 @@
 (assert (and (<= 4294967296 k) (< k 8589934592)))
 (assert (or (not (jdouble.near k 1 1 (* k 1048576) 1 1048576))
   (or (and (jdouble.near k 1 S2 M2 1 1048576) (not (and (= S2 1) (= M2 (* k 1048576)))))
- 
-    (jdouble.near k 1 S2 M2 1 2097152)
+  (jdouble.near k 1 S2 M2 1 2097152)
   (jdouble.near k 1 S2 M2 1 524288))))
 (check-sat)
 (pop 1)
@@ -881,8 +812,7 @@
 (assert (and (< (- 8589934592) k) (<= k (- 4294967296))))
 (assert (or (not (jdouble.near k 1 (- 1) (* (- k) 1048576) 1 1048576))
   (or (and (jdouble.near k 1 S2 M2 1 1048576) (not (and (= S2 (- 1)) (= M2 (* (- k) 1048576)))))
- 
-    (jdouble.near k 1 S2 M2 1 2097152)
+  (jdouble.near k 1 S2 M2 1 2097152)
   (jdouble.near k 1 S2 M2 1 524288))))
 (check-sat)
 (pop 1)
@@ -893,8 +823,7 @@
 (assert (and (<= 8589934592 k) (< k 17179869184)))
 (assert (or (not (jdouble.near k 1 1 (* k 524288) 1 524288))
   (or (and (jdouble.near k 1 S2 M2 1 524288) (not (and (= S2 1) (= M2 (* k 524288)))))
- 
-    (jdouble.near k 1 S2 M2 1 1048576)
+  (jdouble.near k 1 S2 M2 1 1048576)
   (jdouble.near k 1 S2 M2 1 262144))))
 (check-sat)
 (pop 1)
@@ -905,8 +834,7 @@
 (assert (and (< (- 17179869184) k) (<= k (- 8589934592))))
 (assert (or (not (jdouble.near k 1 (- 1) (* (- k) 524288) 1 524288))
   (or (and (jdouble.near k 1 S2 M2 1 524288) (not (and (= S2 (- 1)) (= M2 (* (- k) 524288)))))
- 
-    (jdouble.near k 1 S2 M2 1 1048576)
+  (jdouble.near k 1 S2 M2 1 1048576)
   (jdouble.near k 1 S2 M2 1 262144))))
 (check-sat)
 (pop 1)
@@ -917,8 +845,7 @@
 (assert (and (<= 17179869184 k) (< k 34359738368)))
 (assert (or (not (jdouble.near k 1 1 (* k 262144) 1 262144))
   (or (and (jdouble.near k 1 S2 M2 1 262144) (not (and (= S2 1) (= M2 (* k 262144)))))
- 
-    (jdouble.near k 1 S2 M2 1 524288)
+  (jdouble.near k 1 S2 M2 1 524288)
   (jdouble.near k 1 S2 M2 1 131072))))
 (check-sat)
 (pop 1)
@@ -929,8 +856,7 @@
 (assert (and (< (- 34359738368) k) (<= k (- 17179869184))))
 (assert (or (not (jdouble.near k 1 (- 1) (* (- k) 262144) 1 262144))
   (or (and (jdouble.near k 1 S2 M2 1 262144) (not (and (= S2 (- 1)) (= M2 (* (- k) 262144)))))
- 
-    (jdouble.near k 1 S2 M2 1 524288)
+  (jdouble.near k 1 S2 M2 1 524288)
   (jdouble.near k 1 S2 M2 1 131072))))
 (check-sat)
 (pop 1)
@@ -941,8 +867,7 @@
 (assert (and (<= 34359738368 k) (< k 68719476736)))
 (assert (or (not (jdouble.near k 1 1 (* k 131072) 1 131072))
   (or (and (jdouble.near k 1 S2 M2 1 131072) (not (and (= S2 1) (= M2 (* k 131072)))))
- 
-    (jdouble.near k 1 S2 M2 1 262144)
+  (jdouble.near k 1 S2 M2 1 262144)
   (jdouble.near k 1 S2 M2 1 65536))))
 (check-sat)
 (pop 1)
@@ -953,8 +878,7 @@
 (assert (and (< (- 68719476736) k) (<= k (- 34359738368))))
 (assert (or (not (jdouble.near k 1 (- 1) (* (- k) 131072) 1 131072))
   (or (and (jdouble.near k 1 S2 M2 1 131072) (not (and (= S2 (- 1)) (= M2 (* (- k) 131072)))))
- 
-    (jdouble.near k 1 S2 M2 1 262144)
+  (jdouble.near k 1 S2 M2 1 262144)
   (jdouble.near k 1 S2 M2 1 65536))))
 (check-sat)
 (pop 1)
@@ -965,8 +889,7 @@
 (assert (and (<= 68719476736 k) (< k 137438953472)))
 (assert (or (not (jdouble.near k 1 1 (* k 65536) 1 65536))
   (or (and (jdouble.near k 1 S2 M2 1 65536) (not (and (= S2 1) (= M2 (* k 65536)))))
-  (jdouble.near
-    k 1 S2 M2 1 131072)
+  (jdouble.near k 1 S2 M2 1 131072)
   (jdouble.near k 1 S2 M2 1 32768))))
 (check-sat)
 (pop 1)
@@ -977,8 +900,7 @@
 (assert (and (< (- 137438953472) k) (<= k (- 68719476736))))
 (assert (or (not (jdouble.near k 1 (- 1) (* (- k) 65536) 1 65536))
   (or (and (jdouble.near k 1 S2 M2 1 65536) (not (and (= S2 (- 1)) (= M2 (* (- k) 65536)))))
- 
-    (jdouble.near k 1 S2 M2 1 131072)
+  (jdouble.near k 1 S2 M2 1 131072)
   (jdouble.near k 1 S2 M2 1 32768))))
 (check-sat)
 (pop 1)
@@ -989,8 +911,7 @@
 (assert (and (<= 137438953472 k) (< k 274877906944)))
 (assert (or (not (jdouble.near k 1 1 (* k 32768) 1 32768))
   (or (and (jdouble.near k 1 S2 M2 1 32768) (not (and (= S2 1) (= M2 (* k 32768)))))
-  (jdouble.near
-    k 1 S2 M2 1 65536)
+  (jdouble.near k 1 S2 M2 1 65536)
   (jdouble.near k 1 S2 M2 1 16384))))
 (check-sat)
 (pop 1)
@@ -1001,8 +922,7 @@
 (assert (and (< (- 274877906944) k) (<= k (- 137438953472))))
 (assert (or (not (jdouble.near k 1 (- 1) (* (- k) 32768) 1 32768))
   (or (and (jdouble.near k 1 S2 M2 1 32768) (not (and (= S2 (- 1)) (= M2 (* (- k) 32768)))))
- 
-    (jdouble.near k 1 S2 M2 1 65536)
+  (jdouble.near k 1 S2 M2 1 65536)
   (jdouble.near k 1 S2 M2 1 16384))))
 (check-sat)
 (pop 1)
@@ -1013,8 +933,7 @@
 (assert (and (<= 274877906944 k) (< k 549755813888)))
 (assert (or (not (jdouble.near k 1 1 (* k 16384) 1 16384))
   (or (and (jdouble.near k 1 S2 M2 1 16384) (not (and (= S2 1) (= M2 (* k 16384)))))
-  (jdouble.near
-    k 1 S2 M2 1 32768)
+  (jdouble.near k 1 S2 M2 1 32768)
   (jdouble.near k 1 S2 M2 1 8192))))
 (check-sat)
 (pop 1)
@@ -1025,8 +944,7 @@
 (assert (and (< (- 549755813888) k) (<= k (- 274877906944))))
 (assert (or (not (jdouble.near k 1 (- 1) (* (- k) 16384) 1 16384))
   (or (and (jdouble.near k 1 S2 M2 1 16384) (not (and (= S2 (- 1)) (= M2 (* (- k) 16384)))))
- 
-    (jdouble.near k 1 S2 M2 1 32768)
+  (jdouble.near k 1 S2 M2 1 32768)
   (jdouble.near k 1 S2 M2 1 8192))))
 (check-sat)
 (pop 1)
@@ -1037,8 +955,7 @@
 (assert (and (<= 549755813888 k) (< k 1099511627776)))
 (assert (or (not (jdouble.near k 1 1 (* k 8192) 1 8192))
   (or (and (jdouble.near k 1 S2 M2 1 8192) (not (and (= S2 1) (= M2 (* k 8192)))))
-  (jdouble.near k
-    1 S2 M2 1 16384)
+  (jdouble.near k 1 S2 M2 1 16384)
   (jdouble.near k 1 S2 M2 1 4096))))
 (check-sat)
 (pop 1)
@@ -1049,8 +966,7 @@
 (assert (and (< (- 1099511627776) k) (<= k (- 549755813888))))
 (assert (or (not (jdouble.near k 1 (- 1) (* (- k) 8192) 1 8192))
   (or (and (jdouble.near k 1 S2 M2 1 8192) (not (and (= S2 (- 1)) (= M2 (* (- k) 8192)))))
- 
-    (jdouble.near k 1 S2 M2 1 16384)
+  (jdouble.near k 1 S2 M2 1 16384)
   (jdouble.near k 1 S2 M2 1 4096))))
 (check-sat)
 (pop 1)
@@ -1061,8 +977,7 @@
 (assert (and (<= 1099511627776 k) (< k 2199023255552)))
 (assert (or (not (jdouble.near k 1 1 (* k 4096) 1 4096))
   (or (and (jdouble.near k 1 S2 M2 1 4096) (not (and (= S2 1) (= M2 (* k 4096)))))
-  (jdouble.near k
-    1 S2 M2 1 8192)
+  (jdouble.near k 1 S2 M2 1 8192)
   (jdouble.near k 1 S2 M2 1 2048))))
 (check-sat)
 (pop 1)
@@ -1073,8 +988,7 @@
 (assert (and (< (- 2199023255552) k) (<= k (- 1099511627776))))
 (assert (or (not (jdouble.near k 1 (- 1) (* (- k) 4096) 1 4096))
   (or (and (jdouble.near k 1 S2 M2 1 4096) (not (and (= S2 (- 1)) (= M2 (* (- k) 4096)))))
- 
-    (jdouble.near k 1 S2 M2 1 8192)
+  (jdouble.near k 1 S2 M2 1 8192)
   (jdouble.near k 1 S2 M2 1 2048))))
 (check-sat)
 (pop 1)
@@ -1085,8 +999,7 @@
 (assert (and (<= 2199023255552 k) (< k 4398046511104)))
 (assert (or (not (jdouble.near k 1 1 (* k 2048) 1 2048))
   (or (and (jdouble.near k 1 S2 M2 1 2048) (not (and (= S2 1) (= M2 (* k 2048)))))
-  (jdouble.near k
-    1 S2 M2 1 4096)
+  (jdouble.near k 1 S2 M2 1 4096)
   (jdouble.near k 1 S2 M2 1 1024))))
 (check-sat)
 (pop 1)
@@ -1097,8 +1010,7 @@
 (assert (and (< (- 4398046511104) k) (<= k (- 2199023255552))))
 (assert (or (not (jdouble.near k 1 (- 1) (* (- k) 2048) 1 2048))
   (or (and (jdouble.near k 1 S2 M2 1 2048) (not (and (= S2 (- 1)) (= M2 (* (- k) 2048)))))
- 
-    (jdouble.near k 1 S2 M2 1 4096)
+  (jdouble.near k 1 S2 M2 1 4096)
   (jdouble.near k 1 S2 M2 1 1024))))
 (check-sat)
 (pop 1)
@@ -1109,8 +1021,7 @@
 (assert (and (<= 4398046511104 k) (< k 8796093022208)))
 (assert (or (not (jdouble.near k 1 1 (* k 1024) 1 1024))
   (or (and (jdouble.near k 1 S2 M2 1 1024) (not (and (= S2 1) (= M2 (* k 1024)))))
-  (jdouble.near k
-    1 S2 M2 1 2048)
+  (jdouble.near k 1 S2 M2 1 2048)
   (jdouble.near k 1 S2 M2 1 512))))
 (check-sat)
 (pop 1)
@@ -1121,8 +1032,7 @@
 (assert (and (< (- 8796093022208) k) (<= k (- 4398046511104))))
 (assert (or (not (jdouble.near k 1 (- 1) (* (- k) 1024) 1 1024))
   (or (and (jdouble.near k 1 S2 M2 1 1024) (not (and (= S2 (- 1)) (= M2 (* (- k) 1024)))))
- 
-    (jdouble.near k 1 S2 M2 1 2048)
+  (jdouble.near k 1 S2 M2 1 2048)
   (jdouble.near k 1 S2 M2 1 512))))
 (check-sat)
 (pop 1)
@@ -1133,8 +1043,7 @@
 (assert (and (<= 8796093022208 k) (< k 17592186044416)))
 (assert (or (not (jdouble.near k 1 1 (* k 512) 1 512))
   (or (and (jdouble.near k 1 S2 M2 1 512) (not (and (= S2 1) (= M2 (* k 512)))))
-  (jdouble.near k 1
-    S2 M2 1 1024)
+  (jdouble.near k 1 S2 M2 1 1024)
   (jdouble.near k 1 S2 M2 1 256))))
 (check-sat)
 (pop 1)
@@ -1145,8 +1054,7 @@
 (assert (and (< (- 17592186044416) k) (<= k (- 8796093022208))))
 (assert (or (not (jdouble.near k 1 (- 1) (* (- k) 512) 1 512))
   (or (and (jdouble.near k 1 S2 M2 1 512) (not (and (= S2 (- 1)) (= M2 (* (- k) 512)))))
- 
-    (jdouble.near k 1 S2 M2 1 1024)
+  (jdouble.near k 1 S2 M2 1 1024)
   (jdouble.near k 1 S2 M2 1 256))))
 (check-sat)
 (pop 1)
@@ -1157,8 +1065,7 @@
 (assert (and (<= 17592186044416 k) (< k 35184372088832)))
 (assert (or (not (jdouble.near k 1 1 (* k 256) 1 256))
   (or (and (jdouble.near k 1 S2 M2 1 256) (not (and (= S2 1) (= M2 (* k 256)))))
-  (jdouble.near k 1
-    S2 M2 1 512)
+  (jdouble.near k 1 S2 M2 1 512)
   (jdouble.near k 1 S2 M2 1 128))))
 (check-sat)
 (pop 1)
@@ -1169,8 +1076,7 @@
 (assert (and (< (- 35184372088832) k) (<= k (- 17592186044416))))
 (assert (or (not (jdouble.near k 1 (- 1) (* (- k) 256) 1 256))
   (or (and (jdouble.near k 1 S2 M2 1 256) (not (and (= S2 (- 1)) (= M2 (* (- k) 256)))))
- 
-    (jdouble.near k 1 S2 M2 1 512)
+  (jdouble.near k 1 S2 M2 1 512)
   (jdouble.near k 1 S2 M2 1 128))))
 (check-sat)
 (pop 1)
@@ -1181,8 +1087,7 @@
 (assert (and (<= 35184372088832 k) (< k 70368744177664)))
 (assert (or (not (jdouble.near k 1 1 (* k 128) 1 128))
   (or (and (jdouble.near k 1 S2 M2 1 128) (not (and (= S2 1) (= M2 (* k 128)))))
-  (jdouble.near k 1
-    S2 M2 1 256)
+  (jdouble.near k 1 S2 M2 1 256)
   (jdouble.near k 1 S2 M2 1 64))))
 (check-sat)
 (pop 1)
@@ -1193,8 +1098,7 @@
 (assert (and (< (- 70368744177664) k) (<= k (- 35184372088832))))
 (assert (or (not (jdouble.near k 1 (- 1) (* (- k) 128) 1 128))
   (or (and (jdouble.near k 1 S2 M2 1 128) (not (and (= S2 (- 1)) (= M2 (* (- k) 128)))))
- 
-    (jdouble.near k 1 S2 M2 1 256)
+  (jdouble.near k 1 S2 M2 1 256)
   (jdouble.near k 1 S2 M2 1 64))))
 (check-sat)
 (pop 1)
@@ -1205,8 +1109,7 @@
 (assert (and (<= 70368744177664 k) (< k 140737488355328)))
 (assert (or (not (jdouble.near k 1 1 (* k 64) 1 64))
   (or (and (jdouble.near k 1 S2 M2 1 64) (not (and (= S2 1) (= M2 (* k 64)))))
-  (jdouble.near k 1
-    S2 M2 1 128)
+  (jdouble.near k 1 S2 M2 1 128)
   (jdouble.near k 1 S2 M2 1 32))))
 (check-sat)
 (pop 1)
@@ -1217,8 +1120,7 @@
 (assert (and (< (- 140737488355328) k) (<= k (- 70368744177664))))
 (assert (or (not (jdouble.near k 1 (- 1) (* (- k) 64) 1 64))
   (or (and (jdouble.near k 1 S2 M2 1 64) (not (and (= S2 (- 1)) (= M2 (* (- k) 64)))))
- 
-    (jdouble.near k 1 S2 M2 1 128)
+  (jdouble.near k 1 S2 M2 1 128)
   (jdouble.near k 1 S2 M2 1 32))))
 (check-sat)
 (pop 1)
@@ -1229,8 +1131,7 @@
 (assert (and (<= 140737488355328 k) (< k 281474976710656)))
 (assert (or (not (jdouble.near k 1 1 (* k 32) 1 32))
   (or (and (jdouble.near k 1 S2 M2 1 32) (not (and (= S2 1) (= M2 (* k 32)))))
-  (jdouble.near k 1
-    S2 M2 1 64)
+  (jdouble.near k 1 S2 M2 1 64)
   (jdouble.near k 1 S2 M2 1 16))))
 (check-sat)
 (pop 1)
@@ -1241,8 +1142,7 @@
 (assert (and (< (- 281474976710656) k) (<= k (- 140737488355328))))
 (assert (or (not (jdouble.near k 1 (- 1) (* (- k) 32) 1 32))
   (or (and (jdouble.near k 1 S2 M2 1 32) (not (and (= S2 (- 1)) (= M2 (* (- k) 32)))))
- 
-    (jdouble.near k 1 S2 M2 1 64)
+  (jdouble.near k 1 S2 M2 1 64)
   (jdouble.near k 1 S2 M2 1 16))))
 (check-sat)
 (pop 1)
@@ -1253,8 +1153,7 @@
 (assert (and (<= 281474976710656 k) (< k 562949953421312)))
 (assert (or (not (jdouble.near k 1 1 (* k 16) 1 16))
   (or (and (jdouble.near k 1 S2 M2 1 16) (not (and (= S2 1) (= M2 (* k 16)))))
-  (jdouble.near k 1
-    S2 M2 1 32)
+  (jdouble.near k 1 S2 M2 1 32)
   (jdouble.near k 1 S2 M2 1 8))))
 (check-sat)
 (pop 1)
@@ -1265,8 +1164,7 @@
 (assert (and (< (- 562949953421312) k) (<= k (- 281474976710656))))
 (assert (or (not (jdouble.near k 1 (- 1) (* (- k) 16) 1 16))
   (or (and (jdouble.near k 1 S2 M2 1 16) (not (and (= S2 (- 1)) (= M2 (* (- k) 16)))))
- 
-    (jdouble.near k 1 S2 M2 1 32)
+  (jdouble.near k 1 S2 M2 1 32)
   (jdouble.near k 1 S2 M2 1 8))))
 (check-sat)
 (pop 1)
@@ -1277,8 +1175,7 @@
 (assert (and (<= 562949953421312 k) (< k 1125899906842624)))
 (assert (or (not (jdouble.near k 1 1 (* k 8) 1 8))
   (or (and (jdouble.near k 1 S2 M2 1 8) (not (and (= S2 1) (= M2 (* k 8)))))
-  (jdouble.near k 1 S2
-    M2 1 16)
+  (jdouble.near k 1 S2 M2 1 16)
   (jdouble.near k 1 S2 M2 1 4))))
 (check-sat)
 (pop 1)
@@ -1289,8 +1186,7 @@
 (assert (and (< (- 1125899906842624) k) (<= k (- 562949953421312))))
 (assert (or (not (jdouble.near k 1 (- 1) (* (- k) 8) 1 8))
   (or (and (jdouble.near k 1 S2 M2 1 8) (not (and (= S2 (- 1)) (= M2 (* (- k) 8)))))
-  (jdouble.near
-    k 1 S2 M2 1 16)
+  (jdouble.near k 1 S2 M2 1 16)
   (jdouble.near k 1 S2 M2 1 4))))
 (check-sat)
 (pop 1)
@@ -1301,8 +1197,7 @@
 (assert (and (<= 1125899906842624 k) (< k 2251799813685248)))
 (assert (or (not (jdouble.near k 1 1 (* k 4) 1 4))
   (or (and (jdouble.near k 1 S2 M2 1 4) (not (and (= S2 1) (= M2 (* k 4)))))
-  (jdouble.near k 1 S2
-    M2 1 8)
+  (jdouble.near k 1 S2 M2 1 8)
   (jdouble.near k 1 S2 M2 1 2))))
 (check-sat)
 (pop 1)
@@ -1313,8 +1208,7 @@
 (assert (and (< (- 2251799813685248) k) (<= k (- 1125899906842624))))
 (assert (or (not (jdouble.near k 1 (- 1) (* (- k) 4) 1 4))
   (or (and (jdouble.near k 1 S2 M2 1 4) (not (and (= S2 (- 1)) (= M2 (* (- k) 4)))))
-  (jdouble.near
-    k 1 S2 M2 1 8)
+  (jdouble.near k 1 S2 M2 1 8)
   (jdouble.near k 1 S2 M2 1 2))))
 (check-sat)
 (pop 1)
@@ -1325,8 +1219,7 @@
 (assert (and (< (- 4503599627370496) k) (<= k (- 2251799813685248))))
 (assert (or (not (jdouble.near k 1 (- 1) (* (- k) 2) 1 2))
   (or (and (jdouble.near k 1 S2 M2 1 2) (not (and (= S2 (- 1)) (= M2 (* (- k) 2)))))
-  (jdouble.near
-    k 1 S2 M2 1 4)
+  (jdouble.near k 1 S2 M2 1 4)
   (jdouble.near k 1 S2 M2 1 1))))
 (check-sat)
 (pop 1)
