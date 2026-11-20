@@ -591,10 +591,13 @@ a settled question.
 - **What the logs say.** `bench/pool/pool.py cost` tabulates the nights' measured cost from
   `bench/pool/nightly-cost-2026-11-03-to-2026-11-19.tsv`, one row per job and species run
   (`bench/pool/README.md`, "What a night costs"). The 15 nights of five functions, 5 to 19
-  November 2026, cost 5.8 to 6.2 runner-hours each; by the medians of all 17 nights a night
-  is 137 minutes of fuzz, 118 of x86 sweep and 105 of Arm. That is above the target, and the
-  fuzz is the largest part, as projected. The laptop figures above have not been requoted
-  from the table yet.
+  November 2026, cost 5.8 to 6.2 runner-hours each, above the target. As means over all 17
+  nights, fuzzing is 168 minutes a night (129 in the fuzz jobs, 39 in the Arm jobs), sweeping
+  162 (109 on x86, 53 on Arm) and setup and build 21: the fuzz is the largest part. The x86
+  fuzz jobs' 129 minutes, for five functions on 15 nights and four on 2, stand against the
+  72 to 84 projected for three; a species still fuzzes for the 240 seconds asked, so the
+  difference is the functions added. The entries above have not been requoted from the table
+  yet: expm1's cost and the Arm job's time, which they call unknown, are in it.
 - **When a night fails,** the `alert` job (the only one with `issues: write`) opens an issue
   labelled `nightly-failure`, or comments on the open one, with the run's link, the seed, each
   job's result, the dispatch inputs that replay the run (seed, `nights`, `shards`, `arm-shards`,
