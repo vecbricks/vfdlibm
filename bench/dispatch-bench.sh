@@ -28,10 +28,9 @@
 # --attempts bounds the dispatches. For the three hosts that results wait on, it defaults to none
 # (the hourly retry goes on until the host is drawn). For epyc9v45, a draw of about one in eighteen
 # that is recorded whenever drawn but never waited for, it defaults to 18: an hourly try for
-# about a day, which draws it at least once with a chance of about 64%, each miss costing
-# seconds of runner time (two misses of the probe on a branch of this script's pull request,
-# runs 44710593722 and 44710785601, took 7 and 4 seconds), since the check comes first in the
-# job, after only the fetch of its script and that script's own test. --attempts 1 is a single
+# about a day, which draws it at least once with a chance of about 64%; a miss is a short job,
+# since the check comes first, after only the fetch of its script and that script's own test
+# (its cost has not been measured on the current workflow). --attempts 1 is a single
 # opportunistic try. Running out of attempts on a CPU miss is exit status 3, not a failure of
 # the run; when the last attempt failed before the CPU check, it is 1.
 #
@@ -64,7 +63,7 @@
 
 R=vecbricks/vfdlibm; H=epyc7763; A=""; P=""
 # The host keys are bench/host.sh's, the table benchmark.yml checks the machine against, read
-# once the arguments have parsed, so that a usage error needs no other file. The table is
+# once the options have parsed, so that an unknown option needs no other file. The table is
 # beside this script, as check_base's git is: the script is run by its path in the repository.
 KEYS=""
 usage() {
