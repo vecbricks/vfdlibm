@@ -68,13 +68,15 @@ jobs:
       # First, before any setup beyond fetching the one script: a job checks its own machine,
       # since every job is a new VM. bench/dispatch-bench.sh reads the conclusions of the two
       # steps named "Probe the machine's CPU" and "Check the probe's script", by those exact
-      # names: a failed probe is a CPU miss, and both skipped in a failed run is a fetch that
-      # failed; it tries again after either. bench/host.sh holds each host's CPU string and
+      # names, and of the fetch's, "Fetch the probe's script": a failed probe is a CPU miss, and
+      # a failed fetch with both the others skipped is a fetch that failed; it tries again after
+      # either. bench/host.sh holds each host's CPU string and
       # says how it is matched; CI runs its self-test. The whole tree is checked out further
       # down, after the checks that cost seconds. The script goes to a directory of its own,
       # which the later checkout removes: a second checkout over a sparse one in the same
       # directory left the tree without its other files.
-      - uses: actions/checkout@v5
+      - name: Fetch the probe's script
+        uses: actions/checkout@v5
         with:
           sparse-checkout: |
             bench/host.sh
@@ -89,22 +91,22 @@ jobs:
         env:
           HOST: ${{ inputs.host }}
         run: |
-          if ! [ -x probe/bench/host.sh ]; then
-            echo "::error::bench/host.sh is missing or not executable on this ref"; exit 1
+          if ! [ -r probe/bench/host.sh ]; then
+            echo "::error::bench/host.sh is missing on this ref"; exit 1
           fi
-          if ! probe/bench/host.sh --self-test; then
+          if ! bash probe/bench/host.sh --self-test; then
             echo "::error::bench/host.sh fails its self-test on this ref"; exit 1
           fi
           # The keys are read whole first, so that the check does not rest on how a pipe whose
           # reader leaves at its match ends under the step's shell options.
-          keys="$(probe/bench/host.sh --keys)"
+          keys="$(bash probe/bench/host.sh --keys)"
           if ! grep -qxF -- "$HOST" <<<"$keys"; then
             echo "::error::bench/host.sh has no row for host '$HOST'"; exit 1
           fi
       - name: Probe the machine's CPU
         env:
           HOST: ${{ inputs.host }}
-        run: probe/bench/host.sh --expect "$HOST"
+        run: bash probe/bench/host.sh --expect "$HOST"
       # A pair's free-text inputs, checked before the setup so that a typo costs seconds: the
       # same rules as bench/pair.sh's, which checks them again.
       - name: Check the pair inputs

@@ -9,7 +9,7 @@
 #
 # The table of benchmark hosts, and the check of a machine against it. This is the one place
 # that holds each host's CPU string: .github/workflows/benchmark.yml fetches it, runs its
-# self-test and then checks the machine with it, before any other step;
+# self-test and then checks the machine with it, before any step but its fetch;
 # bench/dispatch-bench.sh takes its host keys from it, and CI runs its self-test.
 #
 #   bench/host.sh --expect <key>   check this machine against one host; exit 1 on any other CPU
@@ -192,6 +192,14 @@ self_test() {
     echo "host.sh: a mismatch printed '$(flat "$out")'" >&2; failed=1
   fi
 
+  # The dispatcher gives the key epyc9v45 its default of 18 attempts; a host nobody waits for
+  # needs that line, so the key it names must still be a row.
+  n=$((n + 1))
+  if ! keys | grep -qxF epyc9v45; then
+    echo "host.sh: no row for epyc9v45, whose default of 18 attempts the dispatcher sets" >&2
+    failed=1
+  fi
+
   # No key is there twice, and every row is well formed.
   n=$((n + 1)); got="$(keys | sort | uniq -d | tr '\n' ' ')"
   if [ -n "$got" ]; then echo "host.sh: more than one row for '$got'" >&2; failed=1; fi
@@ -264,9 +272,9 @@ self_test() {
   done
   rm -f "$env"
 
-  # bench/dispatch-bench.sh reads two steps of benchmark.yml by their exact names.
+  # bench/dispatch-bench.sh reads three steps of benchmark.yml by their exact names.
   local step
-  for step in "Check the probe's script" "Probe the machine's CPU"; do
+  for step in "Fetch the probe's script" "Check the probe's script" "Probe the machine's CPU"; do
     n=$((n + 1))
     if ! grep -qxF -- "      - name: $step" "$yml"; then
       echo "host.sh: benchmark.yml has no step named \"$step\"" >&2; failed=1

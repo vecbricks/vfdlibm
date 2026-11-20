@@ -170,15 +170,16 @@ bench() {
         return 3; fi
       echo "$(t) $N: CPU check failed (not $H), retry in an hour"; sleep 3600; continue
     fi
-    # Retried only when, in a failed run, the check was skipped and so was the step before it
-    # that checks the fetched script: the fetch failed, and the machine is not known. Anything
-    # else is a failure not to be retried: the check passed, the fetched script cannot be run
-    # or lacks the host, the run was cancelled, or no job started (a run with no steps, a
-    # startup failure).
+    # Retried only when, in a failed run, the fetch of the script failed and the two steps
+    # after it were skipped: the machine is not known. Anything else is a failure not to be
+    # retried: the check passed, the fetched script cannot be run or lacks the host, the run
+    # was cancelled, a step other than the fetch failed before the check, or no job started (a
+    # run with no steps, a startup failure).
     if grep -qx "failure Check the probe's script" <<<"$steps"; then
       echo "$(t) $N: run $m could not use $B's bench/host.sh; no benchmark ran, stopping"
       return 1; fi
     if [ "$probe" != skipped ] || [ "$c" != failure ] \
+        || ! grep -qx "failure Fetch the probe's script" <<<"$steps" \
         || ! grep -qx "skipped Check the probe's script" <<<"$steps"; then
       echo "$(t) $N: run $m ended as $c, its failed steps: $(failed_steps); stopping"
       return 1; fi
