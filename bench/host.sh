@@ -238,6 +238,18 @@ self_test() {
     if [ "$got" != 0 ] || [ "$line" != "$want" ]; then
       echo "host.sh: a $key machine ended with $got and wrote '$line'" >&2; failed=1
     fi
+    # Each row's own name is that row's host and no other row's: classify takes the first
+    # row that matches, and --expect checks one key, so an overlap would let one machine pass
+    # as two hosts.
+    n=$((n + 1)); local other matched=""
+    for other in $(keys); do
+      if matches "$(row_of "$other")" "$(string_of "$(row_of "$key")")" "$avx512"; then
+        matched+="${matched:+ }$other"
+      fi
+    done
+    if [ "$matched" != "$key" ]; then
+      echo "host.sh: the name of $key is the host of '$matched'" >&2; failed=1
+    fi
   done
   rm -f "$env"
 
