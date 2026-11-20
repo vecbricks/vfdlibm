@@ -6,7 +6,7 @@
 # is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either
 # express or implied. See the License for the specific language governing permissions and
 # limitations under the License.
-"""Tally the machines GitHub's runner pool gave the nightly's jobs.
+"""Tally the machines GitHub's runner pool gave the nightly's jobs, and what the jobs cost.
 
 Which CPU a GitHub-hosted job runs on is a draw from the pool, and the benchmark hosts are drawn
 from the same pool (HARDWARE.md). Every sweep, fuzz and Arm job of .github/workflows/nightly.yml
@@ -14,18 +14,28 @@ starts with bench/datapath.sh, the step "Record the machine", which prints the C
 vector flags, the JVM's vector settings and the datapath probe's reading. This script reads
 those lines back from the jobs' logs (fetch) and tallies them by CPU (table).
 
-GitHub keeps a run's logs for 90 days, so fetch's output, one row per job, is committed beside
-this script, and table works from that file alone.
+The same logs say what a night costs. dev/nightly.sh brackets each species' JVM with lines
+"== <mode>-<function>-<species>:", and Sweep and Fuzz print what they checked and in how many
+seconds. With --cost, fetch writes a second file, one row per job and species run with the job's
+own times, and cost tabulates it: runner-minutes per night, the time of a whole sweep and the
+fuzz's rate per function and species.
+
+GitHub keeps a run's logs for 90 days, so fetch's outputs are committed beside this script, and
+table and cost work from those files alone.
 
 Usage, from the repository root:
-    bench/pool/pool.py fetch --since 2026-11-03 --until 2026-11-19 > rows.tsv   # needs gh
+    bench/pool/pool.py fetch --since 2026-11-03 --until 2026-11-19 \
+        --cost cost-rows.tsv > rows.tsv                                         # needs gh
     bench/pool/pool.py table bench/pool/nightly-2026-11-03-to-2026-11-19.tsv
+    bench/pool/pool.py cost bench/pool/nightly-cost-2026-11-03-to-2026-11-19.tsv
 """
 
 import argparse
 import collections
 import concurrent.futures
+import datetime
 import json
+import math
 import re
 import subprocess
 import sys
@@ -35,12 +45,26 @@ WORKFLOW = "nightly.yml"
 STEP = "Record the machine"
 COLUMNS = ("date run job name cpu cores avx2 avx512f avx512dq flags jvm"
            " lanes128 lanes256 lanes512 control wide usable").split()
+# --cost's columns. The first nine say which job, on what machine, when it started and its
+# seconds from start to end; the rest are one JVM of dev/nightly.sh, or "-" in a job that ran none.
+COST_COLUMNS = ("date run job name conclusion cpu jvm started wall"
+                " mode function species bits words inputs seconds exit jvmargs").split()
 
 # bench/datapath.sh's five lines, as a job's log holds them after the line's timestamp.
 LINE = re.compile(r"Z (cpu|cores|vector flags|jvm|datapath): ?(.*?)\s*$")
 FLAGS = re.compile(r"avx2=(yes|no) avx512f=(yes|no) avx512dq=(yes|no); all: ?(.*)$")
 DATAPATH = re.compile(r"(\S+) / (\S+) / (\S+) lane-ops/ns at 128 / 256 / 512 bits;"
                       r" 256:128 = (\S+) \(control\), 512:256 = ([^\s;]+)(; unusable.*)?$")
+
+# What dev/nightly.sh, Sweep and Fuzz print for one species: the bracket's two ends, the first
+# line of the program, the JVM's own options, and the count with its seconds.
+BRACKET = re.compile(r"Z == (sweep|fuzz)-(\w+)-(\w+): (?:(java) |exit (\d+)\s*$)")
+AT_BITS = re.compile(r"Z (?:sweep|fuzz) \w+ at (\d+) bits")
+JVM_ARGS = re.compile(r"Z jvm args: ?(.*?)\s*$")
+SWEPT = re.compile(r"Z swept (\d+) high words \((\d+) inputs\) in ([\d.]+) s:")
+FUZZED = re.compile(r"Z fuzzed (\d+) inputs in ([\d.]+) s:")
+WHOLE = 2 ** 32   # the high words of a whole sweep
+TIME = "%Y-%m-%dT%H:%M:%SZ"
 
 
 def gh(args, repo, check=True):
@@ -63,26 +87,80 @@ def nights(repo, since, until):
     return sorted(n for n in kept if (not since or n[0] >= since) and (not until or n[0] <= until))
 
 
-def recording_jobs(run, repo):
-    """The run's jobs that have the step which records the machine."""
-    jobs = json.loads(gh(["run", "view", str(run), "--json", "jobs"], repo))["jobs"]
-    return [j for j in jobs if any(s["name"] == STEP for s in j.get("steps") or [])]
+def jobs_of(run, repo):
+    """Every job of the run, as gh lists them."""
+    return json.loads(gh(["run", "view", str(run), "--json", "jobs"], repo))["jobs"]
+
+
+def records(job):
+    """Whether the job has the step which records the machine."""
+    return any(s["name"] == STEP for s in job.get("steps") or [])
 
 
 def reading(job, repo):
-    """The first of each of bench/datapath.sh's lines in the job's log, or None with no log.
+    """What a job's log says, or None with no log: the first of each of bench/datapath.sh's
+    lines, and under "species" one dictionary per JVM that dev/nightly.sh ran.
 
     The first, because the step runs before the build and a later step may print a line that
     begins the same way."""
     log = gh(["run", "view", "--job", str(job), "--log"], repo, check=False)
     if log is None:
         return None
-    found = {}
+    found = {"species": species_runs(log.splitlines())}
     for line in log.splitlines():
         m = LINE.search(line)
         if m and m.group(1) not in found:
             found[m.group(1)] = m.group(2)
     return found
+
+
+def species_runs(lines):
+    """One dictionary per "== <mode>-<function>-<species>:" bracket of the log, in its order.
+
+    A bracket the log never closes, as when the job was cancelled, keeps the cells it has."""
+    runs, now = [], None
+    for line in lines:
+        m = BRACKET.search(line)
+        if m and m.group(4):
+            now = {"mode": m.group(1), "function": m.group(2), "species": m.group(3)}
+            runs.append(now)
+        elif m and now and m.group(1, 2, 3) == (now["mode"], now["function"], now["species"]):
+            now["exit"] = m.group(5)
+            now = None
+        elif now:
+            for pattern, cells in ((AT_BITS, ("bits",)), (JVM_ARGS, ("jvmargs",)),
+                                   (SWEPT, ("words", "inputs", "seconds")),
+                                   (FUZZED, ("inputs", "seconds"))):
+                m = pattern.search(line)
+                if m:
+                    now.update(zip(cells, m.groups()))
+    return runs
+
+
+def seconds_between(start, end):
+    """The whole seconds from one of the API's times to another; 0 when either is missing or
+    the job never ran (a skipped job's end is before its start)."""
+    try:
+        when = [datetime.datetime.strptime(t, TIME) for t in (start, end)]
+    except (TypeError, ValueError):
+        return 0
+    return max(0, int((when[1] - when[0]).total_seconds()))
+
+
+def cost_rows(date, run, job, found):
+    """The job's rows as the cells of COST_COLUMNS: one per species run, or one with "-" in the
+    species' cells for a job that ran none."""
+    skipped = job.get("conclusion") == "skipped"
+    cells = {"date": date, "run": run, "job": job["databaseId"], "name": job["name"],
+             "conclusion": job.get("conclusion"), "cpu": found.get("cpu"),
+             "jvm": found.get("jvm"), "started": None if skipped else job.get("startedAt"),
+             "wall": seconds_between(job.get("startedAt"), job.get("completedAt"))}
+    rows = []
+    for one in found.get("species") or [{}]:
+        both = dict(cells, **one)
+        rows.append([str(both[c] if both.get(c) not in (None, "") else "-").replace("\t", " ")
+                     for c in COST_COLUMNS])
+    return rows
 
 
 def row(date, run, job, found):
@@ -101,13 +179,23 @@ def row(date, run, job, found):
 
 
 def fetch(args):
-    """Writes one row per recording job of the nights asked for, as tab-separated values."""
-    todo = [(date, run, job) for date, run in nights(args.repo, args.since, args.until)
-            for job in recording_jobs(run, args.repo)]
+    """Writes one row per recording job of the nights asked for, as tab-separated values, and
+    with --cost a second file of every job's times and species runs."""
+    every = [(date, run, job) for date, run in nights(args.repo, args.since, args.until)
+             for job in jobs_of(run, args.repo)]
+    todo = [t for t in every if records(t[2])]
     if not todo:
         sys.exit("no job of %s has the step \"%s\" in that range" % (WORKFLOW, STEP))
     with concurrent.futures.ThreadPoolExecutor(args.parallel) as pool:
         found = list(pool.map(lambda t: reading(t[2]["databaseId"], args.repo), todo))
+    if args.cost:
+        read_of = {job["databaseId"]: f or {} for (_, _, job), f in zip(todo, found)}
+        lines = [cells for date, run, job in sorted(every, key=lambda t: (t[0], t[1],
+                                                                          t[2]["databaseId"]))
+                 for cells in cost_rows(date, run, job, read_of.get(job["databaseId"], {}))]
+        with open(args.cost, "w", encoding="ascii") as out:
+            out.write("\t".join(COST_COLUMNS) + "\n")
+            out.writelines("\t".join(cells) + "\n" for cells in lines)
     rows = sorted(row(date, run, job, f or {}) for (date, run, job), f in zip(todo, found))
     print("\t".join(COLUMNS))
     for cells in rows:
@@ -117,13 +205,13 @@ def fetch(args):
           (len(rows), len({t[0] for t in todo}), unread), file=sys.stderr)
 
 
-def read(path):
+def read(path, columns=COLUMNS):
     """The rows of a file that fetch wrote, as dictionaries."""
     with open(path, encoding="ascii") as f:
         lines = f.read().splitlines()
-    if not lines or lines[0].split("\t") != COLUMNS:
+    if not lines or lines[0].split("\t") != columns:
         sys.exit("%s does not start with fetch's header" % path)
-    return [dict(zip(COLUMNS, line.split("\t"))) for line in lines[1:]]
+    return [dict(zip(columns, line.split("\t"))) for line in lines[1:]]
 
 
 def arch(r):
@@ -204,6 +292,151 @@ def table(args):
               " the rates and ratios." % unusable)
 
 
+def kind(name):
+    """A job's kind, the first word of its name: plan, sweep, fuzz, arm, proofs or alert."""
+    return name.split(" ")[0]
+
+
+def function_of(name):
+    """The function a sweep, fuzz or Arm job's name gives, "sweep (log1p, stripe 0/2)"."""
+    m = re.match(r"\w+ \((\w+),", name)
+    return m.group(1) if m else None
+
+
+def machine(r):
+    """The class of machine a row ran on, by the widest vector its JVM uses: the time of a
+    sweep follows the species the host has before it follows the CPU's model."""
+    size = re.search(r"MaxVectorSize=(\d+)", r["jvm"])
+    if not size:
+        return "-"
+    return "%s, %d bits" % ("Arm" if "UseSVE" in r["jvm"] else "x86", 8 * int(size.group(1)))
+
+
+def median(values):
+    values = sorted(values)
+    half = len(values) // 2
+    return values[half] if len(values) % 2 else (values[half - 1] + values[half]) / 2.0
+
+
+def low_mid_high(values, digits=1):
+    return "%.*f | %.*f | %.*f" % (digits, min(values), digits, median(values),
+                                   digits, max(values))
+
+
+def species_label(r):
+    """A run's species, the species "max" with the bits it had."""
+    return r["species"] if r["species"] != "max" else "max (%s)" % r["bits"]
+
+
+def cost(args):
+    """Prints the nights' runner-minutes by job kind, each function's share of a night, the
+    time of a whole sweep and the fuzz's rate by function, species and machine."""
+    rows = read(args.file, COST_COLUMNS)
+    jobs = {}
+    for r in rows:
+        jobs.setdefault(r["job"], r)
+    jobs = list(jobs.values())
+    dates = sorted({r["date"] for r in rows})
+    names = {kind(j["name"]) for j in jobs}
+    kinds = [k for k in ("plan", "sweep", "fuzz", "arm", "proofs", "alert") if k in names]
+    kinds += sorted(names - set(kinds))
+    print("%d jobs of %d nights, %s to %s; %d species runs."
+          % (len(jobs), len(dates), dates[0], dates[-1],
+             sum(1 for r in rows if r["mode"] != "-")))
+
+    # A night's cost is each job's seconds from start to end, summed as minutes, and the
+    # minutes its jobs started, which is how a hosted runner's time is counted; its span is
+    # the clock time from the first job's start to the last job's end, queueing included.
+    print()
+    print("Runner-minutes a night by job kind: the jobs' seconds from start to end, over 60.")
+    print()
+    print("| night | jobs | %s | all | runner-hours | minutes started | span, minutes |"
+          % " | ".join(kinds))
+    print("|---|---|%s---|---|---|---|" % ("---|" * len(kinds)))
+    totals = []
+    for date in dates:
+        night = [j for j in jobs if j["date"] == date]
+        line = [sum(int(j["wall"]) for j in night if kind(j["name"]) == k) / 60.0
+                for k in kinds]
+        starts = [(datetime.datetime.strptime(j["started"], TIME), int(j["wall"]))
+                  for j in night if j["started"] != "-"]
+        begin = min(s for s, _ in starts)
+        end = max(s + datetime.timedelta(seconds=w) for s, w in starts)
+        line += [sum(line), sum(line) / 60.0,
+                 sum(math.ceil(int(j["wall"]) / 60.0) for j in night),
+                 (end - begin).total_seconds() / 60.0]
+        totals.append(line)
+        print("| %s | %d | %s | %.0f | %.1f | %d | %.0f |" % (
+            date, len(night), " | ".join("%.0f" % m for m in line[:len(kinds)]), line[-4],
+            line[-3], line[-2], line[-1]))
+    for label, pick in (("least", min), ("median", median), ("most", max)):
+        cells = [pick([t[i] for t in totals]) for i in range(len(totals[0]))]
+        print("| %s | | %s | %.0f | %.1f | %.0f | %.0f |" % (
+            label, " | ".join("%.0f" % m for m in cells[:len(kinds)]), cells[-4], cells[-3],
+            cells[-2], cells[-1]))
+
+    functions = sorted({function_of(j["name"]) for j in jobs} - {None})
+    shown = [k for k in kinds if any(kind(j["name"]) == k and function_of(j["name"])
+                                     for j in jobs)]
+    print()
+    print("Runner-minutes a night by function, the mean over the nights that ran it.")
+    print()
+    print("| function | nights | %s | all |" % " | ".join(shown))
+    print("|---|---|%s---|" % ("---|" * len(shown)))
+    for f in functions:
+        mine = [j for j in jobs if function_of(j["name"]) == f]
+        count = len({j["date"] for j in mine})
+        cells = [sum(int(j["wall"]) for j in mine if kind(j["name"]) == k) / 60.0 / count
+                 for k in shown]
+        print("| %s | %d | %s | %.0f |" % (f, count, " | ".join("%.0f" % m for m in cells),
+                                          sum(cells)))
+
+    # A sweep's seconds scaled from its stripe to all 2^32 high words: what one runner would
+    # take for the whole function at that species.
+    if args.by_cpu:
+        def where(r):
+            return pretty(r["cpu"]) if r["cpu"] != "-" else machine(r)
+    else:
+        where = machine
+    done = [r for r in rows if r["exit"] == "0" and r["seconds"] != "-"
+            and float(r["seconds"]) > 0]
+    sweeps = collections.defaultdict(list)
+    for r in done:
+        if r["mode"] == "sweep":
+            sweeps[(r["function"], where(r), int(r["bits"]), species_label(r))].append(
+                float(r["seconds"]) * WHOLE / int(r["words"]) / 60.0)
+    print()
+    print("Minutes of one runner to sweep every high word of a function: each run's seconds,")
+    print("scaled from the high words it swept to all 2^32.")
+    print()
+    print("| function | machine | species | runs | least | median | most |")
+    print("|---|---|---|---|---|---|---|")
+    for (f, place, _, label), values in sorted(sweeps.items()):
+        print("| %s | %s | %s | %d | %s |" % (f, place, label, len(values),
+                                             low_mid_high(values)))
+
+    fuzzes = collections.defaultdict(list)
+    for r in done:
+        if r["mode"] == "fuzz":
+            flags = "as AVX2" if "UseAVX=2" in r["jvmargs"] else "its own"
+            fuzzes[(r["function"], where(r), flags, int(r["bits"]), species_label(r))].append(
+                int(r["inputs"]) / float(r["seconds"]) / 1e6)
+    print()
+    print("The fuzz's millions of inputs a second. A fuzz runs for a set time, so its cost is")
+    print("the seconds asked for times the species; the rate says what that time buys.")
+    print()
+    print("| function | machine | flags | species | runs | least | median | most |")
+    print("|---|---|---|---|---|---|---|---|")
+    for (f, place, flags, _, label), values in sorted(fuzzes.items()):
+        print("| %s | %s | %s | %s | %d | %s |" % (f, place, flags, label, len(values),
+                                                  low_mid_high(values)))
+
+    odd = sum(1 for r in rows if r["mode"] != "-" and r["exit"] != "0")
+    if odd:
+        print()
+        print("%d species runs did not exit 0 and are left out of the last two tables." % odd)
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     commands = parser.add_subparsers(dest="command", required=True)
@@ -212,10 +445,17 @@ def main():
     f.add_argument("--since", help="the first night, YYYY-MM-DD (UTC); default the earliest")
     f.add_argument("--until", help="the last night, YYYY-MM-DD (UTC); default the latest")
     f.add_argument("--parallel", type=int, default=8, help="logs fetched at once (default 8)")
+    f.add_argument("--cost", metavar="FILE",
+                   help="also write every job's times and species runs to FILE, for cost")
     f.set_defaults(run=fetch)
     t = commands.add_parser("table", help="tally a file of rows that fetch wrote")
     t.add_argument("file")
     t.set_defaults(run=table)
+    c = commands.add_parser("cost", help="tabulate a file that fetch --cost wrote")
+    c.add_argument("file")
+    c.add_argument("--by-cpu", action="store_true",
+                   help="split the sweep and fuzz tables by CPU model, not by vector width")
+    c.set_defaults(run=cost)
     args = parser.parse_args()
     args.run(args)
 

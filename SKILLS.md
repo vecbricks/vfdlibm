@@ -588,6 +588,13 @@ a settled question.
   slower than the laptop's, 2 to 2.5. The target is 2 to 3 runner-hours a night:
   the sweep is within it; the whole night is above it until the logs say otherwise, mostly from
   the fuzz, which this schedule does not change.
+- **What the logs say.** `bench/pool/pool.py cost` tabulates the nights' measured cost from
+  `bench/pool/nightly-cost-2026-11-03-to-2026-11-19.tsv`, one row per job and species run
+  (`bench/pool/README.md`, "What a night costs"). The 15 nights of five functions, 5 to 19
+  November 2026, cost 5.8 to 6.2 runner-hours each; by the medians of all 17 nights a night
+  is 137 minutes of fuzz, 118 of x86 sweep and 105 of Arm. That is above the target, and the
+  fuzz is the largest part, as projected. The laptop figures above have not been requoted
+  from the table yet.
 - **When a night fails,** the `alert` job (the only one with `issues: write`) opens an issue
   labelled `nightly-failure`, or comments on the open one, with the run's link, the seed, each
   job's result, the dispatch inputs that replay the run (seed, `nights`, `shards`, `arm-shards`,
