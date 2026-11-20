@@ -5,6 +5,18 @@
  * is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either
  * express or implied. See the License for the specific language governing permissions and
  * limitations under the License.
+ *
+ * The chains below transcribe parts of fdlibm 5.3's s_expm1.c (reference/fdlibm-5.3/s_expm1.c),
+ * which carries this notice:
+ *
+ * ====================================================
+ * Copyright (C) 1993 by Sun Microsystems, Inc. All rights reserved.
+ *
+ * Developed at SunSoft, a Sun Microsystems, Inc. business.
+ * Permission to use, copy, modify, and distribute this
+ * software is freely granted, provided that this notice
+ * is preserved.
+ * ====================================================
  */
 package io.github.vecbricks.vfdlibm;
 
@@ -38,7 +50,7 @@ final class Expm1ProofFiles {
   // expm1_reduction.smt2: L10
 
   /** L10's H14 witnesses: the first doubles from the top of the word where a free k differs. */
-  private static final long[] WITNESSES = {0x3fd62e42_ffffffecL, 0xbfd62e42_fffffff3L};
+  static final long[] WITNESSES = {0x3fd62e42_ffffffecL, 0xbfd62e42_fffffff3L};
 
   /** Controls: the word's top double, either sign, where a free k gives the C's double. */
   private static final long[] CONTROLS = {0x3fd62e42_ffffffffL, 0xbfd62e42_ffffffffL};
@@ -106,6 +118,33 @@ final class Expm1ProofFiles {
   /** The formula's {@code (int) fl(fl(x*invln2) + h)}, as the port and line 169 compute it. */
   private static int formulaK(double x) {
     return (int) (x * Expm1.INVLN2 + (x > 0 ? 0.5 : -0.5));
+  }
+
+  /**
+   * {@link #asWritten}'s result, which must be {@code StrictMath.expm1}'s at {@code wb}: the chain
+   * is a second transcription of the C, and a slip in it would otherwise render a check of some
+   * other computation.
+   */
+  private static long writtenHeld(StringBuilder out, long wb) {
+    double x = Double.longBitsToDouble(wb);
+    long got = bits(asWritten(out, wb));
+    if (got != bits(StrictMath.expm1(x))) {
+      throw new IllegalStateException("the k = 0 chain is not StrictMath.expm1 at " + hex(wb));
+    }
+    return got;
+  }
+
+  /**
+   * {@link #reduced}'s result, which must be that of {@code Expm1Test.cExpm1(x, true)}, the
+   * transcription the scalar tests hold to {@code StrictMath.expm1}, with the same free k.
+   */
+  private static long reducedHeld(StringBuilder out, long wb) {
+    double x = Double.longBitsToDouble(wb);
+    long got = bits(reduced(out, wb));
+    if (got != bits(Expm1Test.cExpm1(x, true))) {
+      throw new IllegalStateException("the reduced chain is not Expm1Test.cExpm1 at " + hex(wb));
+    }
+    return got;
   }
 
   /**
@@ -213,14 +252,18 @@ final class Expm1ProofFiles {
         ;     in a binade further off than the next one (the arithmetic of rationals); and that
         ;     the port computes these steps: the code's text.
         ;
-        ; Constants. Section A is tight to every constant it names: each one with one added to
-        ; its bits, or to the word, is refuted. No claim of section B is tight to ln2_hi or
-        ; ln2_lo beyond their sign and finiteness. Section C's cast holds for a range of invln2
-        ; (its margin is that of exp_zero_reduction.smt2's section C), and its chains evaluate
-        ; whatever Q1..Q5 Expm1 holds and compare the results with no source value, so with a Q
-        ; moved by one ulp the file renders anew and passes as long as the witnesses still
-        ; differ and the controls still agree. Expm1Test.constantsAreTheSourcesBits pins them
-        ; all to the source's hex, and ProofFilesTest this file to its rendering.
+        ; Constants. Section A compares the rendered constants as ground terms, so a constant
+        ; that moves on one side fails its check; it is as strong as ProofsTest's
+        ; l10ReductionIsExps, and refutes only the planted fault's LN2_HI_UP. No claim of
+        ; section B is tight to ln2_hi or ln2_lo beyond their sign and finiteness. Section C's
+        ; cast holds for a range of invln2 (its margin is that of exp_zero_reduction.smt2's
+        ; section C), and its chains evaluate whatever Q1..Q5 Expm1 holds and compare the
+        ; results with no source value, so with a Q moved by one ulp the file renders anew and
+        ; passes as long as the witnesses still differ and the controls still agree.
+        ; Expm1Test.constantsAreTheSourcesBits pins them all to the source's hex, and
+        ; ProofFilesTest this file to its rendering. The chains are a second transcription of
+        ; the C: while rendering, the k = 0 chain's result is held to StrictMath.expm1 and the
+        ; free k's to Expm1Test.cExpm1(x, true), which the scalar tests hold to the oracle.
         ;
         ; The logic is ALL: section B's products S * M * sn are nonlinear. Section C's checks
         ; carry their own non-vacuity: each asserts that the named double is not admitted, or
@@ -252,8 +295,6 @@ final class Expm1ProofFiles {
             Expm1.HX_THREE_HALVES_LN2, Exp.HX_THREE_HALVES_LN2)}) {
       check(out, "expm1's " + c.name() + ", " + c.value() + ", is exp's " + c.exps(), "unsat",
           body("(assert (not (= " + lit(c.expm1()) + " " + lit(c.exp()) + ")))"));
-      check(out, "refuted: " + c.name() + " plus one is not exp's " + c.exps(), "sat",
-          body("(assert (not (= (+ " + lit(c.expm1()) + " 1) " + lit(c.exp()) + ")))"));
     }
     check(out, "refuted: LN2_HI_UP, " + hex(lnHiUp) + ", the fault's, is not exp's ln2HI[0]",
         "sat",
@@ -304,7 +345,8 @@ final class Expm1ProofFiles {
         "(declare-const sx Bool)",
         "(assert (not (= (z.sub sx (z.mul true false)) sx)))"));
     check(out, "that zero is x = -0: -0 - (-0) is +0", "unsat", body(
-        "(assert (not (and (z.mul true false) (not (z.sub true (z.mul true false))))))"));
+        "(assert (not (and (z.mul true false) (not (z.sub true (z.mul true false)))",
+        "  (not (z.sub false (z.mul true false))))))"));
     out.append("""
 
         ; A nonzero normal x less +0 is x: the exact difference is the double S * M * 2^E, a / b
@@ -338,8 +380,8 @@ final class Expm1ProofFiles {
     for (long wb : WITNESSES) {
       out.append("\n; The witness " + hex(wb) + ".\n");
       int k = formulaCast(out, wb);
-      long written = bits(asWritten(out, wb));
-      long free = bits(reduced(out, wb));
+      long written = writtenHeld(out, wb);
+      long free = reducedHeld(out, wb);
       if (written == free) {
         throw new IllegalStateException("not a witness: " + hex(wb));
       }
@@ -349,8 +391,8 @@ final class Expm1ProofFiles {
     for (long wb : CONTROLS) {
       out.append("\n; The control " + hex(wb) + ", the word's top double.\n");
       formulaCast(out, wb);
-      long written = bits(asWritten(out, wb));
-      long free = bits(reduced(out, wb));
+      long written = writtenHeld(out, wb);
+      long free = reducedHeld(out, wb);
       if (written != free) {
         throw new IllegalStateException("not a control: " + hex(wb));
       }
@@ -425,7 +467,8 @@ final class Expm1ProofFiles {
     check(out, "refuted: with c = -0, e - c is not e for some zero e", "sat", body(
         "(declare-const se Bool)", "(assert (not (= (z.sub se true) se)))"));
     check(out, "that zero is e = -0: -0 - (-0) is +0, and with c = +0 it stays -0", "unsat",
-        body("(assert (not (and (not (z.sub true true)) (z.sub true false))))"));
+        body("(assert (not (and (not (z.sub true true)) (z.sub true false)",
+            "  (not (z.sub false true)))))"));
     out.append("""
 
         ; Section B: a nonzero normal double less +0 is itself. The exact difference is the double

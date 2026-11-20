@@ -639,7 +639,7 @@ class ProofsTest {
    */
   @Test
   void l10KIsForcedByTheHighWordTest() {
-    for (long b : new long[] {0x3fd62e42_ffffffecL, 0xbfd62e42_fffffff3L}) {
+    for (long b : Expm1ProofFiles.WITNESSES) {
       double x = Double.longBitsToDouble(b);
       String at = Oracle.hex(x);
       assertEquals(x > 0 ? 1 : -1, (int) kArg(x), at);

@@ -98,7 +98,8 @@
 
 (echo "that zero is e = -0: -0 - (-0) is +0, and with c = +0 it stays -0: expect unsat")
 (push 1)
-(assert (not (and (not (z.sub true true)) (z.sub true false))))
+(assert (not (and (not (z.sub true true)) (z.sub true false)
+  (not (z.sub false true)))))
 (check-sat)
 (pop 1)
 

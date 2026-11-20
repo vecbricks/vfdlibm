@@ -507,8 +507,7 @@ final class ProofFiles {
     out.append('\n').append(echo).append('\n');
     out.append("(push 1)\n");
     for (String line : body) {
-      // A wrapped string that held a line break of its own can end in one and the indent.
-      out.append(line.stripTrailing()).append('\n');
+      out.append(line).append('\n');
     }
     out.append("(check-sat)\n(pop 1)\n");
   }
