@@ -102,10 +102,11 @@ jobs:
   # On Arm it runs the *Preferred rows only: the runners' vectors are 128 bits, so the preferred
   # species is the one width C2 lowers there, and a *256 row would run in the Java fallback, as
   # 512 bits does on an AVX2 host. Every such row read under 1 B/op when the row was first run
-  # (SKILLS.md, "On Arm the check runs the preferred rows").
+  # (bench/results/alloc-arm-2026-11-20.txt; SKILLS.md, "On Arm the check runs the preferred
+  # rows").
   #
   # When a row fails, the last steps run it again with C2 printing what it did not intrinsify
-  # or inline, and keep the check's JSON.
+  # or inline (bench/alloc-check.py --why), and keep the check's JSON.
   alloc:
     name: alloc (${{ matrix.name }})
     runs-on: ${{ matrix.os }}
@@ -116,18 +117,18 @@ jobs:
           - name: x86 runner flags
             os: ubuntu-latest
             jvm-args: ""
-            include: ""
+            rows: ""
           - name: x86 as AVX2
             os: ubuntu-latest
             jvm-args: -XX:UseAVX=2 -XX:MaxVectorSize=32
-            include: ""
+            rows: ""
           - name: Arm 128 bits
             os: ubuntu-24.04-arm
             jvm-args: ""
-            include: .*Benchmark\.(?!\w*Boxed)\w+Preferred$
+            rows: --preferred-only
     env:
       JVM_ARGS: ${{ matrix.jvm-args }}
-      INCLUDE: ${{ matrix.include }}
+      ROWS: ${{ matrix.rows }}
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-java@v5
@@ -140,52 +141,16 @@ jobs:
       - name: Record the machine
         run: bench/datapath.sh || true
       - name: Check that no vector body allocates
-        run: |
-          if [ -n "$INCLUDE" ]; then
-            bench/alloc-check.py --jvm-args "$JVM_ARGS" --include "$INCLUDE"
-          else
-            bench/alloc-check.py --jvm-args "$JVM_ARGS"
-          fi
-      # Each failing row again, one short fork, with C2's own account: the lines of
-      # PrintIntrinsics and PrintInlining that SKILLS.md says how to read, counted. Of the
-      # refused calls only the library's and VectorSupport's are kept; the JDK's own are many
-      # and box nothing.
+        run: bench/alloc-check.py --jvm-args "$JVM_ARGS" $ROWS
       - name: Ask C2 what it refused in each failing row
         if: failure()
-        run: |
-          [ -f target/alloc-check.json ] || { echo "The check left no JSON to read."; exit 0; }
-          cp target/alloc-check.json alloc-check.json
-          python3 - > failing.txt <<'PY'
-          import json
-          for row in json.load(open("alloc-check.json")):
-              norms = [m for k, m in row.get("secondaryMetrics", {}).items()
-                       if k.endswith("gc.alloc.rate.norm")]
-              if norms and max(v for fork in norms[0]["rawData"] for v in fork) >= 1.0:
-                  print(row["benchmark"], row["params"]["inputs"])
-          PY
-          flags="-XX:CompileCommand=inline,io.github.vecbricks.vfdlibm.*::*"
-          flags="$flags -XX:CompileCommand=PrintIntrinsics,io.github.vecbricks.vfdlibm.*::*"
-          flags="$flags -XX:+UnlockDiagnosticVMOptions -XX:+PrintInlining $JVM_ARGS"
-          count() { sed -E 's/^ +//; s/ +/ /g' | sort | uniq -c | sort -rn | head -80; }
-          while read -r row inputs; do
-            echo "::group::$row [inputs=$inputs]"
-            options="-p inputs=$inputs -f 1 -wi 3 -w 1s -i 1 -r 1s -prof gc"
-            mvn -B --no-transfer-progress -q -Pjmh test-compile exec:exec \
-              "-Djmh.args=$row\$ $options -jvmArgsAppend \"$flags\"" > c2.txt 2>&1 || true
-            echo "PrintIntrinsics, each distinct line with its count:"
-            grep -E 'not supported|missing constant|unbox failed' c2.txt | count
-            echo "PrintInlining, the refused calls of the library and of the Vector API:"
-            grep -E 'failed to inline' c2.txt \
-              | grep -E 'vfdlibm|VectorSupport|NodeCountInliningCutoff' | count
-            grep -E 'gc.alloc.rate.norm' c2.txt | tail -1
-            echo "::endgroup::"
-          done < failing.txt
+        run: bench/alloc-check.py --why --jvm-args "$JVM_ARGS"
       - name: Keep the failing check's result
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: alloc-check-${{ strategy.job-index }}
-          path: alloc-check.json
+          name: alloc-check-${{ strategy.job-index }}-attempt-${{ github.run_attempt }}
+          path: target/alloc-check.json
           if-no-files-found: ignore
 
   # The self-tests of the benchmark scripts, which no build runs: bench/host.sh's table of

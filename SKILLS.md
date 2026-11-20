@@ -63,16 +63,20 @@ a settled question.
   see that path box. The `*Max` rows are left out by the regex, since the finish still boxes at
   `SPECIES_MAX` on mixed data (below).
 - **On Arm the check runs the preferred rows, and they pass.** GitHub's Arm runners have 128-bit
-  vectors (`MaxVectorSize=16 UseSVE=2` on every job of `HARDWARE.md`'s pool table), so the
-  preferred species is 128 bits there and a `*256` row would run in the Java fallback, as 512
-  bits does on an AVX2 host. Run once on such a runner (pull request 46's `alloc` job, 20
-  November 2026), all 24 `*Preferred` rows of the five ports, every arm on common and on mixed
-  data, read 0.04 to 0.10 B/op at the worst of three iterations. So at two 64-bit lanes the
-  bodies run unboxed on Arm, where on x86 every masked one boxes (below); that is read from the
-  allocation alone, and no `PrintIntrinsics` line was read there. `ci.yml`'s `alloc` job has
-  that row since, with `--include '.*Benchmark\.(?!\w*Boxed)\w+Preferred$'`. It is an
-  allocation reading, not a timing: no Arm host is a benchmark host, and nothing here says how
-  fast those bodies are.
+  vectors (`MaxVectorSize=16 UseSVE=2` on all 332 Arm jobs of `HARDWARE.md`, "What the pool
+  gives"), so the preferred species is 128 bits there and a `*256` row would run in the Java
+  fallback, as 512 bits does on an AVX2 host. Run once on such a runner, all 24 `*Preferred`
+  rows of the five ports, every arm on common and on mixed data, read 0.04 to 0.10 B/op at the
+  worst of three iterations (`bench/results/alloc-arm-2026-11-20.txt`). So at two 64-bit lanes
+  the bodies run unboxed on Arm, where on x86 every masked one boxes (below); that is read from
+  the allocation alone, and no `PrintIntrinsics` line was read there. `ci.yml`'s `alloc` job
+  has that row since, as `bench/alloc-check.py --preferred-only`. The file is an allocation
+  reading, not a timing: no Arm host is a benchmark host, and nothing here says how fast those
+  bodies are.
+- **When the check fails, ask it why.** `bench/alloc-check.py --why` reads the failed run's
+  result and runs each failing row once more with the two flags of the next entries, printing
+  each distinct `PrintIntrinsics` line and each refused call into the library or the Vector API
+  with its count. CI runs it after a failing check, so the job's log holds C2's account.
 - **Ask C2 what it refused.** `-XX:+UnlockDiagnosticVMOptions -XX:+PrintIntrinsics`, or scoped
   to the library, `-XX:CompileCommand=PrintIntrinsics,io.github.vecbricks.vfdlibm.*::*`. Add
   `-Xbatch` when lines must be attributed to one shape: compiles then happen on the calling

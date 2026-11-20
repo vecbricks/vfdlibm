@@ -1,0 +1,62 @@
+# The allocation check on GitHub's Arm runner, 20 November 2026: every *Preferred row of the
+# five ports under -prof gc, to see whether a body boxes at the runner's 128-bit vectors
+#
+# AN ALLOCATION READING, NOT A TIMING. The run is bench/alloc-check.py's, one short fork per
+# row, made to tell a boxed body from a vector one; its times are not the fixed method's and
+# are not kept here. No Arm host is a benchmark host (HARDWARE.md).
+#
+# Why:         bench/alloc-check.py had never run on Arm (issue 37). Its rows are the vector
+#              arms at 256 bits and at the preferred species; on this runner the preferred
+#              species is 128 bits and a 256-bit row would run in the Java fallback, so only
+#              the *Preferred rows were run.
+# Run:         GitHub Actions run 44710674209, job 136201242337, "alloc (Arm 128 bits, trial)"
+#              of ci.yml on pull request 46, runner image ubuntu-24.04-arm
+# Commit:      820f0ff (pull request 46's first commit, which changes ci.yml alone; the
+#              five ports and their benchmarks are main's at a5683c3)
+# JDK:         OpenJDK 64-Bit Server VM, 25.0.5.1+2-LTS (Zulu 25.0.5+1.2)
+# CPU:         /proc/cpuinfo has no model name on this runner; 4 cores
+# CPU flags:   avx512f and avx512dq: not an x86 CPU. Vector features: asimd asimddp asimdfhm
+#              asimdhp asimdrdm sve sve2 sveaes svebf16 svebitperm svei8mm svesha3 svesm4
+# Vector:      MaxVectorSize=16 UseSVE=2 (preferred and max species 128 bits)
+# Datapath:    26.9 / 26.9 / 26.9 lane-ops/ns at 128 / 256 / 512 bits; 256:128 = 1.00
+#              (control), 512:256 = 1.00; unusable, the control is not about 2
+#              (bench/datapath.sh; with 128-bit vectors only there is no doubling to read)
+# Kernel:      not recorded by the job
+# Load:        not recorded by the job; a hosted runner running this job alone
+# JMH 1.37:    -f 1 -wi 3 -w 1s -i 3 -r 1s -prof gc -p inputs=common,mixed -foe true
+#              -jvmArgsAppend "-XX:CompileCommand=inline,io.github.vecbricks.vfdlibm.*::*"
+#              (the body inlined into the loop, as Varka emits it)
+# Command:     bench/alloc-check.py --jvm-args ""
+#              --include '.*Benchmark\.(?!\w*Boxed)\w+Preferred$'
+# Verdict:     "No vector body allocates 1.0 B/op or more." All 24 rows read under the
+#              check's threshold of 1 B/op in every measured iteration; a boxed body reads
+#              kilobytes per op (SKILLS.md, "Allocation is the verdict").
+#
+# gc.alloc.rate.norm in B/op, one op being 1024 doubles: each of the three measured
+# iterations, from the job's target/alloc-check.json (its artifact alloc-check-arm).
+#
+# Benchmark                         inputs    iteration 1  iteration 2  iteration 3      max
+ExpBenchmark.blendedPreferred     common          0.054        0.053        0.053    0.054
+ExpBenchmark.blendedPreferred     mixed           0.053        0.053        0.053    0.053
+ExpBenchmark.finishPreferred      common          0.037        0.037        0.037    0.037
+ExpBenchmark.finishPreferred      mixed           0.050        0.050        0.050    0.050
+Expm1Benchmark.blendedPreferred   common          0.102        0.102        0.102    0.102
+Expm1Benchmark.blendedPreferred   mixed           0.102        0.102        0.102    0.102
+Expm1Benchmark.finishPreferred    common          0.089        0.089        0.089    0.089
+Expm1Benchmark.finishPreferred    mixed           0.103        0.103        0.103    0.103
+Expm1Benchmark.guardedPreferred   common          0.089        0.089        0.089    0.089
+Expm1Benchmark.guardedPreferred   mixed           0.092        0.092        0.092    0.092
+Log10Benchmark.blendedPreferred   common          0.103        0.103        0.103    0.103
+Log10Benchmark.blendedPreferred   mixed           0.103        0.103        0.103    0.103
+Log10Benchmark.finishPreferred    common          0.089        0.089        0.089    0.089
+Log10Benchmark.finishPreferred    mixed           0.098        0.099        0.099    0.099
+Log1pBenchmark.blendedPreferred   common          0.093        0.093        0.093    0.093
+Log1pBenchmark.blendedPreferred   mixed           0.093        0.093        0.093    0.093
+Log1pBenchmark.finishPreferred    common          0.069        0.069        0.069    0.069
+Log1pBenchmark.finishPreferred    mixed           0.086        0.086        0.086    0.086
+Log1pBenchmark.guardedPreferred   common          0.070        0.070        0.070    0.070
+Log1pBenchmark.guardedPreferred   mixed           0.073        0.073        0.073    0.073
+LogBenchmark.blendedPreferred     common          0.072        0.072        0.072    0.072
+LogBenchmark.blendedPreferred     mixed           0.073        0.073        0.073    0.073
+LogBenchmark.finishPreferred      common          0.057        0.057        0.057    0.057
+LogBenchmark.finishPreferred      mixed           0.069        0.069        0.072    0.072
