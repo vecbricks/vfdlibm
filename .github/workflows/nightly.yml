@@ -30,7 +30,7 @@ name: Nightly
 # narrows them. The input `fault` plants a fault (Faults.java) in every sweep and fuzz JVM, so
 # that a dispatch can show the night catching it and the alert job opening its issue, which is
 # labelled nightly-fault-test and not nightly-failure. Such a run checks only the functions the
-# fault reaches, so everything it reports is the fault's:
+# fault reaches, so its mismatches are expected from the fault:
 #
 #   gh workflow run nightly.yml -f fault=exp.dropCorrection -f functions=exp -f fuzz-seconds=5
 
@@ -160,7 +160,7 @@ jobs:
           # (PlantedFaultTest holds that list to the ports' faults): a mistyped name would plant
           # nothing, and the run would pass as if the night had missed the fault.
           # The run then checks only the functions the fault reaches, of those asked for, so
-          # that every mismatch it reports is the fault's. A port's faults reach its own
+          # that its mismatches are expected from the fault. A port's faults reach its own
           # function and every function that computes through it: log10 computes through
           # Log.logCore, where log's faults are.
           reach() {
@@ -439,7 +439,7 @@ jobs:
 
   # Every proof under Z3 and cvc5, each held to every expectation (proofs/README.md); ci.yml
   # runs them under Z3 only.
-  # A run with a planted fault leaves them out: what it reports is the fault's and nothing else.
+  # A run with a planted fault leaves them out: it reports the fault's functions only.
   proofs:
     needs: plan
     if: inputs.fault == ''
@@ -513,6 +513,7 @@ jobs:
           REPLAY: ${{ needs.plan.outputs.replay }}
           FAULT: ${{ inputs.fault }}
           FAULT_MISSED: ${{ needs.fault-caught.outputs.missed }}
+          FAULT_CAUGHT: ${{ needs.fault-caught.result }}
           RESULTS: >-
             plan=${{ needs.plan.result }} sweep=${{ needs.sweep.result }}
             fuzz=${{ needs.fuzz.result }} arm=${{ needs.arm.result }}
@@ -530,17 +531,19 @@ jobs:
             about="A nightly run with a planted fault, a test of the alert job"
             title="Nightly run with a planted fault (a test of the alert job)"
             # Only its failure says something: see the fault-caught job.
-            if [ "$FAULT_MISSED" = true ]; then RESULTS="$RESULTS fault-caught=failure"; fi
+            RESULTS="$RESULTS fault-caught=$FAULT_CAUGHT"
           fi
           {
             # Said first, so that a test of this job is not read as a failure of the library.
             if [ -n "$FAULT" ]; then
               echo "**A test of the alert job, not a night's failure.** The run was dispatched"
               echo "with the fault \`$FAULT\` planted (\`-Dvfdlibm.fault=$FAULT\`) in every"
-              echo "sweep and fuzz, and it checked only the functions that fault reaches. The"
-              echo "mismatches below are expected from the fault; a real bug in the same"
-              echo "functions would be among them and cannot be told apart, so only a clean"
-              echo "night clears them."
+              echo "sweep and fuzz, and it checked only the functions that fault reaches."
+              if [ "$FAULT_MISSED" != true ]; then
+                echo "The mismatches below are expected from the fault; a real bug in the same"
+                echo "functions would be among them and cannot be told apart, so only a clean"
+                echo "night clears them."
+              fi
               echo
               if [ "$FAULT_MISSED" = true ]; then
                 echo "**The planted fault was not caught**: every sweep and fuzz passed (the"
