@@ -8,9 +8,9 @@
 # limitations under the License.
 #
 # The table of benchmark hosts, and the check of a machine against it. This is the one place
-# that holds each host's CPU string: .github/workflows/benchmark.yml fetches it and runs it
-# before anything else, bench/dispatch-bench.sh takes its host keys from it, and CI runs its
-# self-test.
+# that holds each host's CPU string: .github/workflows/benchmark.yml fetches it, runs its
+# self-test and then checks the machine with it, before any other step;
+# bench/dispatch-bench.sh takes its host keys from it, and CI runs its self-test.
 #
 #   bench/host.sh --expect <key>   check this machine against one host; exit 1 on any other CPU
 #   bench/host.sh                  print this machine's host key; exit 1 when it is no named host
@@ -201,7 +201,11 @@ self_test() {
 
   # The keys are the choices of benchmark.yml's host input, in its order: a key on one side
   # only would fail a dispatch, or fail every run in the probe step, which reads as a CPU miss.
-  local yml; yml="$(dirname "$0")/../.github/workflows/benchmark.yml"
+  local yml; yml="$(dirname "${BASH_SOURCE[0]}")/../.github/workflows/benchmark.yml"
+  if ! [ -r "$yml" ]; then
+    echo "host.sh: no $yml beside this script; run it by its path in the repository" >&2
+    return 1
+  fi
   n=$((n + 1))
   got="$(awk '/^      host:/ {h = 1; next} h && /^      [a-z]/ {exit}
     h && /^        options:/ {o = 1; next} h && o && /^          - / {print $2}' "$yml")"
