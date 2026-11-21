@@ -183,7 +183,7 @@ for r in $(seq 1 "$rounds"); do
   fi
 done
 
-flags="$(grep -m1 '^flags' /proc/cpuinfo)"
+flags="$(grep -m1 -E '^(flags|Features)' /proc/cpuinfo)"
 has() { if grep -qw "$1" <<<"$flags"; then echo yes; else echo no; fi; }
 {
   echo "# Pair: $regex, base against head, $(date -u +'%Y-%m-%d %H:%M UTC')"
@@ -197,12 +197,13 @@ has() { if grep -qw "$1" <<<"$flags"; then echo yes; else echo no; fi; }
   echo "# Head:        $head_sha ($(subject "$head_sha" | cut -d ' ' -f 2-)$dirty)"
   [ -z "$run" ] || echo "# Run:         $run"
   echo "# JDK:         $(java -version 2>&1 | tail -n 1)"
-  echo "# CPU:         $(grep -m1 'model name' /proc/cpuinfo | sed 's/.*: //')"
+  echo "# CPU:         $(bash "$(dirname "$0")/host.sh" --cpu)"
   echo "# AVX-512:     avx512f=$(has avx512f) avx512dq=$(has avx512dq)"
-  echo "# CPU flags:   $(tr ' ' '\n' <<<"$flags" | grep -E '^avx' | sort -u | tr '\n' ' ')"
+  echo "# CPU flags:   $(tr ' ' '\n' <<<"$flags" | grep -E '^(avx|sve|asimd)' | sort -u \
+    | tr '\n' ' ')"
   # shellcheck disable=SC2086 # the extra JVM options are words
   echo "# Vector:      $(java $jvm_args -XX:+PrintFlagsFinal -version 2>/dev/null \
-    | grep -E ' (MaxVectorSize|UseAVX) ' | awk '{print $2 "=" $4}' | tr '\n' ' ')"
+    | grep -E ' (MaxVectorSize|UseAVX|UseSVE) ' | awk '{print $2 "=" $4}' | tr '\n' ' ')"
   echo "# Datapath:    ${dp:-not measured (the probe printed no datapath line)}"
   echo "#              (bench/datapath.sh, at the machine's own JVM flags)"
   echo "# Kernel:      $(uname -r)"

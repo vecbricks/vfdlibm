@@ -75,8 +75,8 @@ re-trying a settled question.
   the bodies run unboxed on Arm, where on x86 every masked one boxes (below); that is read from
   the allocation alone, and no `PrintIntrinsics` line was read there. `ci.yml`'s `alloc` job
   has that row since, as `bench/alloc-check.py --preferred-only`. The file is an allocation
-  reading, not a timing: no Arm host is a benchmark host, and nothing here says how fast those
-  bodies are.
+  reading, not a timing: the Arm host (`neoversen2`) has no timing result, and nothing here says
+  how fast those bodies are.
 - **When the check fails, ask it why.** `bench/alloc-check.py --why` reads the failed run's
   result and runs each failing row once more, under the JVM options the result records for it,
   with the two flags of the next entries and C2 alone compiling (`-XX:-TieredCompilation`:
@@ -222,6 +222,12 @@ re-trying a settled question.
   first, so the AVX-512 hosts are read first; each host decides for its own instruction set, and
   none speaks for another's. Laptop numbers never headline; laptop files say "laptop numbers, not
   headlines" in their header. `HARDWARE.md` lists the hosts' flags, JVM settings and ratios.
+- **The Arm Neoverse N2 is a host for allocation readings, and has no timing result.** GitHub's
+  `ubuntu-24.04-arm` runner was one CPU in three probe draws, and the same features in all 332
+  jobs of the census (`HARDWARE.md`, "The Arm host"), with 128-bit vectors, so `benchmark.yml`
+  runs it on `host: neoversen2` and `ci.yml`'s `alloc` job runs the check there. The four hosts
+  above stay the only ones headline numbers come from; no file under `bench/results/` has a timing
+  from this one, and whether the ports' arms should differ on Arm waits for host runs.
 - **The EPYC 9V74 is not a host: its runners expose no AVX-512.** The three GitHub 9V74 VMs that
   Varka measured had no `avx512` flags and ran at `UseAVX=2`, `MaxVectorSize=32`, so a 9V74 file
   could only ever decide for Zen 4 at AVX2 width, which the EPYC 7763 already covers. It was
@@ -244,8 +250,9 @@ re-trying a settled question.
   current workflow has not been measured. No decision waits on a 9V45 file; when
   one exists, it is read with the other AVX-512 hosts.
 - **The benchmark fails on any other CPU, and is retried, never relaxed.**
-  `.github/workflows/benchmark.yml` takes a `host` input with exactly four choices and maps each
-  to a model-name string fixed in `bench/host.sh`'s table (the workflow's probe step runs
+  `.github/workflows/benchmark.yml` takes a `host` input with exactly five choices (four x86
+  hosts and the Arm one above) and maps each to a model-name string fixed in `bench/host.sh`'s
+  table (the workflow's probe step runs
   `bench/host.sh --expect <host>`, and CI runs `bench/host.sh --self-test`, which classifies
   every kind of machine in the pool's census), as runs of that host printed it, matched ignoring
   case: `INTEL(R) XEON(R) PLATINUM 8573C` (Varka's fork runs 41465323581, 41255932044 and
@@ -256,13 +263,17 @@ re-trying a settled question.
   the script's self-test and looks for the host's key in it, and fails unless the
   model name ends with the host's string, for the two EPYCs, whose full names the runs printed, or
   contains it, for the two Xeons, whose full names no run had recorded then (the pool's census,
-  `bench/pool/`, has since printed both as whole names);
+  `bench/pool/`, has since printed both as whole names); the Arm host's runner prints no model
+  name, so its string is the kernel's `implementer 0x41 part 0xd49` for every core, the whole
+  string, with `sve` and `sve2` (`HARDWARE.md`, "The Arm host");
   `bench/dispatch-bench.sh --host <host>` dispatches it and, when the run failed on that check,
   waits an hour and dispatches again, until a run passes, fails on something else, or (for the
   9V45, or with `--attempts`) the attempts run out (`bench/dispatch-epyc.sh` is the same with
   `--host epyc7763`). A run that failed while fetching the script, before any step looked at
   the machine, is tried again too, each counting as an attempt; the third in a row stops it.
-  Other CPUs (the EPYC 9V74, the Xeon Platinum 8370C) are common draws, and
+  The Arm host's default is 3 attempts, not none: its label gave one CPU in three probe draws, so
+  a miss is most likely a changed pool, not a draw to wait out. Other CPUs (the EPYC 9V74, the
+  Xeon Platinum 8370C) are common draws, and
   accepting one would put a result on a different machine from every result before it. If a
   host stays scarce for days, changing the hosts is a decision for the owner, not a change to
   the check.
