@@ -1240,3 +1240,116 @@ of a vector's lanes rare (`everySubsetOfLanesRare`); `scalarTranscriptionIsStric
 
 **Encoding.** No file of its own: nothing here is a fold. Informal here: that the port's blends
 take each branch on exactly the C's lanes, and that it computes these steps, the code's text.
+
+## atan2 (`Atan2.java`, from `e_atan2.c`)
+
+**What the core's contract is, read in `Atan.java` before calling it.** `Atan.atan(x, live)` takes
+a vector of any doubles and a mask or null. A null mask computes every lane; otherwise only live
+lanes are computed, an inactive lane comes back as the argument's lane, untouched, and never takes
+the per-lane finish (`rare` is and-ed with `live`). It does its own sign handling: it reduces
+`|x|`, negates for `hx < 0`, and returns `x` below `7/16` with no reduction, so for a
+non-negative argument it is `atan` of it by the C's operations. The lanes it leaves to a per-lane
+`StrictMath.atan` are `|x| >= 2^66`, the infinities and the NaNs. `atan2` calls it with `t =
+fabs(y/x)` and the mask `t < 2^66` (and live), so a NaN, an infinity or a huge `t` never
+reaches the finish. The lanes of `t >= 2^66` that the general path keeps (`x = 1.0` beside a huge
+`y`, and a subnormal `x`, whose high word has no exponent, so that `k` understates the gap: `x =
+2^-1074`, `y = 2^-1000` is `t = 2^74` with `k = 23`) take `atanhi[3] + atanlo[3]`, which is what
+s_atan.c returns there for a positive argument (lines 97-102), from the same two arrays `Atan`
+holds. The port copies none of `Atan`'s code.
+
+e_atan2.c returns `x + y` for a NaN in either argument (lines 71-73), `atan(y)` for `x = 1.0` (74),
+`y` or `+-(pi + tiny)` for `y = +-0` by the signs (78-85), `+-(pi_o_2 + tiny)` for `x = +-0` (87),
+the diagonals `+-(pi_o_4 + tiny)` and `+-(3.0*pi_o_4 + tiny)`, or `+-0` and `+-(pi + tiny)`, for `x
+= +-inf` (90-106), and `+-(pi_o_2 + tiny)` for `y = +-inf` (108). The rest take `k = (iy-ix)>>20`
+(111), the result `z = pi_o_2 + 0.5*pi_lo` for `k > 60`, `z = 0.0` for `hx < 0` and `k < -60`, and
+`z = atan(fabs(y/x))` otherwise (112-114), and the quadrant by `m` (115-122): `z`, `z` with its sign
+flipped, `pi - (z - pi_lo)`, `(z - pi_lo) - pi`. The port computes every lane's general path and
+every special lane, and blends the special lanes over it from the last of the C's tests to the
+first, so that the first that matches wins as in the C. It **needs one lemma of its own, L14 below,
+for `x = 1.0`**, and otherwise L13's blend argument: H1 is the C's tests as exact classifications of
+the doubles (a compare with 0.0 for a zero, `IS_INFINITE`, `IS_NAN`, a compare with 1.0, and the C's
+own compares of `k` and of the sign words), in the C's order of priority, which is the order of the
+blends; H2 is the order of the operations in each lane (one division `y/x`, then atan's, then the
+quadrant's); H3 holds since every operation on a lane is total (IEEE operations, compares, int
+shifts, blends: no integer division, no indexed load); and H4 since each blend is a `blend`. The
+values that a lane overwritten by a special blend takes in the general path (`y/0` is an infinity,
+`0/0` a NaN) are never read. Where its text is not the C's:
+
+- `x = 1.0` is not a lane of its own, which L14 proves equal to the C's `atan(y)`. What the C's
+  early return also does is to skip the `k > 60` shortcut, which the port does too
+  (`kHigh.and(xOne.not())`).
+- The quadrants use `z.neg()` for `__HI(z) ^= 0x80000000`: an IEEE negate is the sign-bit flip,
+  `-0.0` included. `z - pi_lo` is computed once for the two quadrants that compute it, the same
+  operation on the same operands.
+- `pi + tiny`, `pi_o_2 + tiny`, `3.0*pi_o_4 + tiny` and their negatives are `static final`
+  expressions in Java of the same operations, so none is assumed to equal another constant;
+  `constantsAreTheSourcesBits` checks the words.
+- `k` is computed on the high words as `int` lanes, as the C does.
+- A lane of two NaNs is `x + y` in the vector, which is one of the arguments quieted, a candidate
+  of `OPERANDS` (the contract of a function of two arguments, above). One NaN beside a finite
+  value is `x + y` too: the NaN quieted with its sign, which `StrictMath.atan2` gives in every
+  mode of the probe (issue 33).
+
+### L14. x = 1.0 through the general path is atan(y)
+
+**Statement.** For `x = 1.0` and a `y` that is not a NaN, the port's lane is the C's `atan(y)`, bit
+for bit, with `-0.0`, the infinities and the lanes of `|y| >= 2^66` included.
+
+**Hypotheses.** (a) `y/1.0` is `y` (division by one is exact: IEEE division is correctly rounded
+and the quotient is a double); `fabs` clears the sign. (b) s_atan.c is odd: `atan(-y) = -atan(y)`
+bit for bit. (c) The port's `z` for `|y|` is s_atan.c's `atan(|y|)` by the C's operations (atan's
+section), or `atanhi[3] + atanlo[3]` from `2^66` up, which is the C's line 100 for a positive
+argument. (d) `y = +-inf` is a special lane, `+-(pi_o_2 + tiny)`, and `pi_o_2 + tiny` is the
+bits of `atanhi[3] + atanlo[3]`.
+
+**Proof.** By (a) the port's `t` is `|y|`, and the `k > 60` shortcut is off for `x = 1.0`, so
+by (c) `z = atan(|y|)` (for `y` finite and not zero; for `y = +-0` the lane is the special lane,
+which returns `y`, and `atan(+-0)` is `+-0` since s_atan.c returns `x` below `2^-29`). `m` is 0
+for `y > 0` and 1 for `y < 0` (`x = 1.0` is positive), so the port returns `z` or `-z`, the sign
+flip being exact. (b) holds on each branch of s_atan.c: below `7/16` the C computes `x -
+x*(s1+s2)` on the signed `x`, where `s1` and `s2` are polynomials in `z = x*x` and `w = z*z` (even
+in `x`) and `x*(s1+s2)` is odd, so the result is odd by (R1) (the rounding of `fl(-v) = -fl(v)`
+at each operation); below `2^-29` it returns `x`; from `7/16` up it computes on `fabs(x)` and
+negates for `hx < 0`; from `2^66` it returns `+-(atanhi[3] + atanlo[3])`. So `atan(y) = -atan(|y|)`
+for `y < 0`, which is what the port returns. For `y = +-inf` the special lane gives `+-(pi_o_2 +
+tiny)`, which by (d) is the C's `+-(atanhi[3] + atanlo[3])`. QED.
+
+**What checks it.** (a) and (c) are the port's own tests: `Atan2Test.xOneIsAtanOfY` checks at every
+width that `atan2(y, 1.0)` has the bits of both `StrictMath.atan(y)` and `VFdlibm.atan(y)` on
+atan's thresholds, sampled values, a spread of magnitudes and dense draws, the infinities and both
+zeros included (a NaN is the NaN lane); `constantsAreTheSourcesBits` checks the words of `pi_o_2`,
+`pi_o_2 + tiny` and `atanhi[3] + atanlo[3]`, which (d) is about. A fault in (b) or (c) would
+show there and in `xIsOne`, which draws `x = +-1.0` and its neighbours beside `|y|` from `2^50`
+to `2^70`.
+
+**The two shortcuts of `k` are redundant in bits, which tests cannot see move by one.** Measured on
+200000 draws of `t` in each binade from `2^54` up, not proved, and by a program that is not
+committed, `StrictMath.atan(t)` is the bits of `pi_o_2 + 0.5*pi_lo` in every one, and for `t` below
+`2^-55` the quadrant results with `z = atan(t)` and with `z = 0.0` are the same bits. They differ in
+58213 of 200000 draws at `2^52` and in all at `2^50`, and the quadrant sums differ from `t` near
+`2^-52` up. So `k > 60` and `hx < 0 && k < -60`, moved by one, change no result (0 of 2^19 draws in
+`theShortcutsAreSeenMovedByTenAndNotByOne`), and neither does the `x = 1.0` exception. The port
+follows the C anyway, and no fault is planted at them by one. The two faults `atan2.kHighMoved` and
+`atan2.kLowMoved` move the thresholds by ten, to `k > 50` and `k < -50`, where `atan(t)` is not yet
+`pi_o_2` (`t` near `2^50`) or the quadrant sum is not yet the same (`t` near `2^-50`), and a test of
+results sees them. That is a statement about the C's values, checked by draws and not proved; the
+port's correctness does not rest on it.
+
+**What it rests on.** (R4) for `+ - * /` and the negate, (R1) for L14, L13, atan's own section for
+the core, and the contract of a function of two arguments for the lane of two NaNs.
+
+**Checks.** `constantsAreTheSourcesBits`, and `Atan2Test`: `VFdlibm.atan2`, `Atan2.atan2Blended`
+and `Atan2.atan2Guarded` against `StrictMath.atan2` by `PairBits.matches` at every width and
+`SPECIES_MAX`, unmasked and masked, on every pair of the special values (the infinities, the zeros,
+the NaNs of both signs and several payloads, the subnormals, `+-1` and the neighbours of `2^60`
+and `2^66`); pairs whose exponents differ by -70 to 70, so that `k` crosses both thresholds; pairs
+drawn at the differences of high words the fuzz lists for atan2; `x = +-1.0` beside `|y|` from
+`2^50` to `2^70`; a subnormal `x` beside a `y` of moderate exponent; sampled bit patterns;
+dense draws; the 20,820 pairs of `hard-cases/atan2.txt`; and every subset of a vector's lanes
+special beside lanes the core computes.
+`scalarTranscriptionIsStrictMath` checks that `cAtan2`, e_atan2.c in scalar Java, is
+`StrictMath.atan2` on those inputs. The planted faults are `atan2.kHighMoved`,
+`atan2.kLowMoved`, `atan2.lowShortcutForPositiveX` (the shortcut without `hx < 0`),
+`atan2.infOrderSwapped` (`y` infinite wins over `x` infinite), `atan2.dropPiLo`, `atan2.zeroSignOfX`
+(`x < 0` by value for `y = +-0`, so `-0.0` is positive), `atan2.diagonalInf` (`pi_o_4` in every
+quadrant) and `atan2.noSignFlip`.

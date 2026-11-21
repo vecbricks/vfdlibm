@@ -362,6 +362,7 @@ import java.lang.reflect.Modifier;
 import java.util.Arrays;
 import java.util.Set;
 import java.util.TreeSet;
+import java.util.function.DoubleBinaryOperator;
 import java.util.function.DoubleUnaryOperator;
 import jdk.incubator.vector.DoubleVector;
 import jdk.incubator.vector.VectorMask;
@@ -429,6 +430,83 @@ public final class Consumer {
     }
   }
 
+  /** Two NaNs with different bits, beside the common values, for a function of two arguments. */
+  private static final double[] PAIR_NANS = {
+    Double.longBitsToDouble(0x7ff8000000000123L), Double.longBitsToDouble(0xfff4000000000456L),
+  };
+
+  /**
+   * Checks f(y, x) and f(y, x, live), found by name, against the oracle, over every pair of the
+   * inputs and of two NaNs of different bits. A lane where both arguments are NaN with different
+   * bits must be one of the arguments' bits with the quiet bit set (the oracle's too), which one
+   * is not specified; every other lane has the oracle's bits.
+   */
+  private static void checkPair(String name, DoubleBinaryOperator oracle) throws Exception {
+    Method plain = function(name, DoubleVector.class, DoubleVector.class);
+    Method masked =
+        function(name, DoubleVector.class, DoubleVector.class, VectorMask.class);
+    double[] values = new double[INPUTS.length + PAIR_NANS.length];
+    System.arraycopy(INPUTS, 0, values, 0, INPUTS.length);
+    System.arraycopy(PAIR_NANS, 0, values, INPUTS.length, PAIR_NANS.length);
+    int count = values.length * values.length;
+    double[] ys = new double[count];
+    double[] xs = new double[count];
+    for (int i = 0; i < count; i++) {
+      ys[i] = values[i / values.length];
+      xs[i] = values[i % values.length];
+    }
+    int length = SPECIES.length();
+    double[] y = new double[length];
+    double[] x = new double[length];
+    boolean[] live = new boolean[length];
+    for (int from = 0; from < count; from += length) {
+      for (int i = 0; i < length; i++) {
+        y[i] = ys[(from + i) % count];
+        x[i] = xs[(from + i) % count];
+      }
+      DoubleVector vy = DoubleVector.fromArray(SPECIES, y, 0);
+      DoubleVector vx = DoubleVector.fromArray(SPECIES, x, 0);
+      double[] got = ((DoubleVector) plain.invoke(null, vy, vx)).toArray();
+      for (int i = 0; i < length; i++) {
+        samePair(name, y[i], x[i], got[i], oracle.applyAsDouble(y[i], x[i]));
+      }
+      for (int out = 0; out < 4; out++) {
+        for (int i = 0; i < length; i++) {
+          live[i] = (from + i) % 3 != out;
+        }
+        VectorMask<Double> mask = VectorMask.fromArray(SPECIES, live, 0);
+        double[] gotMasked = ((DoubleVector) masked.invoke(null, vy, vx, mask)).toArray();
+        for (int i = 0; i < length; i++) {
+          if (live[i]) {
+            samePair(name + " (masked)", y[i], x[i], gotMasked[i],
+                oracle.applyAsDouble(y[i], x[i]));
+          }
+        }
+      }
+    }
+  }
+
+  /** The rule of the pair comparison: see checkPair. A copy of the suite's PairBits.matches. */
+  private static void samePair(String name, double y, double x, double got, double expected) {
+    long yb = Double.doubleToRawLongBits(y);
+    long xb = Double.doubleToRawLongBits(x);
+    long gotBits = Double.doubleToRawLongBits(got);
+    long wantBits = Double.doubleToRawLongBits(expected);
+    boolean nans = (yb & 0x7fffffffffffffffL) > 0x7ff0000000000000L
+        && (xb & 0x7fffffffffffffffL) > 0x7ff0000000000000L && yb != xb;
+    long quiet = 0x0008000000000000L;
+    boolean ok = nans
+        ? (gotBits == (yb | quiet) || gotBits == (xb | quiet))
+            && (wantBits == (yb | quiet) || wantBits == (xb | quiet))
+        : gotBits == wantBits;
+    lanes++;
+    if (!ok) {
+      wrong++;
+      System.out.printf("%s(%016x, %016x): got %016x, StrictMath %016x%n", name, yb, xb, gotBits,
+          wantBits);
+    }
+  }
+
   /** The public static methods of VFdlibm that were not called. */
   private static Set<String> uncalled() {
     Set<String> names = new TreeSet<>();
@@ -461,8 +539,8 @@ public final class Consumer {
     return names;
   }
 
-  // A function of two arguments must compare through a copy of the rule of PairBits.matches (a
-  // lane of two NaNs with different bits is one of the function's declared candidates), not this.
+  // A function of two arguments compares through samePair, a copy of the rule of
+  // PairBits.matches, not through this raw comparison.
   private static void same(String name, double in, double got, double expected) {
     lanes++;
     if (Double.doubleToRawLongBits(got) != Double.doubleToRawLongBits(expected)) {
@@ -487,6 +565,7 @@ public final class Consumer {
     check("asin", StrictMath::asin);
     check("atan", StrictMath::atan);
     check("acos", StrictMath::acos);
+    checkPair("atan2", StrictMath::atan2);
     Module module = VFdlibm.class.getModule();
     String in = module.isNamed() ? module.getName() : "";
     System.out.printf("%d lanes at %d bits, %d wrong; the library is in %s%n", lanes,
