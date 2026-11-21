@@ -2,9 +2,10 @@
 
 All notable changes to vfdlibm are listed here, newest first, in the form of
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). vfdlibm is at 0.x: a minor version may
-break the API and a patch may not (`AGENTS.md`, "Releases"). Each pull request adds its line
-under `Unreleased`. A line for a breaking change starts with `**Breaking:**` and says what a
-client must do. The contract of every version is the same: each lane of each function equals
+break the API and a patch may not (`AGENTS.md`, "Releases"). A pull request that changes what a
+user sees adds its line under `Unreleased`; a change to tests, docs or the build alone does not.
+A line for a breaking change starts with `**Breaking:**` and says what a client must do. The
+contract of every version is the same: each lane of each function equals
 `java.lang.StrictMath`'s result on that input, by `Double.doubleToRawLongBits`.
 
 ## [Unreleased]
