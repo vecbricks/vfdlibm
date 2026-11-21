@@ -62,6 +62,10 @@ vfdlibm ports fdlibm's double functions to the Java Vector API, each lane bit-id
   on the class path and on the module path, must get `StrictMath`'s bits. A new public function
   goes in that consumer too, which fails until it is there; `--self-test` shows the checks of
   the jar's contents failing, each on a copy of the jar with one defect.
+- The README's client example is run against the latest release on Maven Central every week by
+  `.github/workflows/readme-check.yml` (`dev/readme-check.sh`, which you can run by hand). It
+  takes the fenced blocks of "Use" in their order and kinds (a pom, `Main.java`, commands, their
+  output, `module-info.java`, commands), so a change to those blocks changes what it expects.
 - Benchmarks are JMH, in `src/jmh/java`; `verify` compiles them. Run them with
   `mvn -B -Pjmh test-compile exec:exec`, passing JMH options as `-Djmh.args="..."`, e.g.
   `-Djmh.args="ExpBenchmark.finish256 -p inputs=common"`.

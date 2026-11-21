@@ -142,8 +142,9 @@ of 512 bits against 256 on the EPYC 9V74 draws that have AVX-512, and any port's
 0.1.x supports **JDK 25 only**. The Vector API is incubating, and its API and C2's lowering of
 it move between JDK releases, so what a newer JDK does with these functions has not been
 measured here. The contract, bit identity with `StrictMath`, is tested on JDK 25 and on no
-other: every CI row, the nightly sweep and the benchmarks run Zulu 25. The example above was run as
-written on JDK 25 against 0.1.0 from Central; no job here repeats that.
+other: every CI row, the nightly sweep and the benchmarks run Zulu 25. The example above is run
+as written, on JDK 25, every week by `.github/workflows/readme-check.yml`, with the version of
+its dependency replaced by the latest release on Central.
 
 ## Why
 
