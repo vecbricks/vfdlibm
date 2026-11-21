@@ -9,6 +9,7 @@
 package io.github.vecbricks.vfdlibm;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.nio.file.Path;
@@ -100,6 +101,17 @@ class FuzzWordGapsTest {
     for (int g = 0; g < GAPS.length; g++) {
       assertTrue(hits[g] > 4000 && hits[g] < 6000, "gap " + GAPS[g] + " hit " + hits[g]);
     }
+  }
+
+  @Test
+  void theGapsAreCopiedOnTheWayInAndOut() {
+    int[] gaps = {ABOVE};
+    Fuzz.PairEdges edges = new Fuzz.PairEdges(EDGES, EDGES, Fuzz.PAIR_SPECIALS, gaps);
+    gaps[0] = Integer.MAX_VALUE;
+    edges.wordGaps()[0] = Integer.MAX_VALUE;
+    assertEquals(ABOVE, edges.wordGaps()[0]);
+    assertThrows(IllegalArgumentException.class,
+        () -> new Fuzz.PairEdges(EDGES, EDGES, Fuzz.PAIR_SPECIALS, new int[] {Integer.MAX_VALUE}));
   }
 
   @Test

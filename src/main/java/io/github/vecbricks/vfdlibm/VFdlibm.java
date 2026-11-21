@@ -14,10 +14,11 @@ import jdk.incubator.vector.VectorMask;
 
 /**
  * fdlibm's double functions over {@link DoubleVector} lanes, each lane bit-identical to the
- * {@link StrictMath} method of the same name, NaN payloads and signed zeros included.
+ * {@link StrictMath} method of the same name, NaN payloads and signed zeros included; the one
+ * exception is a lane of {@code atan2} where both arguments are NaN with different bits.
  *
  * <p>Every method works on a vector of any species of 128 bits or more (exp, expm1, log, log10,
- * log1p, sinh, cosh, asin and atan hold fdlibm's {@code int} words in int lanes of half the
+ * log1p, sinh, cosh, asin, atan and atan2 hold fdlibm's {@code int} words in int lanes of half the
  * vector's size). Each comes in two forms: one computes every lane, and a masked form computes
  * only the lanes set in {@code live} and returns every other lane of its argument untouched, raw
  * bits and all. An inactive lane never sends the vector down a slow path.
@@ -278,5 +279,32 @@ public final class VFdlibm {
    */
   public static DoubleVector atan(DoubleVector x, VectorMask<Double> live) {
     return Atan.atan(x, Objects.requireNonNull(live, "live"));
+  }
+
+  /**
+   * {@code StrictMath.atan2(y, x)} in every lane, except that a lane where both arguments are NaN
+   * with different bits is one of the two, with the quiet bit set (which one is not specified,
+   * since {@code StrictMath}'s own choice varies); every other lane, a NaN beside a finite value
+   * included, has {@code StrictMath}'s bits. Ported from fdlibm 5.3's {@code e_atan2.c}.
+   *
+   * @param y the first arguments, the ordinates
+   * @param x the second arguments, the abscissae, of {@code y}'s species
+   * @return the angle of each lane's point {@code (x, y)}
+   */
+  public static DoubleVector atan2(DoubleVector y, DoubleVector x) {
+    return Atan2.atan2(y, x, null);
+  }
+
+  /**
+   * {@link #atan2(DoubleVector, DoubleVector)} in the lanes set in {@code live}; every other lane
+   * is {@code y}'s, untouched.
+   *
+   * @param y the first arguments, the ordinates
+   * @param x the second arguments, of {@code y}'s species
+   * @param live the lanes to compute, of the same species
+   * @return the angle of each live lane, and {@code y} in the others
+   */
+  public static DoubleVector atan2(DoubleVector y, DoubleVector x, VectorMask<Double> live) {
+    return Atan2.atan2(y, x, Objects.requireNonNull(live, "live"));
   }
 }

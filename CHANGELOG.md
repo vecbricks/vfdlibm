@@ -27,6 +27,12 @@ contract of every version is the same: each lane of each function equals
   any species of 128 bits or more. Every lane is bit-identical to `StrictMath.atan`, NaN payloads
   and signed zeros included. Lanes of magnitude `2^66` or more, the infinities and NaNs are
   finished per lane by `StrictMath.atan`.
+- `VFdlibm.atan2`, in the two forms `atan2(y, x)` and `atan2(y, x, live)`, over `DoubleVector`
+  lanes of any species of 128 bits or more; a lane that is not live is `y`'s. Every lane is
+  bit-identical to `StrictMath.atan2`, NaN payloads and signed zeros included, except a lane where
+  both arguments are NaN with different bits: it is one of the two arguments' bits with the quiet
+  bit set, and which one is not specified, since `StrictMath`'s own choice varies by JIT tier. No
+  lane is finished by a call to `StrictMath`.
 
 ### Changed
 

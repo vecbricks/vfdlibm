@@ -98,6 +98,12 @@ final class Fuzz {
     PairEdges(Edges x, Edges y, double[] specials) {
       this(x, y, specials, new int[0]);
     }
+
+    /** A copy: writing into it changes nothing the constructor checked. */
+    @Override
+    public int[] wordGaps() {
+      return wordGaps.clone();
+    }
   }
 
   /** The special values of a function of two arguments, either sign: the sweep draws them too. */

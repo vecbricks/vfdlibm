@@ -221,8 +221,8 @@ final class Nightly {
   /**
    * A function of two arguments: its oracle, what its result may be on a lane of two NaNs with
    * different bits ({@link PairBits}; no default), every arm and where its branches are (for the
-   * {@link Fuzz}). No ported function is one yet, so {@link #KNOWN} is empty until a test or a
-   * port registers one; a pair function that is not listed in nightly.yml is never run there.
+   * {@link Fuzz}). {@link #KNOWN} lists the ported ones, and the stand-ins a test adds; a pair
+   * function that is not listed in nightly.yml is never run there.
    */
   record PairFunction(
       String id, DoubleBinaryOperator oracle, PairBits.Candidates candidates, List<Arm2> arms,
@@ -241,11 +241,31 @@ final class Nightly {
     }
 
     /**
-     * The functions of two arguments by name, in the order they are listed. A port registers its
-     * function here, in {@code Nightly}, as it adds a constant to {@link Function}; a test adds
-     * a stand-in and removes it again.
+     * atan2: its two arms (the guarded arm {@code VFdlibm} calls, and the blended one), the
+     * candidates of a lane of two NaNs, and where its branches are: the high words of zero, one,
+     * the infinities and (for {@code y}) {@code 2^66}, and the differences of the two words
+     * that {@code k = (iy-ix)>>20} compares against 60 and -60 (e_atan2.c, lines 111-113).
      */
-    static final List<PairFunction> KNOWN = new CopyOnWriteArrayList<>();
+    static final PairFunction ATAN2 = new PairFunction("atan2", StrictMath::atan2,
+        PairBits.Candidates.OPERANDS,
+        List.of(
+            new Arm2("VFdlibm.atan2", VFdlibm::atan2, VFdlibm::atan2),
+            new Arm2("Atan2.atan2Blended", (y, x) -> Atan2.atan2Blended(y, x, null),
+                Atan2::atan2Blended)),
+        new Fuzz.PairEdges(
+            new Fuzz.Edges(new int[] {0x00000000, 0x3ff00000, 0x44100000, 0x7ff00000},
+                new int[0], false, new double[] {0.0, 1.0, 0x1p66, Double.POSITIVE_INFINITY}),
+            new Fuzz.Edges(new int[] {0x00000000, 0x3ff00000, 0x7ff00000},
+                new int[0], false, new double[] {0.0, 1.0, Double.POSITIVE_INFINITY}),
+            Fuzz.PAIR_SPECIALS,
+            new int[] {61 << 20, (61 << 20) - 1, -60 << 20, (-60 << 20) - 1}));
+
+    /**
+     * The functions of two arguments by name, in the order they are listed. A port registers its
+     * function here, in {@code Nightly}; a test adds a stand-in and removes it again. A function
+     * in this list is not in the nightly's {@code all} until nightly.yml says so.
+     */
+    static final List<PairFunction> KNOWN = new CopyOnWriteArrayList<>(List.of(ATAN2));
 
     @Override
     public int arity() {

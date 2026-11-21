@@ -43,7 +43,10 @@ and expm1's `k == 0` lines, with two arms for its small range: the default arm i
 provisionally, until a benchmark host times them). `asin` is done too (`VFdlibm.asin`, from
 `e_asin.c`, with `sqrt` as the Vector API's `SQRT`, one arm, and the lanes of `|x| >= 1` finished
 per lane), and so is `atan` (`VFdlibm.atan`, from `s_atan.c`, five ranges through one division on
-blended operands, the lanes from `2^66` up finished per lane). `log`, `log10` and
+blended operands, the lanes from `2^66` up finished per lane), and so is `atan2`
+(`VFdlibm.atan2`, from `e_atan2.c`, the first function of two arguments: the special lanes
+blended over the general path, which calls `atan`'s core, no lane finished per lane, and two
+arms, the blended one and the guarded one `VFdlibm` calls, provisionally). `log`, `log10` and
 `log1p` are done too (`VFdlibm.log`, from `e_log.c`, `VFdlibm.log10`, from `e_log10.c`, which
 computes through log's common path, and `VFdlibm.log1p`, from `s_log1p.c`), and so is `expm1`
 (`VFdlibm.expm1`, from `s_expm1.c`, whose reduction is exp's).
@@ -88,7 +91,8 @@ five are a later, optional set; the large-argument reduction of the trigonometri
   -XX:MaxVectorSize=32`, 128 and 256 bits on every draw), on x86 with `-XX:MaxVectorSize=16`
   (all of it at 128 bits) and on Arm (128 bits).
 - **Nightly:** `.github/workflows/nightly.yml` sweeps every high word of exp, expm1, log, log10,
-  log1p, sinh, cosh and atan (asin is in `Nightly`'s table and not yet in the night's list) with
+  log1p, sinh, cosh and atan (asin and atan2 are in `Nightly`'s tables and not yet in the
+  night's list) with
   three low words each (every branch fdlibm decides on the high word) at every width but 128 bits
   on x86, where a rotating 1/32 slice a night covers it in 32 nights, and at 128 bits on Arm every
   night; it fuzzes from a fresh seed at every width, and runs every proof under both solvers; a
@@ -159,14 +163,15 @@ five are a later, optional set; the large-argument reduction of the trigonometri
   and 512 bits, the preferred species and `SPECIES_MAX`. `Log1pBenchmark` does the same for `log1p`,
   with a third arm that blends the rare paths only when a vector holds a rare lane; `Expm1Benchmark`
   has the same three arms for `expm1`, `SinhBenchmark` one for `sinh`, `CoshBenchmark` two for
-  `cosh`, `AsinBenchmark` one for `asin` and `AtanBenchmark` one for `atan`. Each of the nine has
+  `cosh`, `AsinBenchmark` one for `asin`, `AtanBenchmark` one for `atan` and `Atan2Benchmark` two
+  for `atan2` (the blended and the guarded arm, over two arrays). Each of the ten has
   rows at `SPECIES_MAX` (`*Max`), which the allocation check covers: the finish of `exp`,
   `expm1`, `log`, `log10` and `log1p` boxed there on mixed data until its first eight lanes were
   written out
   (`bench/results/max-finish-laptop-2026-11-20.txt`, then
   `bench/results/max-finish-alloc-free-laptop-2026-11-21.txt`, a laptop reading of allocation only);
-  no file reads the earlier finish of `sinh` or `cosh`, and none has an `asin` or an `atan` row,
-  whose finishes were written in the new shape from the start. `ExpKindsBench` runs exp's two arms
+  no file reads the earlier finish of `sinh` or `cosh`, and none has an `asin`, an `atan` or
+  an `atan2` row, whose finishes were written in the new shape from the start. `ExpKindsBench` runs exp's two arms
   on one kind of rare input at a time (a NaN, an overflow, an underflow, a subnormal result), to
   find which kind costs an arm its time on mixed data (#41); it is named apart so that a run of
   `ExpBenchmark` and the allocation check's default regex leave it out, as `CoshKindsBench`, which

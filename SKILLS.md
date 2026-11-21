@@ -665,40 +665,37 @@ next port re-trying a settled question.
   `NightlyTest`'s planted-fault test passes it; `dev/nightly.sh` passes only `--seconds`, so to
   replay a bounded run call `Fuzz` directly (its class comment has the command).
 - **Functions of two arguments** (`Nightly.PairFunction`, test-only code like the rest: a port
-  registers its function in `PairFunction.KNOWN`; none is ported yet, and `PairHarnessTest` runs the
-  harness on a toy, `x * 0.5 + y`, with planted faults). The workflow lists such a function in the
-  plan job's `pairs`, as well as in `all`, and gives its sweep jobs an `argument` and an artifact
-  suffix (`dev/nightly.sh` reads `NIGHTLY_ARGUMENT`, and names its log `sweep-<function>-arg<N>-`):
-  the input `pair-passes` is `alternate` (the default: the first argument for a rotation of
-  `nights` nights, then the second for as many), `both` (two jobs a stripe) or `1` or `2`. A
-  function of one argument has no `argument` field, so its entries are what they were. The sweep
-  takes `--argument 1` (the default) or
-  `2`: the high words swept are that argument's, each with its three low words, and each swept value
-  gets a partner for the other argument drawn from the seed, the argument and the input's index
-  alone (`Sweep.partner`; a quarter each of special values, the swept value's exponent, an exponent
-  within 64 of it, and random bits), so a pair replays from the seed and its replay line says
-  `--argument`. A pass checks 3 * 2^32 of the 2^128 pairs, so **what it can miss**: a bug that needs
-  a high word of each argument at once, which a partner drawn as above meets with probability about
-  2^-32 for a random partner and more where the two exponents are near, and which
-  the fuzz meets because its draws put both arguments at their edges at once (`toy2-xy` in
-  `PairHarnessTest`: both sweeps pass it, the fuzz finds it). The masked form of an arm keeps the
-  first argument's bits in a lane that is not live (`Oracle.assertPairMasked`'s contract). A pair
-  function's mismatch file, and a hard-cases file of one, say `# arity: 2` before the first input
-  and hold `0x<x> 0x<y>` on a line: `Inputs.hardCasePairs` reads one, and `Inputs.hardCases` refuses
-  it by that line.
+  registers its function in `PairFunction.KNOWN`; `atan2` is the first, and `PairHarnessTest` runs
+  the harness on a toy, `x * 0.5 + y`, with planted faults). The workflow lists such a function in
+  the plan job's `pairs`, as well as in `all`, and gives its sweep jobs an `argument` and an
+  artifact suffix (`dev/nightly.sh` reads `NIGHTLY_ARGUMENT`, and names its log
+  `sweep-<function>-arg<N>-`): the input `pair-passes` is `alternate` (the default: the first
+  argument for a rotation of `nights` nights, then the second for as many), `both` (two jobs a
+  stripe) or `1` or `2`. A function of one argument has no `argument` field, so its entries are what
+  they were. The sweep takes `--argument 1` (the default) or `2`: the high words swept are that
+  argument's, each with its three low words, and each swept value gets a partner for the other
+  argument drawn from the seed, the argument and the input's index alone (`Sweep.partner`; a quarter
+  each of special values, the swept value's exponent, an exponent within 64 of it, and random bits),
+  so a pair replays from the seed and its replay line says `--argument`. A pass checks 3 * 2^32 of
+  the 2^128 pairs, so **what it can miss**: a bug that needs a high word of each argument at once,
+  which a partner drawn as above meets with probability about 2^-32 for a random partner and more
+  where the two exponents are near, and which the fuzz meets because its draws put both arguments at
+  their edges at once (`toy2-xy` in `PairHarnessTest`: both sweeps pass it, the fuzz finds it). The
+  masked form of an arm keeps the first argument's bits in a lane that is not live
+  (`Oracle.assertPairMasked`'s contract). A pair function's mismatch file, and a hard-cases file of
+  one, say `# arity: 2` before the first input and hold `0x<x> 0x<y>` on a line:
+  `Inputs.hardCasePairs` reads one, and `Inputs.hardCases` refuses it by that line.
   `hard-cases/atan2.txt` is one: Lefevre's data has no tag of a function of two arguments, so
   `dev/testlibm-extract.py atn atan2` derives its 20820 pairs from the 1735 `atn` inputs `t`, as
-  `(+-t * 2^j, +-2^j)` for `j` in 0, 1, -5 (so `|y/x| = t` exactly), which are inputs of atan's
-  core through `atan2`'s own code and not hard cases of its quadrants; `HardCasePairsTest` checks
-  the file's shape.
-  A branch on the two arguments' high words relative to each other (`e_atan2.c`'s `k = (iy - ix)
-  >> 20`, which the edges of each argument cannot reach) is listed in `Fuzz.PairEdges.wordGaps`,
-  the first argument's absolute high word less the second's at the values the C tests (for an
-  `atan2` port: `61 * 2^20` and `-60 * 2^20`, and the word below each, which no function lists
-  yet); one pair in ten is then drawn
-  at one of them, and a function that lists none draws as before. `FuzzWordGapsTest` shows a
-  fault at exactly one gap found by the fuzz at every width and not found when the gaps are not
-  listed.
+  `(+-t * 2^j, +-2^j)` for `j` in 0, 1, -5 (so `|y/x| = t` exactly), which are inputs of atan's core
+  through `atan2`'s own code and not hard cases of its quadrants; `HardCasePairsTest` checks the
+  file's shape. A branch on the two arguments' high words relative to each other (`e_atan2.c`'s `k =
+  (iy - ix) >> 20`, which the edges of each argument cannot reach) is listed in
+  `Fuzz.PairEdges.wordGaps`, the first argument's absolute high word less the second's at the values
+  the C tests (for an `atan2`: `61 * 2^20` and `-60 * 2^20`, and the word below each, which
+  `Nightly.PairFunction.ATAN2` lists); one pair in ten is then drawn at one of them, and a function
+  that lists none draws as before. `FuzzWordGapsTest` shows a fault at exactly one gap found by the
+  fuzz at every width and not found when the gaps are not listed.
 - **One comparator for a function of two arguments** (`PairBits.matches(candidates, x, y, want,
   got)`, test code). Every comparison of a pair function's lane goes through it: `Oracle.assertPair`
   and the live lanes of `assertPairMasked` (a lane that is not live keeps `x`'s raw bits), and the
@@ -717,8 +714,8 @@ next port re-trying a settled question.
   oracle's bits unchecked, or to keep the sign under `MAGNITUDES`, fails `PairNanTest` (tried by
   hand on this version).
 - **What a pass over a function of two arguments costs** (laptop, 21 November 2026,
-  `bench/results/pair-sweep-laptop-2026-11-21.txt`; no pair function is ported, so this is two
-  stand-ins run through `PairCostProbe`, not a port). A stripe of 2^24 high words at 256 bits took
+  `bench/results/pair-sweep-laptop-2026-11-21.txt`; it was taken before `atan2` was ported, so
+  it is two stand-ins run through `PairCostProbe`, not the port, and no timing of `atan2` exists). A stripe of 2^24 high words at 256 bits took
   0.9 s for the harness alone (`toy2`) and 1.8 s for an arm that calls `StrictMath.atan2` lane by
   lane, against 2.9 s and 3.6 s for the unary sweeps of exp and log1p, at 4 threads on 4 CPUs.
   Scaled to a whole pass (256 stripes), the x86 sweep jobs of the arm-bound stand-in come to, on
@@ -1041,3 +1038,53 @@ next port re-trying a settled question.
 - **Hard cases: 1655 inputs**, from `dev/testlibm-extract.py asn asin` (the tag `asn` is asin's;
   the extractor's recheck passes on all 1655 lines). All are positive, between 6.5e-8 and 1, and
   the one at 1 is a rare lane.
+
+## What the atan2 port taught
+
+- **The first function of two arguments, and no lane finished by a call.** The special lanes
+  (NaN, zeros, infinities) are blends of constants, of `y` and of `x + y`; the general path calls
+  `Atan.atan` on `t = fabs(y/x)` and the mask `t < 2^66` (and live), and the lanes of `t >= 2^66`,
+  which only `x = 1.0` has, take the constant `atanhi[3] + atanlo[3]` that s_atan.c returns there.
+  Every lane the tests drew matched on the first run of `Atan2Test`, at every width, masked and
+  unmasked, with the hard-case pairs and every subset of lanes special.
+- **The first body boxed on every row.** It made its masks, then called `Atan.atan` and, last, a
+  private `specials` method. `bench/alloc-check.py --why` named C2's refusals: `Atan::atan` and
+  `Atan2::specials` both failed to inline with `NodeCountInliningCutoff`. The fix is the rule in
+  `Atan`'s comment (every call a body makes comes first), taken further: the call into atan
+  comes second, right
+  after the quotient and one compare (`t < 2^66`) that is its whole mask, the classification masks
+  and the special blends follow inline (no second call), and the body then allocates nothing:
+  `bench/alloc-check.py` passes on the `Atan2Benchmark` rows (`blended` and `guarded`, at 256 bits,
+  the preferred species and `SPECIES_MAX`, common and mixed data) at this laptop's flags and as an
+  AVX2 host, and CI runs it. The readings are not committed as results files, so no figure of them
+  is quoted. No timing of `atan2` exists, so the two arms are not compared and the guarded one
+  is the default provisionally.
+- **A lane the core must not see.** A NaN, an infinity or a huge `t` in a lane the special blends
+  overwrite would send the vector to atan's per-lane finish. The mask `t < 2^66` keeps them out
+  (a NaN compares false), and a vector with no special lane never reaches the finish.
+- **The shortcuts of `k` are redundant in bits.** `atan(t)` is `pi_o_2 + 0.5*pi_lo` from `t` near
+  `2^54`, and the quadrant sums with `z = 0.0` and with `z = atan(t)` agree below `t` near `2^-55`,
+  so the C's `k > 60` and `hx < 0 && k < -60`, and its early return for `x = 1.0`, change no
+  result, and a fault that moves a threshold by one cannot be seen (PROOFS.md, atan2). The
+  design note's fault on `x = 1.0` taking the shortcut was dropped for that reason, and so was a
+  fault that took `k` from the exponent fields; `atan2.kHighMoved` and `atan2.kLowMoved` move the
+  thresholds by ten.
+- **The faults, sized on 2^22 draws** (a throwaway program over `VFdlibm.atan2`, once per fault,
+  at 256 bits; the counts are of pairs the fault changes). Over pairs whose exponents differ by
+  -70 to 70: `atan2.kHighMoved` 40791, `atan2.kLowMoved` 20438,
+  `atan2.lowShortcutForPositiveX` 155961, `atan2.dropPiLo` 1253851, `atan2.noSignFlip` 1049118,
+  `atan2.infOrderSwapped`, `atan2.zeroSignOfX` and `atan2.diagonalInf` none. Over the nightly's
+  own draws at the `k` gaps (`Nightly.PairFunction.ATAN2`'s edges): 1452, 738, 594538, 807566,
+  832241, and 240, 96 and 152 for the three that need an infinity or a zero. Over the 7225 pairs of
+  the special values: 4, 2 and 3 for those three, 650 for `lowShortcutForPositiveX`, 817 for
+  `dropPiLo` and 1150 for `noSignFlip`, and 0 for the two thresholds. The fault run's inputs
+  hold all of them, and the unplanted port changes 0 of each.
+- **Hard cases.** Lefevre's data has no `atan2` tag, so `hard-cases/atan2.txt` is derived from its
+  `atn` lines (`dev/testlibm-extract.py atn atan2`): `atan2(+-t * 2^j, +-2^j)` for `j` in 0, 1,
+  -5, 20,820 pairs. They are inputs of atan's core through `atan2`'s own code, not hard cases of
+  its quadrants.
+- **The masked form keeps `y`, the first argument,** in a lane that is not live, as the harness's
+  `assertPairMasked` requires, and a lane that is not live never takes a special blend's test: the
+  guard reads `special & live`.
+- **The consumer of `dev/jar-check.sh`** calls `atan2` over every pair of its inputs and two NaNs of
+  different bits, unmasked and under four masks, and compares by a copy of `PairBits.matches`.
