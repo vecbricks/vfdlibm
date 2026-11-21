@@ -198,7 +198,6 @@ class PairNanTest {
         (x, y, live) -> x, PairHarnessTest::scalar, column(0), column(1), 7));
   }
 
-
   @ParameterizedTest
   @EnumSource(VectorWidth.class)
   void theAssertsOfTheOracleCatchWhatTheRuleRefuses(VectorWidth width) {
@@ -331,6 +330,8 @@ class PairNanTest {
   private record Declared(String name, boolean oracleClears, boolean armClears,
       PairBits.Candidates candidates, boolean caught) {}
 
+  // The rows depend on LANES holding two NaNs with different bits and both signs ({D, B}, {B, A}),
+  // where the candidates of the two declarations differ, and a lane of one NaN.
   private static final List<Declared> DECLARED = List.of(
       new Declared("atan2-like, operands", false, false, OPERANDS, false),
       new Declared("hypot-like, magnitudes", true, true, MAGNITUDES, false),
@@ -362,7 +363,7 @@ class PairNanTest {
         }
       }
       long found = mismatches("toy2-decl", oracle, d.candidates, arm, species, column(0),
-          column(1), dir.resolve("decl-" + width + "-" + Math.abs(d.name.hashCode()) + ".txt"));
+          column(1), dir.resolve("decl-" + width + "-" + DECLARED.indexOf(d) + ".txt"));
       assertEquals(d.caught, found > 0, d.name + " by the nightly's check at " + species);
     }
   }
