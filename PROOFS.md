@@ -890,12 +890,12 @@ reassociation, and **needs no lemma of its own**. Where its text is not the C's:
   the other branches' operations take in a lane are computed and never kept. There is nothing
   to prove, and no hinge of its own: the one thing that could differ is the tests, and they are
   the C's, made on the same high word. What checks them is narrower than the tests are: the
-  four words equal the C's literals (`constantsAreTheSourcesBits`), and `CoshTest` compares every arm with `StrictMath.cosh` at
-  the thresholds and their neighbours. `cosh.splitMoved` is the only planted fault that moves
-  a compare's constant (the slice arm's `HX_SMALL`); `cosh.finishMissesSmall` drops a mask. A
-  `HX_LIMIT` compare moved above about 18.7 changes no result (dropping `half/t` changes none
-  there, by the sizing of `cosh.dropHalfOverT`); other compares may also move without changing a
-  result, and no test claims to catch those.
+  four words equal the C's literals (`constantsAreTheSourcesBits`), and `CoshTest` compares
+  every arm with `StrictMath.cosh` at the thresholds and their neighbours. `cosh.splitMoved`
+  is the only planted fault that moves a compare's constant (the slice arm's `HX_SMALL`);
+  `cosh.finishMissesSmall` drops a mask. A `HX_LIMIT` compare moved above about 18.7 changes no
+  result (dropping `half/t` changes none there, by the sizing of `cosh.dropHalfOverT`); other
+  compares may also move without changing a result, and no test claims to catch those.
 - The lanes from `0x40862E42` up, the infinities and the NaNs are finished per lane by
   `StrictMath.cosh`, which is the C.
 
