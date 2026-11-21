@@ -632,16 +632,19 @@ a settled question.
   - **How firm that is: not very.** The 13-function fit is unverified, and no night has run on
     the new slots. The model divides a kind's minutes by its slots and counts no whole waves
     of jobs, so 76 is a lower bound; the sweep's 62, plus its longest job, 19.8, plus the 8
-    minutes, gives 90 as an upper bound, which is the budget itself: with no margin. The 8
+    minutes, gives 90 as an estimate of the worst case, which is the budget itself: with no
+    margin. (It adds a median to a longest job, so it is neither a median nor a maximum.) The 8
     minutes are one fit (54 against 46). Each further average function adds about 5 minutes
     (Arm's 273 over 13 functions and 4 slots). For today's five functions the prediction is 34
     minutes, Arm's 105 over 4 slots (26) plus the 8; the sweep's 119 over 5 slots (24) and the
     fuzz's 138 over 6 (23) are below it. The sweep's slots go from 8 to 5, and its 10 jobs of
-    about 11 minutes run in two waves on either, so for five functions that move costs little;
-    it is the 26 jobs of 13 functions that need the 5. The first nights on the new slots check
-    both: fetch them with `pool.py fetch` and read the span from `pool.py cost`. A night above
-    90 minutes breaks the budget and calls for one of the levers below. A night between the
-    bounds, 76 and 90 at 13 functions, is inside it, and shows how far the model is off.
+    about 11 minutes run in two waves on either, so for five functions that move costs
+    nothing. It pays for the fuzz's 6 and Arm's 4 slots under the cap of 15 matrix jobs, and at
+    13 functions the sweep's 26 jobs take 6 waves on 5 slots where 8 would take 4. The first
+    nights on the new slots check both: fetch them with `pool.py fetch` and read the span from
+    `pool.py cost`. The budget is a median span of 90 minutes, so a median of the nights above
+    90 breaks it and calls for one of the levers below; a single long night does not. At 13
+    functions a median between 76 and 90 is inside it, and shows how far the model is off.
   - **What gives when it does not fit,** cheapest first, with what each buys at 13 functions
     (the table's means times 2.6): `fuzz-seconds` 120 saves 224 runner-minutes a night (172 in
     the fuzz jobs, 52 in Arm's) and halves what a species is fuzzed; `nights` 2 saves 192, 124

@@ -572,9 +572,12 @@ def cost(args):
     kind, what the jobs do, the time of a whole sweep and the fuzz's rate by function, species
     and machine, for the nights from --since to --until."""
     rows = read(args.file, COST_COLUMNS)
-    # --since and --until (checked by iso_date at the parser; a caller that builds the arguments
-    # itself passes real days) pick the nights, by the date of their run, to quote one set of them,
-    # as the nights of five functions, apart from the two of four.
+    # --since and --until pick the nights, by the date of their run, to quote one set of them,
+    # as the nights of five functions, apart from the two of four. The parser has checked them;
+    # a caller that builds the arguments itself is checked here, as the strings are compared.
+    for given in (args.since, args.until):
+        if given:
+            iso_date(given)
     rows = [r for r in rows if (not args.since or r["date"] >= args.since)
             and (not args.until or r["date"] <= args.until)]
     if not rows:
@@ -868,17 +871,22 @@ def selftest(args):
         except argparse.ArgumentTypeError:
             continue
         raise AssertionError("a date was taken: " + repr(bad))
-    # The command line takes a date only through iso_date, on all four options.
+    # The command line takes a date only through iso_date, on all four options: a real day
+    # parses, and a bad one is refused with a message that names it.
     for command in ("fetch", "cost"):
         for option in ("--since", "--until"):
+            argv = [command] + (["x.tsv"] if command == "cost" else []) + [option]
+            assert getattr(build_parser().parse_args(argv + ["2026-11-20"]),
+                           option[2:]) == "2026-11-20"
             for given in ("2026-11-5", "2026-13-45"):
-                argv = [command] + (["x.tsv"] if command == "cost" else []) + [option, given]
+                said_err = io.StringIO()
                 try:
-                    with contextlib.redirect_stderr(io.StringIO()):
-                        build_parser().parse_args(argv)
+                    with contextlib.redirect_stderr(said_err):
+                        build_parser().parse_args(argv + [given])
                 except SystemExit:
+                    assert given + " is not a" in said_err.getvalue(), said_err.getvalue()
                     continue
-                raise AssertionError("the command line took " + " ".join(argv))
+                raise AssertionError("the command line took " + " ".join(argv + [given]))
     print("pool.py selftest: the fault-run rule, the log readers and the dates passed")
 
 
