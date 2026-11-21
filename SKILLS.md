@@ -2,10 +2,10 @@
 
 Lessons about benchmarking, the JIT and the Vector API that every port follows. Most were learned
 in Varka (github.com/vecbricks/varka, its `sql/varka/skills/`) and are rewritten here for a vector
-math library; the last sections are what the `exp`, `log`, `log1p`, `log10` and `expm1` ports
-taught. Each entry says where its numbers come from. A new lesson goes in the section it belongs
-to, as a short entry; a negative result belongs here too, since it stops the next port re-trying
-a settled question.
+math library; the last sections are what the `exp`, `log`, `log1p`, `log10`, `expm1` and `sinh`
+ports taught. Each entry says where its numbers come from. A new lesson goes in the section it
+belongs to, as a short entry; a negative result belongs here too, since it stops the next port
+re-trying a settled question.
 
 ## Benchmarking with JMH
 
@@ -714,9 +714,10 @@ a settled question.
   calls first, the core as soon as its argument exists, then only Vector API operations. From 22
   up the C needs `exp`, and `Exp.expCore` beside `Expm1`'s body would be two port bodies in one
   graph (above), so those lanes, the infinities and the NaNs are finished per lane by
-  `StrictMath.sinh`. The rows of `SinhBenchmark` (`finish256`, `finishPreferred`) pass
-  `bench/alloc-check.py` on common and mixed data, at the host's flags and as AVX2; they were
-  run before any test was written, so a body that boxed would have shown first.
+  `StrictMath.sinh`. The rows of `SinhBenchmark` (`finish256`, `finishPreferred`) are
+  held by `bench/alloc-check.py`, which CI runs on common and mixed data at the runner's flags
+  and as AVX2, and no figure of theirs is committed; they were run locally before any test was
+  written, so a body that boxed would have shown first.
 - **The two forms of the first range share one division.** `h*(2.0*t-t*t/(t+one))` below `|x| =
   1` and `h*(t+t/(t+one))` from it on differ in the numerator and in the sign of `q`'s term; each
   lane's numerator is picked and the one quotient is formed, and both sums are computed and
