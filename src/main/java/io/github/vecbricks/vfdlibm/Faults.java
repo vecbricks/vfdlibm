@@ -29,9 +29,11 @@ package io.github.vecbricks.vfdlibm;
  * <p>This class is in the main sources, so the shipped jar reads the property too: a JVM started
  * with {@code -Dvfdlibm.fault=exp.dropCorrection}, for example through a stray {@code
  * JAVA_TOOL_OPTIONS}, gets wrong results from {@link VFdlibm#exp}. The property is meant for this
- * project's tests only. So that such a JVM does not go unnoticed, loading this class with a fault
- * planted prints one warning to {@code System.err}; it runs once, in this class's initialiser, and
- * adds nothing to any vector body.
+ * project's tests only: it and the fault names are not part of the public API or of the
+ * compatibility promise, and any release, a patch included, may rename or remove them. So that
+ * such a JVM does not go unnoticed, loading this class with a fault planted prints one warning to
+ * {@code System.err}; it runs once, in this class's initialiser, and adds nothing to any vector
+ * body.
  */
 final class Faults {
 
