@@ -94,12 +94,13 @@ class NightlyTest {
    * longest is 614,400 (exp.dropKForcing), which a million would clear only 1.6 times, but the
    * seed is fixed. One thread finding the fault is enough, so a fault's index is the smaller of
    * its two threads': the largest is 57,344 (exp.dropKForcing), and a million inputs is 17
-   * times that (14 times the first thread's alone, 69,632). The time was the trouble: a first block of 4,096
-   * inputs takes 0.1 to 0.2 s here, JIT warm-up, and the 20,480 inputs of expm1.dropKForcing
-   * 0.38 s at 128 bits, of the one second the test used to allow. On GitHub's x86 runner (4 cores, 128 bits) the
-   * one second drew 32,768 inputs, 16,384 a thread, about 31,000 a second, one block short of
-   * that fault (run 44893905573, job 136815350908). Now the inputs are bounded and the seconds
-   * only end a hung run. The test takes 0.4 to 2.5 s here, 1.0 to 2.5 s at 128 bits.
+   * times that (14 times the first thread's alone, 69,632). The time was the trouble: a first
+   * block of 4,096 inputs takes 0.1 to 0.2 s here, JIT warm-up, and the 20,480 inputs of
+   * expm1.dropKForcing 0.38 s at 128 bits, of the one second the test used to allow. On GitHub's
+   * x86 runner (4 cores, 128 bits) the one second drew 32,768 inputs, 16,384 a thread, about
+   * 31,000 a second, one block short of that fault (run 44893905573, job 136815350908). Now the
+   * inputs are bounded and the seconds only end a hung run. The test takes 0.4 to 2.5 s here, 1.0
+   * to 2.5 s at 128 bits.
    */
   private static final String DRAWS = "1000000";
 
