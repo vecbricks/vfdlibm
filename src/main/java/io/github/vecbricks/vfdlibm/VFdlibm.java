@@ -28,7 +28,11 @@ import jdk.incubator.vector.VectorMask;
  * <p>The system property {@code vfdlibm.fault} plants a known fault in a function, to prove that
  * this project's tests catch it, and it works in the shipped jar too: never set it outside those
  * tests, including through {@code JAVA_TOOL_OPTIONS}. A JVM with a fault planted prints a warning
- * to {@code System.err} once, when the first function that reads its faults is initialised.
+ * to {@code System.err} once, when the first function that reads its faults is initialised. The
+ * property and the fault names are for this project's tests only: they are not part of the public
+ * API or of the compatibility promise, and any release, a patch included, may rename or remove
+ * them. With the property unset, the results are unchanged, and each lane still equals {@code
+ * StrictMath}'s.
  */
 public final class VFdlibm {
 

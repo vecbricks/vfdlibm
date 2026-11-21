@@ -162,9 +162,12 @@ blend, the per-lane finish, the order of a branch) is a patch too, because every
 same bits. 0.1.x supports JDK 25 only (`README.md`, "Supported JDKs"). What no version may
 change is the contract: **each lane of each function equals
 `StrictMath`'s result on that input, by `Double.doubleToRawLongBits`**. A result that differs
-from `StrictMath`'s is a bug and a fix, never a breaking change. A breaking change has a
-changelog line that starts with `**Breaking:**` and says what a client must do, and its pull
-request says the same. 1.0.0 promises that the surface stays; it is not scheduled.
+from `StrictMath`'s is a bug and a fix, never a breaking change. The property `vfdlibm.fault`
+and the fault names are for this project's tests only: they are not part of the public API or of
+the compatibility promise, and any release, a patch included, may rename or remove them. With the
+property unset, the results are unchanged, and each lane still equals `StrictMath`'s. A breaking
+change has a changelog line that starts with `**Breaking:**` and says what a client must do, and
+its pull request says the same. 1.0.0 promises that the surface stays; it is not scheduled.
 
 **The release is owner-run, from a tag.** `.github/workflows/release.yml` is a dry run only: it
 publishes nothing and holds no secret; it shows on GitHub's runners that a tag would build, sign

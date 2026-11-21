@@ -124,7 +124,7 @@ five are a later, optional set; the large-argument reduction of the trigonometri
 - Java 25 only for 0.1.x, the Vector API module, no preview features. The Vector API is
   incubating and C2's lowering of it moves between JDK releases, so no other JDK is measured,
   and bit identity is tested on 25 alone (every workflow pins Zulu 25); there is no CI row
-  for a newer JDK (Max's decision of 21 November 2026, closing #38's step 5).
+  for a newer JDK (the owner's decision of 21 November 2026, closing #38's step 5).
 - Lines at most 100 columns; ASCII only, except for string literals that need it.
 - Commits and pull requests end with `Generated-by: <tool> (<model>)` when AI tooling was used.
 
