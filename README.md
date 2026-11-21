@@ -3,36 +3,134 @@
 fdlibm on the Java Vector API: math functions over `DoubleVector` lanes whose every lane is
 bit-identical to `java.lang.StrictMath`.
 
-**Status: 0.x.** `exp`, `expm1`, `log`, `log1p` and `log10` are ported; 0.1.0, the first
-release, is being prepared (`CHANGELOG.md`). Functions are added one at a time, as
-[Varka](https://github.com/vecbricks/varka) needs them.
-A minor version may break the API and a patch may not; adding a function is a patch.
-Bit identity with `StrictMath` is the contract, and no version changes it (`CHANGELOG.md`).
+**Status: 0.x.** `exp`, `expm1`, `log`, `log1p` and `log10` are ported and released:
+`io.github.vecbricks:vfdlibm` 0.1.0 is on Maven Central. Functions are added one at a time, as
+[Varka](https://github.com/vecbricks/varka) needs them. A minor version may break the API and a
+patch may not; adding a function is a patch. Bit identity with `StrictMath` is the contract, and
+no version changes it (`CHANGELOG.md`).
 
 ## Use
 
-From 0.1.0 (it is not on Maven Central before the owner has released it):
+A client that depends on the released jar, from Maven Central. Its `pom.xml`:
 
 ```xml
-<dependency>
-  <groupId>io.github.vecbricks</groupId>
-  <artifactId>vfdlibm</artifactId>
-  <version>0.1.0</version>
-</dependency>
+<project xmlns="http://maven.apache.org/POM/4.0.0">
+  <modelVersion>4.0.0</modelVersion>
+  <groupId>example</groupId>
+  <artifactId>client</artifactId>
+  <version>1</version>
+
+  <properties>
+    <maven.compiler.release>25</maven.compiler.release>
+  </properties>
+
+  <dependencies>
+    <dependency>
+      <groupId>io.github.vecbricks</groupId>
+      <artifactId>vfdlibm</artifactId>
+      <version>0.1.0</version>
+    </dependency>
+  </dependencies>
+</project>
 ```
 
-The Vector API is still incubating, so a client that does not add its module already must:
-`--add-modules jdk.incubator.vector` for `javac` and for `java` (in Maven, a `compilerArgs`
-entry and the same flag in the test and run JVMs), or `requires jdk.incubator.vector;` in a
-`module-info.java`. The jar's module name is `io.github.vecbricks.vfdlibm`. It needs Java 25.
+and `src/main/java/example/Main.java`, which calls `VFdlibm.exp` on the lanes of an array, in
+both forms (`f(x)` and `f(x, live)`), and compares with `StrictMath`:
 
 ```java
-DoubleVector y = VFdlibm.exp(DoubleVector.fromArray(DoubleVector.SPECIES_PREFERRED, xs, i));
-DoubleVector z = VFdlibm.exp(y, live); // only the lanes set in live; the others keep y's bits
+package example;
+
+import io.github.vecbricks.vfdlibm.VFdlibm;
+import jdk.incubator.vector.DoubleVector;
+import jdk.incubator.vector.VectorMask;
+import jdk.incubator.vector.VectorSpecies;
+
+public final class Main {
+  private static final VectorSpecies<Double> SPECIES = DoubleVector.SPECIES_PREFERRED;
+
+  public static void main(String[] args) {
+    double[] xs = {0.5, 1.0, 2.0, -1.0, 10.0, 700.0, 710.0, Double.NaN, 0.0, -0.0, 1e-300, 3.5};
+    double[] ys = new double[xs.length];
+
+    int i = 0;
+    for (; i < SPECIES.loopBound(xs.length); i += SPECIES.length()) {
+      VFdlibm.exp(DoubleVector.fromArray(SPECIES, xs, i)).intoArray(ys, i);
+    }
+    for (; i < xs.length; i++) { // the tail the species does not fill, one lane at a time
+      ys[i] = StrictMath.exp(xs[i]);
+    }
+
+    boolean same = true;
+    for (int k = 0; k < SPECIES.loopBound(xs.length); k++) { // the lanes VFdlibm computed
+      long got = Double.doubleToRawLongBits(ys[k]);
+      same &= got == Double.doubleToRawLongBits(StrictMath.exp(xs[k]));
+    }
+    System.out.println("exp(" + xs[0] + ") = " + ys[0] + " at " + SPECIES.vectorBitSize()
+        + " bits; the computed lanes have StrictMath's bits: " + same);
+
+    // Only the lanes set in the mask are computed; the others keep the input's bits.
+    DoubleVector x = DoubleVector.fromArray(SPECIES, xs, 0, SPECIES.indexInRange(0, xs.length));
+    VectorMask<Double> live = VectorMask.fromLong(SPECIES, 0b1);
+    DoubleVector z = VFdlibm.exp(x, live);
+    System.out.println("masked: lane 0 is " + z.lane(0) + ", lane 1 is " + z.lane(1));
+  }
+}
 ```
 
-Each method takes a vector of any species of 128 bits or more. Ported so far: `exp`, `expm1`,
-`log`, `log10` and `log1p`.
+The Vector API is still incubating, and the JVM does not resolve an incubating module unless it
+is told to, so **at run time** a client adds the module: `--add-modules jdk.incubator.vector`
+on the class path, as here (without it the run fails with `NoClassDefFoundError:
+jdk/incubator/vector/DoubleVector`; on the JDK this was checked with, 25.0.5, a plain `javac`
+needed no flag for a class-path build, and passing it there is harmless). The example assumes
+the host's preferred species is 128 bits or more, which the library requires of every vector
+it is given. The class path comes from Maven:
+
+```sh
+mvn -q compile org.apache.maven.plugins:maven-dependency-plugin:3.7.0:build-classpath \
+  -Dmdep.outputFile=cp.txt
+java --add-modules jdk.incubator.vector -cp "target/classes:$(cat cp.txt)" example.Main
+```
+
+which prints, on a host with 512-bit vectors (the width is the host's), and the JVM's own
+warning that an incubator module is in use:
+
+```
+exp(0.5) = 1.6487212707001282 at 512 bits; the computed lanes have StrictMath's bits: true
+masked: lane 0 is 1.6487212707001282, lane 1 is 1.0
+```
+
+On the module path, the client names the module instead of passing the flag: a
+`src/main/java/module-info.java` that requires the jar's module,
+`io.github.vecbricks.vfdlibm`, and the Vector API's:
+
+```java
+module example {
+  requires io.github.vecbricks.vfdlibm;
+  requires jdk.incubator.vector;
+}
+```
+
+built and run with no `--add-modules` at all (without the second `requires`, `javac` says that
+the package `jdk.incubator.vector` is not visible):
+
+```sh
+mvn -q clean compile org.apache.maven.plugins:maven-dependency-plugin:3.7.0:build-classpath \
+  -Dmdep.outputFile=cp.txt
+java --module-path "target/classes:$(cat cp.txt)" -m example/example.Main
+```
+
+Each function takes a vector of any species of 128 bits or more. Ported so far: `exp`,
+`expm1`, `log`, `log10` and `log1p`. The system property `vfdlibm.fault` plants a fault, for
+this project's tests only, and works in the shipped jar too: never set it, including through
+`JAVA_TOOL_OPTIONS`; a JVM that has it set prints a warning to `System.err` once.
+
+## Supported JDKs
+
+0.1.x supports **JDK 25 only**. The Vector API is incubating, and its API and C2's lowering of
+it move between JDK releases, so what a newer JDK does with these functions has not been
+measured here. The contract, bit identity with `StrictMath`, is tested on JDK 25 and on no
+other: every CI row, the nightly sweep and the benchmarks run Zulu 25. The example above was run as
+written on JDK 25 against 0.1.0 from Central; no job here repeats that.
 
 ## Why
 

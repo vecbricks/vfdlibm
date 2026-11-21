@@ -159,7 +159,8 @@ Changed or Fixed; a change to tests, docs or the build alone does not.
 **The promise, while the version is 0.x.** A minor version may break the public API and a patch
 may not. Adding a function is a patch. Changing an arm (how a function reaches its result: the
 blend, the per-lane finish, the order of a branch) is a patch too, because every arm gives the
-same bits. What no version may change is the contract: **each lane of each function equals
+same bits. 0.1.x supports JDK 25 only (`README.md`, "Supported JDKs"). What no version may
+change is the contract: **each lane of each function equals
 `StrictMath`'s result on that input, by `Double.doubleToRawLongBits`**. A result that differs
 from `StrictMath`'s is a bug and a fix, never a breaking change. A breaking change has a
 changelog line that starts with `**Breaking:**` and says what a client must do, and its pull

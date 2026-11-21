@@ -121,7 +121,10 @@ five are a later, optional set; the large-argument reduction of the trigonometri
   general, so no proof covers them as a rule. A specific use proven equal for every input would
   follow the proof rule above like any other different computation. No `Math.*` call inside a
   vector body except the per-lane `StrictMath` fallback.
-- Java 25, the Vector API module, no preview features.
+- Java 25 only for 0.1.x, the Vector API module, no preview features. The Vector API is
+  incubating and C2's lowering of it moves between JDK releases, so no other JDK is measured,
+  and bit identity is tested on 25 alone (every workflow pins Zulu 25); there is no CI row
+  for a newer JDK (Max's decision of 21 November 2026, closing #38's step 5).
 - Lines at most 100 columns; ASCII only, except for string literals that need it.
 - Commits and pull requests end with `Generated-by: <tool> (<model>)` when AI tooling was used.
 
@@ -161,7 +164,9 @@ released version, and the next function arrives as a patch or a minor.
   --release` on the jars, which holds the licence files, the module name and a consumer on the
   class path and the module path; a `## [0.1.0]` changelog section.
 - **What a client needs:** the jar's module is `io.github.vecbricks.vfdlibm`; the Vector API is
-  incubating, so a client adds `--add-modules jdk.incubator.vector` at compile time and at run
-  time, and a modular client `requires jdk.incubator.vector`.
+  incubating and the JVM does not resolve it unless told to, so a class-path client adds
+  `--add-modules jdk.incubator.vector` at run time (a plain `javac` needed none on 25.0.5, and
+  passing it is harmless), and a modular client `requires jdk.incubator.vector` and needs no
+  flag at all.
 - **How it is cut:** by the owner from a tag (`dev/release.sh`, then `mvn -B -Prelease deploy`);
   `release.yml` is a dry run only.
