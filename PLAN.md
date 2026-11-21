@@ -161,7 +161,8 @@ released version, and the next function arrives as a patch or a minor.
   --release` on the jars, which holds the licence files, the module name and a consumer on the
   class path and the module path; a `## [0.1.0]` changelog section.
 - **What a client needs:** the jar's module is `io.github.vecbricks.vfdlibm`; the Vector API is
-  incubating, so a client adds `--add-modules jdk.incubator.vector` at compile time and at run
-  time, and a modular client `requires jdk.incubator.vector`.
+  incubating and the JVM does not resolve it unless told to, so a class-path client adds
+  `--add-modules jdk.incubator.vector` at run time (`javac` needs no flag), and a modular client
+  `requires jdk.incubator.vector` and needs no flag at all.
 - **How it is cut:** by the owner from a tag (`dev/release.sh`, then `mvn -B -Prelease deploy`);
   `release.yml` is a dry run only.

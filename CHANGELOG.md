@@ -21,7 +21,8 @@ contract of every version is the same: each lane of each function equals
   operation except where `PROOFS.md` proves a different computation equal for every input.
 - The jar holds `LICENSE` and `NOTICE` (Sun's fdlibm notice) under `META-INF/`, and names its
   module `io.github.vecbricks.vfdlibm`. A client needs the incubating Vector API module
-  (`--add-modules jdk.incubator.vector`) at compile time and at run time.
+  (`--add-modules jdk.incubator.vector`) at run time, or `requires jdk.incubator.vector;` in its
+  `module-info.java`.
 
 [Unreleased]: https://github.com/vecbricks/vfdlibm/compare/v0.1.0...HEAD
 [0.1.0]: https://github.com/vecbricks/vfdlibm/releases/tag/v0.1.0
