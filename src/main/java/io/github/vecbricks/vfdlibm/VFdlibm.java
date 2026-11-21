@@ -35,11 +35,11 @@ import jdk.incubator.vector.VectorMask;
  *       GitHub's Arm runner, whose vectors are 128 bits, the preferred species, where all 24 rows
  *       passed ({@code bench/results/alloc-arm-2026-11-20.txt}, an allocation reading and no
  *       timing).
- *   <li>On the EPYC 7763, an AVX2 host, at 128 bits {@code exp} and {@code log} allocate 0.5 to
- *       0.6 million bytes per op (the files of 20 November 2026 named below), and {@code exp}
- *       the same on a Xeon 8573C, at the head of the pair in {@code
- *       bench/results/exp-onediv-xeon8573c-2026-11-03.txt}. {@code log10}, {@code log1p} and
- *       {@code expm1} have no 128-bit row.
+ *   <li>At 128 bits {@code exp} and {@code log} allocate 0.5 to 0.6 million bytes per op on
+ *       x86, the finish arm that {@code VFdlibm} calls: on the EPYC 7763, an AVX2 host, in the
+ *       files of 20 November 2026 named below, and on the Xeon Platinum 8573C in {@code
+ *       bench/results/exp-xeon8573c-2026-11-21.txt} and {@code log-xeon8573c-2026-11-21.txt}.
+ *       {@code log10}, {@code log1p} and {@code expm1} have no 128-bit row.
  *   <li>On the EPYC 7763 at 512 bits, which is the Vector API's Java fallback there, each of the
  *       five functions allocates 0.9 to 1.8 million bytes per op. The files of 20 November 2026
  *       hold this reading and the 128-bit one above ({@code exp-epyc7763-2026-11-20.txt}, and
@@ -51,7 +51,13 @@ import jdk.incubator.vector.VectorMask;
  *       and {@code expm1} and {@code log1p} less than 0.5 ({@code
  *       bench/results/max-finish-laptop-2026-11-20.txt}, a laptop file and not a headline, read
  *       at 512 bits and as an AVX2 host at 256; {@code SPECIES_MAX} at 128 bits was not read).
- *       The host files of {@code exp} and {@code log10} read inside that range.
+ *       The host files read the same for the arm {@code VFdlibm} calls (readings of 21 and 20
+ *       November 2026): on the Xeon Platinum 8573C (the files named {@code
+ *       <function>-xeon8573c-2026-11-21.txt}) 30,912 bytes per op for {@code exp}, 30,432 for
+ *       {@code log} and {@code log10}, and 0.012 and 0.009 for the guarded arms of {@code
+ *       expm1} and {@code log1p}; on the EPYC 7763 at 256 bits 36,992 for {@code exp} and
+ *       36,672 for {@code log10} ({@code exp-epyc7763-2026-11-20.txt}, {@code
+ *       log10-epyc7763-2026-11-20.txt}).
  *   <li>Not measured: any port's speed at 512 bits against 256 on the EPYC 9V74 draws that have
  *       AVX-512 ({@code HARDWARE.md} has only a datapath reading for them, and lists {@code
  *       MaxVectorSize=64}), any port's speed on Arm, and allocation on an Arm host with vectors

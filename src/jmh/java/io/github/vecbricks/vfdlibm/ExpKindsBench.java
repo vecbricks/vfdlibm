@@ -29,8 +29,9 @@ import org.openjdk.jmh.annotations.Warmup;
  * mixed data costs an arm its time there: the scalar {@code StrictMath.exp} loop, {@link
  * VFdlibm#exp} (rare lanes finished per lane) and {@link Exp#expBlended}, each vector form at 256
  * bits and at the host's preferred species, over an array of 1024 doubles. The time in question:
- * on the Xeon Platinum 8573C the blended arm's minimum at the preferred species is 1,715 ns on
- * common data and 4,768 ns on mixed ({@code bench/results/exp-onediv-xeon8573c-2026-11-03.txt}).
+ * on the Xeon Platinum 8573C the blended arm's minimum at the preferred species is 1,909 ns on
+ * common data and 4,998 ns on mixed, 2.62 times ({@code
+ * bench/results/exp-xeon8573c-2026-11-21.txt}).
  *
  * <p>{@code inputs} picks the data. {@code common} and {@code mixed} are {@code ExpBenchmark}'s
  * arrays: draws from {@code [-20, 20]}, and for {@code mixed} one input in 16 replaced by a NaN,
@@ -43,9 +44,11 @@ import org.openjdk.jmh.annotations.Warmup;
  * the kind has fewer, so its share there is that cost scaled by its count over 66 where the cost
  * is one per lane; a cost per vector, such as the finish arm's branch, would not add up that way.
  * Nor need the shares add up to {@code mixed}'s excess over {@code none}. A hypothesis, which
- * these rows are there to test and no results file yet backs: each value runs in a fork of its
- * own, where C2 profiles one kind's path and a branch repeats one outcome, while {@code mixed}
- * interleaves four, and what is left over would be that interleaving, not any one kind.
+ * these rows are there to test, and whose first run ({@code
+ * bench/results/exp-kinds-xeon8573c-2026-11-21.txt}, one run) decides nothing: each value runs
+ * in a fork of its own, where C2 profiles one kind's path and a branch repeats one outcome,
+ * while {@code mixed} interleaves four, and what is left over would be that interleaving, not
+ * any one kind.
  * ({@code common} is not the baseline: {@code ExpBenchmark} draws its common array without the
  * draws that place the rare inputs, so its ordinary values are other draws from the same range.)
  * Every kind has its rare lanes in the same vectors, 62 of the 256 four-lane vectors and 56 of
