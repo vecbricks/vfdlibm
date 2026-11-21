@@ -127,17 +127,19 @@ and the fault names are for this project's tests only: they are not part of the 
 the compatibility promise, and any release, a patch included, may rename or remove them. With the
 property unset, the results are unchanged, and each lane still equals `StrictMath`'s.
 
-**Which species to pass.** Every species of 128 bits or more gives the same bits, at different
-costs. The allocation check (`bench/alloc-check.py`, run by CI) covers 256 bits and the
-preferred species, which is 512 bits on a host that prefers it and 128 bits on Arm, where it
-passed (`bench/results/alloc-arm-2026-11-20.txt`, an allocation reading and no timing). 128 bits
-on x86 allocates 0.9 to 1.9 million bytes per op and 512 bits without AVX-512 1.1 to 1.6 million
-(the EPYC 7763 files of `exp`, `log` and `log1p` in `bench/results/`). At `SPECIES_MAX`, `exp`,
-`log` and `log10` allocate 30432 to 36992 bytes per op on data with rare lanes, and `expm1` and
-`log1p` less than 0.5 (`bench/results/max-finish-laptop-2026-11-20.txt`, a laptop file and not a
-headline). Not measured: the speed of 512 bits against 256 on a CPU whose AVX-512 datapath is
-256 bits wide, such as the EPYC 9V74 (`HARDWARE.md` has its datapath reading), and the speed of
-any port on Arm. The same list is in the Javadoc of `VFdlibm`.
+**Which species to pass.** Every species of 128 bits or more gives the same bits; what differs is
+what the body allocates. The allocation check (`bench/alloc-check.py`, run by CI) covers, on x86,
+256 bits and the preferred species, and on Arm the preferred species, 128 bits, where it passed
+(`bench/results/alloc-arm-2026-11-20.txt`, an allocation reading and no timing). On an x86 host
+without AVX-512, the arms `exp` and `log` call allocate 0.9 to 1.4 million bytes per op at 128
+bits, and the arms `exp`, `log`, `log1p` and `expm1` call 1.1 to 1.7 million at 512 bits, which
+is the Java fallback there (the EPYC 7763 files in `bench/results/`). At `SPECIES_MAX`, on data
+with rare lanes, the arm `exp`, `log` and `log10` call allocates 30432 to 36993 bytes per op, and
+the arm `expm1` and `log1p` call less than 0.5 (`bench/results/max-finish-laptop-2026-11-20.txt`,
+a laptop file and not a headline, read at 512 and 256 bits). Not measured on a benchmark host:
+the speed of 512 bits against 256 on a CPU whose AVX-512 datapath is 256 bits wide, such as the
+EPYC 9V74 (`HARDWARE.md` has a probe reading), and the speed of any port on Arm. The same list
+is in the Javadoc of `VFdlibm`.
 
 ## Supported JDKs
 

@@ -22,37 +22,33 @@ import jdk.incubator.vector.VectorMask;
  * and returns every other lane of its argument untouched, raw bits and all. An inactive lane
  * never sends the vector down a slow path.
  *
- * <p>Which species to pass. Every species of 128 bits or more gives the same bits, but not at the
- * same cost, and the types do not say. What the files under {@code bench/results/} show:
+ * <p>Which species to pass. Every species of 128 bits or more gives the same bits; what differs
+ * is what the body allocates, which the files under {@code bench/results/} read:
  *
  * <ul>
- *   <li>256 bits, and 512 bits where the host's preferred species is 512, are what {@code
- *       bench/alloc-check.py} covers. CI runs it at 256 bits and at {@code
- *       DoubleVector.SPECIES_PREFERRED}, and fails a body that allocates 1 byte per op or more.
- *   <li>128 bits does not allocate on Arm, where it is the preferred species: all 24 of the
- *       check's {@code *Preferred} rows passed there ({@code
- *       bench/results/alloc-arm-2026-11-20.txt}, an allocation reading and no timing). On x86
- *       the 128-bit rows allocate 0.9 to 1.9 million bytes per op ({@code exp} and {@code log}
- *       in {@code bench/results/exp-epyc7763-2026-11-02.txt} and {@code
+ *   <li>Covered by {@code bench/alloc-check.py}, which CI runs and which fails a body that
+ *       allocates 1 byte per op or more: on x86, 256 bits and {@code
+ *       DoubleVector.SPECIES_PREFERRED}, with the runner's own flags and as an AVX2 host; on Arm,
+ *       the preferred species, 128 bits, where all 24 rows passed ({@code
+ *       bench/results/alloc-arm-2026-11-20.txt}, an allocation reading and no timing).
+ *   <li>128 bits on x86: the arms {@code exp} and {@code log} call allocate 0.9 to 1.4 million
+ *       bytes per op ({@code bench/results/exp-epyc7763-2026-11-02.txt} and {@code
  *       log-epyc7763-2026-11-02.txt}).
- *   <li>512 bits on a host without AVX-512 runs in the Vector API's Java fallback, and its rows
- *       allocate 1.1 to 1.6 million bytes per op (the {@code exp}, {@code log} and {@code log1p}
- *       files of the EPYC 7763 in {@code bench/results/}).
+ *   <li>512 bits on a host without AVX-512, where it is the Vector API's Java fallback: the arms
+ *       {@code exp}, {@code log}, {@code log1p} and {@code expm1} call allocate 1.1 to 1.7
+ *       million bytes per op (their EPYC 7763 files in {@code bench/results/}).
  *   <li>{@code DoubleVector.SPECIES_MAX} is none of the fixed shapes. On data with rare lanes (the
- *       NaNs, infinities and out-of-range inputs that take their own path in the C), {@code exp},
- *       {@code log} and {@code log10} allocate 30432 to 36992 bytes per op there, and {@code
- *       expm1} and {@code log1p} less than 0.5 ({@code
- *       bench/results/max-finish-laptop-2026-11-20.txt}, a laptop file and not a headline).
- *   <li>Not measured: the speed of 512 bits against 256 on a CPU whose AVX-512 datapath is 256
- *       bits wide. The EPYC 9V74 draws that have AVX-512 prefer 512 bits, and the datapath probe
- *       reads their 512-bit lanes at 0.90 to 0.91 of the 256-bit rate ({@code HARDWARE.md}), but
- *       no port was timed there. No port's speed was benchmarked on Arm either.
+ *       NaNs, infinities and out-of-range inputs that take their own path in the C), the finish
+ *       arm of every function allocates 30432 to 36993 bytes per op there. {@code exp}, {@code
+ *       log} and {@code log10} call that arm; {@code expm1} and {@code log1p} call the guarded
+ *       arm, which reads less than 0.5 ({@code bench/results/max-finish-laptop-2026-11-20.txt}, a
+ *       laptop file and not a headline, read at 512 bits and as an AVX2 host at 256; {@code
+ *       SPECIES_MAX} at 128 bits was not read).
+ *   <li>Not measured on a benchmark host: the speed of 512 bits against 256 on a CPU whose
+ *       AVX-512 datapath is 256 bits wide. The EPYC 9V74 draws that have AVX-512 prefer 512 bits,
+ *       and {@code HARDWARE.md} reads their 512-bit lanes at 0.90 to 0.91 of the 256-bit rate in
+ *       a probe, but no port was timed there. No port's speed was benchmarked on Arm either.
  * </ul>
- *
- * <p>So the species the check covers are those of 256 bits, the preferred species, and 512 bits
- * where that is the preferred species. 128 bits on x86 and 512 bits without AVX-512 allocate, and
- * at {@code SPECIES_MAX} {@code exp}, {@code log} and {@code log10} allocate when a lane takes a
- * rare path.
  *
  * <p>Each function is ported from fdlibm 5.3's C source, kept in {@code reference/fdlibm-5.3/};
  * the class that holds a function's port names the file it follows and carries its notice.
