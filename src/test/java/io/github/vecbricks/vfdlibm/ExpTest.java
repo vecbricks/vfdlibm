@@ -556,12 +556,16 @@ class ExpTest {
   /**
    * exp's faults, each with the check that must catch it: both arms, at each width the host has,
    * over the thresholds and dense draws from the finite-result range. The same inputs pass in the
-   * normal run, through {@link #faultRunInputsPass}.
+   * normal run, through {@link #faultRunInputsPass}. {@link Exp#DROP_K_FORCING} is caught by the
+   * thresholds alone: with the forcing dropped, the doubles just below the top of word
+   * 0x3fd62e42, which {@link #thresholds} takes around the next word's first double, get k = +-1
+   * (PROOFS.md, L1, H1).
    */
   static Map<String, Executable> faultCatchers() {
     Map<String, Executable> catchers = new LinkedHashMap<>();
     for (String fault : new String[] {
-        Exp.DROP_CORRECTION, Exp.CONSTANT_OFF_BY_ONE_ULP, Exp.THRESHOLD_MOVED}) {
+        Exp.DROP_CORRECTION, Exp.CONSTANT_OFF_BY_ONE_ULP, Exp.THRESHOLD_MOVED,
+        Exp.DROP_K_FORCING}) {
       catchers.put(fault, () -> forEachWidth(species -> {
         PlantedFaultTest.assertCaught(fault, () -> Oracle.assertUnary(
             "VFdlibm.exp", species, VFdlibm::exp, StrictMath::exp, faultRunInputs()));

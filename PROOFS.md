@@ -104,8 +104,15 @@ of the word, and at `0x3fd62e42_fefa3a08` the far form with `k = 1` is not exp);
 `Exp.expBlended`), unmasked and masked, against `StrictMath` at the words `0x3e2fffff`,
 `0x3e300000`, `0x3fd62e42`, `0x3fd62e43`, `0x3ff0a2b1` and `0x3ff0a2b2`, both signs, low words 0,
 `0xffffffff` and 1024 seeded, plus the 4096 doubles each side of `+-0.5 ln2`, at every width
-and `SPECIES_MAX`; with
-the `k` forcing removed it fails.
+and `SPECIES_MAX`. With the `k` forcing removed, the planted fault `exp.dropKForcing`
+(`Exp.DROP_K_FORCING`), eight `ExpTest` cases fail at each width they run:
+`thresholdsAndSpecials`, `foldBoundaries`, `foldBoundariesAtMaxSpecies`, `masked`,
+`maxSpecies`, `faultRunInputsPass`, and `coreAndRareMaskAreTheFinishArm` with its
+`AtMaxSpecies` form. 18 of `thresholds()`' 2620 inputs differ, the first in array order
+`0x3fd62e42_ffffffcb`, and 571 of `foldBoundaries`' 28698, the first `0x3fd62e42_fefa3a08`,
+which is H1's. That list is a run of `-Dtest=ExpTest` with the fault, which CI does not make;
+what CI checks is `ExpTest.faultCatchers`, which requires both arms to fail at each width the
+host has on `faultRunInputs()`.
 
 **Encoding.** `proofs/exp_zero_reduction.smt2`, partly machine-checked. Checked: step 1's and
 step 3's `x - (+0) = x` and `+0 - q = -q` (the exact value is the double or its negation, which
