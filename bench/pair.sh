@@ -183,7 +183,7 @@ for r in $(seq 1 "$rounds"); do
   fi
 done
 
-flags="$(grep -m1 -E '^(flags|Features)' /proc/cpuinfo)"
+flags="$(grep -m1 -E '^(flags|Features)' /proc/cpuinfo || true)"
 has() { if grep -qw "$1" <<<"$flags"; then echo yes; else echo no; fi; }
 {
   echo "# Pair: $regex, base against head, $(date -u +'%Y-%m-%d %H:%M UTC')"

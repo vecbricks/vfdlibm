@@ -251,7 +251,7 @@ re-trying a settled question.
   one exists, it is read with the other AVX-512 hosts.
 - **The benchmark fails on any other CPU, and is retried, never relaxed.**
   `.github/workflows/benchmark.yml` takes a `host` input with exactly five choices (four x86
-  hosts and the Arm one above) and maps each to a model-name string fixed in `bench/host.sh`'s
+  hosts and the Arm one above) and maps each to a CPU string fixed in `bench/host.sh`'s
   table (the workflow's probe step runs
   `bench/host.sh --expect <host>`, and CI runs `bench/host.sh --self-test`, which classifies
   every kind of machine in the pool's census), as runs of that host printed it, matched ignoring

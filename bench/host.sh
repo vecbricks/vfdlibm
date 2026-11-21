@@ -57,7 +57,9 @@ export LC_ALL=C
 # checked, as no x86 string names a stepping. The flags are the Features line's, and `sve sve2`
 # are required: a guest that hid them would run at other JVM flags (HARDWARE.md). The fields
 # are the ones the probe of run 44925264619 printed (the self-test holds its stanza), not
-# lscpu's name for them, which comes from lscpu's own table.
+# lscpu's name for them, which comes from lscpu's own table. A kernel that began to print a
+# model name there would read as another string and match no row: a miss, never a looser check,
+# and the row would then be re-keyed on what the new probe prints.
 HOSTS=(
   "epyc7763|end|AMD EPYC 7763 64-Core Processor|"
   "xeon8573c|any|INTEL(R) XEON(R) PLATINUM 8573C|"
@@ -319,7 +321,9 @@ self_test() {
   fi
   # Each file as the check runs it: the key of the machine passes and writes its string, and
   # no other key passes, whatever the machine.
-  local fenv; fenv="$(mktemp)"
+  local fenv
+  if ! fenv="$(mktemp)"; then echo "host.sh: no temporary file for the self-test" >&2
+    rm -rf "$fx"; return 1; fi
   fxexpect() { # <file> <key> <want status>
     n=$((n + 1)); : > "$fenv"
     GITHUB_ENV="$fenv" expect_and_record "$2" "$(this_cpu "$fx/$1")" "$(this_flags "$fx/$1")" \
