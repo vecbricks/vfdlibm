@@ -661,9 +661,7 @@ re-trying a settled question.
   first argument's bits in a lane that is not live (`Oracle.assertBinaryMasked`'s contract). A pair
   function's mismatch file, and a hard-cases file of one, say `# arity: 2` before the first input
   and hold `0x<x> 0x<y>` on a line: `Inputs.hardCasePairs` reads one, and `Inputs.hardCases` refuses
-  it by that line. The unary functions' output is unchanged: the sweep and the fuzz of the seven,
-  run on fixed slices with one thread before and after, wrote the same logs and mismatch files (101
-  files, with four planted faults).
+  it by that line.
 - **Its cost, measured (the logs of 3 to 19 November 2026).** The first sizing was a laptop's,
   from a sample of high words, before any night had run; the nights' own logs replaced it.
   `bench/pool/pool.py cost --since 2026-11-05

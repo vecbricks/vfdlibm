@@ -38,8 +38,8 @@ import jdk.incubator.vector.VectorSpecies;
  *
  * <p>A function of two arguments takes {@code --argument 1} (the default) or {@code 2}: the
  * high words swept are that argument's, each with its three low words, and each swept value gets
- * a partner for the other argument, drawn from the seed, the argument, the high word and the low
- * word's index alone ({@link #partner}), so any pair of the pass replays from the seed. A pair
+ * a partner for the other argument, drawn from the seed, the argument and the input's index
+ * alone ({@link #partner}), so any pair of the pass replays from the seed. A pair
  * is checked once in a pass, so a night that sweeps both arguments checks 3 * 2^33 pairs of the
  * 2^128. A bug that needs two particular high words together is left to the {@link Fuzz}'s
  * related pairs.
@@ -247,8 +247,9 @@ final class Sweep {
    * The partner of the swept value {@code swept}, the {@code index}-th input of the pass (three a
    * high word): a function of the seed, the argument swept and the index alone, of one kind in
    * four, by the top two bits of its first mix: a value of {@code specials}, with the sign its
-   * next bit gives; a double of the swept value's exponent; one within 64 binary exponents of it;
-   * or random bits. The significand and sign of the second and third kinds are random.
+   * next bit gives; a double of the swept value's exponent; one within 64 binary exponents of it
+   * (an offset of -64 to -1 a little likelier than one of 1 to 64); or random bits. The
+   * significand and sign of the second and third kinds are random.
    */
   static double partner(long seed, int argument, long index, double swept, double[] specials) {
     long r = Nightly.mix(seed + 0xa5a5a5a5a5a5a5a5L * argument + index * 0x9e3779b97f4a7c15L);

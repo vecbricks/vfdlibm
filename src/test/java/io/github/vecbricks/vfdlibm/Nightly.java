@@ -215,10 +215,17 @@ final class Nightly {
       String id, DoubleBinaryOperator oracle, List<Arm2> arms, Fuzz.PairEdges edges)
       implements Subject {
 
+    PairFunction {
+      if (arms.isEmpty() || edges.specials().length == 0
+          || edges.x().words().length == 0 || edges.y().words().length == 0) {
+        throw new IllegalArgumentException(id + " has no arm, no special value or no branch word");
+      }
+    }
+
     /**
-     * The functions of two arguments by name, in the order they are listed. A port adds its
-     * function to this initializer, as it adds a constant to {@link Function}; a test adds a
-     * stand-in and removes it again.
+     * The functions of two arguments by name, in the order they are listed. A port registers its
+     * function here, in {@code Nightly}, as it adds a constant to {@link Function}; a test adds
+     * a stand-in and removes it again.
      */
     static final List<PairFunction> KNOWN = new CopyOnWriteArrayList<>();
 
