@@ -1,7 +1,8 @@
 name: Nightly
 
 # The nightly correctness run (SKILLS.md, "The nightly sweep and fuzz"): every arm of exp,
-# expm1, log, log10, log1p and sinh, unmasked and masked, compared with StrictMath by raw bits.
+# expm1, log, log10, log1p, sinh and cosh, unmasked and masked, compared with StrictMath by raw
+# bits.
 #
 # - sweep (x86): every one of the 2^32 high words with three low words each (Sweep.java) at
 #   every width the drawn runner has except 128 bits: 256 and max on every draw, 512 on an
@@ -120,7 +121,7 @@ jobs:
         run: |
           # Every function of the night: each matrix and each check below reads this list, so a
           # new port is added here (and in `reach`, if it computes through another port).
-          all='exp expm1 log log10 log1p sinh'
+          all='exp expm1 log log10 log1p sinh cosh'
           # A dispatch's text is echoed in errors below: a line break in it would let a line of
           # the dispatcher's be read as a workflow command, so line breaks become spaces (which
           # every check below then refuses).
@@ -164,12 +165,16 @@ jobs:
           # function and every function that computes through it, by fault: log10 computes
           # through Log.logCore, where log's faults are, and sinh through Expm1.expm1Core, whose
           # faults reach it but expm1.thresholdMoved (sinh's k stops at 32, below the k = 56 it
-          # moves) and expm1.guardMissesFilter (the guarded arm's own).
+          # moves) and expm1.guardMissesFilter (the guarded arm's own); cosh through Exp.expCore,
+          # whose dropCorrection and constantOffByOneUlp reach it, but not thresholdMoved (the
+          # subnormal scale-back, which expCore leaves out) or dropKForcing (the word of 0.5 ln2,
+          # which is cosh's small range, computed from expm1's lines and not from exp).
           reach() {
             case "$1" in
               log.*) echo 'log log10' ;;
               expm1.dropCorrection | expm1.constantOffByOneUlp | expm1.dropKForcing)
                 echo 'expm1 sinh' ;;
+              exp.dropCorrection | exp.constantOffByOneUlp) echo 'exp cosh' ;;
               *) echo "${1%%.*}" ;;
             esac
           }
@@ -199,7 +204,7 @@ jobs:
             fault_args="-Dvfdlibm.fault=$FAULT"
           fi
           # A matrix holds at most 256 jobs, one per function and shard of the run: with all of
-          # today's 6 functions 32 shards are 192, so the 256-job check in the loop below starts
+          # today's 7 functions 32 shards are 224, so the 256-job check in the loop below starts
           # to refuse only when the list is longer. A stripe count (nights or slice-nights times
           # shards) is at most Sweep's 4096 chunks.
           count="$(wc -w <<< "$functions")"

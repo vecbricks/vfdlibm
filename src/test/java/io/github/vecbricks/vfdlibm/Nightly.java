@@ -120,7 +120,11 @@ final class Nightly {
         new Arm("Log1p.log1pBlended", x -> Log1p.log1pBlended(x, null), Log1p::log1pBlended),
         new Arm("Log1p.log1pFinish", x -> Log1p.log1pFinish(x, null), Log1p::log1pFinish))),
     SINH("sinh", StrictMath::sinh, List.of(
-        new Arm("VFdlibm.sinh", VFdlibm::sinh, VFdlibm::sinh)));
+        new Arm("VFdlibm.sinh", VFdlibm::sinh, VFdlibm::sinh))),
+    COSH("cosh", StrictMath::cosh, List.of(
+        // VFdlibm.cosh is Cosh.coshFinish, so the finish arm is checked under that name.
+        new Arm("VFdlibm.cosh", VFdlibm::cosh, VFdlibm::cosh),
+        new Arm("Cosh.coshSlice", x -> Cosh.coshSlice(x, null), Cosh::coshSlice)));
 
     final String id;
     final DoubleUnaryOperator oracle;
@@ -139,7 +143,7 @@ final class Nightly {
         }
       }
       throw new IllegalArgumentException(
-          "unknown function '" + id + "'; known: exp, expm1, log, log10, log1p, sinh");
+          "unknown function '" + id + "'; known: exp, expm1, log, log10, log1p, sinh, cosh");
     }
   }
 

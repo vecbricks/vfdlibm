@@ -23,9 +23,9 @@ import jdk.incubator.vector.VectorSpecies;
  * function at one species by {@link Nightly.Checker}, every arm unmasked and masked. fdlibm
  * decides its branches on the high word (exp's and expm1's filters, reductions and tiny tests;
  * log's subnormal, non-finite and significand tests, which log10 shares; log1p's; sinh's tiny, 1
- * and 22), so every such decision is taken by some input here. The low word of the third input
- * is {@code mix(seed + hi * 0x9e3779b97f4a7c15L)}, so any input of any part is reproducible from
- * the seed alone, whatever the parts and threads.
+ * and 22; cosh's tiny, 0.5 ln2 and 22), so every such decision is taken by some input here. The
+ * low word of the third input is {@code mix(seed + hi * 0x9e3779b97f4a7c15L)}, so any input of
+ * any part is reproducible from the seed alone, whatever the parts and threads.
  * Taking every high-word branch is not detecting every moved split: a split one step off on the
  * high word changes few of these inputs (SKILLS.md, "The nightly sweep and fuzz"), and the fuzz,
  * which draws the neighbourhood of each split, is what catches it.
