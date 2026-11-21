@@ -84,6 +84,16 @@ final class Fuzz {
    */
   record PairEdges(Edges x, Edges y, double[] specials, int[] wordGaps) {
 
+    PairEdges {
+      wordGaps = wordGaps.clone();
+      for (int gap : wordGaps) {
+        if (Math.abs((long) gap) > 0x7fefffffL) {
+          throw new IllegalArgumentException(
+              "a gap of " + gap + " is not between two finite high words");
+        }
+      }
+    }
+
     /** A function with no branch on the arguments' words relative to each other. */
     PairEdges(Edges x, Edges y, double[] specials) {
       this(x, y, specials, new int[0]);

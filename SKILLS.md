@@ -693,8 +693,9 @@ next port re-trying a settled question.
   the file's shape.
   A branch on the two arguments' high words relative to each other (`e_atan2.c`'s `k = (iy - ix)
   >> 20`, which the edges of each argument cannot reach) is listed in `Fuzz.PairEdges.wordGaps`,
-  the first argument's absolute high word less the second's at the values the C tests (for
-  `atan2`: `61 * 2^20` and `-60 * 2^20`, and the word below each); one pair in ten is then drawn
+  the first argument's absolute high word less the second's at the values the C tests (for an
+  `atan2` port: `61 * 2^20` and `-60 * 2^20`, and the word below each, which no function lists
+  yet); one pair in ten is then drawn
   at one of them, and a function that lists none draws as before. `FuzzWordGapsTest` shows a
   fault at exactly one gap found by the fuzz at every width and not found when the gaps are not
   listed.

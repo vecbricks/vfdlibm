@@ -51,15 +51,14 @@ class FuzzWordGapsTest {
   static void registerTheToys() {
     removeTheToys();
     for (int i = 0; i < GAPS.length; i++) {
-      Nightly.PairFunction.KNOWN.add(toy("toy2-gap" + i, GAPS[i], GAPS));
-      Nightly.PairFunction.KNOWN.add(toy("toy2-nogap" + i, GAPS[i], new int[0]));
+      Nightly.PairFunction.KNOWN.add(toy("wordgap-" + i, GAPS[i], GAPS));
+      Nightly.PairFunction.KNOWN.add(toy("wordgap-none-" + i, GAPS[i], new int[0]));
     }
   }
 
   @AfterAll
   static void removeTheToys() {
-    Nightly.PairFunction.KNOWN.removeIf(f -> f.id().startsWith("toy2-gap")
-        || f.id().startsWith("toy2-nogap"));
+    Nightly.PairFunction.KNOWN.removeIf(f -> f.id().startsWith("wordgap-"));
   }
 
   /** The pair harness's toy with its result's low bit flipped where {@code iy - ix == gap}. */
@@ -135,9 +134,9 @@ class FuzzWordGapsTest {
     String species = width == VectorWidth.PREFERRED
         ? "preferred" : "" + width.species().vectorBitSize();
     for (int i = 0; i < GAPS.length; i++) {
-      assertEquals(Nightly.MISMATCH, fuzz("toy2-gap" + i, species, dir.resolve(width + "g" + i)),
+      assertEquals(Nightly.MISMATCH, fuzz("wordgap-" + i, species, dir.resolve(width + "g" + i)),
           "gap " + GAPS[i] + " at " + width);
-      assertEquals(Nightly.OK, fuzz("toy2-nogap" + i, species, dir.resolve(width + "n" + i)),
+      assertEquals(Nightly.OK, fuzz("wordgap-none-" + i, species, dir.resolve(width + "n" + i)),
           "gap " + GAPS[i] + " unlisted at " + width);
     }
   }
