@@ -164,10 +164,13 @@ fdlibm's own sequence of operations, lane by lane. That is this library.
 - **Rare paths, exact too.** Lanes on a rare path (huge arguments, subnormals, special cases) are
   either computed in the vector, every branch blended (in every vector, or only in a vector that
   holds a rare lane), or finished by `StrictMath` per lane; the result is exact either way. The
-  choice is made per function from benchmarks, and stays provisional until the function's runs on
-  the benchmark hosts (the AVX-512 Xeon Platinum 8573C and Xeon 6973P-C first, the EPYC 9V45 when
-  drawn, then the AVX2 EPYC 7763; `HARDWARE.md`): the laptop's numbers do not agree at every
-  width.
+  choice is made per function from benchmarks, and stays provisional. `exp`, `expm1`, `log`, `log10`
+  and `log1p` each have files from the Xeon Platinum 8573C and the EPYC 7763 (`bench/results/`), and
+  each file's reading is in `SKILLS.md`; where two arms are within 1.3x of each other no direction
+  is read, and where the hosts disagree the files say so. The decision waits for a second run of the
+  8573C and a first of the other AVX-512 hosts (`HARDWARE.md`, the EPYC 9V45 when drawn), a pair,
+  and the rules for a tie and for hosts that disagree (issue #30). The laptop's numbers do not agree
+  at every width.
 
 ## Testing
 

@@ -111,7 +111,7 @@ re-trying a settled question.
   final compile, under `-XX:UseAVX=2` with the body force-inlined. Its three arguments were then
   boxed on every vector, rare or not: 256 vectors times 168 bytes (two 64-byte `DoubleVector`
   boxes and a 40-byte mask) plus, for the 62 vectors of the mixed data that hold a rare lane,
-  160 bytes (two `toArray` copies and the returned box) sum to exactly the 52928 B/op measured;
+  160 bytes (two `toArray` copies and the returned box) sum to the allocation the run read;
   JFR's allocation-by-site named `fromArray0Template`, `blendTemplate`, `Mask.or` and `toArray`.
   On common data the branch never ran, C2 left it as an uncommon trap, and nothing boxed, which
   is why the allocation check, on common data only, never saw it. Written out in the body with
@@ -162,21 +162,25 @@ re-trying a settled question.
   allocate. A port meant to run at `SPECIES_MAX` measures its slow path there too.
 - **Every port's finish boxes at `SPECIES_MAX`, Log's counted loop too; constant lane indices do
   not.** With `*Max` rows in all five benchmarks, read on the laptop under `-prof gc`
-  (`bench/results/max-finish-laptop-2026-11-20.txt`, allocation readings on a loaded machine,
-  no timings): on mixed data `finishMax` allocates 30912 B/op at 512 bits for exp, expm1 and
-  log1p and 30432 for log and log10, and 36992 and 36672 under `-XX:UseAVX=2`; on common data
-  it allocates nothing, and neither do the blended rows (log has none) or the guarded rows
-  of log1p and expm1, on either data. Log's finish is a counted loop over `species.length()` that
-  tests each bit where the others walk the set bits with `numberOfTrailingZeros`; it boxes the
-  same, so the loop's shape is not the cause, the lane index not being a constant is. Tried and
-  not merged: the first eight lanes written out with literal indices, `if (lanes > 0 &&
-  (rareLanes & 1L) != 0) result = result.withLane(0, f(x.lane(0)));` and so on, the loop
-  kept for lanes past eight. With it every `*Max` row of every port read under 0.5 B/op, on
-  mixed data and under both flag sets, and the five ports' tests passed. Owed before a port
+  (`bench/results/max-finish-laptop-2026-11-20.txt`, allocation readings on a loaded machine, no
+  timings): on mixed data `finishMax` allocates 30912 B/op at 512 bits for exp, expm1 and log1p and
+  30432 for log and log10, and 36992 and 36672 under `-XX:UseAVX=2`; on common data it allocates
+  nothing, and neither do the blended rows (log has none) or the guarded rows of log1p and expm1, on
+  either data. The host files read it too: `finishMax` on mixed data allocates 30,912 B/op on the
+  Xeon Platinum 8573C (the five files `exp-`, `expm1-`, `log-`, `log10-` and
+  `log1p-xeon8573c-2026-11-21.txt`) for exp, expm1 and log1p and 30,432 for log and log10, and, at
+  256 bits on the EPYC 7763, 36,992 for exp and 36,672 for log10 (`exp-epyc7763-2026-11-20.txt` and
+  `log10-epyc7763-2026-11-20.txt`; the other EPYC files have no `*Max` row). Log's finish is a
+  counted loop over `species.length()` that tests each bit where the others walk the set bits with
+  `numberOfTrailingZeros`; it boxes the same, so the loop's shape is not the cause, the lane index
+  not being a constant is. Tried and not merged: the first eight lanes written out with literal
+  indices, `if (lanes > 0 && (rareLanes & 1L) != 0) result = result.withLane(0, f(x.lane(0)));` and
+  so on, the loop kept for lanes past eight. With it every `*Max` row of every port read under 0.5
+  B/op, on mixed data and under both flag sets, and the five ports' tests passed. Owed before a port
   takes it: the `*256` and `*Preferred` rows through `bench/alloc-check.py` on a quiet machine
-  (under load they ended under 0.4 B/op, with first iterations where C2 was late, which the
-  check counts as failures), `mvn verify` with the planted faults, and a pair on a host, since
-  the fixed shapes' finish changes too.
+  (under load they ended under 0.4 B/op, with first iterations where C2 was late, which the check
+  counts as failures), `mvn verify` with the planted faults, and a pair on a host, since the fixed
+  shapes' finish changes too.
 - **At two 64-bit lanes x86 C2 lowers no mask.** Compare to mask, blend, mask cast, mask
   broadcast, logic and test are `not supported` at `vlen=2` for double and long masks, and fine
   at four lanes. So on x86 every 128-bit double port that branches through masks runs per lane
@@ -290,30 +294,37 @@ re-trying a settled question.
 - **Per-lane finish against blend.** `exp` has both arms in one body, selected by a constant
   `boolean`, so they share every line but the rare paths and the unused arm folds away once inlined.
   The blended arm computes every branch of `e_exp.c` in every lane; the finish arm computes the
-  common path and, when any lane is rare, sends those lanes to `StrictMath.exp`. On the EPYC 7763
-  (`bench/results/exp-epyc7763-2026-11-02.txt`, minimums in ns per 1024 doubles at 256 bits), the
-  finish arm as first merged was 1.57x faster than the blend on common data, 4203 against 6590, and
-  lost once rare lanes were common: on mixed data (one rare input in 16, about a quarter of the
-  4-lane vectors holding a rare lane) it was 1.64x slower, 12331 against 7512, while allocating
-  52928 B/op. The allocation was the refused call above; with the finish written out inline it is
-  gone at 256 and 512 bits, and on the laptop under `UseAVX=2` mixed data now reads 2591 against
-  4639 for the blend, and 1925 against 3199 at 512 bits on the default flags, where the old method
-  allocated 44032 B/op (`bench/results/exp-finish-laptop-2026-11-02.txt`, laptop numbers). Which arm
-  `VFdlibm.exp` keeps is decided by the EPYC run of that change, not by the laptop. Each port
-  measures both on common and mixed data, decides per branch, and records the decision in its pull
-  request (`PLAN.md` section 5).
-- **A blended alternative costs its whole form in every lane.** exp computed the C's near form
-  and its `k == 0` form for every lane and blended them. Proving that the far form and the
-  general tail already give those lanes' results (`PROOFS.md`, L1 and L2) left one form. With
-  native AVX-512 at 512 bits the hot path went from 77 instructions to 52, two `vdivpd` to one,
-  11 blends to 2 and 5 mask spills to none; at 256 bits under `-XX:UseAVX=2`, from 107 to 64,
-  with 11 blends to 2, 25 constant broadcasts to 12 and 4 spills to none
-  (`bench/asm/README.md`). Before blending two of the C's forms, look for a proof that one covers
-  the other's lanes; count the result with `bench/asm/` before timing it. Timed as a pair
-  against its base on the Xeon Platinum 8573C
+  common path and, when any lane is rare, sends those lanes to `StrictMath.exp`. The finish was
+  first a call that took vectors and boxed (above); written out in the body it allocates nothing at
+  256 and 512 bits. By minimums in ns per 1024 doubles at 256 bits, blended against finish: on the
+  EPYC 7763 (`bench/results/exp-epyc7763-2026-11-20.txt`, two runs) 5,581 and 5,424 against 2,749
+  and 2,727 on common data, and 6,429 and 6,369 against 4,292 and 4,256 on mixed data; on the Xeon
+  Platinum 8573C (`bench/results/exp-xeon8573c-2026-11-21.txt`, one run) 2,670 against 2,177 and
+  5,891 against 3,446. The blend over the finish is 1.99 to 2.13 on the EPYC on common data and 1.50
+  to 1.57 on mixed data, at 256 bits and the preferred species; on the Xeon it is 1.23, 1.29 and
+  1.37 on common data (at 256 bits, the preferred species and 512 bits), where 1.3x lies inside the
+  range, and 1.70 to 1.84 on mixed data. The finish is lower on every one of those rows on both
+  hosts. Mixed over common data, by minimums, the blended arm reads 1.15 to 1.19 on the EPYC and
+  2.21 to 2.62 on the Xeon, and the finish arm 1.55 to 1.60 and 1.58 to 1.99, in the same files;
+  they give no cause for the Xeon's larger slowing, and
+  `bench/results/exp-kinds-xeon8573c-2026-11-21.txt` times each kind of rare input apart. Both files
+  time `exp` as of a5683c3 and a1db6df, and `Exp.java` has changed since by a fault constant and a
+  local, so no run has timed today's body. Which arm `VFdlibm.exp` keeps is not decided here: it
+  waits for a second run of the Xeon 8573C and a first of the other AVX-512 hosts, a pair and the
+  rules for a tie within 1.3x and for hosts that disagree (issue #30). Each port measures both on
+  common and mixed data, decides per branch, and records the decision in its pull request (`PLAN.md`
+  section 5).
+- **A blended alternative costs its whole form in every lane.** exp computed the C's near form and
+  its `k == 0` form for every lane and blended them. Proving that the far form and the general tail
+  already give those lanes' results (`PROOFS.md`, L1 and L2) left one form. With native AVX-512 at
+  512 bits the hot path went from 77 instructions to 52, two `vdivpd` to one, 11 blends to 2 and 5
+  mask spills to none; at 256 bits under `-XX:UseAVX=2`, from 107 to 64, with 11 blends to 2, 25
+  constant broadcasts to 12 and 4 spills to none (`bench/asm/README.md`). Before blending two of the
+  C's forms, look for a proof that one covers the other's lanes; count the result with `bench/asm/`
+  before timing it. Timed as a pair against its base on the Xeon Platinum 8573C
   (`bench/results/exp-onediv-xeon8573c-2026-11-03.txt`, five rounds a side), the folded body is
-  1.33x to 1.48x faster by the median on common data at 256 and 512 bits and 1.18x to 1.31x on
-  mixed data, and no vector row is slower.
+  1.33x to 1.48x faster by the median on common data at 256 bits, 512 bits, the preferred species
+  and `SPECIES_MAX`, and 1.18x to 1.31x on mixed data, and no vector row is slower.
 - **Laptop first, then the EPYC.** The `D2L` boxing never showed under the laptop's default
   flags, where AVX512DQ is present; it showed only under `-XX:UseAVX=2`. Run a new port's
   benchmark under both before calling it done.
@@ -328,32 +339,49 @@ re-trying a settled question.
   succeeded" and nothing refused, and both 256-bit arms allocate ~0 B/op
   (`bench/results/log-laptop-avx2-2026-11-02.txt`). So `L2I` and the int-to-double mask cast join
   `D2I`, `I2D` and `I2L` as safe on AVX2; only `D2L`, `L2D`, `L2F` and `F2L` are not.
-- **The per-lane finish must not be a call that takes vectors.** Late in a large body C2 refuses
-  to inline the finish (`Log::finishPerLane ... failed to inline: NodeCountInliningCutoff`, under
-  `UseAVX=2`), and a refused call receives its vector arguments boxed. log's first finish took
-  `(x, result, rare)` and, on mixed data at 256 bits under `UseAVX=2`, cost 9150 ns and 51648
-  B/op per 1024 doubles against 3062 ns for the blend and 4104 for the scalar loop (2.2x slower
-  than not vectorising). Passing arrays and `rare.toLong()` instead cut it to 3062 ns and 5184
-  B/op. Doing the finish in the body with no helper, a loop over the set bits of `rare.toLong()`
-  with `result.withLane(lane, StrictMath.log(x.lane(lane)))`, made it ~0 B/op and 2921 ns: the
-  256- and 512-bit `lane` and `withLane` switch on the index to a constant lane, which C2
-  intrinsifies (`extract`, `insert`), and the only call left is `StrictMath.log` on a double.
-  exp's finish used to be such a call and boxed: 52928 B/op on mixed data on the EPYC 7763, where
-  it cost 12331 ns against 7512 for the blend (`bench/results/exp-epyc7763-2026-11-02.txt`). The
-  same in-body loop removed that at 256 and 512 bits; at `SPECIES_MAX` exp's finish still boxes
-  on mixed data (above).
-- **The laptop understated the boxed finish's cost on mixed data.** Under `UseAVX=2` on the
-  laptop exp's boxed finish tied the blend on mixed data; on the EPYC 7763 it lost by 1.6x. Read
-  each finish arm's `gc.alloc.rate.norm` on mixed data, where the rare lanes run, not only on
-  common data: an in-body finish allocates nothing at 256 and 512 bits, so anything above zero
-  there is boxing (or arrays the finish makes on purpose), and its cost grows on the EPYC.
-- **The arm choice is per function, and a fix can reverse it.** With the boxed finish the data
-  said to blend log; with the finish in registers it is ahead on common data, level on mixed at
-  256 bits (1.18x and 1.05x under `UseAVX=2`), and the blend wins at 512 bits on mixed data (1.36x
-  on the laptop's AVX-512, `bench/results/log-laptop-2026-11-02.txt`). The EPYC 7763 run
-  (`bench/results/log-epyc7763-2026-11-02.txt`) kept the finish for `VFdlibm.log`: level with the
-  blend on mixed data at 256 bits and allocating nothing, where exp's boxed finish had lost by
-  1.6x. Measure the finish only once it allocates nothing.
+- **The per-lane finish must not be a call that takes vectors.** Late in a large body C2 refuses to
+  inline the finish (`Log::finishPerLane ... failed to inline: NodeCountInliningCutoff`, under
+  `UseAVX=2`), and a refused call receives its vector arguments boxed. log's first finish took `(x,
+  result, rare)` and, on mixed data at 256 bits under `UseAVX=2`, cost 9150 ns and 51648 B/op per
+  1024 doubles against 3062 ns for the blend and 4104 for the scalar loop (2.2x slower than not
+  vectorising; laptop numbers, the FIRST VERSION block of
+  `bench/results/log-laptop-avx2-2026-11-02.txt`). Passing arrays and `rare.toLong()` instead cut it
+  to 3062 ns and 5184 B/op. Doing the finish in the body with no helper, a loop over the set bits of
+  `rare.toLong()` with `result.withLane(lane, StrictMath.log(x.lane(lane)))`, made it ~0 B/op and
+  2921 ns: the 256- and 512-bit `lane` and `withLane` switch on the index to a constant lane, which
+  C2 intrinsifies (`extract`, `insert`), and the only call left is `StrictMath.log` on a double.
+  exp's finish used to be such a call and boxed on mixed data, and cost more there than the blend
+  did on the EPYC 7763 (the old code's run is `bench/results/exp-epyc7763-2026-11-02.txt`). The same
+  in-body loop removed that at 256 and 512 bits; at `SPECIES_MAX` exp's finish still boxes on mixed
+  data (above).
+- **The laptop understated the boxed finish's cost on mixed data.** Under `UseAVX=2` on the laptop
+  exp's boxed finish tied the blend on mixed data; on the EPYC 7763 it lost to the blend
+  (`bench/results/exp-epyc7763-2026-11-02.txt`). Read each finish arm's `gc.alloc.rate.norm` on
+  mixed data, where the rare lanes run, not only on common data: an in-body finish allocates nothing
+  at 256 and 512 bits, so anything above zero there is boxing (or arrays the finish makes on
+  purpose), and its cost grows on the EPYC.
+- **The arm choice is per function, and a fix can reverse it.** With the boxed finish the data said
+  to blend log; with the finish in registers the laptop read it ahead on common data, level on mixed
+  at 256 bits (1.18x and 1.05x under `UseAVX=2`), and the blend ahead at 512 bits on mixed data
+  (1.36x on the laptop's AVX-512, `bench/results/log-laptop-2026-11-02.txt`; laptop numbers). The
+  host files read the same shape by minimums. On the EPYC 7763
+  (`bench/results/log-epyc7763-2026-11-20.txt`, two runs) the blend is 1.21 to 1.24 times the finish
+  on common data and 1.01 to 1.03 on mixed data, at 256 bits and the preferred species, and the
+  finish allocates nothing. On the Xeon Platinum 8573C
+  (`bench/results/log-xeon8573c-2026-11-21.txt`, one run) blended over finish is 1.24 (256 bits),
+  1.32 (preferred species) and 1.32 (512 bits) on common data, the last two just outside 1.3x with
+  the finish lower, and 0.97, 0.77 and 0.77 on mixed data, where the blend is lower and the last two
+  sit at the 1.3x line (finish over blended 1.30 and 1.29). At 256 bits, the one width both hosts
+  run natively, they read alike: the finish is lower on common data (blended over finish 1.22 to
+  1.24 on the EPYC, 1.24 on the Xeon) and level on mixed data (1.02 to 1.03 and 0.97, within 5%, so
+  no sign is read). On the Xeon the blend is lower on mixed data at all three widths, by more only
+  at the two widths with no native EPYC counterpart (its preferred species is 256 bits, and its
+  512-bit rows run in the Java fallback), so the files show no disagreement between the hosts at
+  equal width. Both files time the `log` of today (`Log.java` has not changed since either run;
+  `LogBenchmark` gained its `finishMax` row after the EPYC run, which is why that file has none).
+  Which arm `VFdlibm.log` keeps is not decided here: it waits for a second Xeon run, a pair and the
+  rules for a tie within 1.3x and for hosts that disagree (issue #30). Measure the finish only once
+  it allocates nothing.
 
 - **Int words can live in long lanes, with an exact dk.** log first kept its words in int lanes
   for the `I2D`; moving them to the long lanes of the bits drops `L2I`, `I2L`, `I2D` and the
@@ -391,22 +419,33 @@ re-trying a settled question.
   lane, negative NaNs of any payload included; a positive NaN takes `x+x` and keeps its payload.
   Where the C makes a NaN by an invalid operation, check the oracle's bits on NaN inputs of both
   signs and several payloads (`Inputs.specials` has them) before computing it.
-- **A third shape: blend the rare paths behind one test.** `log1p`'s rare paths (`x <= -1`,
-  `|x| < 2^-29`, `+inf` and NaN, and `|f| < 2^-20`) are a few vector operations each. Computing
-  and blending them only when a vector holds a rare lane (`if (rare.anyTrue())`) never allocates.
-  Against the per-lane finish written in the body (below) and the blend of every lane, by
-  minimums in ns per 1024 doubles over two runs each, laptop numbers: under `UseAVX=2` at 256
-  bits the guarded and finish arms are level on common data (2770 and 2745) and on mixed data
-  (3034 and 2952), and the blend's minimums are 3189 to 3264
+- **A third shape: blend the rare paths behind one test.** `log1p`'s rare paths (`x <= -1`, `|x| <
+  2^-29`, `+inf` and NaN, and `|f| < 2^-20`) are a few vector operations each. Computing and
+  blending them only when a vector holds a rare lane (`if (rare.anyTrue())`) never allocates.
+  Against the per-lane finish written in the body (below) and the blend of every lane, by minimums
+  in ns per 1024 doubles over two runs each, laptop numbers: under `UseAVX=2` at 256 bits the
+  guarded and finish arms are level on common data (2770 and 2745) and on mixed data (3034 and
+  2952), and the blend's minimums are 3189 to 3264
   (`bench/results/log1p-laptop-avx2-2026-11-02.txt`). The laptop's AVX-512 build was measured the
-  same way at 256 and 512 bits (`bench/results/log1p-laptop-2026-11-02.txt`). In both files the
-  arms are within 1.3x of each other on every row, and no direction is read: `VFdlibm.log1p` uses
-  the guarded arm provisionally. The EPYC 7763 run (`bench/results/log1p-epyc7763-2026-11-02.txt`)
-  keeps them within 1.3x at 256 bits too, so the AVX-512 hosts decide (`HARDWARE.md`). The first,
-  the Xeon Platinum 8573C (`bench/results/log1p-xeon8573c-2026-11-03.txt`), keeps the arms within
-  1.3x on every row too; the guarded arm has the lowest minimum on each, from one run, so no
-  direction is read yet, and a second 8573C run and the Xeon 6973P-C run are owed. A port whose
-  rare paths are cheap in vector form should measure this shape beside the other two.
+  same way at 256 and 512 bits (`bench/results/log1p-laptop-2026-11-02.txt`). In both files the arms
+  are within 1.3x of each other on every row, and no direction is read. The host files read the
+  three arms by minimums at 256 bits, the preferred species and, on the Xeon, 512 bits. On the EPYC
+  7763 (`bench/results/log1p-epyc7763-2026-11-20.txt`, two runs) blended over finish is 1.20 on
+  common data and 1.07 to 1.08 on mixed data, and guarded over finish 1.00 to 1.04 on common data
+  and 0.99 to 1.02 on mixed data. On the Xeon Platinum 8573C
+  (`bench/results/log1p-xeon8573c-2026-11-21.txt`, one run) blended over finish is 1.13 to 1.17 on
+  common data and 0.99 to 1.01 on mixed data, and guarded over finish 0.99 to 1.03 on common data
+  and 0.91 to 0.96 on mixed data. Every arm is within 1.3x of the others on every one of those rows,
+  so no direction is read on either host, and the lowest minimum moves between finish and guarded
+  from row to row (on the Xeon: finish at 256 and 512 bits and guarded at the preferred species on
+  common data, guarded at all three on mixed data); the Xeon file of 3 November
+  (`bench/results/log1p-xeon8573c-2026-11-03.txt`, one run, at another commit and on a draw whose
+  datapath read higher, `HARDWARE.md`) had guarded lowest on every row. The EPYC file times `Log1p`
+  as of a5683c3, before a fault constant and a mask local were added; the Xeon file of 21 November
+  times `Log1p` as it stands. `VFdlibm.log1p` uses the guarded arm provisionally: the decision waits
+  for a second run of the Xeon 8573C and a first of the other AVX-512 hosts, a pair and the rules
+  for a tie within 1.3x and for hosts that disagree (issue #30). A port whose rare paths are cheap
+  in vector form should measure this shape beside the other two.
 - **The in-body finish allocates nothing in log1p too.** log1p's finish was first a call,
   `finishPerLane(x, result, rare)`, and boxed: 52,928 B/op on mixed data at 256 bits under
   `UseAVX=2`, 2.0x slower than the guarded arm there (the superseded runs kept at the end of
@@ -471,6 +510,21 @@ re-trying a settled question.
   and a negative NaN of any payload, `StrictMath.log10` returns the bits of `(x-x)/zero`, so the
   blended arm keeps the C's expression, unlike log1p (above).
 
+- **log10 on the benchmark hosts, 20 and 21 November 2026.** By minimums at 256 bits, the preferred
+  species and, on the Xeon, 512 bits. On the EPYC 7763
+  (`bench/results/log10-epyc7763-2026-11-20.txt`, two runs) blended over finish is 1.24 to 1.28 on
+  common data and 1.06 to 1.13 on mixed data; on the Xeon Platinum 8573C
+  (`bench/results/log10-xeon8573c-2026-11-21.txt`, one run) 1.18 to 1.25 on common data and 0.92 to
+  0.98 on mixed data. Every ratio is within 1.3x, the EPYC's 1.28 on common data being the nearest
+  to it, so no direction is read. The finish is lower on common data on both hosts. On mixed data at
+  256 bits, the one width both run natively, blended over finish is 1.13 and 1.10 on the EPYC and
+  0.98 on the Xeon: the hosts differ in size, the EPYC reading the finish lower by more than 5% and
+  the Xeon level (within 5%), both inside 1.3x. At the Xeon's preferred species and 512 bits, which
+  have no native EPYC counterpart, blended over finish is 0.94 and 0.92. Both files time `Log10` as
+  it stands (its one change since is Javadoc). `VFdlibm.log10` calls the finish arm provisionally:
+  the decision waits for a second run of the Xeon 8573C and a first of the other AVX-512 hosts, a
+  pair and the rules for a tie within 1.3x and for hosts that disagree (issue #30).
+
 ## What the expm1 port taught
 
 - **A reduction shared with another port inherits its proofs through a pinned hinge.**
@@ -511,14 +565,26 @@ re-trying a settled question.
   mixed data, with the laptop's default flags and under `-XX:UseAVX=2 -XX:MaxVectorSize=32`; the
   two runner files record `gc.alloc.rate.norm`: no vector row on the native species reads over
   0.035 B/op.
-- **expm1 on the benchmark hosts, 4 November 2026.** On the Xeon Platinum 8573C
-  (`bench/results/expm1-xeon8573c-2026-11-04.txt`) the guarded arm has the lowest minimum on the
-  preferred rows, 5% ahead of finish on common data and 3% ahead of blended on mixed; on the EPYC
-  7763 (`bench/results/expm1-epyc7763-2026-11-04.txt`) finish is ahead of guarded, by 14% and 8%.
-  Every arm is within 1.3x of the others on every native row of both, from one run each, so no
-  direction is read and `VFdlibm.expm1` keeps the guarded arm; a second 8573C run and the Xeon
-  6973P-C run are owed. The EPYC file's 512-bit rows run in the Java fallback and measure no
-  expm1.
+- **expm1 on the benchmark hosts, 20 and 21 November 2026.** By minimums at 256 bits, the preferred
+  species and, on the Xeon, 512 bits. On the EPYC 7763
+  (`bench/results/expm1-epyc7763-2026-11-20.txt`, two runs) the finish arm is lowest on every row:
+  blended over finish is 1.17 to 1.18 on common data and 1.18 to 1.20 on mixed data, guarded over
+  finish 1.13 to 1.15 and 1.07 to 1.08. On the Xeon Platinum 8573C
+  (`bench/results/expm1-xeon8573c-2026-11-21.txt`, one run) blended over finish is 1.04 to 1.16 on
+  common data and 0.90 to 0.94 on mixed data, guarded over finish 0.97 to 1.05 and 0.85 to 0.87: on
+  common data guarded is lowest at 256 bits and finish at the preferred species and 512 bits, on
+  mixed data guarded is lowest at all three. Every arm is within 1.3x of the others on every one of
+  those rows in both files, so no direction is read on either host, and the hosts differ in which
+  arm has the lowest minimum on mixed data (finish on the EPYC, guarded on the Xeon). The Xeon file
+  of 4 November (`bench/results/expm1-xeon8573c-2026-11-04.txt`, one run, at another commit) had
+  guarded lowest on the preferred rows of both kinds of data; the file of 21 November has finish
+  lowest there on common data. `VFdlibm.expm1` keeps the guarded arm provisionally: the decision
+  waits for a second run of the Xeon 8573C and a first of the other AVX-512 hosts, a pair and the
+  rules for a tie within 1.3x and for hosts that disagree (issue #30). Both files time `Expm1`
+  before its core entry (below), which no run has timed, and `Expm1.java` changed between their two
+  commits too (a fault constant and a local in the k conversion, as for `Exp`), so the cross-host
+  comparison rests on two code versions. The EPYC file's 512-bit rows run in the Java fallback and
+  measure no expm1.
 - **Lefevre's direction bit is the 54th bit of the exact |result|.** testlibm-data's last field
   agreed with that for all 7578 `em1` lines (3836 ones, 3742 zeros), not with "the exact
   result is above the rounded one", which splits about evenly.

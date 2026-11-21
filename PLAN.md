@@ -100,12 +100,19 @@ five are a later, optional set; the large-argument reduction of the trigonometri
   vector form never trades exactness for speed. Whether a given branch is blended or finished per
   lane is decided by measurement and recorded in the function's pull request. A rare path that is
   only a few vector operations can instead be computed and blended only for a vector that holds a
-  rare lane, behind one `anyTrue`, as `log1p` does. For `exp` the question is open again: on the
-  EPYC 7763 the per-lane finish as first merged was 1.57x faster than the blend on common data
-  and 1.64x slower on mixed data, where its fallback allocated; the fallback no longer allocates
-  at 256 and 512 bits (it still boxes at `SPECIES_MAX` on mixed data), and that change's runs on
-  the benchmark hosts, as pairs against its base (`bench/pair.sh`), decide, each for its own
-  instruction set, the AVX-512 hosts first (`SKILLS.md`, `HARDWARE.md`).
+  rare lane, behind one `anyTrue`, as `log1p` does. The readings are in `SKILLS.md`, port by port.
+  For `exp` the per-lane finish allocates nothing at 256 and 512 bits (it still boxes at
+  `SPECIES_MAX` on mixed data), and the host files read the two arms by minimums: on the EPYC 7763
+  (`bench/results/exp-epyc7763-2026-11-20.txt`, two runs) the finish is 1.99 to 2.13 times faster
+  than the blend on common data and 1.50 to 1.57 on mixed data, at 256 bits and the preferred
+  species; on the Xeon Platinum 8573C (`bench/results/exp-xeon8573c-2026-11-21.txt`, one run) 1.23
+  to 1.37 on common data, a ratio that straddles 1.3x, and 1.70 to 1.84 on mixed data, at 256 bits,
+  512 bits and the preferred species. The code has changed since both runs (a fault constant and a
+  local in the k conversion), so no run has timed today's `exp`. Which arm each function keeps stays
+  provisional until the 8573C has a second run, the other AVX-512 hosts a first, and a pair exists,
+  and the rules for a tie within 1.3x and for hosts that disagree are set (issue #30); meanwhile
+  `VFdlibm` calls the finish arm of `exp`, `log` and `log10` and the guarded arm of `expm1` and
+  `log1p` (`HARDWARE.md`).
 
 ## 6. Rules
 
