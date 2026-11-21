@@ -686,16 +686,23 @@ next port re-trying a settled question.
   function's mismatch file, and a hard-cases file of one, say `# arity: 2` before the first input
   and hold `0x<x> 0x<y>` on a line: `Inputs.hardCasePairs` reads one, and `Inputs.hardCases` refuses
   it by that line.
-- **One comparator for a function of two arguments** (`PairBits.matches(x, y, want, got)`, test
-  code). Every comparison of a pair function's lane goes through it: `Oracle.assertPair` and the
-  live lanes of `assertPairMasked` (a lane that is not live keeps `x`'s raw bits), and the
+- **One comparator for a function of two arguments** (`PairBits.matches(candidates, x, y, want,
+  got)`, test code). Every comparison of a pair function's lane goes through it: `Oracle.assertPair`
+  and the live lanes of `assertPairMasked` (a lane that is not live keeps `x`'s raw bits), and the
   nightly's `PairChecker`, so its mismatch file and the replay of that file use it too. A new
-  comparison of such a function written with `doubleToRawLongBits` is a defect. The `jar-check.sh`
-  consumer cannot use it (the jar holds no test classes): its `same` compares one argument's
-  functions, and when `atan2` arrives its two-argument form takes a copy of the rule written in the
-  consumer, with a lane of two NaNs of different bits in its inputs. `PairNanTest` is the proof it
-  can fail: toys with one change fail it, and a comparator changed to accept any NaN, or none, fails
-  `PairNanTest` too (each tried by hand before the last case was added).
+  comparison of such a function written with `doubleToRawLongBits` is a defect. A function declares
+  its `PairBits.Candidates` on its `PairFunction` and passes them to the asserts, and there is no
+  default: `OPERANDS` for `atan2` and `pow`, `MAGNITUDES` for `hypot`. A mismatch row of a lane of
+  two NaNs says "one of" its two candidates and the oracle's own bits. Which candidate wins is not
+  specified and varies with the tier, for `hypot` too, where it is not the NaN of the larger high
+  word. `pow(x, +-0)` is 1 whatever `x` is, and nothing else returns before the NaN case: `pow(1.0,
+  NaN)` is NaN. The `jar-check.sh` consumer cannot use `PairBits` (the jar holds no test classes):
+  its `same` compares one argument's functions, and when `atan2` arrives its two-argument form takes
+  a copy of the rule written in the consumer, with a lane of two NaNs of different bits in its
+  inputs. `PairNanTest` is the proof it can fail: toys with one change fail it, as do a function
+  declared the wrong way and one that declares nothing, and a comparator changed to take the
+  oracle's bits unchecked, or to keep the sign under `MAGNITUDES`, fails `PairNanTest` (tried by
+  hand on this version).
 - **What a pass over a function of two arguments costs** (laptop, 21 November 2026,
   `bench/results/pair-sweep-laptop-2026-11-21.txt`; no pair function is ported, so this is two
   stand-ins run through `PairCostProbe`, not a port). A stripe of 2^24 high words at 256 bits took

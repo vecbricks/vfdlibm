@@ -42,10 +42,12 @@ final class PairCostProbe {
         new int[] {0x3ff00000, 0x40000000, 0}, new int[0], false, new double[] {1.0, 2.0});
     Fuzz.PairEdges pairEdges = new Fuzz.PairEdges(edges, edges, Fuzz.PAIR_SPECIALS);
     Nightly.PairFunction.KNOWN.add(new Nightly.PairFunction("toy2", PairCostProbe::toy,
+        PairBits.Candidates.OPERANDS,
         List.of(new Nightly.Arm2("Toy.masked", PairCostProbe::toy,
             (x, y, live) -> x.blend(toy(x, y), live))),
         pairEdges));
     Nightly.PairFunction.KNOWN.add(new Nightly.PairFunction("atan2-scratch", PairCostProbe::atan2,
+        PairBits.Candidates.OPERANDS,
         List.of(new Nightly.Arm2("Scratch.atan2", PairCostProbe::atan2,
             (x, y, live) -> x.blend(atan2(x, y), live))),
         pairEdges));

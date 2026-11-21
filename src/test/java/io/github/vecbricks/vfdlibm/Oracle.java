@@ -11,6 +11,7 @@ package io.github.vecbricks.vfdlibm;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.fail;
 
+import java.util.Objects;
 import java.util.SplittableRandom;
 import java.util.function.BiFunction;
 import java.util.function.BinaryOperator;
@@ -85,16 +86,19 @@ final class Oracle {
 
   /**
    * Checks a function of two arguments, such as atan2 or pow, against its oracle: by
-   * {@link PairBits#matches}, which is raw bits except on a lane of two NaNs with different bits.
+   * {@link PairBits#matches}, which is raw bits except on a lane of two NaNs with different bits,
+   * where the result must be one of the function's declared {@code candidates}.
    */
   static void assertPair(
       String name,
       VectorSpecies<Double> species,
+      PairBits.Candidates candidates,
       BinaryOperator<DoubleVector> function,
       DoubleBinaryOperator oracle,
       double[] xs,
       double[] ys) {
-    assertTwoInputs(name, species, function, oracle, xs, ys, true);
+    assertTwoInputs(name, species, function, oracle, xs, ys,
+        Objects.requireNonNull(candidates, "a pair function declares its candidates"));
   }
 
   /**
@@ -108,9 +112,10 @@ final class Oracle {
       DoubleBinaryOperator oracle,
       double[] xs,
       double[] ys) {
-    assertTwoInputs(name, species, function, oracle, xs, ys, false);
+    assertTwoInputs(name, species, function, oracle, xs, ys, null);
   }
 
+  /** {@code candidates} is null for raw bits on every lane. */
   private static void assertTwoInputs(
       String name,
       VectorSpecies<Double> species,
@@ -118,7 +123,7 @@ final class Oracle {
       DoubleBinaryOperator oracle,
       double[] xs,
       double[] ys,
-      boolean pair) {
+      PairBits.Candidates candidates) {
     assertNonEmpty(xs);
     assertEquals(xs.length, ys.length, "x and y inputs differ in length");
     int lanes = species.length();
@@ -134,8 +139,8 @@ final class Oracle {
       assertEquals(lanes, got.length, name + " returned a vector of another length");
       for (int lane = 0; lane < lanes && base + lane < xs.length; lane++) {
         double want = oracle.applyAsDouble(x[lane], y[lane]);
-        boolean ok = pair
-            ? PairBits.matches(x[lane], y[lane], want, got[lane])
+        boolean ok = candidates != null
+            ? PairBits.matches(candidates, x[lane], y[lane], want, got[lane])
             : Double.doubleToRawLongBits(want) == Double.doubleToRawLongBits(got[lane]);
         if (!ok) {
           differing++;
@@ -143,7 +148,9 @@ final class Oracle {
             first = String.format(
                 "%s at %s lane %d (input %d): x = %s, y = %s: expected %s, got %s",
                 name, species, lane, base + lane, hex(x[lane]), hex(y[lane]),
-                pair ? PairBits.expected(x[lane], y[lane], want) : hex(want), hex(got[lane]));
+                candidates != null ? PairBits.expected(candidates, x[lane], y[lane], want)
+                    : hex(want),
+                hex(got[lane]));
           }
         }
       }
@@ -173,7 +180,7 @@ final class Oracle {
         xs,
         xs,
         seed,
-        false);
+        null);
   }
 
   /**
@@ -184,12 +191,14 @@ final class Oracle {
   static void assertPairMasked(
       String name,
       VectorSpecies<Double> species,
+      PairBits.Candidates candidates,
       MaskedBinary function,
       DoubleBinaryOperator oracle,
       double[] xs,
       double[] ys,
       long seed) {
-    assertBinaryMasked(name, species, function, oracle, xs, ys, seed, true);
+    assertBinaryMasked(name, species, function, oracle, xs, ys, seed,
+        Objects.requireNonNull(candidates, "a pair function declares its candidates"));
   }
 
   /** A two-argument masked form, {@code f(x, y, live)}. */
@@ -198,6 +207,7 @@ final class Oracle {
     DoubleVector apply(DoubleVector x, DoubleVector y, VectorMask<Double> live);
   }
 
+  /** {@code candidates} is null for a function of one argument, which has no pair of NaNs. */
   private static void assertBinaryMasked(
       String name,
       VectorSpecies<Double> species,
@@ -206,7 +216,7 @@ final class Oracle {
       double[] xs,
       double[] ys,
       long seed,
-      boolean binary) {
+      PairBits.Candidates candidates) {
     assertNonEmpty(xs);
     assertEquals(xs.length, ys.length, "x and y inputs differ in length");
     SplittableRandom random = new SplittableRandom(seed);
@@ -232,8 +242,8 @@ final class Oracle {
           double want = live[lane] ? oracle.applyAsDouble(x[lane], y[lane]) : x[lane];
           // Only a live lane of a function of two arguments has the NaN-pair rule; a lane that is
           // not live keeps x's bits, and a function of one argument has no pair.
-          boolean ok = live[lane] && binary
-              ? PairBits.matches(x[lane], y[lane], want, got[lane])
+          boolean ok = live[lane] && candidates != null
+              ? PairBits.matches(candidates, x[lane], y[lane], want, got[lane])
               : Double.doubleToRawLongBits(want) == Double.doubleToRawLongBits(got[lane]);
           if (!ok) {
             differing++;
@@ -241,8 +251,9 @@ final class Oracle {
               first = String.format(
                   "%s at %s under mask %s, %s lane %d (input %d): x = %s%s: expected %s, got %s",
                   name, species, mask, live[lane] ? "active" : "inactive", lane, base + lane,
-                  hex(x[lane]), binary ? ", y = " + hex(y[lane]) : "",
-                  live[lane] && binary ? PairBits.expected(x[lane], y[lane], want) : hex(want),
+                  hex(x[lane]), candidates != null ? ", y = " + hex(y[lane]) : "",
+                  live[lane] && candidates != null
+                      ? PairBits.expected(candidates, x[lane], y[lane], want) : hex(want),
                   hex(got[lane]));
             }
           }
