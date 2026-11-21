@@ -75,7 +75,8 @@ import jdk.incubator.vector.VectorSpecies;
  * host files read the same, by minimums at 256 bits, the preferred species and, on the Xeon, 512
  * bits: on the AMD EPYC 7763 ({@code bench/results/log1p-epyc7763-2026-11-20.txt}, two runs, the
  * code of a5683c3) and on the Xeon Platinum 8573C ({@code
- * bench/results/log1p-xeon8573c-2026-11-21.txt}, one run, the code as it stands) every arm is
+ * bench/results/log1p-xeon8573c-2026-11-21.txt}, one run, the code as it stands; the class
+ * changed between their two commits by a fault constant and a local in the blend) every arm is
  * within 1.3x of the others on every row, so no direction is read, and the lowest minimum moves
  * between the finish and the guarded arm from row to row. The Xeon file of 3 November ({@code
  * log1p-xeon8573c-2026-11-03.txt}) had the guarded arm lowest on every row. The choice waits for

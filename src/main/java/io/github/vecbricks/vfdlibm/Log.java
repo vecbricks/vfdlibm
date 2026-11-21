@@ -73,13 +73,14 @@ import jdk.incubator.vector.VectorSpecies;
  * species) and 1.32 (512 bits) on ordinary data, the last two a little outside 1.3x in this one
  * run, so no direction is read before a re-run, and 0.97, 0.77 and 0.77 on mixed data, where the
  * blend is lower and the last two sit at the 1.3x line. At 256 bits, the one width both hosts
- * run natively, the hosts read alike: the finish is lower on ordinary data and level on mixed
- * data (within 5%). Both host files time this class as it stands, after the departures of {@code
- * PROOFS.md}'s L6 to L9. The choice waits for a second run of the Xeon 8573C and a first of the
- * other AVX-512 hosts ({@code HARDWARE.md}), a pair ({@code bench/pair.sh}), and the rules for a
- * tie within 1.3x and for hosts that disagree (issue #30); the second arm is kept so it can be
- * re-measured, on other hosts and as the JDK changes. The laptop's runs measured the body before
- * those departures.
+ * run natively, the hosts read alike: the finish is lower on ordinary data, and on mixed data
+ * the minimums are within 3% (the blend 1.02 to 1.03 times the finish on the EPYC, the finish
+ * 1.03 times the blend on the Xeon). Both host files time this class as it stands, after the
+ * departures of {@code PROOFS.md}'s L6 to L9. The choice waits for a second run of the Xeon
+ * 8573C and a first of the other AVX-512 hosts ({@code HARDWARE.md}), a pair ({@code
+ * bench/pair.sh}), and the rules for a tie within 1.3x and for hosts that disagree (issue #30);
+ * the second arm is kept so it can be re-measured, on other hosts and as the JDK changes. The
+ * laptop's runs measured the body before those departures.
  *
  * <p>{@link #logCore} is the common path alone, with no rare lanes and no finish: {@code Log10}
  * computes its {@code __ieee754_log} through it, the only entry it uses.
