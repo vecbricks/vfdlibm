@@ -802,18 +802,18 @@ next port re-trying a settled question.
     keep `fuzz-seconds` 240, `nights` 1, `shards` 2 and `arm-shards` 4, and `max-parallel` was
     5 for the sweep, 6 for the fuzz and 4 for Arm until 21 November 2026 (the entry on slots 6,
     8 and 5 below).
-  - **How firm that is: not very.** (This entry and the next two are the state of 20 November
-    2026, on slots 5, 6 and 4; the slots are now 6, 8 and 5, below.) The 13-function fit is
-    unverified, and no night has run on the new slots. The model divides a kind's minutes by its slots and counts no whole waves
-    of jobs, so 76 is a lower bound; the sweep's 62, plus its longest job, 19.8, plus the 8
-    minutes, gives 90 as an estimate of the worst case, which is the budget itself: with no
+  - **How firm that is: not very.** (This entry and the next are the state of 20 November 2026,
+    on slots 5, 6 and 4; the slots are now 6, 8 and 5, below.) The 13-function fit is
+    unverified, and no night had run on the 5, 6 and 4 slots then. The model divides a kind's
+    minutes by its slots and counts no whole waves of jobs, so 76 is a lower bound; the sweep's
+    62, plus its longest job, 19.8, plus the 8 minutes, gives 90 as an estimate of the worst case, which is the budget itself: with no
     margin. (It adds a median to a longest job, so it is neither a median nor a maximum.) The 8
     minutes are one fit (54 against 46). Each further average function adds about 5 minutes
     (Arm's 273 over 13 functions and 4 slots). For the five functions the table measured the
     prediction was 34 minutes, Arm's 105 over 4 slots (26) plus the 8; the sweep's 119 over 5
     slots (24) and the fuzz's 138 over 6 (23) are below it. The sweep's slots go from 8 to 5, and
     its 10 jobs of about 11 minutes run in two waves on either, so for five functions that move
-    costs nothing. It pays for the fuzz's 6 and Arm's 4 slots under the cap of 15 matrix jobs,
+    costs nothing. It pays for the fuzz's 6 and Arm's 4 slots under the then cap of 15 matrix jobs,
     and at 13 functions the sweep's 26 jobs take 6 waves on 5 slots where 8 would take 4. The
     first nights on the new slots check both: fetch them with `pool.py fetch` and read the span from
     `pool.py cost`. The budget is a median span of 90 minutes, so a median of the nights above
