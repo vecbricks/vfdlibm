@@ -17,9 +17,11 @@ package io.github.vecbricks.vfdlibm;
  * <p>The rule: a lane equals {@code StrictMath}'s result by {@link Double#doubleToRawLongBits},
  * except on a lane where both arguments are NaN and their bits differ. There the result must equal
  * one of the two arguments' bits with the quiet bit set, all 64 bits, the sign included; which of
- * the two is not specified. The reason is that {@code StrictMath} itself returns {@code x + y}
- * there, and which operand's payload that sum keeps changes with the JIT tier that runs it, so no
- * port can match it by bits. Everything else keeps the raw-bit rule: a NaN made from arguments
+ * the two is not specified. The reason is that {@code StrictMath.atan2} returns {@code x + y}
+ * there (so does fdlibm's {@code pow}), and which operand's payload that sum keeps changes with the
+ * JIT tier that runs it, so no port can match it by bits. fdlibm's {@code hypot} adds the absolute
+ * values of its operands, so its sign is cleared: this rule has no sign clause for it, and its port
+ * settles that. Everything else keeps the raw-bit rule: a NaN made from arguments
  * that are not both NaN, one NaN argument with a finite one, and two NaNs with identical bits.
  * (PROOFS.md, "The contract of a function of two arguments".)
  *

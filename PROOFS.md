@@ -76,11 +76,14 @@ NaN made from arguments that are not both NaN, one NaN argument with a finite on
 with identical bits.
 
 The exception is there because `StrictMath.atan2` returns `x + y` on two NaNs (as the C of `pow`
-and `hypot` do, reading `reference/fdlibm-5.3`), and which operand's payload a sum of two NaNs
-keeps is fixed neither by IEEE 754 nor by the JLS. On JDK 25.0.5.1 and x86-64 the interpreter and
-C2 returned `y`'s payload and C1 `x`'s, for every one of 65,536 pairs a mode (issue 33), so a
-raw-bit comparison with `StrictMath` fails by the tier the oracle's call is in. `PairBits.matches`
-is the one comparison of such a lane, used by `Oracle`'s asserts and the nightly's pair check, and
+does, reading `reference/fdlibm-5.3`), and which operand's payload a sum of two NaNs keeps is
+fixed neither by IEEE 754 nor by the JLS. The C of `hypot` adds the absolute values, so its sign
+is cleared: the rule above does not say what that lane's sign must be, and its port settles it.
+
+On JDK 25.0.5.1 and x86-64 the interpreter and C2 returned `y`'s payload and C1 `x`'s of
+`atan2`, for every one of 65,536 pairs a mode (issue 33), so a raw-bit comparison with
+`StrictMath` fails by the tier the oracle's call is in. `PairBits.matches` is the one comparison
+of such a lane, used by `Oracle`'s asserts and the nightly's pair check, and
 `PairNanTest` shows that it fails for a canonical NaN, a NaN of a third payload, the other sign, a
 result not quieted, and one payload bit off on a lane that is not two different NaNs. A function of
 one argument keeps the raw-bit rule on every lane: its NaN results were the same in every mode in
