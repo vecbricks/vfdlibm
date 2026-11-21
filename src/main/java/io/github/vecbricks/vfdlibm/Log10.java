@@ -77,7 +77,12 @@ import jdk.incubator.vector.VectorSpecies;
  * to 1.25 on common data and 0.92 to 0.98 on mixed data on the Xeon Platinum 8573C ({@code
  * bench/results/log10-xeon8573c-2026-11-21.txt}, one run). Every one of those ratios is within
  * 1.3x, so no direction is read; the files time this class before the finish's first eight lanes
- * were written out with constant indices (issue #37). The choice waits for a second run of the
+ * were written out with constant indices (issue #37), which the pair on the EPYC 7763 reads as
+ * not free: its mixed finish rows ({@code finish256}, {@code finishPreferred}) 2.6% to 4.0%
+ * slower by median and 3.7% to 4.1% by best in two runs ({@code
+ * bench/results/exp-log10-pair-epyc7763-2026-11-21.txt} and {@code
+ * bench/results/exp-log10-pair-rerun-epyc7763-2026-11-21.txt}), the cause not known, and no
+ * AVX-512 host paired. The choice waits for a second run of the
  * Xeon 8573C and a first of the other AVX-512 hosts ({@code HARDWARE.md}), a pair, and the rules
  * for a tie within 1.3x and for hosts that disagree (issue #30); the second arm is kept so the
  * choice can be re-measured.

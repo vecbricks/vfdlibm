@@ -85,9 +85,14 @@ import jdk.incubator.vector.VectorSpecies;
  * finish arm at the preferred species and 512 bits on common data. The earlier Xeon file ({@code
  * expm1-xeon8573c-2026-11-04.txt}) had the guarded arm lowest on the preferred rows of both
  * kinds of data. The EPYC file of 20 November and the Xeon file of 21 November time the class
- * before {@link #expm1Core}, which no run has timed, and before the finish's first eight lanes
- * were written out with constant indices (issue #37); the class changed between their two
- * commits by a fault constant and a local in the k conversion. The choice waits for a second run
+ * before {@link #expm1Core} and before the finish's first eight lanes were written out with
+ * constant indices (issue #37); the class changed between their two commits by a fault constant
+ * and a local in the k conversion. The EPYC's file of 21 November ({@code
+ * bench/results/expm1-epyc7763-2026-11-21.txt}, one run, main at 9b9cc7b) is the only one with
+ * core rows, and also times the finish before the eight lanes; its minimums read the guarded
+ * arm over the finish at 1.02 on common data and 1.07 to 1.08 on mixed data, against 1.13 to
+ * 1.15 and 1.07 to 1.08 in the 20 November files, all within 1.3x, and no pair or re-run backs
+ * the 1.02. The choice waits for a second run
  * of the Xeon 8573C and a first of the other AVX-512 hosts ({@code HARDWARE.md}), a pair, and
  * the rules for a tie within 1.3x and for hosts that disagree (issue #30); the other two arms
  * are kept so it can be re-measured ({@code SKILLS.md}).

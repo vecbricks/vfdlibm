@@ -54,7 +54,8 @@ import jdk.incubator.vector.VectorSpecies;
  *       eight): in the laptop reading of {@code
  *       bench/results/max-finish-alloc-free-laptop-2026-11-21.txt} (allocation only, no timing)
  *       the finish allocates nothing at 256 bits, at 512 bits and at {@code SPECIES_MAX} of up
- *       to eight lanes. At 128 bits on x86 the masks box anyway ({@code SKILLS.md}).
+ *       to eight lanes. At 128 bits on x86 the masks box anyway ({@code SKILLS.md}). The change
+ *       is not free in time: see the pair below.
  *   <li>{@link #expBlended} computes them in every lane too and blends them, with no branch.
  * </ul>
  *
@@ -66,8 +67,16 @@ import jdk.incubator.vector.VectorSpecies;
  * a1db6df) it is 1.23 to 1.37 on common data, a range with 1.3x inside it, and 1.70 to 1.84 on
  * mixed data, at 256 bits, 512 bits and the preferred species. This class has changed since both
  * runs by a fault constant and a local in the k conversion and by the finish's first eight lanes
- * written out with constant indices (issue #37), so no run has timed it as it stands. Which arm
- * is kept waits for a second run of the Xeon 8573C and a first of the other AVX-512 hosts
+ * written out with constant indices (issue #37), so no run has timed it as it stands, but for
+ * the rows of the pair on the EPYC 7763: that change is not free there. Its finish rows on
+ * mixed data ({@code finish256}, {@code finishPreferred}) read 7.4% to 9.3% slower by median and
+ * 8.3% to 8.9% slower by best, under the pair's 10% threshold, in two runs of one AVX2 host ({@code
+ * bench/results/exp-log10-pair-epyc7763-2026-11-21.txt} and {@code
+ * bench/results/exp-log10-pair-rerun-epyc7763-2026-11-21.txt}), and the {@code finishMax} row
+ * faster on mixed data, since it no longer boxes. The cause is not known, and no AVX-512 host has
+ * been paired.
+ * The first run's head is a branch tip, not a commit of main (that file's header says so).
+ * Which arm is kept waits for a second run of the Xeon 8573C and a first of the other AVX-512 hosts
  * ({@code HARDWARE.md}), a pair, and the rules for a tie within 1.3x and for hosts that disagree
  * (issue #30). The second arm is kept so the choice can be re-measured, on other hosts and as
  * the JDK changes. The folds above cut the common path C2 emits from 77 instructions with two
