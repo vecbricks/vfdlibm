@@ -23,7 +23,9 @@ import jdk.incubator.vector.VectorMask;
  * never sends the vector down a slow path.
  *
  * <p>Which species to pass. Every species of 128 bits or more gives the same bits; what differs
- * is what the body allocates, which the files under {@code bench/results/} read:
+ * is what the body allocates, which the files under {@code bench/results/} read. The arm that
+ * {@code exp}, {@code log} and {@code log10} call is the finish arm, and the one {@code expm1} and
+ * {@code log1p} call is the guarded arm.
  *
  * <ul>
  *   <li>Covered by {@code bench/alloc-check.py}, which CI runs and which fails a body that
@@ -31,19 +33,19 @@ import jdk.incubator.vector.VectorMask;
  *       DoubleVector.SPECIES_PREFERRED}, with the runner's own flags and as an AVX2 host; on Arm,
  *       the preferred species, 128 bits, where all 24 rows passed ({@code
  *       bench/results/alloc-arm-2026-11-20.txt}, an allocation reading and no timing).
- *   <li>128 bits on x86: the arms {@code exp} and {@code log} call allocate 0.9 to 1.4 million
- *       bytes per op ({@code bench/results/exp-epyc7763-2026-11-02.txt} and {@code
- *       log-epyc7763-2026-11-02.txt}).
- *   <li>512 bits on a host without AVX-512, where it is the Vector API's Java fallback: the arms
- *       {@code exp}, {@code log}, {@code log1p} and {@code expm1} call allocate 1.1 to 1.7
- *       million bytes per op (their EPYC 7763 files in {@code bench/results/}).
+ *   <li>128 bits on an AVX2 host: the finish arm of {@code exp} and of {@code log} allocates 0.9
+ *       to 1.4 million bytes per op ({@code bench/results/exp-epyc7763-2026-11-02.txt} and
+ *       {@code log-epyc7763-2026-11-02.txt}).
+ *   <li>512 bits on a host without AVX-512, where it is the Vector API's Java fallback: the arm
+ *       that {@code exp}, {@code log}, {@code log1p} and {@code expm1} call allocates 1.1 to 1.7
+ *       million bytes per op (their EPYC 7763 files in {@code bench/results/}). {@code log10} has
+ *       no file at 128 or 512 bits.
  *   <li>{@code DoubleVector.SPECIES_MAX} is none of the fixed shapes. On data with rare lanes (the
  *       NaNs, infinities and out-of-range inputs that take their own path in the C), the finish
- *       arm of every function allocates 30432 to 36993 bytes per op there. {@code exp}, {@code
- *       log} and {@code log10} call that arm; {@code expm1} and {@code log1p} call the guarded
- *       arm, which reads less than 0.5 ({@code bench/results/max-finish-laptop-2026-11-20.txt}, a
- *       laptop file and not a headline, read at 512 bits and as an AVX2 host at 256; {@code
- *       SPECIES_MAX} at 128 bits was not read).
+ *       arm of every function allocates 30432 to 36993 bytes per op there, and the guarded arm
+ *       of {@code expm1} and {@code log1p} less than 0.5 ({@code
+ *       bench/results/max-finish-laptop-2026-11-20.txt}, a laptop file and not a headline, read
+ *       at 512 bits and as an AVX2 host at 256; {@code SPECIES_MAX} at 128 bits was not read).
  *   <li>Not measured on a benchmark host: the speed of 512 bits against 256 on a CPU whose
  *       AVX-512 datapath is 256 bits wide. The EPYC 9V74 draws that have AVX-512 prefer 512 bits,
  *       and {@code HARDWARE.md} reads their 512-bit lanes at 0.90 to 0.91 of the 256-bit rate in
