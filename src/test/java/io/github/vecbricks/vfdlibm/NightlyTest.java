@@ -67,7 +67,7 @@ class NightlyTest {
   private static final Set<String> NOT_FOR_THE_FUZZ = Set.of(Log1p.FOLD_SHORT_PATH);
 
   /**
-   * The fuzz finds each planted fault of the five functions in a second at most, but those of
+   * The fuzz finds each planted fault of the functions in a second at most, but those of
    * {@link #NOT_FOR_THE_FUZZ}.
    */
   @Test
