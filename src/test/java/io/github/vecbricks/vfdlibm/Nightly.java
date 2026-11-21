@@ -127,7 +127,9 @@ final class Nightly {
         // width, masked and unmasked, and the planted-fault tests and jar-check's consumer cover
         // it too.
         new Arm("Cosh.coshSlice", x -> Cosh.coshSlice(x, null), Cosh::coshSlice),
-        new Arm("Cosh.coshFinish", x -> Cosh.coshFinish(x, null), Cosh::coshFinish)));
+        new Arm("Cosh.coshFinish", x -> Cosh.coshFinish(x, null), Cosh::coshFinish))),
+    ATAN("atan", StrictMath::atan, List.of(
+        new Arm("VFdlibm.atan", VFdlibm::atan, VFdlibm::atan)));
 
     final String id;
     final DoubleUnaryOperator oracle;
@@ -146,7 +148,7 @@ final class Nightly {
         }
       }
       throw new IllegalArgumentException(
-          "unknown function '" + id + "'; known: exp, expm1, log, log10, log1p, sinh, cosh");
+          "unknown function '" + id + "'; known: exp, expm1, log, log10, log1p, sinh, cosh, atan");
     }
   }
 

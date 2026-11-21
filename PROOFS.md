@@ -1025,3 +1025,52 @@ with s_expm1.c's lines in scalar Java, is `StrictMath.cosh`.
 **Encoding.** No file of its own. The files of exp's lemmas check their steps for cosh as they
 stand, `expCore` being the same body. Informal here: that the port's blends take each branch on
 exactly the C's lanes, and that it computes these steps, the code's text.
+
+## atan (`Atan.java`, from `s_atan.c`)
+
+s_atan.c returns, from `|x| >= 2^66`, `x + x` for a NaN and `atanhi[3] + atanlo[3]` with `x`'s
+sign otherwise (lines 97-102); below `7/16` it reduces nothing, and below `2^-29` it returns `x`
+(103-107). From `7/16` up it divides once, `(2.0*x-one)/(2.0+x)` below `11/16`, `(x-one)/(x+one)`
+below `19/16`, `(x-1.5)/(one+1.5*x)` below `39/16` and `-1.0/x` above (109-121). One polynomial
+in the reduced `x` follows (124-128), and the result is `x - x*(s1+s2)` with no reduction and
+`atanhi[id] - ((x*(s1+s2) - atanlo[id]) - x)`, negated for `hx < 0`, with one (129-132). The port
+computes the lines below `2^66` in the C's order, with no fused multiply-add and no
+reassociation, and **needs no lemma of its own** beyond L13's blend argument. Where its text is
+not the C's:
+
+- The four reductions share one division, which is a transcription and no departure, as in
+  sinh's and cosh's sections. Each lane takes exactly one of the C's
+  branches, picked by the compares of `ix` of lines 103, 110, 111 and 116, and the port computes
+  in that lane the operations of that branch in the C's order: the numerator and the
+  denominator are that range's own operands (`2.0*x-one` over `2.0+x`, `x-one` over `x+one`,
+  `x-1.5` over `one+1.5*x`, `-1.0` over `x`), picked by the same compares, so the division is
+  the C's division of the C's operands (R4). A lane below `7/16` takes no branch with a
+  division: its quotient is computed and not kept, and its reduced value is `x` itself. The
+  values the other branches' operations take in a lane are computed and never kept. This is
+  L13, instantiated: H1 is the C's compares on the same high word, nested as the C's `if`
+  chain is (`noReduction`, then `id0`, `idUpTo1` and `idUpTo2`, which blend the operands from
+  the last range down), H2 is the order just given, with the operand blend before the one
+  division, H3 holds since every operation on a lane is total (IEEE operations on doubles,
+  compares, and int and long bit operations and reinterpretations: no division of integers, no
+  indexed load), and H4 since each blend is a `blend`. The port has no hinge beyond L13's, and
+  the one that could be false is H1, the tests, which are the C's, made on the same high word.
+- The polynomial, `atanhi[id]` and `atanlo[id]` are selected by the same compares, and the one
+  polynomial is evaluated on the lane's reduced value, which is `x` below `7/16` and the quotient
+  above, as in the C. The sign of line 132 is a negation, exact, picked by `hx < 0`; the result
+  below `7/16` has no sign step in the C and none here.
+- The lanes from `0x44100000` up, the infinities and the NaNs are finished per lane by
+  `StrictMath.atan`, which is the C.
+
+**What it rests on.** (R4) for `+ - * /`, and nothing of exp's or expm1's: the port calls no
+other port body.
+
+**Checks.** `constantsAreTheSourcesBits` checks that the six words and the coefficients are the
+C's. `AtanTest` compares `VFdlibm.atan` with `StrictMath.atan` at every width and
+`SPECIES_MAX`, unmasked and masked, at the six words and their neighbours, on sampled bit
+patterns, dense draws, the published hard cases and their negations, and with every subset of a
+vector's lanes rare; `scalarTranscriptionIsStrictMath` checks that `cAtan`, s_atan.c in scalar
+Java, is `StrictMath.atan`. The planted faults are `atan.dropLo` (`atanlo` dropped),
+`atan.splitMoved` (the `19/16` word moved to 2, which moves a compare) and `atan.hiOneUlpOff`
+(`atanhi[1]` one ulp up). No fault reaches the compares at `0x3fdc0000`, `0x3fe60000`,
+`0x40038000`, `0x3e200000` or `0x44100000`, and a compare moved without changing a result is
+not caught by a test of results; no test claims to catch those.
