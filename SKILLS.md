@@ -672,9 +672,9 @@ re-trying a settled question.
   stand-ins run through `PairCostProbe`, not a port). A stripe of 2^24 high words at 256 bits took
   0.9 s for the harness alone (`toy2`) and 1.8 s for an arm that calls `StrictMath.atan2` lane by
   lane, against 2.9 s and 3.6 s for the unary sweeps of exp and log1p, at 4 threads on 4 CPUs.
-  Scaled to a whole pass (256 stripes), the x86 sweep jobs of the arm-bound stand-in come to about
-  16 runner-minutes on an AVX2 draw and 23 on an AVX-512 one, and the second argument's pass costs
-  what the first does: both passes in one night are twice that, one alternating pass is once. The
+  Scaled to a whole pass (256 stripes), the x86 sweep jobs of the arm-bound stand-in come to, on
+  that loaded laptop and so only as an indication, about 16 runner-minutes on an AVX2 draw and 23
+  on an AVX-512 one, and the second argument's pass costs what the first does: both passes in one night are twice that, one alternating pass is once. The
   file has the method, the three runs of each row and its limits; the nightly's own logs replace
   it once a pair function runs. It also records that, on two NaNs, the oracle's `StrictMath.atan2`
   and a loop of calls to it differed in the payload in 12 of 12 runs (cause not read), so a pair

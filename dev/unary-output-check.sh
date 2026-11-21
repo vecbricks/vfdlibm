@@ -94,7 +94,7 @@ compare() {
     [ -e "$a/$(basename "$f")" ] || { echo "only in $b: $(basename "$f")"; only=$((only + 1)); }
   done
   echo "$same files the same, $differ differ, $only in one capture only"
-  [ "$differ" -eq 0 ]
+  [ "$differ" -eq 0 ] && [ "$same" -gt 0 ]
 }
 
 self_test() {
