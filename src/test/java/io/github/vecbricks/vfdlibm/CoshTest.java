@@ -45,8 +45,8 @@ class CoshTest {
         new LinkedHashMap<>();
     arms.put(
         "VFdlibm.cosh", (x, live) -> live == null ? VFdlibm.cosh(x) : VFdlibm.cosh(x, live));
-    // Cosh.coshSlice is listed though VFdlibm.cosh runs it today, so that it stays tested if the
-    // default changes (Nightly's list names the default too, see Cosh's Javadoc).
+    // Every arm is listed by name besides VFdlibm.cosh, so that each stays tested whichever one
+    // is the default.
     arms.put("Cosh.coshSlice", Cosh::coshSlice);
     arms.put("Cosh.coshFinish", Cosh::coshFinish);
     return arms;

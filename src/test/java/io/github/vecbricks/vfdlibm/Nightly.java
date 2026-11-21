@@ -122,10 +122,11 @@ final class Nightly {
     SINH("sinh", StrictMath::sinh, List.of(
         new Arm("VFdlibm.sinh", VFdlibm::sinh, VFdlibm::sinh))),
     COSH("cosh", StrictMath::cosh, List.of(
-        // VFdlibm.cosh runs the slice arm, provisionally, and Cosh.coshFinish is
-        // the other: if the default arm changes, this list must change with it, so that each arm
-        // runs once and none twice.
-        new Arm("VFdlibm.cosh", VFdlibm::cosh, VFdlibm::cosh),
+        // The two arms by name, so that both are swept whichever one VFdlibm.cosh calls and none
+        // runs twice. VFdlibm.cosh is a thin call to the default arm; CoshTest runs it at every
+        // width, masked and unmasked, and the planted-fault tests and jar-check's consumer cover
+        // it too.
+        new Arm("Cosh.coshSlice", x -> Cosh.coshSlice(x, null), Cosh::coshSlice),
         new Arm("Cosh.coshFinish", x -> Cosh.coshFinish(x, null), Cosh::coshFinish)));
 
     final String id;

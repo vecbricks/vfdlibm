@@ -893,9 +893,10 @@ reassociation, and **needs no lemma of its own**. Where its text is not the C's:
   four words equal the C's literals (`constantsAreTheSourcesBits`), and `CoshTest` compares
   every arm with `StrictMath.cosh` at the thresholds and their neighbours. `cosh.splitMoved`
   is the only planted fault that moves a compare's constant (the slice arm's `HX_SMALL`);
-  `cosh.finishMissesSmall` drops a mask. A `HX_LIMIT` compare moved above about 18.7 changes no
-  result (dropping `half/t` changes none there, by the sizing of `cosh.dropHalfOverT`); other
-  compares may also move without changing a result, and no test claims to catch those.
+  `cosh.finishMissesSmall` drops a mask. Sizing `cosh.dropHalfOverT` observed
+  that dropping `half/t` changes no result above about 18.7; this is an observation from that
+  sizing, not a result proven here, and nothing relies on it. Other compares may also move
+  without changing a result, and no test claims to catch those.
 - The lanes from `0x40862E42` up, the infinities and the NaNs are finished per lane by
   `StrictMath.cosh`, which is the C.
 

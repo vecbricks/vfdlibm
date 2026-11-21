@@ -61,14 +61,13 @@ import jdk.incubator.vector.VectorSpecies;
  * </ul>
  *
  * <p>Both finish per lane the lanes from the overflow window up ({@code ix >= 0x40862E42}), the
- * infinities and the NaNs. They share cosh's own quotient, one division. The slice arm keeps its
- * result in the small range and in the exp branches; the finish arm keeps it in the exp branches
- * alone, and its small-range lanes divide too, then take the per-lane finish's value. Its
- * numerator is {@code t*t} (small range) or {@code half}, its denominator {@code w+w} or
- * {@code exp(|x|)}, and each lane's sum is its own range's: {@code 1+q}, {@code w}, {@code
- * half*t+q} or {@code half*t}. The slice arm divides once more, in the polynomial of its
- * expm1 lines ({@code (r1-t3)/(6-x*t3)}), which the finish arm never runs. Each lane takes one of
- * the C's branches and does that branch's operations in the C's order; the other branches'
+ * infinities and the NaNs. They share one division for cosh's own quotient. In the slice arm its
+ * numerator is {@code t*t} (small range) or {@code half}, its denominator {@code w+w} or {@code
+ * exp(|x|)}, and each lane's sum is its own range's: {@code 1+q}, {@code w}, {@code half*t+q}
+ * or {@code half*t}; it divides once more, in the polynomial of its expm1 lines ({@code
+ * (r1-t3)/(6-x*t3)}). In the finish arm it divides {@code half} by {@code exp(|x|)} in every
+ * lane, and a small-range lane takes the per-lane finish's value instead. Each lane takes one
+ * of the C's branches and does that branch's operations in the C's order; the other branches'
  * values are computed and never kept.
  *
  * <p>The {@code exp} of every lane is {@link Exp#expCore} of {@code |x|}, the only entry into
@@ -83,10 +82,8 @@ import jdk.incubator.vector.VectorSpecies;
  * <p>{@link #cosh(DoubleVector, VectorMask)}, which {@code VFdlibm.cosh} calls, is the slice
  * arm, provisionally: no timing of the two arms exists yet, so the choice is the design's, not a
  * measurement's, and a benchmark host's run of {@code CoshBenchmark} and {@code CoshKindsBench}
- * will decide it ({@code SKILLS.md}). The places that state the default are {@code
- * Cosh.cosh(x, live)}, which sets it, {@code CoshTest}, {@code Nightly}'s arm list, the Javadocs
- * of {@code CoshBenchmark} and {@code CoshKindsBench}, {@code PLAN.md} and {@code SKILLS.md};
- * they change with it.
+ * will decide it ({@code SKILLS.md}). The default is chosen in {@code cosh(x, live)}; other
+ * places say "the default arm".
  */
 final class Cosh {
 
