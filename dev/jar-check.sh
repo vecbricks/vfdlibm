@@ -485,6 +485,7 @@ public final class Consumer {
     check("sinh", StrictMath::sinh);
     check("cosh", StrictMath::cosh);
     check("asin", StrictMath::asin);
+    check("atan", StrictMath::atan);
     check("acos", StrictMath::acos);
     Module module = VFdlibm.class.getModule();
     String in = module.isNamed() ? module.getName() : "";

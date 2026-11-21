@@ -162,6 +162,8 @@ final class Nightly {
     // `all=` list in nightly.yml does not name it yet (the follow-up that adds it is pending).
     ASIN("asin", StrictMath::asin, List.of(
         new Arm("VFdlibm.asin", VFdlibm::asin, VFdlibm::asin))),
+    ATAN("atan", StrictMath::atan, List.of(
+        new Arm("VFdlibm.atan", VFdlibm::atan, VFdlibm::atan))),
     // As asin: in the table, and not in the night's `all=` list in nightly.yml yet.
     ACOS("acos", StrictMath::acos, List.of(
         new Arm("VFdlibm.acos", VFdlibm::acos, VFdlibm::acos)));
@@ -183,8 +185,8 @@ final class Nightly {
         }
       }
       throw new IllegalArgumentException(
-          "unknown function '" + id + "'; known: exp, expm1, log, log10, log1p, sinh, cosh, asin,"
-              + " acos");
+          "unknown function '" + id + "'; known: exp, expm1, log, log10, log1p, sinh, cosh,"
+              + " asin, atan, acos");
     }
 
     @Override

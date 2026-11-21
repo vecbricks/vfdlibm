@@ -17,7 +17,7 @@ import jdk.incubator.vector.VectorMask;
  * {@link StrictMath} method of the same name, NaN payloads and signed zeros included.
  *
  * <p>Every method works on a vector of any species of 128 bits or more (exp, expm1, log, log10,
- * log1p, sinh, cosh, asin and acos hold fdlibm's {@code int} words in int lanes of half the
+ * log1p, sinh, cosh, asin, atan and acos hold fdlibm's {@code int} words in int lanes of half the
  * vector's size). Each comes in two forms: one computes every lane, and a masked form computes
  * only the lanes set in {@code live} and returns every other lane of its argument untouched, raw
  * bits and all. An inactive lane never sends the vector down a slow path.
@@ -57,8 +57,8 @@ import jdk.incubator.vector.VectorMask;
  *       {@code sinh} and {@code cosh} reads under 0.1 bytes per op ({@code
  *       bench/results/max-finish-alloc-free-laptop-2026-11-21.txt}, a laptop file and not a
  *       headline, read at 512 bits and as an AVX2 host at 256). {@code SPECIES_MAX} at 128
- *       bits, and with more than eight lanes, was not read. No file has an {@code asin} or
- *       {@code acos} row, and no timing of either exists.
+ *       bits, and with more than eight lanes, was not read. No file has an {@code asin} row,
+ *       and no {@code asin} timing exists.
  *   <li>Not measured: any port's speed at 512 bits against 256 on the EPYC 9V74 draws that have
  *       AVX-512 ({@code HARDWARE.md} has only a datapath reading for them, and lists {@code
  *       MaxVectorSize=64}), any port's speed on Arm, and allocation on an Arm host with vectors
@@ -256,6 +256,28 @@ public final class VFdlibm {
    */
   public static DoubleVector asin(DoubleVector x, VectorMask<Double> live) {
     return Asin.asin(x, Objects.requireNonNull(live, "live"));
+  }
+
+  /**
+   * {@code StrictMath.atan} in every lane. Ported from fdlibm 5.3's {@code s_atan.c}.
+   *
+   * @param x the arguments
+   * @return the arctangent of each lane of {@code x}
+   */
+  public static DoubleVector atan(DoubleVector x) {
+    return Atan.atan(x, null);
+  }
+
+  /**
+   * {@code StrictMath.atan} in the lanes set in {@code live}; every other lane is {@code x}'s,
+   * untouched.
+   *
+   * @param x the arguments
+   * @param live the lanes to compute, of {@code x}'s species
+   * @return the arctangent of each live lane of {@code x}, and {@code x} in the others
+   */
+  public static DoubleVector atan(DoubleVector x, VectorMask<Double> live) {
+    return Atan.atan(x, Objects.requireNonNull(live, "live"));
   }
 
   /**

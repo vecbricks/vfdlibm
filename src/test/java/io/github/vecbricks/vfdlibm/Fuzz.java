@@ -39,7 +39,11 @@ import jdk.incubator.vector.VectorSpecies;
  * <p>A function of two arguments draws pairs ({@link #drawPair}), one in each of: both arguments
  * random bits (3 in 10); one argument drawn as above from its own {@link Edges} and the other a
  * special value or random bits (2 in 10 for each argument); and both from their edges (3 in
- * 10), so that a branch that needs a word of each argument is drawn at once.
+ * 10), so that a branch that needs a word of each argument is drawn at once. A function whose
+ * branch is on the two arguments' high words relative to each other, as {@code e_atan2.c}'s
+ * {@code k = (iy - ix) >> 20}, lists the differences it tests in {@link PairEdges#wordGaps}, and
+ * one pair in ten is then drawn at one of them (the other nine as above): the first argument's
+ * absolute high word less the second's equals the difference, the words otherwise random.
  *
  * <p>The sweep takes three low words per high word; these take every other one, where the C's
  * results depend on the low word: exp's {@code k}, log's and log1p's reductions.
@@ -74,9 +78,27 @@ final class Fuzz {
 
   /**
    * Where the branches of a function of two arguments are: each argument's {@link Edges} and the
-   * values both arguments take specially (the sweep's partners, the fuzz's other argument).
+   * values both arguments take specially (the sweep's partners, the fuzz's other argument), and
+   * {@code wordGaps}: the values of the first argument's absolute high word less the second's
+   * at which the function's result changes form; one pair in ten is drawn at one of them.
    */
-  record PairEdges(Edges x, Edges y, double[] specials) {}
+  record PairEdges(Edges x, Edges y, double[] specials, int[] wordGaps) {
+
+    PairEdges {
+      wordGaps = wordGaps.clone();
+      for (int gap : wordGaps) {
+        if (Math.abs((long) gap) > 0x7fefffffL) {
+          throw new IllegalArgumentException(
+              "a gap of " + gap + " is not between two finite high words");
+        }
+      }
+    }
+
+    /** A function with no branch on the arguments' words relative to each other. */
+    PairEdges(Edges x, Edges y, double[] specials) {
+      this(x, y, specials, new int[0]);
+    }
+  }
 
   /** The special values of a function of two arguments, either sign: the sweep draws them too. */
   static final double[] PAIR_SPECIALS = {
@@ -187,6 +209,22 @@ final class Fuzz {
       new double[] {0x1p-27, 0.5, 0.975, 1.0, Math.nextDown(1.0), Math.sqrt(0.5), 0.9});
 
   /**
+   * atan: s_atan.c's high-word tests (the tiny return, the four range splits at 7/16, 11/16,
+   * 19/16 and 39/16, the {@code 2^66} word and the non-finite words), the doubles at those
+   * edges, the word and the double 2 where {@code atan.splitMoved} moves the 19/16 split, and the
+   * arguments whose reduction is exactly 0, where the quotient's sign and rounding change: 0.5
+   * (id 0), 1 (id 1), 1.5 (id 2).
+   */
+  static final Edges ATAN = new Edges(
+      new int[] {
+        Atan.HX_TINY, Atan.HX_NO_REDUCTION, Atan.HX_ID0, Atan.HX_ID1, Atan.HX_ID2, Atan.HX_BIG,
+        0x7ff00000, 0x40000000, 0
+      },
+      new int[0],
+      false,
+      new double[] {0.5, 1.0, 1.5, 2.0, 0.4375, 0.6875, 1.1875, 2.4375, 0x1p66, 0x1p-29});
+
+  /**
    * acos: e_acos.c's high-word tests (the constant return at {@code 0x3c600000}, the split at
    * 0.5 and the per-lane finish from 1) and the doubles at them, both signs, which the sign of
    * {@code hx} sends to the two forms above 0.5; the non-finite words as well.
@@ -250,6 +288,7 @@ final class Fuzz {
       case SINH -> SINH;
       case COSH -> COSH;
       case ASIN -> ASIN;
+      case ATAN -> ATAN;
       case ACOS -> ACOS;
     };
   }
@@ -415,6 +454,10 @@ final class Fuzz {
    * One pair, drawn as the class comment says, written to {@code out[0]} and {@code out[1]}.
    */
   static void drawPair(SplittableRandom random, PairEdges edges, double[] out) {
+    if (edges.wordGaps().length > 0 && random.nextInt(10) == 0) {
+      drawAtGap(random, edges.wordGaps()[random.nextInt(edges.wordGaps().length)], out);
+      return;
+    }
     int kind = random.nextInt(10);
     if (kind < 3) {
       out[0] = Double.longBitsToDouble(random.nextLong());
@@ -429,6 +472,30 @@ final class Fuzz {
       out[0] = draw(random, edges.x());
       out[1] = draw(random, edges.y());
     }
+  }
+
+  /**
+   * A pair whose absolute high words differ by {@code gap}, the first's less the second's: the
+   * second's word is drawn from those that keep both words finite, both low words as
+   * {@link #lowWord}, both signs random.
+   */
+  private static void drawAtGap(SplittableRandom random, int gap, double[] out) {
+    long finite = 0x7fefffffL;
+    long low = Math.max(0, -(long) gap);
+    long high = Math.min(finite, finite - gap);
+    if (low > high) {
+      throw new IllegalArgumentException("a gap of " + gap + " between two finite high words");
+    }
+    int second = (int) (low + random.nextLong(high - low + 1));
+    int first = second + gap;
+    out[0] = fromWords(random, first);
+    out[1] = fromWords(random, second);
+  }
+
+  /** The double of the absolute high word {@code word}, a random sign and a {@link #lowWord}. */
+  private static double fromWords(SplittableRandom random, int word) {
+    long hi = (word | (random.nextBoolean() ? 0x80000000 : 0)) & 0xffffffffL;
+    return Double.longBitsToDouble(hi << 32 | lowWord(random));
   }
 
   /** An argument that is not the one at a branch: a special value, or random bits. */
