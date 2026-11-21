@@ -1038,11 +1038,13 @@ split root (105-111); the sign is applied last (113). The port computes the line
 in the C's order, with no fused multiply-add and no reassociation, and **needs no lemma of its
 own** beyond L13's blend argument and (R4)'s `sqrt`. Where its text is not the C's:
 
-- The tiny test of lines 86-89 reads as an `if ... else`, but its `else` binds to the inner `if`
-  alone: the inner test `huge+x>one` is true for every `|x| < 2^-27` (`1e300 + x` is above 1 for
-  zeros and subnormals too), so the lanes below `2^-27` return `x` and the fall-through to
-  `t = x*x` is for the other lanes of `|x| < 0.5` only. The port returns `x` in those lanes by
-  the same compare, and `AsinTest.cAsin` transcribes the C's structure.
+- The braces of lines 86-89 close the tiny test before its `else`, so that `else` belongs to
+  `if(ix<0x3e400000)` and governs the one statement `t = x*x;` (line 89); `p`, `q`, `w` and the
+  return (90-93) are not in it, though the indentation says so, and run for every lane that
+  reaches them. The test inside the braces, `huge+x>one`, is true for every `|x| < 2^-27`
+  (`1e300 + x` is above 1 for zeros and subnormals too), so those lanes return `x`; the other
+  lanes of `|x| < 0.5` take `t = x*x` and then the same `p`, `q` and `w`. The port returns `x`
+  in the tiny lanes by the same compare, and `AsinTest.cAsin` transcribes the C's structure.
 - `w = s; __LO(w) = 0` (lines 105-106) is the AND of the lane's 64 bits with
   `0xFFFFFFFF00000000`, which is what clearing the low word of an IEEE double is: the port does
   the C's own operation on the bits, an exact one, and no arithmetic replaces it. So there is

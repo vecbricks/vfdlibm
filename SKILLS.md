@@ -915,10 +915,11 @@ next port re-trying a settled question.
   division `p/q`, and the split range's second division is computed on every lane; the rare lanes
   (`|x| >= 1`, NaN) are finished per lane. There is no second body to compare, so the arm needs
   no default rule, and the benchmark has no `slice` row.
-- **e_asin.c's dangling else.** Lines 86-89 read as one `if ... else` but are two statements: the
-  tiny test returns `x` for every `|x| < 2^-27` (`huge+x>one` is true there), and `t = x*x` runs
-  for the other lanes of `|x| < 0.5`. The port, `AsinTest.cAsin` and PROOFS.md transcribe what
-  the C does, not what its indentation suggests.
+- **e_asin.c's misleading indentation.** The `else` of lines 86-89 belongs to the tiny test and
+  governs `t = x*x;` alone: `p`, `q`, `w` and the return after it are not in it, though they are
+  indented as if they were. The tiny lanes return `x` first (`huge+x>one` is true there). The
+  port, `AsinTest.cAsin` and PROOFS.md transcribe what the C does, not what its indentation
+  suggests.
 - **The faults, sized on 2^22 draws** (a throwaway program over `VFdlibm.asin`, run once per
   fault): `asin.dropPio2Lo` changed 970339 of the draws of `[-1, 1]`, `asin.skipLowClear`
   234026 (467198 of `[0.5, 1)`, none above `0.975`, where the root form has no low-word clear) and
