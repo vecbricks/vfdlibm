@@ -11,11 +11,14 @@
 # "Command" are the workflow's header; "Array" describes the benchmark; the min/avg/max table is
 # taken from JMH's "Result" blocks in the raw output.
 #
-# Exp.java has changed since a5683c3 (the code of the 20 November files) by a fault constant
-# (DROP_K_FORCING, read once into a static final, which folds away with no fault planted) and a
-# local in the k conversion, in both bodies; its finish is the one of a5683c3, a loop over the set
-# bits of the rare mask. The finish in this run is the one that was on main before issue #37's
-# change: commit 5a452fa (#100), which writes out the finish's first eight lanes with constant
+# Exp.java has changed since a5683c3 (the code of the 20 November files) in its Javadoc, by a fault
+# constant (DROP_K_FORCING, read once into a static final, expected to fold away with no fault
+# planted) and by a local in the k conversion, in both bodies; its finish is the one of a5683c3, a
+# loop over the set bits of the rare mask. No pair has shown that the constant folds away, and
+# scalarStrictMath on common data, which no code change touches, reads 1.06 of the 20 November
+# minimums, the top of the band of this file's own comparison below, so that band is no evidence
+# that the constant costs nothing. The finish in this run is the one that was on main before issue
+# #37's change: commit 5a452fa (#100), which writes out the finish's first eight lanes with constant
 # indices, is not in 9b9cc7b, so the *Max rows here time the finish before that change. The JMH
 # options include -foe true, so a row that failed would have failed the run; every row of
 # ExpBenchmark has a Result block, which bench/record.py requires.

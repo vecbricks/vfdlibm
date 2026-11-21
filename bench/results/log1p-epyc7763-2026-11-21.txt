@@ -12,14 +12,14 @@
 # taken from JMH's "Result" blocks in the raw output.
 #
 # Log1p.java has changed since a5683c3 by a fault constant (FOLD_SHORT_PATH, read once into a static
-# final), the mask of the hu == 0 blend built in a local, and a branch on the constant, which folds
-# away with no fault planted; its finish is the one of a5683c3, a loop over the set bits of the rare
-# mask. Log1pBenchmark has gained the guardedMax, finishMax and blendedMax rows, which the 20
-# November file lacks. The finish in this run is the one that was on main before issue #37's change:
-# commit 5a452fa (#100), which writes out the finish's first eight lanes with constant indices, is
-# not in 9b9cc7b, so the *Max rows here time the finish before that change. The JMH options include
-# -foe true, so a row that failed would have failed the run; every row of Log1pBenchmark has a
-# Result block, which bench/record.py requires.
+# final), the mask of the hu == 0 blend built in a local, and a branch on the constant, expected to
+# fold away with no fault planted (no pair has shown it); its finish is the one of a5683c3, a loop
+# over the set bits of the rare mask. Log1pBenchmark has gained the guardedMax, finishMax and
+# blendedMax rows, which the 20 November file lacks. The finish in this run is the one that was on
+# main before issue #37's change: commit 5a452fa (#100), which writes out the finish's first eight
+# lanes with constant indices, is not in 9b9cc7b, so the *Max rows here time the finish before that
+# change. The JMH options include -foe true, so a row that failed would have failed the run; every
+# row of Log1pBenchmark has a Result block, which bench/record.py requires.
 #
 # The run held 6 classes; this file has Log1pBenchmark's blocks and rows of it.
 #
@@ -69,10 +69,10 @@
 #   / 1.20 (inside 1.3x); blended over finish on mixed data 1.06 / 1.08 (inside 1.3x); guarded over
 #   finish on common data 1.04 / 1.04 (inside 1.3x); guarded over finish on mixed data 1.01 / 1.03
 #   (inside 1.3x). In the two runs of 2026-11-20 the same ratios, over both runs and both widths,
-#   were: blended over finish on common data 1.20 to 1.20; blended over finish on mixed data 1.07 to
-#   1.08; guarded over finish on common data 1.00 to 1.04; guarded over finish on mixed data 0.99 to
-#   1.02. A ratio inside 1.3x reads no direction. No arm is decided here: which arm VFdlibm.log1p
-#   keeps is issue #30's, and this run is one run of this commit.
+#   were: blended over finish on common data 1.20; blended over finish on mixed data 1.07 to 1.08;
+#   guarded over finish on common data 1.00 to 1.04; guarded over finish on mixed data 0.99 to 1.02.
+#   A ratio inside 1.3x reads no direction. No arm is decided here: which arm VFdlibm.log1p keeps is
+#   issue #30's, and this run is one run of this commit.
 # - Mixed over common data, each arm's minimum (256 bits / preferred): blended 1.00 / 1.00; finish
 #   1.14 / 1.11; guarded 1.10 / 1.10; scalar loop 0.96.
 # - The 512-bit rows read 214,852 to 291,063 ns and allocate 1,142,785 to 1,569,793 B/op in JMH's
