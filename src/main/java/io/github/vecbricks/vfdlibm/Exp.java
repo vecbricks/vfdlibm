@@ -51,29 +51,31 @@ import jdk.incubator.vector.VectorSpecies;
  *       finish walks the set bits of the rare mask ({@code toLong}), reads each lane with {@code
  *       lane} and writes it back with {@code withLane}, all in this body. At the fixed shapes
  *       C2 intrinsifies that lane access: at 256 and 512 bits the finish allocates nothing (at
- *       128 bits on x86 the masks box anyway). At {@code SPECIES_MAX} it is not intrinsified,
- *       and the finish still boxes on data with rare lanes (the {@code finishMax} rows of {@code
- *       bench/results/exp-finish-laptop-2026-11-02.txt}).
+ *       128 bits on x86 the masks box anyway). At {@code SPECIES_MAX} the {@code finishMax} rows
+ *       of {@code bench/results/exp-xeon8573c-2026-11-21.txt} and {@code
+ *       exp-epyc7763-2026-11-20.txt} allocate on data with rare lanes (readings of 21 and 20
+ *       November 2026).
  *   <li>{@link #expBlended} computes them in every lane too and blends them, with no branch.
  * </ul>
  *
- * <p>Both are exact. {@code VFdlibm.exp} uses the first. On the AMD EPYC 7763, the headline
- * host, the first arm as first merged ({@code bench/results/exp-epyc7763-2026-11-02.txt}, minimums
- * in ns per 1024 doubles at 256 bits) was 1.57x faster than the blend on common data, where no
- * lane is rare (4203 against 6590), and lost once rare lanes were common: on mixed data, one rare
- * input in 16, it was 1.64x slower than the blend (12331 against 7512). Its finish was then a
- * separate method, which C2 refused to inline at the end of this large body, so every vector
- * boxed its arguments and the mixed rows allocated 52928 B/op. The finish is now written out
- * inline and allocates nothing at 256 and 512 bits (laptop numbers in {@code
- * bench/results/exp-finish-laptop-2026-11-02.txt}); the runs of this code on the benchmark hosts
- * decide between the arms again, each for its own instruction set, the AVX-512 hosts first
- * ({@code HARDWARE.md}). The second arm is kept so the choice can be re-measured, on other hosts
- * and as the JDK changes. Those figures predate the folds above, which cut the common path C2 emits
- * from 77 instructions with two divisions to 52 with one at 512 bits on AVX-512, and from 107 to
- * 64 at 256 bits under {@code -XX:UseAVX=2} ({@code bench/asm/README.md}). The folded body has
- * been timed once, as a pair against its base on the Xeon Platinum 8573C ({@code
- * bench/results/exp-onediv-xeon8573c-2026-11-03.txt}): on common data its 256-bit and 512-bit
- * rows are 1.33x to 1.48x faster by the median of five rounds, and no vector row is slower.
+ * <p>Both are exact. {@code VFdlibm.exp} uses the first, provisionally. By minimums in ns per
+ * 1024 doubles, the blended arm over the finish arm is 1.99 to 2.13 on common data and 1.50 to
+ * 1.57 on mixed data at 256 bits and the preferred species on the AMD EPYC 7763 ({@code
+ * bench/results/exp-epyc7763-2026-11-20.txt}, two runs, the code of a5683c3); on the Xeon
+ * Platinum 8573C ({@code bench/results/exp-xeon8573c-2026-11-21.txt}, one run, the code of
+ * a1db6df) it is 1.23 to 1.37 on common data, a range with 1.3x inside it, and 1.70 to 1.84 on
+ * mixed data, at 256 bits, 512 bits and the preferred species. This class has changed since both
+ * runs by a fault constant and a local in the k conversion, so no run has timed it as it stands.
+ * Which arm is kept waits for a second run of the Xeon 8573C and a first of the other AVX-512
+ * hosts ({@code HARDWARE.md}), a pair, and the rules for a tie within 1.3x and for hosts that
+ * disagree (issue #30). The second arm is kept so the choice can be re-measured, on other hosts
+ * and as the JDK changes. The folds above cut the common path C2 emits from 77 instructions with
+ * two divisions to 52 with one at 512 bits on AVX-512, and from 107 to 64 at 256 bits under
+ * {@code -XX:UseAVX=2} ({@code bench/asm/README.md}). The folded body was timed once as a pair
+ * against its base on the Xeon Platinum 8573C ({@code
+ * bench/results/exp-onediv-xeon8573c-2026-11-03.txt}): on common data its 256-bit, 512-bit,
+ * preferred and Max rows are 1.33x to 1.48x faster by the median of five rounds, and no vector
+ * row is slower.
  *
  * <p>{@link #expCore} and {@link #expRare} split the finish arm into its branch-free part and its
  * rare-lane mask, for {@code ExpBenchmark}'s experiment with two vectors per loop iteration.

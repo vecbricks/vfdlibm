@@ -70,9 +70,16 @@ import jdk.incubator.vector.VectorSpecies;
  *       subnormal lanes are scaled by {@code 2^54} before the high word is read, as in the C.
  * </ul>
  *
- * <p>Both are exact. {@code VFdlibm.log10} uses the first, as {@code VFdlibm.log} does, until the
- * benchmark hosts measure the two ({@code HARDWARE.md}); the second is kept so the choice can be
- * re-measured.
+ * <p>Both are exact. {@code VFdlibm.log10} uses the first, as {@code VFdlibm.log} does,
+ * provisionally. By minimums at 256 bits, the preferred species and, on the Xeon, 512 bits, the
+ * blended arm over the finish arm is 1.24 to 1.28 on common data and 1.06 to 1.13 on mixed data
+ * on the AMD EPYC 7763 ({@code bench/results/log10-epyc7763-2026-11-20.txt}, two runs), and 1.18
+ * to 1.25 on common data and 0.92 to 0.98 on mixed data on the Xeon Platinum 8573C ({@code
+ * bench/results/log10-xeon8573c-2026-11-21.txt}, one run). Every ratio is within 1.3x, so no
+ * direction is read; the files time this class as it stands. The choice waits for a second run
+ * of the Xeon 8573C and a first of the other AVX-512 hosts ({@code HARDWARE.md}), a pair, and
+ * the rules for a tie within 1.3x and for hosts that disagree (issue #30); the second arm is
+ * kept so the choice can be re-measured.
  */
 final class Log10 {
 
