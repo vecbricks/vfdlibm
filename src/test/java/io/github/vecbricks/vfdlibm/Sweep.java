@@ -41,8 +41,8 @@ import jdk.incubator.vector.VectorSpecies;
  * a partner for the other argument, drawn from the seed, the argument and the input's index
  * alone ({@link #partner}), so any pair of the pass replays from the seed. A pair
  * is checked once in a pass, so a night that sweeps both arguments checks 3 * 2^33 pairs of the
- * 2^128. A bug that needs two particular high words together is left to the {@link Fuzz}'s
- * related pairs.
+ * 2^128. A bug that needs two particular high words together is left to the {@link Fuzz}, which
+ * draws both arguments at their edges at once.
  *
  * <p>{@code --part i/N} checks the i-th of N equal parts of the high words (N a power of two up
  * to 2^32; 0/1, the default, is all of them), and a comma-separated list of parts checks each.

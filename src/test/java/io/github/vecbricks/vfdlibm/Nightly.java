@@ -190,7 +190,11 @@ final class Nightly {
 
     @Override
     public List<String> armNames() {
-      return Nightly.armNames(this);
+      List<String> names = new ArrayList<>();
+      for (Arm arm : arms) {
+        names.add(arm.name() + (arm.masked() == null ? " (unmasked only)" : ""));
+      }
+      return names;
     }
 
     @Override
@@ -730,19 +734,5 @@ final class Nightly {
         }
       }
     }
-  }
-
-  /** The arms of {@code subject}, by name, for the log. */
-  static List<String> armNames(Subject subject) {
-    return subject.armNames();
-  }
-
-  /** The arms of {@code function}, by name, for the log. */
-  static List<String> armNames(Function function) {
-    List<String> names = new ArrayList<>();
-    for (Arm arm : function.arms) {
-      names.add(arm.name() + (arm.masked() == null ? " (unmasked only)" : ""));
-    }
-    return names;
   }
 }
