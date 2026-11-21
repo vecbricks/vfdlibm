@@ -30,8 +30,9 @@ contract of every version is the same: each lane of each function equals
   first eight lanes with constant indices. Before the change, at `DoubleVector.SPECIES_MAX` (up to
   eight lanes) the finish of `exp`, `expm1`, `log`, `log10` and `log1p` allocated 30,432 to 36,992
   B/op (one op is 1024 doubles) on mixed data (`bench/results/max-finish-laptop-2026-11-20.txt`, a
-  laptop reading); after it, every `*Max` row reads under 0.1 B/op there
-  (`bench/results/max-finish-alloc-free-laptop-2026-11-21.txt`, allocation only, no timing).
+  laptop reading); after it, every `*Max` row of those seven reads under 0.1 B/op there
+  (`bench/results/max-finish-alloc-free-laptop-2026-11-21.txt`, a laptop reading, allocation only,
+  no timing).
   Every lane's result is unchanged.
 
 ## [0.1.0] - 2026-11-20

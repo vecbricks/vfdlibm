@@ -383,7 +383,7 @@ next port re-trying a settled question.
   host files read the same shape by minimums. On the EPYC 7763
   (`bench/results/log-epyc7763-2026-11-20.txt`, two runs) the blend is 1.21 to 1.24 times the finish
   on common data and 1.01 to 1.03 on mixed data, at 256 bits and the preferred species, and the
-  finish allocates nothing. On the Xeon Platinum 8573C
+  finish reads 0.017 B/op or less on its 256-bit and preferred rows. On the Xeon Platinum 8573C
   (`bench/results/log-xeon8573c-2026-11-21.txt`, one run) blended over finish is 1.24 (256 bits),
   1.32 (preferred species) and 1.32 (512 bits) on common data, the last two just outside 1.3x with
   the finish lower, and 0.97, 0.77 and 0.77 on mixed data, where the blend is lower and the last two
@@ -470,7 +470,7 @@ next port re-trying a settled question.
   are, a loop over the set bits of `rare.toLong()` with `result.withLane(lane,
   StrictMath.log1p(x.lane(lane)))`, it reads ~0.01 B/op on mixed data at 256 and 512 bits, so
   nothing in it was refused in log1p's large body (the current runs in the same files). Its
-  `SPECIES_MAX` form boxed as exp's did: 30912 B/op on mixed data at 512 bits and 36993 under
+  `SPECIES_MAX` form boxed as exp's did: 30912 B/op on mixed data at 512 bits and 36992 under
   `-XX:UseAVX=2` (`bench/results/max-finish-laptop-2026-11-20.txt`). An earlier exploratory run had
   measured a `withLane` loop at 47,232 B/op (quoted in the same superseded runs); whether that
   loop sat in a helper taking vectors was not recorded, and it most likely measured that call's
