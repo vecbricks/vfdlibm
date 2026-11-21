@@ -128,22 +128,21 @@ the compatibility promise, and any release, a patch included, may rename or remo
 property unset, the results are unchanged, and each lane still equals `StrictMath`'s.
 
 **Which species to pass.** Every species of 128 bits or more gives the same bits. The files under
-`bench/results/` read what the body allocates at each. `exp`, `log` and `log10` call the finish
-arm, and `expm1` and `log1p` the guarded arm. The allocation check (`bench/alloc-check.py`, run
-by CI) covers, on x86, 256 bits and the preferred species, and on Arm the preferred species, 128
-bits, where it passed (`bench/results/alloc-arm-2026-11-20.txt`, an allocation reading and no
-timing). On an EPYC 7763, an AVX2 host (the files of 20 November 2026 in `bench/results/`), the
-finish arm of `exp` and of `log` allocates 0.5 to 0.6 million bytes per op at 128 bits, `exp`'s
-the same on a Xeon 8573C (at the head of the pair in
-`bench/results/exp-onediv-xeon8573c-2026-11-03.txt`), and the arm each of the five functions
-calls 0.9 to 1.8 million at 512 bits, the Java fallback there; the other three functions have
-no 128-bit row. At `SPECIES_MAX`, on mixed data, the finish arm of every
-function allocates 30432 to 36992 bytes per op, and the guarded arm of `expm1` and `log1p` less
-than 0.5 (`bench/results/max-finish-laptop-2026-11-20.txt`, a laptop file and not a headline,
-read at 512 and 256 bits, not at 128). Not measured: the speed of 512 bits against 256 on the
-EPYC 9V74 draws that have AVX-512 (`HARDWARE.md` lists `MaxVectorSize=64` for them and no
-benchmark host is of that kind), and the speed of any port on Arm. A fuller list is in the
-Javadoc of `VFdlibm`.
+`bench/results/` read what the body allocates at each, in bytes per op, an op being one pass over
+1024 doubles. The allocation check (`bench/alloc-check.py`, run by CI) covers, on x86, 256 bits
+and the preferred species, and on Arm the preferred species, 128 bits, where it passed
+(`bench/results/alloc-arm-2026-11-20.txt`, an allocation reading and no timing). On an EPYC
+7763, an AVX2 host (the files of 20 November 2026 in `bench/results/`), `exp` and `log` allocate
+0.5 to 0.6 million bytes per op at 128 bits, `exp` the same on a Xeon 8573C (at the head of the
+pair in `bench/results/exp-onediv-xeon8573c-2026-11-03.txt`), and each of the five functions
+0.9 to 1.8 million at 512 bits, the Java fallback there; `log10`, `log1p` and `expm1` have no
+128-bit row. At `SPECIES_MAX`, on mixed data, `exp`, `log` and `log10` allocate 30432 to 36992
+bytes per op, and `expm1` and `log1p` less than 0.5
+(`bench/results/max-finish-laptop-2026-11-20.txt`, a laptop file and not a headline, read at 512
+and 256 bits, not at 128). So the readings favour 256 bits and the preferred species over 128
+bits on x86 and 512 bits on an AVX2 host. Not measured: any port's speed at 512 bits against 256
+on the EPYC 9V74 draws that have AVX-512 (`HARDWARE.md` has only a datapath reading for them),
+and on Arm. A fuller list is in the Javadoc of `VFdlibm`.
 
 ## Supported JDKs
 

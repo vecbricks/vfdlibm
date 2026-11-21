@@ -23,9 +23,9 @@ import jdk.incubator.vector.VectorMask;
  * never sends the vector down a slow path.
  *
  * <p>Which species to pass. Every species of 128 bits or more gives the same bits. The files
- * under {@code bench/results/} read what the body allocates at each. The arm that {@code exp},
- * {@code log} and {@code log10} call is the finish arm, and the one {@code expm1} and {@code
- * log1p} call is the guarded arm.
+ * under {@code bench/results/} read what the body allocates at each, in bytes per op, an op being
+ * one pass over 1024 doubles. The arm that {@code exp}, {@code log} and {@code log10} call is the
+ * finish arm, and the one {@code expm1} and {@code log1p} call is the guarded arm.
  *
  * <ul>
  *   <li>Covered by {@code bench/alloc-check.py}, which CI runs and which fails a body that
@@ -33,26 +33,29 @@ import jdk.incubator.vector.VectorMask;
  *       DoubleVector.SPECIES_PREFERRED}, with the runner's own flags and as an AVX2 host; on Arm,
  *       the preferred species, 128 bits, where all 24 rows passed ({@code
  *       bench/results/alloc-arm-2026-11-20.txt}, an allocation reading and no timing).
- *   <li>128 bits on x86: the finish arm of {@code exp} and of {@code log} allocates 0.5 to 0.6
- *       million bytes per op on an EPYC 7763, an AVX2 host (the files of 20 November 2026, below),
- *       and {@code exp}'s the same on a Xeon 8573C, at the head of the pair in {@code
+ *   <li>128 bits on x86: {@code exp} and {@code log} allocate 0.5 to 0.6 million bytes per op on
+ *       an EPYC 7763, an AVX2 host (the files of 20 November 2026 named below), and {@code exp}
+ *       the same on a Xeon 8573C, at the head of the pair in {@code
  *       bench/results/exp-onediv-xeon8573c-2026-11-03.txt}. {@code log10}, {@code log1p} and
  *       {@code expm1} have no 128-bit row.
- *   <li>512 bits on an AVX2 host, where it is the Vector API's Java fallback: the arm each of the
- *       five functions calls allocates 0.9 to 1.8 million bytes per op. Both EPYC 7763 readings
- *       are in the files of 20 November 2026 ({@code exp-epyc7763-2026-11-20.txt}, and the same
- *       for {@code log}, {@code log10}, {@code log1p} and {@code expm1}, in {@code
+ *   <li>512 bits on an AVX2 host, where it is the Vector API's Java fallback: each of the five
+ *       functions allocates 0.9 to 1.8 million bytes per op. The EPYC 7763 files of 20 November
+ *       2026 hold this reading and the 128-bit one above ({@code exp-epyc7763-2026-11-20.txt},
+ *       and the same for {@code log}, {@code log10}, {@code log1p} and {@code expm1}, in {@code
  *       bench/results/}).
  *   <li>{@code DoubleVector.SPECIES_MAX} is none of the fixed shapes. On mixed data (one input in
- *       16 replaced by one that takes its own path in the C, as each benchmark class lists), the
- *       finish arm of every function allocates 30432 to 36992 bytes per op there, and the guarded
- *       arm of {@code expm1} and {@code log1p} less than 0.5 ({@code
+ *       16 replaced by one that takes its own path in the C, as each benchmark class lists),
+ *       {@code exp}, {@code log} and {@code log10} allocate 30432 to 36992 bytes per op there,
+ *       and {@code expm1} and {@code log1p} less than 0.5 ({@code
  *       bench/results/max-finish-laptop-2026-11-20.txt}, a laptop file and not a headline, read
  *       at 512 bits and as an AVX2 host at 256; {@code SPECIES_MAX} at 128 bits was not read).
- *   <li>Not measured: the speed of 512 bits against 256 on the EPYC 9V74 draws that have AVX-512
- *       ({@code HARDWARE.md} lists {@code MaxVectorSize=64} for them and no benchmark host is of
- *       that kind), and the speed of any port on Arm.
+ *   <li>Not measured: any port's speed at 512 bits against 256 on the EPYC 9V74 draws that have
+ *       AVX-512 ({@code HARDWARE.md} has only a datapath reading for them, and lists {@code
+ *       MaxVectorSize=64}), and any port's speed on Arm.
  * </ul>
+ *
+ * <p>So the readings favour 256 bits and the preferred species, which the check covers, over 128
+ * bits on x86 and 512 bits on an AVX2 host, which allocate 0.5 to 1.8 million bytes per op.
  *
  * <p>Each function is ported from fdlibm 5.3's C source, kept in {@code reference/fdlibm-5.3/};
  * the class that holds a function's port names the file it follows and carries its notice.
