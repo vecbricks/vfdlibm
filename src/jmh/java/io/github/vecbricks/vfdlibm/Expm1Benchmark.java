@@ -156,6 +156,44 @@ public class Expm1Benchmark {
     return out;
   }
 
+  /**
+   * {@link Expm1#expm1Core}, the common path alone: no rare lane is finished, so on {@code mixed}
+   * data the rare lanes hold unspecified values, and the row reads what the nested body costs.
+   * It is named like the arms, so {@code bench/alloc-check.py} checks its {@code 256} and {@code
+   * Preferred} rows.
+   */
+  @Benchmark
+  public double[] core256() {
+    for (int i = 0; i < N; i += S256.length()) {
+      Expm1.expm1Core(DoubleVector.fromArray(S256, in, i)).intoArray(out, i);
+    }
+    return out;
+  }
+
+  @Benchmark
+  public double[] core512() {
+    for (int i = 0; i < N; i += S512.length()) {
+      Expm1.expm1Core(DoubleVector.fromArray(S512, in, i)).intoArray(out, i);
+    }
+    return out;
+  }
+
+  @Benchmark
+  public double[] corePreferred() {
+    for (int i = 0; i < N; i += SP.length()) {
+      Expm1.expm1Core(DoubleVector.fromArray(SP, in, i)).intoArray(out, i);
+    }
+    return out;
+  }
+
+  @Benchmark
+  public double[] coreMax() {
+    for (int i = 0; i < N; i += SMAX.length()) {
+      Expm1.expm1Core(DoubleVector.fromArray(SMAX, in, i)).intoArray(out, i);
+    }
+    return out;
+  }
+
   @Benchmark
   public double[] blended256() {
     for (int i = 0; i < N; i += S256.length()) {

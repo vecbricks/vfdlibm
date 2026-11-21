@@ -523,7 +523,9 @@ s_expm1.c reduces `|x| > 0.5 ln2` the way e_exp.c does, in a near form for `|x| 
 one of six forms of `e = (x*(e-c)-c)-hxs` otherwise (191-212). The port computes the far form
 on every lane and lets `k == 0` lanes through it (L10), and returns the `k == 0` lanes' result
 from the shared `e` (L11). Everything else is the C's operations in the C's order; the six
-`k != 0` forms are each computed and blended. Line numbers in this section are
+`k != 0` forms are each computed and blended. `Expm1.expm1Core`, the finish arm's body in a
+fourth mode without its rare block, adds no departure: its lanes outside `expm1Rare` run the same
+operations, so L10 and L11 cover them as they cover the arms. Line numbers in this section are
 `reference/fdlibm-5.3/s_expm1.c`'s, and `hx` is the C's high word of `|x|`. In the C `hx` is
 `unsigned`; every compare follows `hx &= 0x7fffffff`, so both sides lie in `[0, 2^31)` and the
 port's signed `int` compares are the C's (the integers are the same, and so is their order).

@@ -28,8 +28,9 @@ import org.junit.jupiter.params.provider.EnumSource;
 /**
  * expm1 against {@code StrictMath.expm1}, by raw bits, at every width and at {@code
  * SPECIES_MAX}: the public {@link VFdlibm#expm1} and each of {@code Expm1}'s arms ({@link
- * Expm1#expm1Blended}, {@link Expm1#expm1Guarded}, {@link Expm1#expm1Finish}), unmasked and
- * masked, on s_expm1.c's high-word tests, the doubles where its {@code k} steps and so its
+ * Expm1#expm1Blended}, {@link Expm1#expm1Guarded}, {@link Expm1#expm1Finish}, and {@link
+ * Expm1#expm1Core} with {@link Expm1#expm1Rare}'s lanes finished per lane), unmasked and masked,
+ * on s_expm1.c's high-word tests, the doubles where its {@code k} steps and so its
  * return form changes, the special values, sampled bit patterns over the whole domain, dense
  * draws over each range the C treats differently, the fold boundaries of {@code PROOFS.md}'s
  * L10 and L11, every subset of a vector's lanes rare, and the published hard-to-round cases.
@@ -52,7 +53,72 @@ class Expm1Test {
     arms.put("Expm1.expm1Blended", Expm1::expm1Blended);
     arms.put("Expm1.expm1Guarded", Expm1::expm1Guarded);
     arms.put("Expm1.expm1Finish", Expm1::expm1Finish);
+    // The core has no masked form of its own: its test form finishes the rare mask's lanes per
+    // lane and, under a mask, keeps x in the inactive lanes, as the other arms do.
+    arms.put("Expm1.expm1Core+expm1Rare", (x, live) -> {
+      DoubleVector result = coreAndRare(x);
+      return live == null ? result : x.blend(result, live);
+    });
     return arms;
+  }
+
+  /** {@link Expm1#expm1Core}, with the lanes {@link Expm1#expm1Rare} sets finished per lane. */
+  private static DoubleVector coreAndRare(DoubleVector x) {
+    DoubleVector core = Expm1.expm1Core(x);
+    long rare = Expm1.expm1Rare(x).toLong();
+    for (long bits = rare; bits != 0; bits &= bits - 1) {
+      int lane = Long.numberOfTrailingZeros(bits);
+      core = core.withLane(lane, StrictMath.expm1(x.lane(lane)));
+    }
+    return core;
+  }
+
+  /**
+   * {@code expm1Rare} sets exactly s_expm1.c's early returns, computed here per lane from the C,
+   * and {@code expm1Core} is {@code StrictMath.expm1} in every other lane, at every width and at
+   * {@code SPECIES_MAX}. A lane the mask wrongly leaves clear shows as a core lane that differs;
+   * a lane it wrongly sets shows in the mask itself.
+   */
+  @ParameterizedTest
+  @EnumSource(VectorWidth.class)
+  void coreAndRareMaskAreTheFinishArm(VectorWidth width) {
+    assertCoreAndRare(width.species());
+  }
+
+  @Test
+  void coreAndRareMaskAreTheFinishArmAtMaxSpecies() {
+    assertCoreAndRare(DoubleVector.SPECIES_MAX);
+  }
+
+  private static void assertCoreAndRare(VectorSpecies<Double> species) {
+    int n = species.length();
+    double[] xs = Inputs.concat(thresholds(), foldBoundaries(), everySubsetOfLanesRare(n),
+        Inputs.sampled(4200L, 1 << 14), Inputs.uniform(4201L, 1 << 14, -60.0 * LN2, 720.0),
+        Inputs.uniform(4202L, 1 << 14, -3.0, 3.0));
+    for (int base = 0; base + n <= xs.length; base += n) {
+      DoubleVector x = DoubleVector.fromArray(species, xs, base);
+      DoubleVector core = Expm1.expm1Core(x);
+      VectorMask<Double> rare = Expm1.expm1Rare(x);
+      for (int i = 0; i < n; i++) {
+        double xi = xs[base + i];
+        String at = Oracle.hex(xi);
+        assertEquals(cRare(xi), rare.laneIsSet(i), "rare lane at " + at);
+        if (!rare.laneIsSet(i)) {
+          assertEquals(Double.doubleToRawLongBits(StrictMath.expm1(xi)),
+              Double.doubleToRawLongBits(core.lane(i)), "core lane at " + at);
+        }
+      }
+    }
+  }
+
+  /** s_expm1.c's early returns for one double: lines 146-158 and 177. */
+  private static boolean cRare(double x) {
+    int hx = (int) (Double.doubleToRawLongBits(x) >>> 32) & 0x7fffffff;
+    boolean negative = (Double.doubleToRawLongBits(x) < 0);
+    return hx >= Expm1.HX_NON_FINITE
+        || (hx >= Expm1.HX_FILTER && x > Expm1.O_THRESHOLD)
+        || (negative && hx >= Expm1.HX_56_LN2)
+        || hx < Expm1.HX_TINY;
   }
 
   /** Every arm, unmasked, at {@code species}, over {@code xs}. */
