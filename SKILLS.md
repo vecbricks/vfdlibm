@@ -754,7 +754,8 @@ re-trying a settled question.
   body, with its reduction and its seven forms, beside `Exp`'s would be two port bodies in one
   graph (above). With one `expCore` and about 35 more operations, `CoshBenchmark`'s rows are
   held by `bench/alloc-check.py` (CI runs it, and it was run locally before any test was
-  written), at the runner's flags and as AVX2; no figure is committed.
+  written), at the runner's flags and as AVX2; the laptop file's `gc.alloc.rate.norm` rows are
+  under 0.1 B/op.
 - **Two arms, one provisional default.** `coshSlice` computes the small range in the vector and
   `coshFinish` finishes its lanes per lane; `VFdlibm.cosh` runs the slice arm. The arms differ
   only on `|x| < 0.5*ln2`, so their cost follows the share of that range, which is 3.5% in

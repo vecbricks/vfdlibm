@@ -893,13 +893,14 @@ reassociation, and **needs no lemma of its own**. Where its text is not the C's:
 
 **What it rests on.** The `exp` of lines 71 and 76 is `Exp.expCore(|x|)`: exp's own body, the
 same lines, with the rare paths and the rare-lane finish left out, which is `StrictMath.exp` in
-every lane outside `Exp.expRare`. So exp's lemmas hold for cosh's lanes as they stand: L1, the
-`k == 0` path as the general tail, L2, the near band's form as the far form, and L5, `halF[xsb]`
-from the sign bit, whose argument here is non-negative. A lane of `0.5*ln2 <= |x| < 709.78` is
-none of `expRare`'s: its `k` is not below `-1021` and its high word is below the filter's. The
-lanes of the small range get `expCore` values nobody keeps.
+every lane outside `Exp.expRare`. So exp's lemmas hold for cosh's lanes as they stand: L2, the
+near band's form as the far form, and L5, `halF[xsb]` from the sign bit, whose argument here is
+non-negative. L1, the `k == 0` path, is not used: every lane whose `expCore` value is kept has
+`|x| >= 0.5*ln2` and is reduced, and the unreduced lanes of the small range get values nobody
+keeps. A lane of `0.5*ln2 <= |x| < 709.78` is none of `expRare`'s: its `k` is not below `-1021`
+and its high word is below the filter's.
 
-**Hinge tests.** Those of L1, L2 and L5 (`ProofsTest`), which run on `Exp`'s scalar words. The
+**Hinge tests.** Those of L2 and L5 (`ProofsTest`), which run on `Exp`'s scalar words. The
 vector tie is `CoshTest`: `VFdlibm.cosh` and both arms against `StrictMath.cosh` at every width
 and `SPECIES_MAX`, unmasked and masked, on the thresholds of lines 62, 65, 70 and 76 and their
 neighbours, sampled bit patterns, dense draws of `(-30, 30)`, of `(-0.5, 0.5)` and of `[20, 24]`,
