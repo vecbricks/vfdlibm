@@ -47,6 +47,7 @@ class PlantedFaultTest {
     CATCHERS.putAll(Log1pTest.faultCatchers());
     CATCHERS.putAll(SinhTest.faultCatchers());
     CATCHERS.putAll(AsinTest.faultCatchers());
+    CATCHERS.putAll(AcosTest.faultCatchers());
     CATCHERS.putAll(CoshTest.faultCatchers());
     CATCHERS.putAll(AtanTest.faultCatchers());
   }

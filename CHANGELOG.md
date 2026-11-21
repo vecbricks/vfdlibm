@@ -27,6 +27,10 @@ contract of every version is the same: each lane of each function equals
   any species of 128 bits or more. Every lane is bit-identical to `StrictMath.atan`, NaN payloads
   and signed zeros included. Lanes of magnitude `2^66` or more, the infinities and NaNs are
   finished per lane by `StrictMath.atan`.
+- `VFdlibm.acos`, in the two forms `acos(x)` and `acos(x, live)`, over `DoubleVector` lanes of
+  any species of 128 bits or more. Every lane is bit-identical to `StrictMath.acos`, NaN payloads
+  and signed zeros included. Lanes of magnitude 1 or more and NaNs are finished per lane by
+  `StrictMath.acos`.
 
 ### Changed
 

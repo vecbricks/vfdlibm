@@ -1181,3 +1181,62 @@ way: moved by one word, the lanes of the word between give the same bits (0 of 2
 changed, and the test pins that), so no test of results sees those two move, and they are not
 checked. That a move by more than one word is seen was not measured, except for the
 `0x3ff30000` one.
+
+## acos (`Acos.java`, from `e_acos.c`)
+
+e_acos.c reads `hx = __HI(x)` and `ix = hx&0x7fffffff` (lines 69-70). For `ix >= 0x3ff00000` it
+returns `0.0` for exactly `1`, `pi+2.0*pio2_lo` for exactly `-1` and `(x-x)/(x-x)` above (71-76).
+Below that, for `|x| < 0.5` (`ix < 0x3fe00000`, line 78) it returns `pio2_hi+pio2_lo` for `ix <=
+0x3c600000` (79) and otherwise `pio2_hi - (x - (pio2_lo-x*r))` with `z = x*x`, `r = p/q` (80-84);
+for `hx < 0` (`x <= -0.5`: the C's comment says `x < -0.5`, but `-0.5` takes this branch, line
+85) with `z = (one+x)*0.5`, `s = sqrt(z)` and `r = p/q` it returns `pi - 2.0*(s+w)`, `w =
+r*s-pio2_lo` (86-92); and otherwise (94-103, `x >= 0.5`: the C's comment says
+`x > 0.5`, but `+0.5` takes this branch) with `z =
+(one-x)*0.5`, `s = sqrt(z)`, `df` the root with its low word cleared and `c = (z-df*df)/(s+df)`
+it returns `2.0*(df+w)`, `w = r*s+c`. The port computes the lines below `|x| = 1` in the C's
+order, with no fused multiply-add and no reassociation, and **needs no lemma of its own** beyond
+L13's blend argument and (R4)'s `sqrt`; the asin section says the same of its own blends,
+and what it says of the low-word clear, of the shared polynomials and of the rare lanes holds
+here for the same reasons. Where acos's text is not the C's:
+
+- `__LO(df) = 0` (lines 96-97) is the AND of the lane's 64 bits with `0xFFFFFFFF00000000`, the
+  C's own operation on the bits, exact, as in asin's `__LO(w) = 0`: nothing to prove, the claim is
+  that the port clears the word the C clears. `acos.skipLowClear` is the fault that omits it.
+- The three ranges below 1 share one pass: `z` is `x*x`, `(one+x)*0.5` or `(one-x)*0.5` by the
+  C's compares, and `p`, `q` and `r = p/q` are then the same operations in all three (lines
+  81-83, 87-88 and 90, 99-101), on `z`; `s = sqrt(z)` is `VectorOperators.SQRT`. The second
+  division, `(z-df*df)/(s+df)`, is computed on every lane and kept by the lanes of `x >= 0.5`.
+- `pio2_hi+pio2_lo` (line 79) is the one constant of the port's source, `PIO2_HI + PIO2_LO`: a
+  Java constant expression of two doubles is evaluated as IEEE 754 addition, the one rounding the
+  C's run-time sum has (R4).
+- The lanes of `|x| >= 1`, the infinities and the NaNs, which the C answers with its first
+  branch, are finished per lane by `StrictMath.acos`, which is the C: no computation of the port
+  is in them.
+
+**L13 for acos.** H1 (selection) holds: every mask is the C's compare on the same `ix` or `hx` (`ix
+< 0x3ff00000`, `ix < 0x3fe00000`, `ix <= 0x3c600000`, `hx < 0`). The `<=` of the constant return is
+the C's text. A scalar script run once, not committed, found the first form's result equal to the
+constant's in 2000 random draws of each binade from `2^-80` to `2^-56`, and different from `2^-55`
+up (213 of 2000 there); that is all the evidence, and no test of the port tells the compare from `<`
+or from a neighbouring word. `acos.tinyMoved` moves the word to `0x3cd00000`, far enough to show. H2
+(operands) holds for the blend of `z`, the one operand the three ranges give the polynomials, and
+for the sums, which are the C's in its order. H3 (totality) holds: every operation is an IEEE
+operation on doubles, a compare, a bit operation or a reinterpretation, with no integer division and
+no indexed load, so a discarded lane's `sqrt` of a negative `z` or a `NaN` is a value and nothing
+else. H4 (select) holds: each blend is a `blend`. Not covered: that H1's words are the C's is
+`AcosTest`'s (`constantsAreTheSourcesBits`, and the thresholds and their neighbours), which catches
+`acos.halfMoved` (moved to `0x3fe80000`) and `acos.tinyMoved` (moved to `0x3cd00000`) and has no
+fault for a word moved by one (for the constant return's word, see above); the port's code having
+L13's shape is `AcosTest`'s tie and not L13's tests, which run a model; and (R4)'s `sqrt` is the
+operator's, tested by `SqrtTest`, with the C's own `sqrt` not shown there.
+
+**Hinge tests.** The vector tie is `AcosTest`: `VFdlibm.acos` against `StrictMath.acos` at every
+width and `SPECIES_MAX`, unmasked and masked, on the thresholds of lines 71, 78 and 79 and their
+neighbours, sampled bit patterns, dense draws of `(-1, 1)`, of `(-0.6, -0.4)`, `(0.4, 0.6)`,
+`(0.95, 1)` and `(-1, -0.95)`, the magnitudes from `2^-70` to `1`, the published hard cases (1569
+inputs, all positive) and their negations, which reach the branch of `x < -0.5`, and every subset
+of a vector's lanes rare (`everySubsetOfLanesRare`); `scalarTranscriptionIsStrictMath` checks that
+`cAcos`, e_acos.c in scalar Java, is `StrictMath.acos`. L13's own tests are `ProofsTest.l13*`.
+
+**Encoding.** No file of its own: nothing here is a fold. Informal here: that the port's blends
+take each branch on exactly the C's lanes, and that it computes these steps, the code's text.

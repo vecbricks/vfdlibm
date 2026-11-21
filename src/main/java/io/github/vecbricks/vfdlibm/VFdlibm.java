@@ -17,7 +17,7 @@ import jdk.incubator.vector.VectorMask;
  * {@link StrictMath} method of the same name, NaN payloads and signed zeros included.
  *
  * <p>Every method works on a vector of any species of 128 bits or more (exp, expm1, log, log10,
- * log1p, sinh, cosh, asin and atan hold fdlibm's {@code int} words in int lanes of half the
+ * log1p, sinh, cosh, asin, atan and acos hold fdlibm's {@code int} words in int lanes of half the
  * vector's size). Each comes in two forms: one computes every lane, and a masked form computes
  * only the lanes set in {@code live} and returns every other lane of its argument untouched, raw
  * bits and all. An inactive lane never sends the vector down a slow path.
@@ -278,5 +278,27 @@ public final class VFdlibm {
    */
   public static DoubleVector atan(DoubleVector x, VectorMask<Double> live) {
     return Atan.atan(x, Objects.requireNonNull(live, "live"));
+  }
+
+  /**
+   * {@code StrictMath.acos} in every lane. Ported from fdlibm 5.3's {@code e_acos.c}.
+   *
+   * @param x the arguments
+   * @return the arc cosine of each lane of {@code x}
+   */
+  public static DoubleVector acos(DoubleVector x) {
+    return Acos.acos(x, null);
+  }
+
+  /**
+   * {@code StrictMath.acos} in the lanes set in {@code live}; every other lane is {@code x}'s,
+   * untouched.
+   *
+   * @param x the arguments
+   * @param live the lanes to compute, of {@code x}'s species
+   * @return the arc cosine of each live lane of {@code x}, and {@code x} in the others
+   */
+  public static DoubleVector acos(DoubleVector x, VectorMask<Double> live) {
+    return Acos.acos(x, Objects.requireNonNull(live, "live"));
   }
 }

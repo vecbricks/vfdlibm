@@ -3,9 +3,9 @@
 Lessons about benchmarking, the JIT and the Vector API that every port follows. Most were learned in
 Varka (github.com/vecbricks/varka, its `sql/varka/skills/`) and are rewritten here for a vector math
 library; the last sections are what the `exp`, `log`, `log1p`, `log10`, `expm1`, `sinh`, `cosh`,
-`asin` and `atan` ports taught. Each entry says where its numbers come from. A new lesson goes in
-the section it belongs to, as a short entry; a negative result belongs here too, since it stops the
-next port re-trying a settled question.
+`asin`, `atan` and `acos` ports taught. Each entry says where its numbers come from. A new lesson
+goes in the section it belongs to, as a short entry; a negative result belongs here too, since it
+stops the next port re-trying a settled question.
 
 ## Benchmarking with JMH
 
@@ -1041,3 +1041,29 @@ next port re-trying a settled question.
 - **Hard cases: 1655 inputs**, from `dev/testlibm-extract.py asn asin` (the tag `asn` is asin's;
   the extractor's recheck passes on all 1655 lines). All are positive, between 6.5e-8 and 1, and
   the one at 1 is a rare lane.
+
+## What the acos port taught
+
+- **The sibling of asin, with its own branches.** acos splits `|x| < 0.5` from `x <= -0.5`
+  (`hx < 0`) and `x >= 0.5`, so one pass computes `z` for the three, the polynomials and `r = p/q`
+  once, and the blends keep each lane's form; the `x >= 0.5` form divides a second time, for `c`.
+  The sign decides two forms above 0.5, so the hard cases (all positive, 1569 of them) reach the
+  `x <= -0.5` form only by their negations, which `AcosTest` draws. One arm: no tie to break.
+- **The C's comments are not its tests.** The comment says `x < -0.5` and `x > 0.5` where the
+  tests send `-0.5` to the `hx < 0` form and `+0.5` to the last one; the port and `AcosTest.cAcos`
+  use the tests, and the thresholds include both `+-0.5`.
+- **Which of the four planted faults changes what** (sized on 2^22 draws, a throwaway program over
+  `VFdlibm.acos`, run once per fault; the counts are of 4194304 draws each).
+  `acos.dropPio2Lo` changed 842961 of `[-1, 1]` and none of `[0.5, 1)`, where the form has no
+  `pio2_lo`; `acos.halfMoved` (the split moved to `0x3fe80000`) 954010 of `[-1, 1]` and none of
+  `(-0.5, 0.5)`; `acos.skipLowClear` 140899 of `[-1, 1]` (564449 of `[0.5, 1)`, none of
+  `[-1, -0.5)`, whose form has no low-word clear); `acos.tinyMoved` (the constant return's word
+  moved to `0x3cd00000`) none of `[-1, 1]` and 935119 of the magnitudes `2^-60` to `2^-50`, which
+  is why the fault run's inputs include those magnitudes. A word moved by one is not planted.
+- **Hard cases: 1569 inputs**, from `dev/testlibm-extract.py acs acos` (the extractor's recheck
+  passes on all of them). 1265 of them have fewer than 40 bits after the round bit pointing at the
+  midpoint, so most are not hard to round; the file keeps every line. All are positive, between
+  0.0143 and 0.999999999999999.
+- **Allocation.** CI runs `bench/alloc-check.py` on `AcosBenchmark`'s rows (`finish256`,
+  `finishPreferred`, `finishMax`, common and mixed data). No reading of them is committed and no
+  timing exists, so nothing is claimed of either.
