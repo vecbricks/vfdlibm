@@ -53,7 +53,9 @@ five are a later, optional set; the large-argument reduction of the trigonometri
 
 ## 4. Testing
 
-- **The oracle** is `StrictMath` on the same JVM, compared by `doubleToRawLongBits`.
+- **The oracle** is `StrictMath` on the same JVM, compared by `doubleToRawLongBits`; for a function
+  of two arguments, a lane of two NaNs with different bits is compared by `PairBits` (`PROOFS.md`,
+  "The contract of a function of two arguments").
 - **Inputs:**
   - sampled bit patterns over the whole `double` domain;
   - dense sweeps around each threshold fdlibm branches on;

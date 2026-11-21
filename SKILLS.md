@@ -676,10 +676,20 @@ re-trying a settled question.
   2^-32 for a random partner and more where the two exponents are near, and which
   the fuzz meets because its draws put both arguments at their edges at once (`toy2-xy` in
   `PairHarnessTest`: both sweeps pass it, the fuzz finds it). The masked form of an arm keeps the
-  first argument's bits in a lane that is not live (`Oracle.assertBinaryMasked`'s contract). A pair
+  first argument's bits in a lane that is not live (`Oracle.assertPairMasked`'s contract). A pair
   function's mismatch file, and a hard-cases file of one, say `# arity: 2` before the first input
   and hold `0x<x> 0x<y>` on a line: `Inputs.hardCasePairs` reads one, and `Inputs.hardCases` refuses
   it by that line.
+- **One comparator for a function of two arguments** (`PairBits.matches(x, y, want, got)`, test
+  code). Every comparison of a pair function's lane goes through it: `Oracle.assertPair` and the
+  live lanes of `assertPairMasked` (a lane that is not live keeps `x`'s raw bits), and the
+  nightly's `PairChecker`, so its mismatch file and the replay of that file use it too. A new
+  comparison of such a function written with `doubleToRawLongBits` is a defect. The `jar-check.sh`
+  consumer cannot use it (the jar holds no test classes): its `same` compares one argument's
+  functions, and when `atan2` arrives its two-argument form takes a copy of the rule written in the
+  consumer, with a lane of two NaNs of different bits in its inputs. `PairNanTest` is the proof it
+  can fail: toys with one change fail it, and a comparator changed to accept any NaN, or none, fails
+  `PairNanTest` too (each tried by hand before the last case was added).
 - **What a pass over a function of two arguments costs** (laptop, 21 November 2026,
   `bench/results/pair-sweep-laptop-2026-11-21.txt`; no pair function is ported, so this is two
   stand-ins run through `PairCostProbe`, not a port). A stripe of 2^24 high words at 256 bits took
