@@ -131,17 +131,17 @@ property unset, the results are unchanged, and each lane still equals `StrictMat
 what the body allocates. `exp`, `log` and `log10` call the finish arm, and `expm1` and `log1p`
 the guarded arm. The allocation check (`bench/alloc-check.py`, run by CI) covers, on x86, 256
 bits and the preferred species, and on Arm the preferred species, 128 bits, where it passed
-(`bench/results/alloc-arm-2026-11-20.txt`, an allocation reading and no timing). On an AVX2 host,
-the finish arm of `exp` and of `log` allocates 0.9 to 1.4 million bytes per op at 128 bits, and
-the arm that `exp`, `log`, `log1p` and `expm1` call 1.1 to 1.7 million at 512 bits, the Java
-fallback there (the EPYC 7763 files in `bench/results/`; `log10` has none). At `SPECIES_MAX`, on
-data with rare lanes, the finish arm of every function allocates 30432 to 36993 bytes per op, and
-the guarded arm of `expm1` and `log1p` less than 0.5
-(`bench/results/max-finish-laptop-2026-11-20.txt`, a laptop file and not a headline, read at 512
-and 256 bits, not at 128). Not measured on a benchmark host: the speed of 512 bits against 256
-on a CPU whose AVX-512 datapath is 256 bits wide; `HARDWARE.md` reads the EPYC 9V74's 512-bit
-lanes at 0.90 to 0.91 of the 256-bit rate in a probe. No port's speed was benchmarked on Arm. A
-fuller list is in the Javadoc of `VFdlibm`.
+(`bench/results/alloc-arm-2026-11-20.txt`, an allocation reading and no timing). On an AVX2 host
+(the EPYC 7763 files of 20 November 2026 in `bench/results/`), the finish arm of `exp` and of
+`log` allocates 0.5 to 0.6 million bytes per op at 128 bits, and the arm each of the five
+functions calls 0.9 to 1.8 million at 512 bits, the Java fallback there; the other three
+functions have no 128-bit row. At `SPECIES_MAX`, on data with rare lanes, the finish arm of every
+function allocates 30432 to 36992 bytes per op, and the guarded arm of `expm1` and `log1p` less
+than 0.5 (`bench/results/max-finish-laptop-2026-11-20.txt`, a laptop file and not a headline,
+read at 512 and 256 bits, not at 128). Not measured on a benchmark host: the speed of 512 bits
+against 256 on the EPYC 9V74 draws that have AVX-512, which prefer 512 bits (`HARDWARE.md` has
+their datapath probe reading), and the speed of any port on Arm. A fuller list is in the Javadoc
+of `VFdlibm`.
 
 ## Supported JDKs
 
