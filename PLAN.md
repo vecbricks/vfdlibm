@@ -40,7 +40,9 @@ own logarithm and exponential and calls only `sqrt`, `fabs` and `scalbn`. `sinh`
 (`VFdlibm.sinh`, from `e_sinh.c`, computing through `expm1`'s common path below 22 and finishing
 the rest per lane), and so is `cosh` (`VFdlibm.cosh`, from `e_cosh.c`, through `exp`'s common path
 and expm1's `k == 0` lines, with two arms for its small range: the default arm is the slice arm,
-provisionally, until a benchmark host times them). `log`, `log10` and
+provisionally, until a benchmark host times them). `asin` is done too (`VFdlibm.asin`, from
+`e_asin.c`, with `sqrt` as the Vector API's `SQRT`, one arm, and the lanes of `|x| >= 1` finished
+per lane). `log`, `log10` and
 `log1p` are done too (`VFdlibm.log`, from `e_log.c`, `VFdlibm.log10`, from `e_log10.c`, which
 computes through log's common path, and `VFdlibm.log1p`, from `s_log1p.c`), and so is `expm1`
 (`VFdlibm.expm1`, from `s_expm1.c`, whose reduction is exp's).
@@ -62,7 +64,7 @@ five are a later, optional set; the large-argument reduction of the trigonometri
   - published hard cases: inputs where the exact result lies very close to a rounding boundary, from
     Lefevre and Muller's worst-case tables (ARITH 15, 2001) and Lefevre's list of round-to-nearest
     hard cases, one resource per function under `src/test/resources/.../hard-cases/` (so far `exp`,
-    `expm1`, `log`, `log10`, `log1p`, `sinh` and `cosh`), loaded with
+    `expm1`, `log`, `log10`, `log1p`, `sinh`, `cosh` and `asin`), loaded with
     `Inputs.hardCases("<function>")`. The inputs of Lefevre's list come out of
     `dev/testlibm-extract.py`, which rechecks each line with 400-digit arithmetic against exact
     values it derives itself (`sinh`'s and `cosh`'s files were written by it; it also derives

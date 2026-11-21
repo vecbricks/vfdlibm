@@ -1025,3 +1025,59 @@ with s_expm1.c's lines in scalar Java, is `StrictMath.cosh`.
 **Encoding.** No file of its own. The files of exp's lemmas check their steps for cosh as they
 stand, `expCore` being the same body. Informal here: that the port's blends take each branch on
 exactly the C's lanes, and that it computes these steps, the code's text.
+
+## asin (`Asin.java`, from `e_asin.c`)
+
+e_asin.c reads `hx = __HI(x)` and `ix = hx&0x7fffffff` (lines 78-79). For `ix >= 0x3ff00000` it
+returns `x*pio2_hi + x*pio2_lo` for exactly `+-1` and `(x-x)/(x-x)` above (80-84). Below that, for
+`|x| < 0.5` (`ix < 0x3fe00000`, line 85) it returns `x` below `2^-27` (86-87) and otherwise `x+x*w`
+with `t = x*x`, `w = p/q` (89-93); from `0.5` up it takes `t = (one-fabs(x))*0.5`, the same `p`
+and `q` in `t`, and `s = sqrt(t)` (96-100), then above `0.975` (`ix >= 0x3FEF3333`, line 101)
+`pio2_hi-(2.0*(s+s*w)-pio2_lo)` with `w = p/q` (102-103), and below it `pio4_hi-(p-q)` with the
+split root (105-111); the sign is applied last (113). The port computes the lines below `|x| = 1`
+in the C's order, with no fused multiply-add and no reassociation, and **needs no lemma of its
+own** beyond L13's blend argument and (R4)'s `sqrt`. Where its text is not the C's:
+
+- The tiny test of lines 86-89 reads as an `if ... else`, but its `else` binds to the inner `if`
+  alone: the inner test `huge+x>one` is true for every `|x| < 2^-27` (`1e300 + x` is above 1 for
+  zeros and subnormals too), so the lanes below `2^-27` return `x` and the fall-through to
+  `t = x*x` is for the other lanes of `|x| < 0.5` only. The port returns `x` in those lanes by
+  the same compare, and `AsinTest.cAsin` transcribes the C's structure.
+- `w = s; __LO(w) = 0` (lines 105-106) is the AND of the lane's 64 bits with
+  `0xFFFFFFFF00000000`, which is what clearing the low word of an IEEE double is: the port does
+  the C's own operation on the bits, an exact one, and no arithmetic replaces it. So there is
+  nothing to prove about it: the claim is that the port clears the word the C clears.
+  `asin.skipLowClear` is the fault that omits it.
+- The three ranges below 1 share one pass: `t` is `x*x` or `(one-fabs(x))*0.5` by the C's
+  compare, and the polynomials `p`, `q` and the division `p/q` are then the same operations in
+  all three (lines 90-92, 98-99 and 102 or 108), on `t`. The split range's second division,
+  `(t-w*w)/(s+w)`, is computed on every lane and kept by the lanes of `0.5 <= |x| <= 0.975`.
+- The sign is `hx>0 ? t : -t`: the port blends `t` and its negation, which is exact, under the
+  mask `hx > 0` on the same word.
+- The lanes of `|x| >= 1`, the infinities and the NaNs, which the C answers with its first branch,
+  are finished per lane by `StrictMath.asin`, which is the C: no computation of the port is in
+  them.
+
+**L13 for asin.** H1 (selection) holds: every mask is the C's compare on the same `ix` or `hx`
+(`ix < 0x3ff00000`, `< 0x3fe00000`, `< 0x3e400000`, `>= 0x3FEF3333`, `hx > 0`). H2 (operands)
+holds for the blend of `t`, the one operand two branches give the polynomials, and for the sums,
+which are the C's in its order. H3 (totality) holds: every operation is an IEEE operation on
+doubles, a compare, a bit operation or a reinterpretation, with no integer division and no
+indexed load, so a discarded lane's `sqrt` of a negative `t` or a `NaN` is a value and nothing
+else. H4 (select) holds: each blend is a `blend`. Not covered: that H1's words are the C's is
+`AsinTest`'s (`constantsAreTheSourcesBits`, and the thresholds and their neighbours), which
+catches `asin.splitMoved` (moved to `0x3FFF3333`, above every lane of the range) and does not
+claim to catch a word moved by one, which changes only that word's lanes; the port's code having
+L13's shape is `AsinTest`'s tie and not L13's tests, which run a model; and (R4)'s `sqrt` is the
+operator's, tested by `SqrtTest`, with the C's own `sqrt` not shown there.
+
+**Hinge tests.** The vector tie is `AsinTest`: `VFdlibm.asin` against `StrictMath.asin` at every
+width and `SPECIES_MAX`, unmasked and masked, on the thresholds of lines 80, 85, 86 and 101 and
+their neighbours, sampled bit patterns, dense draws of `(-1, 1)`, of `(-0.6, -0.4)`, `(0.4, 0.6)`
+and `(0.95, 1)` and their negations, the magnitudes from `2^-60` to `1`, the published hard cases
+(1655 inputs, one of them 1) and their negations, and every subset of a vector's lanes rare
+(`everySubsetOfLanesRare`); `scalarTranscriptionIsStrictMath` checks that `cAsin`, e_asin.c in
+scalar Java, is `StrictMath.asin`. L13's own tests are `ProofsTest.l13*`.
+
+**Encoding.** No file of its own: nothing here is a fold. Informal here: that the port's blends
+take each branch on exactly the C's lanes, and that it computes these steps, the code's text.

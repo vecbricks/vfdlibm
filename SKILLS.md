@@ -2,10 +2,10 @@
 
 Lessons about benchmarking, the JIT and the Vector API that every port follows. Most were learned in
 Varka (github.com/vecbricks/varka, its `sql/varka/skills/`) and are rewritten here for a vector math
-library; the last sections are what the `exp`, `log`, `log1p`, `log10`, `expm1`, `sinh` and `cosh`
-ports taught. Each entry says where its numbers come from. A new lesson goes in the section it
-belongs to, as a short entry; a negative result belongs here too, since it stops the next port
-re-trying a settled question.
+library; the last sections are what the `exp`, `log`, `log1p`, `log10`, `expm1`, `sinh`, `cosh` and
+`asin` ports taught. Each entry says where its numbers come from. A new lesson goes in the
+section it belongs to, as a short entry; a negative result belongs here too, since it stops the
+next port re-trying a settled question.
 
 ## Benchmarking with JMH
 
@@ -900,3 +900,30 @@ re-trying a settled question.
   where expm1's has 16 of each and caught it. The 17 mutants that only the fuzz or the search
   showed now have a witness each among the hard cases, and `MutantsTest` pins them; a port's
   survey row that reads `fuzz` or `search` is a hard case waiting to be added.
+
+## What the asin port taught
+
+- **The first port over `sqrt`.** The body calls `VectorOperators.SQRT` on `t`; `SqrtTest`
+  checks the operator's raw bits against `StrictMath.sqrt` (PROOFS.md, (R4)), and
+  `bench/alloc-check.py` reads `AsinBenchmark`'s rows (`finish256`, `finishPreferred`, common and
+  mixed data) under 0.03 B/op both at this laptop's flags and as an AVX2 host (`-XX:UseAVX=2 -XX:MaxVectorSize=32`),
+  and `SqrtBenchmark`'s the same: the operator lowers at 256 bits and the preferred species
+  without boxing on both. That says nothing of 128 bits or of the masked form's lowering; no
+  figure of timing is committed, so the port claims no speed.
+- **One arm, no tie to break.** The three ranges below 1 share `t`'s polynomials and the one
+  division `p/q`, and the split range's second division is computed on every lane; the rare lanes
+  (`|x| >= 1`, NaN) are finished per lane. There is no second body to compare, so the arm needs
+  no default rule, and the benchmark has no `slice` row.
+- **e_asin.c's dangling else.** Lines 86-89 read as one `if ... else` but are two statements: the
+  tiny test returns `x` for every `|x| < 2^-27` (`huge+x>one` is true there), and `t = x*x` runs
+  for the other lanes of `|x| < 0.5`. The port, `AsinTest.cAsin` and PROOFS.md transcribe what
+  the C does, not what its indentation suggests.
+- **The faults, sized on 2^22 draws** (a throwaway program over `VFdlibm.asin`, run once per
+  fault): `asin.dropPio2Lo` changed 970339 of the draws of `[-1, 1]`, `asin.skipLowClear`
+  234026 (467198 of `[0.5, 1)`, none above `0.975`, where the root form has no low-word clear) and
+  `asin.splitMoved` 20855 of `[-1, 1]` and 833300 of `[0.975, 1)`. The split is moved to the word
+  `0x3FFF3333`, above every lane of the range: moved by one word it changes only the lanes of one
+  word, as the sinh section says, and that move is not planted.
+- **Hard cases: 1655 inputs**, from `dev/testlibm-extract.py asn asin` (the tag `asn` is asin's;
+  the extractor's recheck passes on all 1655 lines). All are positive, between 6.5e-8 and 1, and
+  the one at 1 is a rare lane.

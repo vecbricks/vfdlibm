@@ -17,8 +17,8 @@ import jdk.incubator.vector.VectorMask;
  * {@link StrictMath} method of the same name, NaN payloads and signed zeros included.
  *
  * <p>Every method works on a vector of any species of 128 bits or more (exp, expm1, log, log10,
- * log1p, sinh and cosh hold fdlibm's {@code int} words in int lanes of half the vector's size).
- * Each comes in two forms: one computes every lane, and a masked form computes only the lanes set
+ * log1p, sinh, cosh and asin hold fdlibm's {@code int} words in int lanes of half the vector's
+ * size). Each comes in two forms: one computes every lane, and a masked form computes only the lanes set
  * in {@code live} and returns every other lane of its argument untouched, raw bits and all. An
  * inactive lane never sends the vector down a slow path.
  *
@@ -230,5 +230,27 @@ public final class VFdlibm {
    */
   public static DoubleVector cosh(DoubleVector x, VectorMask<Double> live) {
     return Cosh.cosh(x, Objects.requireNonNull(live, "live"));
+  }
+
+  /**
+   * {@code StrictMath.asin} in every lane. Ported from fdlibm 5.3's {@code e_asin.c}.
+   *
+   * @param x the arguments
+   * @return the arc sine of each lane of {@code x}
+   */
+  public static DoubleVector asin(DoubleVector x) {
+    return Asin.asin(x, null);
+  }
+
+  /**
+   * {@code StrictMath.asin} in the lanes set in {@code live}; every other lane is {@code x}'s,
+   * untouched.
+   *
+   * @param x the arguments
+   * @param live the lanes to compute, of {@code x}'s species
+   * @return the arc sine of each live lane of {@code x}, and {@code x} in the others
+   */
+  public static DoubleVector asin(DoubleVector x, VectorMask<Double> live) {
+    return Asin.asin(x, Objects.requireNonNull(live, "live"));
   }
 }
