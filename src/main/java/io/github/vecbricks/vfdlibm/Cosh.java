@@ -106,21 +106,24 @@ final class Cosh {
   /**
    * Moves line 62's {@code 0x3fd62e43} to {@code 0x3ff00000} in the slice arm: the lanes of
    * {@code [0.5*ln2, 1)} take the polynomial of the small range where the C takes {@code exp},
-   * which rounds differently in about half of them (sized on 2^22 draws of {@code (-1, 1)}:
-   * 2070784 changed; moved by one word, none). The finish arm computes the small range per lane
+   * which rounds differently in about three quarters of them (sized on 2^22 draws of {@code
+   * (-1, 1)}: 2070784 changed, of about 2.74 million in {@code [0.3466, 1)}; moved by one word,
+   * none). The finish arm computes the small range per lane
    * and never reads it.
    */
   private static final boolean MOVING_SPLIT = Faults.is(SPLIT_MOVED);
   /**
-   * {@code half} one ulp up, 0.5 as {@code 0x3fe0000000000001}: every lane of the exp ranges is
-   * then wrong (4144395 of 2^22 draws of {@code (-30, 30)} changed).
+   * {@code half} one ulp up, 0.5 as {@code 0x3fe0000000000001}: nearly every lane of the exp
+   * ranges is then wrong (4144395 of 2^22 draws of {@code (-30, 30)} changed; the small range,
+   * 1% of them, does not read {@code half}).
    */
   private static final double HALF_USED =
       Faults.is(HALF_ONE_ULP_OFF) ? Double.longBitsToDouble(0x3fe00000_00000001L) : HALF;
   /**
    * Drops line 72's {@code half/t}: the lanes of {@code [0.5*ln2, 22)} return {@code half*t},
-   * which is wrong in about 61% of the draws of {@code (-30, 30)} (2568400 of 2^22) and in every
-   * one of {@code [0.35, 5)}; above that the term is under an ulp.
+   * which is wrong in about 61% of the draws of {@code (-30, 30)} (2568400 of 2^22), in every
+   * lane up to {@code |x|} of about 18.7, above which the term is under half an ulp of {@code
+   * half*t}.
    */
   private static final boolean DROPPING_HALF_OVER_T = Faults.is(DROP_HALF_OVER_T);
   /**

@@ -770,10 +770,11 @@ re-trying a settled question.
   change `expCore`'s lanes of `|x| >= 0.5 ln2`. `exp.thresholdMoved` moves the subnormal
   scale-back, which `expCore` leaves out, and `exp.dropKForcing` the lanes of the word of 0.5
   ln2, which cosh computes from expm1's lines. `CoshTest` fails under the first two and passes
-  under the other two (run with `-Dtest=CoshTest -Dvfdlibm.test.jvmArgs=-Dvfdlibm.fault=<name>`),
-  and the nightly's `reach` map says the same.
+  under the other two (run with `-Dtest=CoshTest -Dvfdlibm.test.jvmArgs=-Dvfdlibm.fault=<name>`;
+  the runs' output is not committed), and the nightly's `reach` map says the same.
 - **Sizing the faults, on 2^22 draws each.** `cosh.splitMoved` moves the small range's end from
-  0.5 ln2 to 1: 2070784 of the draws of `(-1, 1)` change, and none do when it moves by one word.
+  0.5 ln2 to 1: 2070784 of the draws of `(-1, 1)` change, about three quarters of those in
+  `[0.3466, 1)`, and none do when it moves by one word.
   `cosh.halfOneUlpOff` changes 4144395 of the draws of `(-30, 30)`, `cosh.dropHalfOverT` 2568400
   and `cosh.finishMissesSmall` 503123 of those of `(-0.34, 0.34)`. The last is the finish arm's
   alone and the first the slice arm's alone, so their catchers name one arm each.
