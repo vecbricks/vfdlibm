@@ -36,7 +36,13 @@ name: Nightly
 
 on:
   schedule:
-    - cron: '17 2 * * *'
+    # 00:07 UTC, which is 01:07 in CET and 02:07 in CEST: cron is UTC only, so the local hour
+    # moves with summer time. The minute is odd because GitHub delays scheduled events at busy
+    # minutes. It is just after midnight UTC because the plan job takes the night and the slice
+    # night from the days since 1970 in UTC, so a cron before midnight could land on the wrong
+    # date and repeat or skip a slice of the 128-bit sweep (and a stripe, with `nights` above
+    # 1). No allowance is made for a late event: the cron states the wanted time.
+    - cron: '7 0 * * *'
   workflow_dispatch:
     inputs:
       seed:
