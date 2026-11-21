@@ -15,7 +15,9 @@ import jdk.incubator.vector.VectorMask;
 /**
  * fdlibm's double functions over {@link DoubleVector} lanes, each lane bit-identical to the
  * {@link StrictMath} method of the same name, NaN payloads and signed zeros included; the one
- * exception is a lane of {@code atan2} where both arguments are NaN with different bits.
+ * exception is a lane of a function of two arguments ({@code atan2}) where both arguments are NaN
+ * with different bits, which is one of the two arguments' bits with the quiet bit set (which one
+ * is not specified).
  *
  * <p>Every method works on a vector of any species of 128 bits or more (exp, expm1, log, log10,
  * log1p, sinh, cosh, asin, atan, acos and atan2 hold fdlibm's {@code int} words in int lanes of

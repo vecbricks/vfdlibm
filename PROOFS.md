@@ -1,13 +1,14 @@
 # Proofs: where a port computes differently from fdlibm's C
 
-Every lane of every function here is bit-identical to `StrictMath`. A port follows the C operation
-by operation, except where a lemma below proves that a different computation gives the same
-double for every input (`PLAN.md` section 6). Each lemma names its hypotheses (the input domain
+Every lane of every function here is bit-identical to `StrictMath`, but for a two-NaN lane of a
+function of two arguments ("The contract of a function of two arguments"). A port follows the C
+operation by operation, except where a lemma below proves that a different computation gives the
+same double for every input (`PLAN.md` section 6). Each lemma names its hypotheses (the input domain
 and each hinge condition, with the range where it holds and why the lanes are in it), the IEEE 754
 property it rests on, the proof, and the test that checks its hinges; that test fails if a hinge
-were false. The code carries a pointer to the lemma. A port with no departure of its own
-(log10, log1p) has a section saying so; log10's names the lemmas it rests on through `log`,
-log1p's holds a counter-example, a statement and not a proof of a fold.
+were false. The code carries a pointer to the lemma. A port with no departure of its own (log10,
+log1p) has a section saying so; log10's names the lemmas it rests on through `log`, log1p's holds a
+counter-example, a statement and not a proof of a fold.
 
 The tests are of two kinds, and each lemma names both. Hinge tests in `ProofsTest` mostly check a
 lemma's hypotheses on scalar Java, where each operation is the same single rounding as a vector
