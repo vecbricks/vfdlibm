@@ -45,7 +45,7 @@ class SqrtTest {
   private static final double[] BOUNDARY = boundary();
 
   /** The random doubles, built once, on first use: 70 MB. */
-  private static final class Random {
+  private static final class RandomDoubles {
     static final double[] XS = random();
   }
 
@@ -104,7 +104,7 @@ class SqrtTest {
   @ParameterizedTest
   @EnumSource(VectorWidth.class)
   void sqrtIsStrictMathsOnRandomDoubles(VectorWidth width) {
-    assertSqrt(width.species(), Random.XS);
+    assertSqrt(width.species(), RandomDoubles.XS);
   }
 
   @ParameterizedTest

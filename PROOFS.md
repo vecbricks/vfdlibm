@@ -47,7 +47,8 @@ IEEE properties used:
   square root", `NaN` for a `NaN` or a negative argument, `+infinity` for `+infinity` and the
   argument itself for either zero; and a vector's `VectorOperators.SQRT`, `DoubleVector.sqrt()`,
   is "conforming to the specification of `Math.sqrt(a)`" on each lane. The C calls `sqrt` in
-  e_asin.c and e_acos.c (`s = sqrt(z)`) and does not define it: fdlibm 5.3's e_sqrt.c is not
+  e_asin.c (`s = sqrt(t)`, line 100) and e_acos.c (`s = sqrt(z)`, lines 89 and 95) and does
+  not define it: fdlibm 5.3's e_sqrt.c is not
   among the files in `reference/`, and no claim is made here about it. The claim is the
   oracle's: a lane of the operator is `StrictMath.sqrt`'s result. That the C's `sqrt` is that
   function is not shown here; a port that uses the operator shows it by its tests against
@@ -58,9 +59,9 @@ IEEE properties used:
   smallest normal, the largest double, the infinities, `NaN`s of several payloads, negative
   numbers) and, unmasked, 8.7 million random doubles of both signs at 128, 256 and 512 bits and
   the preferred species (a width the host lacks is skipped there). The masked form is checked
-  on the boundary doubles and 2^19 random bit patterns at those widths; `SPECIES_MAX` and the
-  widths the host lacks, which run in Java, on the boundary doubles and 2^18 random bit
-  patterns, masked and unmasked. That
+  on the boundary doubles and 2^19 random bit patterns at those widths; `SPECIES_MAX` and
+  the three fixed widths, whether the host has them or not, on the boundary doubles and 2^18
+  random bit patterns, masked and unmasked (a width above the host's runs in Java there). That
   the operator lowers to a vector instruction and does not box is a separate fact, read from
   `bench/alloc-check.py` on `SqrtBenchmark` (unmasked only; no row for the masked form).
 
@@ -925,9 +926,11 @@ argument. Where its text is not the C's:
   operation on the same operands as the C's, so its result is the C's (R4); the values the other
   branch's operations take in a lane are computed and never kept. This is L13, instantiated: H1
   is the C's compare on the same high word (`belowOne`, and `tiny` for the return of `x`), H2 is
-  the order just given, H3 holds since every operation is an IEEE operation on doubles, and H4
-  since each blend is a `blend`. The port has no hinge beyond L13's, and the one that could be
-  false is H1, the test, which is the C's, made on the same high word.
+  the order just given, H3 holds since every operation on a lane is total (IEEE operations on
+  doubles, compares, and int and long bit operations and reinterpretations: no division of
+  integers, no indexed load), and H4 since each blend is a `blend`. The port has no hinge
+  beyond L13's, and the one that could be false is H1, the test, which is the C's, made on the
+  same high word.
 - The lanes of `|x| >= 22`, the infinities and the NaNs, which the C answers with `exp`, are
   finished per lane by `StrictMath.sinh`, which is the C: no computation of the port is in them.
 

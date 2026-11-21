@@ -58,6 +58,9 @@ public class SqrtBenchmark {
 
   @Setup
   public void setUp() {
+    if (!inputs.equals("common") && !inputs.equals("mixed")) {
+      throw new IllegalArgumentException("inputs: " + inputs);
+    }
     SplittableRandom random = new SplittableRandom(1L);
     double[] rare = {
       0.0, -0.0, -1.0, -5e-324, Double.POSITIVE_INFINITY, Double.NEGATIVE_INFINITY, Double.NaN,
