@@ -135,7 +135,7 @@ def positive(text):
 def iso_date(text):
     """An argument that must be a real day written YYYY-MM-DD. The shape is checked as well
     as the calendar, since date.fromisoformat takes other forms (20261120, 2026-W47-5)."""
-    if not re.fullmatch(r"\d{4}-\d\d-\d\d", text):
+    if not re.fullmatch(r"[0-9]{4}-[0-9]{2}-[0-9]{2}", text):
         raise argparse.ArgumentTypeError("%s is not a date as YYYY-MM-DD" % text)
     try:
         datetime.date.fromisoformat(text)
@@ -572,7 +572,8 @@ def cost(args):
     kind, what the jobs do, the time of a whole sweep and the fuzz's rate by function, species
     and machine, for the nights from --since to --until."""
     rows = read(args.file, COST_COLUMNS)
-    # --since and --until pick the nights, by the date of their run, to quote one set of them,
+    # --since and --until (checked by iso_date at the parser; a caller that builds the arguments
+    # itself passes real days) pick the nights, by the date of their run, to quote one set of them,
     # as the nights of five functions, apart from the two of four.
     rows = [r for r in rows if (not args.since or r["date"] >= args.since)
             and (not args.until or r["date"] <= args.until)]
@@ -867,10 +868,22 @@ def selftest(args):
         except argparse.ArgumentTypeError:
             continue
         raise AssertionError("a date was taken: " + repr(bad))
-    print("pool.py selftest: the fault-run rule and the log readers passed")
+    # The command line takes a date only through iso_date, on all four options.
+    for command in ("fetch", "cost"):
+        for option in ("--since", "--until"):
+            for given in ("2026-11-5", "2026-13-45"):
+                argv = [command] + (["x.tsv"] if command == "cost" else []) + [option, given]
+                try:
+                    with contextlib.redirect_stderr(io.StringIO()):
+                        build_parser().parse_args(argv)
+                except SystemExit:
+                    continue
+                raise AssertionError("the command line took " + " ".join(argv))
+    print("pool.py selftest: the fault-run rule, the log readers and the dates passed")
 
 
-def main():
+def build_parser():
+    """The command line's parser, apart from main so that selftest can try it."""
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     commands = parser.add_subparsers(dest="command", required=True)
     f = commands.add_parser("fetch", help="read the jobs' logs with gh; rows go to stdout")
@@ -914,7 +927,11 @@ def main():
     c.set_defaults(run=cost)
     st = commands.add_parser("selftest", help="check the readers and the fault-run rule offline")
     st.set_defaults(run=selftest)
-    args = parser.parse_args()
+    return parser
+
+
+def main():
+    args = build_parser().parse_args()
     args.run(args)
 
 
