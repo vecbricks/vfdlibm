@@ -27,8 +27,12 @@ contract of every version is the same: each lane of each function equals
 ### Changed
 
 - The per-lane finish of `exp`, `expm1`, `log`, `log10`, `log1p`, `sinh` and `cosh` writes out its
-  first eight lanes with constant indices, so that at `DoubleVector.SPECIES_MAX` (up to eight lanes)
-  it allocates nothing on data with rare lanes, where it allocated 30 to 37 KB per 1024 doubles.
+  first eight lanes with constant indices. Before the change, at `DoubleVector.SPECIES_MAX` (up to
+  eight lanes) the finish of `exp`, `expm1`, `log`, `log10` and `log1p` allocated 30,432 to 36,992
+  B/op (one op is 1024 doubles) on mixed data (`bench/results/max-finish-laptop-2026-11-20.txt`, a
+  laptop reading); after it, every `*Max` row of those seven reads under 0.1 B/op there
+  (`bench/results/max-finish-alloc-free-laptop-2026-11-21.txt`, a laptop reading, allocation only,
+  no timing).
   Every lane's result is unchanged.
 
 ## [0.1.0] - 2026-11-20

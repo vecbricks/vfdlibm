@@ -44,11 +44,15 @@ import org.openjdk.jmh.annotations.Warmup;
  * the kind has fewer, so its share there is that cost scaled by its count over 66 where the cost
  * is one per lane; a cost per vector, such as the finish arm's branch, would not add up that way.
  * Nor need the shares add up to {@code mixed}'s excess over {@code none}. A hypothesis, which
- * these rows are there to test, and whose first run ({@code
- * bench/results/exp-kinds-xeon8573c-2026-11-21.txt}, one run) decides nothing: each value runs
- * in a fork of its own, where C2 profiles one kind's path and a branch repeats one outcome,
- * while {@code mixed} interleaves four, and what is left over would be that interleaving, not
- * any one kind.
+ * these rows are there to test: each value runs in a fork of its own, where C2 profiles one
+ * kind's path and a branch repeats one outcome, while {@code mixed} interleaves four, and what
+ * is left over would be that interleaving, not any one kind. The first run ({@code
+ * bench/results/exp-kinds-xeon8573c-2026-11-21.txt}, one run, the finish before its first eight
+ * lanes were written out) gives scaled sums that differ from mixed's excess over {@code none} by
+ * 1.4% (blended at 256 bits), 8.9% (blended, preferred species), 5.9% (finish, 256 bits, where
+ * the sum is above the excess) and 2.5% (finish, preferred species), and by 63% for the scalar
+ * loop (+174 against +474 ns); the percentages are of mixed's excess over {@code none}, and one
+ * run cannot attribute the leftover (289 ns for the blended arm at the preferred species).
  * ({@code common} is not the baseline: {@code ExpBenchmark} draws its common array without the
  * draws that place the rare inputs, so its ordinary values are other draws from the same range.)
  * Every kind has its rare lanes in the same vectors, 62 of the 256 four-lane vectors and 56 of

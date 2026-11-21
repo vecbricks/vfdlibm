@@ -75,11 +75,12 @@ import jdk.incubator.vector.VectorSpecies;
  * blended arm over the finish arm is 1.24 to 1.28 on common data and 1.06 to 1.13 on mixed data
  * on the AMD EPYC 7763 ({@code bench/results/log10-epyc7763-2026-11-20.txt}, two runs), and 1.18
  * to 1.25 on common data and 0.92 to 0.98 on mixed data on the Xeon Platinum 8573C ({@code
- * bench/results/log10-xeon8573c-2026-11-21.txt}, one run). Every ratio is within 1.3x, so no
- * direction is read; the files time this class as it stands. The choice waits for a second run
- * of the Xeon 8573C and a first of the other AVX-512 hosts ({@code HARDWARE.md}), a pair, and
- * the rules for a tie within 1.3x and for hosts that disagree (issue #30); the second arm is
- * kept so the choice can be re-measured.
+ * bench/results/log10-xeon8573c-2026-11-21.txt}, one run). Every one of those ratios is within
+ * 1.3x, so no direction is read; the files time this class before the finish's first eight lanes
+ * were written out with constant indices (issue #37). The choice waits for a second run of the
+ * Xeon 8573C and a first of the other AVX-512 hosts ({@code HARDWARE.md}), a pair, and the rules
+ * for a tie within 1.3x and for hosts that disagree (issue #30); the second arm is kept so the
+ * choice can be re-measured.
  */
 final class Log10 {
 
