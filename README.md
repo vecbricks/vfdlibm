@@ -69,7 +69,7 @@ public final class Main {
         + " bits; the computed lanes have StrictMath's bits: " + same);
 
     // Only the lanes set in the mask are computed; the others keep the input's bits.
-    DoubleVector x = DoubleVector.fromArray(SPECIES, xs, 0);
+    DoubleVector x = DoubleVector.fromArray(SPECIES, xs, 0, SPECIES.indexInRange(0, xs.length));
     VectorMask<Double> live = VectorMask.fromLong(SPECIES, 0b1);
     DoubleVector z = VFdlibm.exp(x, live);
     System.out.println("masked: lane 0 is " + z.lane(0) + ", lane 1 is " + z.lane(1));
