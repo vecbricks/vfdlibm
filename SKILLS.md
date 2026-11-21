@@ -268,8 +268,8 @@ re-trying a settled question.
   string, with `sve` and `sve2` (`HARDWARE.md`, "The Arm host");
   `bench/dispatch-bench.sh --host <host>` dispatches it and, when the run failed on that check,
   waits an hour and dispatches again, until a run passes, fails on something else, or (for the
-  9V45, or with `--attempts`) the attempts run out (`bench/dispatch-epyc.sh` is the same with
-  `--host epyc7763`). A run that failed while fetching the script, before any step looked at
+  9V45 and the Arm host, or with `--attempts`) the attempts run out (`bench/dispatch-epyc.sh` is
+  the same with `--host epyc7763`). A run that failed while fetching the script, before any step looked at
   the machine, is tried again too, each counting as an attempt; the third in a row stops it.
   The Arm host's default is 3 attempts, not none: its label gave one CPU in three probe draws, so
   a miss is most likely a changed pool, not a draw to wait out. Other CPUs (the EPYC 9V74, the

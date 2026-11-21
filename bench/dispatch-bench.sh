@@ -35,7 +35,8 @@
 # opportunistic try. Running out of attempts on a CPU miss is exit status 3, not a failure of
 # the run; when the last attempt failed before the CPU check, it is 1. For neoversen2 it
 # defaults to 3: the Arm label gave one CPU in three probe draws (HARDWARE.md), so a miss most
-# likely means the pool changed or the mapping is wrong, which hours of tries do not mend.
+# likely means the pool changed or the mapping is wrong, which more tries do not mend, and three
+# hourly ones are a cap on the wait, not a hope of a draw.
 #
 # --base <base> makes each run a pair (bench/pair.sh in the workflow): the benchmarks on <base>
 # and on the dispatched <ref> as head, alternating, on one machine. <base> is a branch or tag of
