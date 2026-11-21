@@ -865,3 +865,49 @@ vector's lanes rare (`everySubsetOfLanesRare`); `scalarTranscriptionIsStrictMath
 exp's lemmas check their steps for sinh as they stand, `expm1Core` being the same body. Informal
 here: that the port's blends take each form on exactly the C's lanes, and that it computes these
 steps, the code's text.
+
+## cosh (`Cosh.java`, from `e_cosh.c`)
+
+e_cosh.c returns `x*x` for a non-finite `x` (line 59); for `|x| < 0.5*ln2` (`ix < 0x3fd62e43`,
+line 62) with `t = expm1(|x|)` and `w = 1+t`, `w` below `2^-55` (65) and `1 + t*t/(w+w)` above
+it (66); up to `22` `half*t + half/t` with `t = exp(|x|)` (70-72); up to `o_threshold`'s word
+`0x40862E42` `half*exp(|x|)` (76); and then `exp(half*|x|)` squared with `half` (80-88). The port
+computes the lines below `o_threshold`'s word in the C's order, with no fused multiply-add and no
+reassociation, and **needs no lemma of its own**. Where its text is not the C's:
+
+- The `expm1(|x|)` of line 63 is s_expm1.c's own `k == 0` path written out (lines 177-189): for
+  `|x| <= 0.5*ln2` the C reduces nothing, so its `expm1` there is the tiny return (`|x| < 2^-54`,
+  lines 177-179) or the polynomial's `x - (x*e-hxs)` (184-189), and the port transcribes them
+  with `Expm1`'s constants, each operation as the C has it. It is not `Expm1`'s body, which
+  rewrites the `k == 0` return as `x - e` (L11): neither L10 nor L11 is used. The finish arm
+  computes none of it: it finishes these lanes with `StrictMath.cosh`.
+- The lanes share one division, which is a transcription and no departure, as in sinh's section:
+  each lane takes exactly one of the C's branches, picked by the same compare of `ix`, and
+  computes that branch's operations in the C's order. The numerator and denominator are `t*t`
+  and `w+w` in the small range and `half` and `exp(|x|)` above it, the quotient is `(t*t)/(w+w)`
+  or `half/t`, and the sum after it, `1+q`, `w`, `half*t + q` or `half*t`, is picked by the same
+  test. Each operation is one IEEE operation on the same operands as the C's (R4); the values
+  the other branches' operations take in a lane are computed and never kept.
+- The lanes from `0x40862E42` up, the infinities and the NaNs are finished per lane by
+  `StrictMath.cosh`, which is the C.
+
+**What it rests on.** The `exp` of lines 71 and 76 is `Exp.expCore(|x|)`: exp's own body, the
+same lines, with the rare paths and the rare-lane finish left out, which is `StrictMath.exp` in
+every lane outside `Exp.expRare`. So exp's lemmas hold for cosh's lanes as they stand: L2, the
+near band's form as the far form, and L5, `halF[xsb]` from the sign bit, whose argument here is
+non-negative. L1, the `k == 0` path, is not used: every lane whose `expCore` value is kept has
+`|x| >= 0.5*ln2` and is reduced, and the unreduced lanes of the small range get values nobody
+keeps. A lane of `0.5*ln2 <= |x| < 709.78` is none of `expRare`'s: its `k` is not below `-1021`
+and its high word is below the filter's.
+
+**Hinge tests.** Those of L2 and L5 (`ProofsTest`), which run on `Exp`'s scalar words. The
+vector tie is `CoshTest`: `VFdlibm.cosh` and both arms against `StrictMath.cosh` at every width
+and `SPECIES_MAX`, unmasked and masked, on the thresholds of lines 62, 65, 70 and 76 and their
+neighbours, sampled bit patterns, dense draws of `(-30, 30)`, of `(-0.5, 0.5)` and of `[20, 24]`,
+the magnitudes from `2^-60` to `2^10`, the published hard cases and their negations, and every
+subset of a vector's lanes rare; `scalarTranscriptionIsStrictMath` checks that `cCosh`, e_cosh.c
+with s_expm1.c's lines in scalar Java, is `StrictMath.cosh`.
+
+**Encoding.** No file of its own. The files of exp's lemmas check their steps for cosh as they
+stand, `expCore` being the same body. Informal here: that the port's blends take each branch on
+exactly the C's lanes, and that it computes these steps, the code's text.

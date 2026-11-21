@@ -16,6 +16,10 @@ contract of every version is the same: each lane of each function equals
   species of 128 bits or more. Every lane is bit-identical to `StrictMath.sinh`, NaN payloads and
   signed zeros included. Lanes of magnitude 22 or more, the infinities and NaNs are finished
   per lane by `StrictMath.sinh`.
+- `VFdlibm.cosh`, in the two forms `cosh(x)` and `cosh(x, live)`, over `DoubleVector` lanes of
+  any species of 128 bits or more. Every lane is bit-identical to `StrictMath.cosh`, NaN payloads
+  and signed zeros included. In both arms, lanes from `|x|` of about 709.78 up, the infinities
+  and NaNs are finished per lane by `StrictMath.cosh`.
 
 ## [0.1.0] - 2026-11-20
 

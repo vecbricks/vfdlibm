@@ -141,6 +141,33 @@ final class Fuzz {
       false,
       sinhPoints());
 
+  /**
+   * cosh: e_cosh.c's high-word tests (the tiny return of its small range, its end at 0.5 ln2, 22,
+   * the exp filter, the overflow threshold's word and the non-finite words), s_expm1.c's tiny
+   * word, the doubles at those edges and the overflow threshold itself, and the edges of exp's
+   * reduction, which it computes through {@code Exp.expCore} from 0.5 ln2 up: its 1.5 ln2 word and
+   * {@code (k + 1/2) ln2} for the k of a result below the overflow.
+   */
+  static final Edges COSH = new Edges(
+      new int[] {
+        Cosh.HX_TINY, Expm1.HX_TINY, Cosh.HX_SMALL, Cosh.HX_LIMIT, Cosh.HX_FILTER, 0x408633ce,
+        0x7ff00000, Exp.HX_THREE_HALVES_LN2, 0
+      },
+      new int[0],
+      false,
+      coshPoints());
+
+  /** cosh's own edges, and {@code (k + 1/2) ln2} for every k up to the overflow's. */
+  private static double[] coshPoints() {
+    double ln2 = StrictMath.log(2.0);
+    List<Double> points = new ArrayList<>(List.of(22.0, 0.5 * ln2, 1.5 * ln2, 0x1p-54, 0x1p-55,
+        Double.longBitsToDouble(0x408633ce_8fb9f87dL), Exp.O_THRESHOLD));
+    for (int k = 0; k <= 1025; k++) {
+      points.add((k + 0.5) * ln2);
+    }
+    return points.stream().mapToDouble(Double::doubleValue).toArray();
+  }
+
   /** sinh's own edges, and {@code (k + 1/2) ln2} for the k of expm1's core below 22. */
   private static double[] sinhPoints() {
     double ln2 = StrictMath.log(2.0);
@@ -181,6 +208,7 @@ final class Fuzz {
       case LOG10 -> LOG10;
       case LOG1P -> LOG1P;
       case SINH -> SINH;
+      case COSH -> COSH;
     };
   }
 
