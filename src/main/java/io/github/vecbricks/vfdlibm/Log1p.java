@@ -65,10 +65,10 @@ import jdk.incubator.vector.VectorSpecies;
  * </ul>
  *
  * <p>All three are exact, and none allocates at 256 or 512 bits on ordinary data or when one
- * input in 16 is rare. At {@code SPECIES_MAX}, {@code finishMax} on mixed data allocates 30,912
- * B/op and {@code guardedMax}, the arm {@code VFdlibm.log1p} calls, 0.009, in {@code
- * bench/results/log1p-xeon8573c-2026-11-21.txt} (reading of 21 November 2026). {@link #log1p},
- * which {@code VFdlibm.log1p} calls, is the guarded arm, provisionally. On the laptop ({@code
+ * input in 16 is rare, nor at {@code SPECIES_MAX} of up to eight lanes: the finish writes out
+ * its first eight lanes with constant indices, which C2 intrinsifies there, where a variable
+ * index it does not (SKILLS.md). {@link #log1p}, which {@code VFdlibm.log1p} calls, is
+ * the guarded arm, provisionally. On the laptop ({@code
  * bench/results/log1p-laptop-avx2-2026-11-02.txt}, under {@code -XX:UseAVX=2} as C2 compiles for
  * the AVX2 hosts, and {@code log1p-laptop-2026-11-02.txt}, AVX-512; laptop numbers, not
  * headlines) the three arms are within 1.3x of each other at both widths and on both mixes. The
@@ -325,8 +325,36 @@ final class Log1p {
       // result and rare as heap objects, boxed on every vector. This finish visits only the set
       // lanes of rare, through its bits, and moves no lane through an array: lane and withLane
       // are lane extract and insert, which C2 intrinsifies at a variable lane index for the
-      // fixed shapes. rare is already and-ed with live, so an inactive lane is never rewritten.
+      // fixed shapes only, so the first eight lanes are written out with constant indices,
+      // which it intrinsifies at SPECIES_MAX too, and the loop takes the lanes past eight. rare
+      // is already and-ed with live, so an inactive lane is never rewritten.
       long rareLanes = rare.toLong();
+      int lanes = x.length();
+      if (lanes > 0 && (rareLanes & 1L) != 0) {
+        result = result.withLane(0, StrictMath.log1p(x.lane(0)));
+      }
+      if (lanes > 1 && (rareLanes & 2L) != 0) {
+        result = result.withLane(1, StrictMath.log1p(x.lane(1)));
+      }
+      if (lanes > 2 && (rareLanes & 4L) != 0) {
+        result = result.withLane(2, StrictMath.log1p(x.lane(2)));
+      }
+      if (lanes > 3 && (rareLanes & 8L) != 0) {
+        result = result.withLane(3, StrictMath.log1p(x.lane(3)));
+      }
+      if (lanes > 4 && (rareLanes & 16L) != 0) {
+        result = result.withLane(4, StrictMath.log1p(x.lane(4)));
+      }
+      if (lanes > 5 && (rareLanes & 32L) != 0) {
+        result = result.withLane(5, StrictMath.log1p(x.lane(5)));
+      }
+      if (lanes > 6 && (rareLanes & 64L) != 0) {
+        result = result.withLane(6, StrictMath.log1p(x.lane(6)));
+      }
+      if (lanes > 7 && (rareLanes & 128L) != 0) {
+        result = result.withLane(7, StrictMath.log1p(x.lane(7)));
+      }
+      rareLanes &= ~0xffL;
       while (rareLanes != 0) {
         int lane = Long.numberOfTrailingZeros(rareLanes);
         rareLanes &= rareLanes - 1;

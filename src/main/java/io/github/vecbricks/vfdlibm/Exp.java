@@ -49,12 +49,11 @@ import jdk.incubator.vector.VectorSpecies;
  *   <li>{@link #exp} finishes those lanes per lane with {@code StrictMath.exp} after the vector
  *       body, behind one {@code anyTrue} a vector; on ordinary data that branch never runs. The
  *       finish walks the set bits of the rare mask ({@code toLong}), reads each lane with {@code
- *       lane} and writes it back with {@code withLane}, all in this body. At the fixed shapes
- *       C2 intrinsifies that lane access: at 256 and 512 bits the finish allocates nothing (at
- *       128 bits on x86 the masks box anyway). At {@code SPECIES_MAX} the {@code finishMax} rows
- *       of {@code bench/results/exp-xeon8573c-2026-11-21.txt} and {@code
- *       exp-epyc7763-2026-11-20.txt} allocate on data with rare lanes (readings of 21 and 20
- *       November 2026).
+ *       lane} and writes it back with {@code withLane}, all in this body. C2 intrinsifies that
+ *       lane access at a constant index, which the first eight lanes have (a loop takes any past
+ *       eight): at 256 and 512 bits and at {@code SPECIES_MAX} of up to eight lanes the finish
+ *       allocates nothing (at 128 bits on x86 the masks box anyway; {@code
+ *       bench/results/max-finish-alloc-free-laptop-2026-11-21.txt}).
  *   <li>{@link #expBlended} computes them in every lane too and blends them, with no branch.
  * </ul>
  *
@@ -292,8 +291,36 @@ final class Exp {
         // rare or not. The Vector API's own methods used here are inlined late instead. It
         // visits only the set lanes of rare, through its bits, and moves no lane through an
         // array: lane and withLane are lane extract and insert. C2 intrinsifies them at a
-        // variable lane index for the fixed shapes only; at SPECIES_MAX this loop still boxes.
+        // variable lane index for the fixed shapes only, so the first eight lanes are written
+        // out with constant indices, which it intrinsifies at SPECIES_MAX too; the loop takes
+        // the lanes past eight.
         long rareLanes = rare.toLong();
+        int lanes = x.length();
+        if (lanes > 0 && (rareLanes & 1L) != 0) {
+          result = result.withLane(0, StrictMath.exp(x.lane(0)));
+        }
+        if (lanes > 1 && (rareLanes & 2L) != 0) {
+          result = result.withLane(1, StrictMath.exp(x.lane(1)));
+        }
+        if (lanes > 2 && (rareLanes & 4L) != 0) {
+          result = result.withLane(2, StrictMath.exp(x.lane(2)));
+        }
+        if (lanes > 3 && (rareLanes & 8L) != 0) {
+          result = result.withLane(3, StrictMath.exp(x.lane(3)));
+        }
+        if (lanes > 4 && (rareLanes & 16L) != 0) {
+          result = result.withLane(4, StrictMath.exp(x.lane(4)));
+        }
+        if (lanes > 5 && (rareLanes & 32L) != 0) {
+          result = result.withLane(5, StrictMath.exp(x.lane(5)));
+        }
+        if (lanes > 6 && (rareLanes & 64L) != 0) {
+          result = result.withLane(6, StrictMath.exp(x.lane(6)));
+        }
+        if (lanes > 7 && (rareLanes & 128L) != 0) {
+          result = result.withLane(7, StrictMath.exp(x.lane(7)));
+        }
+        rareLanes &= ~0xffL;
         while (rareLanes != 0) {
           int lane = Long.numberOfTrailingZeros(rareLanes);
           rareLanes &= rareLanes - 1;

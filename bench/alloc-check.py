@@ -10,19 +10,20 @@ r"""Fail when a port's vector body allocates, which means it boxed.
 
 A boxed body computes the right bits, so the tests pass on it; only the allocation rate shows
 that the Vector API fell back to Java (SKILLS.md, "Allocation is the verdict"). This script runs
-every JMH benchmark method named *256 or *Preferred of a class named *Benchmark, on common and
-mixed inputs, under -prof gc
-with the body inlined as Varka emits it, and fails if any measured iteration of any row allocates
-THRESHOLD bytes per op or more. It reads the numbers from JMH's JSON result, and fails too when
-a benchmark that JMH lists for the regex threw or has no row there for an inputs value it runs.
+every JMH benchmark method named *256, *Preferred or *Max of a class named *Benchmark, on common and
+mixed inputs, under -prof gc with the body inlined as Varka emits it, and fails if any measured
+iteration of any row allocates THRESHOLD bytes per op or more. It reads the numbers from JMH's JSON
+result, and fails too when a benchmark that JMH lists for the regex threw or has no row there for an
+inputs value it runs.
 
 Rows left out: 128 bits, since on x86 C2 lowers no mask at two 64-bit lanes and every masked
 128-bit body boxes (SKILLS.md); and 512 bits, which runs in software on an AVX2 host (the
 preferred arm covers 512 bits on a host that has it). Mixed inputs are checked because they are
 the ones that run the rare lanes' paths, which common inputs never reach. The *Max rows, at
-SPECIES_MAX, and the *Boxed* rows are left out by INCLUDE's regex (see the comment there), and
-so is ExpKindsBench, by its class name: its rows call the bodies ExpBenchmark's rows call, and
-its other inputs values are checked by naming it, as below.
+SPECIES_MAX, are checked with the *256 and *Preferred ones. The *Boxed* rows are left out by
+INCLUDE's regex (see the comment there), and so is ExpKindsBench, by its class name: its rows
+call the bodies ExpBenchmark's rows call, and its other inputs values are checked by naming it,
+as below.
 
 With --why it runs nothing new through the check: it reads the last run's result and runs the
 rows that failed once more (WHY_ROWS of them at most, one of each benchmark method first),
@@ -66,22 +67,23 @@ import sys
 # 143 us per op with no vector boxed. A row that slow wants the threshold read again.
 THRESHOLD = 1.0
 
-# Not *Max: at SPECIES_MAX the finish arm boxes on mixed data, so finishMax would fail. Its lane
-# extract and insert (lane, withLane, at a variable lane index) are intrinsified for the fixed
-# shapes, whose rows pass, but not for the Max shape; the *Max rows exist in the benchmark to
-# record that (bench/results/exp-finish-laptop-2026-11-02.txt), not to gate on it.
+# *Max is in: the finish arm writes out the first eight lanes with constant lane indices, which
+# C2 intrinsifies at SPECIES_MAX too, so finishMax allocates nothing on mixed data
+# (bench/results/max-finish-alloc-free-laptop-2026-11-21.txt). Before that change the finish
+# walked the rare mask's set bits, a variable lane index that C2 intrinsifies for the fixed
+# shapes only, and boxed at SPECIES_MAX (bench/results/max-finish-laptop-2026-11-20.txt).
 #
-# Not *Boxed* either: ExpBenchmark.finishPairBoxed256 and finishPairBoxedPreferred inline two
+# Not *Boxed*: ExpBenchmark.finishPairBoxed256 and finishPairBoxedPreferred inline two
 # vfdlibm bodies in one loop, which exceeds C2's NodeCountInliningCutoff (a develop flag, 18000
 # nodes, fixed in product JVMs). Past it C2 refuses every callee larger than MaxTrivialSize
 # (6 bytes) that is not @ForceInline, and a refused call boxes its vectors, so those rows
-# allocate on every vector (SKILLS.md). They record that, like the *Max rows; they cannot pass.
+# allocate on every vector (SKILLS.md). They record that; they cannot pass.
 #
 # PREFERRED is the same with *256 left out too, for a host whose vectors are narrower than 256
 # bits (GitHub's Arm runners, 128 bits): a *256 row runs in the Java fallback there, as 512
 # bits does on an AVX2 host. Both come from one pattern, so an exclusion is written once.
 ROWS = r".*Benchmark\.(?!\w*Boxed)\w+(%s)$"
-INCLUDE = ROWS % "256|Preferred"
+INCLUDE = ROWS % "256|Preferred|Max"
 PREFERRED = ROWS % "Preferred"
 INLINE = "-XX:CompileCommand=inline,io.github.vecbricks.vfdlibm.*::*"
 RESULT = "target/alloc-check.json"
