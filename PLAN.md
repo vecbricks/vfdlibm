@@ -61,6 +61,8 @@ five are a later, optional set; the large-argument reduction of the trigonometri
     Lefevre and Muller's worst-case tables (ARITH 15, 2001) and Lefevre's list of round-to-nearest
     hard cases, one resource per function under `src/test/resources/.../hard-cases/` (so far `exp`,
     `expm1`, `log`, `log10`, `log1p` and `sinh`), loaded with `Inputs.hardCases("<function>")`.
+    The inputs of Lefevre's list come out of `dev/testlibm-extract.py`, which rechecks each line
+    with 400-digit arithmetic (`sinh`'s file was written by it).
     A port that keeps fdlibm's operations, or departs from them only where `PROOFS.md` proves the
     result equal, matches `StrictMath` on them by construction; they sit where a dropped correction
     term or a reassociated sum, an error far below one ulp, is most likely to change the returned

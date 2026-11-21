@@ -823,11 +823,17 @@ C's:
 
 - `h` is `0.5` with `x`'s sign bit, the bits of `0.5` or'ed with `x`'s sign bit, as exp's `halF`
   is: that is exp's L5, for the same two doubles.
-- The two forms share one division: the lane's numerator is `t*t` or `t`, its denominator `t+one`
-  in both, and the quotient is `t*t/(t+one)` or `t/(t+one)`, each the C's operation on its lane
-  (the C reads `t*t/(t+one)` as `(t*t)/(t+one)`). Both forms' remaining operations are computed
-  in every lane, `2.0*t - q` and `t + q`, and blended by the high word of `|x|`; a form's value
-  on a lane that does not take it is never kept.
+- The two forms share one division, which is a transcription and no departure. Each lane takes
+  exactly one of the C's two branches, the one `ix < 0x3ff00000` picks (line 65, `h*(2.0*t -
+  t*t/(t+one))`) or the other (line 66, `h*(t + t/(t+one))`), and the port computes in that lane
+  the operations of that branch and no others that reach the result, in the C's order: the
+  numerator `t*t` or `t` is picked by the same test, the division is by `t+one` in both, and the
+  C reads `t*t/(t+one)` as `(t*t)/(t+one)`. The sum after it is `2.0*t - q` or `t + q`, picked
+  by the same test, and the last operation is the product with `h`. Each operation is one IEEE
+  operation on the same operands as the C's, so its result is the C's (R4); the values the other
+  branch's operations take in a lane are computed and never kept. There is nothing to prove, and
+  no hinge: the one thing that could differ is the test, and it is the C's, made on the same
+  high word.
 - The lanes of `|x| >= 22`, the infinities and the NaNs, which the C answers with `exp`, are
   finished per lane by `StrictMath.sinh`, which is the C: no computation of the port is in them.
 
