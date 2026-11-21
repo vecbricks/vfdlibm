@@ -102,13 +102,13 @@ port teaches.
   and the command, then each row's minimum, average and maximum and JMH's summary table with
   `gc.alloc.rate.norm`. The existing files are the template. A file from the laptop says it is
   not a headline.
-- A results file is named `bench/results/<function>-<host>-<date>.txt`, one CPU per file, the
-  host being the workflow's host key (`xeon8573c`, `xeon6973p`, `epyc9v45`, `epyc7763`,
-  `neoversen2`) or `laptop` with a suffix for its flags (`laptop-avx2`); `<function>` may name
-  the comparison too (`exp-finish`, `exp-onediv`). The files written before the newer hosts keep their names. An
+- A results file is named `bench/results/<function>-<host>-<date>.txt`, one CPU per file, the host
+  being the workflow's host key (`xeon8573c`, `xeon6973p`, `epyc9v45`, `epyc7763`, `neoversen2`)
+  or `laptop` with a suffix for its flags (`laptop-avx2`); `<function>` may name the comparison
+  too (`exp-finish`, `exp-onediv`). The files written before the newer hosts keep their names. An
   allocation reading from GitHub's Arm runner, whose key is `neoversen2`, is
-  `alloc-neoversen2-<date>.txt`; the one written before the key is `alloc-arm-2026-11-20.txt`.
-  It is no timing, and says so.
+  `alloc-neoversen2-<date>.txt`; the one written before the key is `alloc-arm-2026-11-20.txt`. It
+  is no timing, and says so.
 - The method is fixed: `-f 2 -wi 3 -w 2s -i 5 -r 2s -prof gc`, the body inlined with
   `-XX:CompileCommand=inline,io.github.vecbricks.vfdlibm.*::*`, on an otherwise idle machine.
   The arms of a comparison run in one JMH run. A claim resting on a ratio under about 1.3x is
