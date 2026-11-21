@@ -122,8 +122,9 @@ final class Nightly {
     SINH("sinh", StrictMath::sinh, List.of(
         new Arm("VFdlibm.sinh", VFdlibm::sinh, VFdlibm::sinh))),
     COSH("cosh", StrictMath::cosh, List.of(
-        // VFdlibm.cosh is Cosh.cosh, the slice arm, so that arm is checked under that name.
+        // VFdlibm.cosh is the default arm, provisionally the slice arm; each arm is named too.
         new Arm("VFdlibm.cosh", VFdlibm::cosh, VFdlibm::cosh),
+        new Arm("Cosh.coshSlice", x -> Cosh.coshSlice(x, null), Cosh::coshSlice),
         new Arm("Cosh.coshFinish", x -> Cosh.coshFinish(x, null), Cosh::coshFinish)));
 
     final String id;

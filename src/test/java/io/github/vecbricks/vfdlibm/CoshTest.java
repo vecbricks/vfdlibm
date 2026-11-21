@@ -26,10 +26,10 @@ import org.junit.jupiter.params.provider.EnumSource;
 
 /**
  * cosh against {@code StrictMath.cosh}, by raw bits, at every width and at {@code SPECIES_MAX}:
- * {@link VFdlibm#cosh} (the slice arm) and {@link Cosh#coshFinish}, unmasked and masked, on
- * e_cosh.c's high-word tests, the special values, sampled bit patterns over the whole domain,
- * dense draws over each range the C treats differently, both signs, every subset of a vector's
- * lanes rare, and the published hard-to-round cases with their negations.
+ * {@link VFdlibm#cosh} (the default arm), {@link Cosh#coshSlice} and {@link Cosh#coshFinish},
+ * unmasked and masked, on e_cosh.c's high-word tests, the special values, sampled bit patterns
+ * over the whole domain, dense draws over each range the C treats differently, both signs, every
+ * subset of a vector's lanes rare, and the published hard-to-round cases with their negations.
  */
 class CoshTest {
 
@@ -45,6 +45,7 @@ class CoshTest {
         new LinkedHashMap<>();
     arms.put(
         "VFdlibm.cosh", (x, live) -> live == null ? VFdlibm.cosh(x) : VFdlibm.cosh(x, live));
+    arms.put("Cosh.coshSlice", Cosh::coshSlice);
     arms.put("Cosh.coshFinish", Cosh::coshFinish);
     return arms;
   }
@@ -380,15 +381,17 @@ class CoshTest {
   /**
    * Each of cosh's faults, with a check that must fail while it is planted: the vector forms
    * over {@link #faultRunInputs()} at every width the host has. {@code splitMoved} is read by
-   * the slice arm ({@code VFdlibm.cosh}) only, as is {@code dropSmallTerm} (the finish arm never
-   * runs the small range), {@code finishMissesSmall} by the finish arm only; the other two reach
-   * every arm. Each was sized on 2^22 draws before it was wired ({@link
-   * Cosh}).
+   * the slice arm only, as is {@code dropSmallTerm} (the finish arm never runs the small range),
+   * {@code finishMissesSmall} by the finish arm only; the other two reach every arm. The
+   * catchers name {@code Cosh.coshSlice} and {@code Cosh.coshFinish}, not {@code VFdlibm.cosh},
+   * so they reach the code that reads the fault whichever arm {@code VFdlibm.cosh} runs; the
+   * ordinary tests cover {@code VFdlibm.cosh} itself as an arm. Each was sized on
+   * 2^22 draws before it was wired (see the fields of {@link Cosh}).
    */
   static Map<String, Executable> faultCatchers() {
     Map<String, Executable> catchers = new LinkedHashMap<>();
-    catchers.put(Cosh.SPLIT_MOVED, caughtBy("VFdlibm.cosh", Cosh.SPLIT_MOVED));
-    catchers.put(Cosh.DROP_SMALL_TERM, caughtBy("VFdlibm.cosh", Cosh.DROP_SMALL_TERM));
+    catchers.put(Cosh.SPLIT_MOVED, caughtBy("Cosh.coshSlice", Cosh.SPLIT_MOVED));
+    catchers.put(Cosh.DROP_SMALL_TERM, caughtBy("Cosh.coshSlice", Cosh.DROP_SMALL_TERM));
     catchers.put(Cosh.FINISH_MISSES_SMALL,
         caughtBy("Cosh.coshFinish", Cosh.FINISH_MISSES_SMALL));
     for (String fault : new String[] {Cosh.HALF_ONE_ULP_OFF, Cosh.DROP_HALF_OVER_T}) {
