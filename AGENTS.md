@@ -103,12 +103,13 @@ port teaches.
   and the command, then each row's minimum, average and maximum and JMH's summary table with
   `gc.alloc.rate.norm`. The existing files are the template. A file from the laptop says it is
   not a headline.
-- A results file is named `bench/results/<function>-<host>-<date>.txt`, one CPU per file, the
-  host being the workflow's host key (`xeon8573c`, `xeon6973p`, `epyc9v45`, `epyc7763`) or
-  `laptop` with a suffix for its flags (`laptop-avx2`); `<function>` may name the comparison too
-  (`exp-finish`, `exp-onediv`). The files written before the newer hosts keep their names. An
-  allocation reading from GitHub's Arm runner, which is no benchmark host and has no key, uses
-  `arm` (`alloc-arm-2026-11-20.txt`); it is no timing, and says so.
+- A results file is named `bench/results/<function>-<host>-<date>.txt`, one CPU per file, the host
+  being the workflow's host key (`xeon8573c`, `xeon6973p`, `epyc9v45`, `epyc7763`, `neoversen2`)
+  or `laptop` with a suffix for its flags (`laptop-avx2`); `<function>` may name the comparison
+  too (`exp-finish`, `exp-onediv`). The files written before the newer hosts keep their names. An
+  allocation reading from GitHub's Arm runner, whose key is `neoversen2`, is
+  `alloc-neoversen2-<date>.txt`; the one written before the key is `alloc-arm-2026-11-20.txt`. It
+  is no timing, and says so.
 - The method is fixed: `-f 2 -wi 3 -w 2s -i 5 -r 2s -prof gc`, the body inlined with
   `-XX:CompileCommand=inline,io.github.vecbricks.vfdlibm.*::*`, on an otherwise idle machine.
   The arms of a comparison run in one JMH run. A claim resting on a ratio under about 1.3x is
@@ -120,7 +121,9 @@ port teaches.
   dispatcher stops after 18 tries); and the AMD EPYC 7763 (`epyc7763`, the default) for AVX2.
   Each host decides for its own instruction set, in files of its own; laptop numbers never
   headline. Never relax a host's CPU check (`SKILLS.md`, "Where headline numbers come from").
-  `HARDWARE.md` lists the hosts with their flags, JVM settings and datapath ratios.
+  `HARDWARE.md` lists the hosts with their flags, JVM settings and datapath ratios. A fifth
+  host, GitHub's Arm runner (`neoversen2`, an Arm Neoverse N2), is for allocation readings
+  today: no timing result exists for it.
 - A change meant to be faster or simpler at no cost is measured as a pair: `bench/pair.sh`
   runs the benchmarks on the base and on the head in alternating rounds on one machine and
   compares medians and bests per row, failing a row slower by both past the threshold. On a

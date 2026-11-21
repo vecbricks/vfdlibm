@@ -29,7 +29,9 @@ Each host decides for its own instruction set (`SKILLS.md`, "Where headline numb
 The host key is `benchmark.yml`'s `host` input, and the string after it is what the workflow's
 CPU check requires of `/proc/cpuinfo`'s model name, matched ignoring case: the two EPYC strings
 are full names and must end it, the two Xeon strings may sit anywhere in it. The table the check
-reads is `bench/host.sh`'s.
+reads is `bench/host.sh`'s. GitHub's Arm runner prints no model name, so its string is built from
+the kernel's own `CPU implementer` and `CPU part` fields, for every CPU of the machine, and must
+be the whole string ("The Arm host" below).
 
 | machine | host key and CPU string | vector flags | JVM | lane-ops/ns at 128 / 256 / 512 | control | 512:256 | source |
 |---|---|---|---|---|---|---|---|
@@ -37,8 +39,38 @@ reads is `bench/host.sh`'s.
 | Intel Xeon 6973P-C (Granite Rapids) | `xeon6973p`, `Intel(R) Xeon(R) 6973P-C` | full `avx512` set | `UseAVX=3`, `MaxVectorSize=64` | see source | 2.00 to 2.01 | 1.33 to 1.35 | Varka, `VARKA-62.md` 11.9, 2 runs; the string from vfdlibm run 41442062308 |
 | AMD EPYC 9V45 (Zen 5) | `epyc9v45`, `AMD EPYC 9V45 96-Core Processor` | full `avx512` set | `UseAVX=3`, `MaxVectorSize=64` | see source | 2.04 | 1.99 | Varka, `VARKA-62.md` 11.9, 1 run; the string from Varka's fork runs 41486339971, 41446843041 and 41329377429 |
 | AMD EPYC 7763 (Zen 3) | `epyc7763`, `AMD EPYC 7763 64-Core Processor` | `avx2`, no `avx512` | `UseAVX=2`, `MaxVectorSize=32` | 45.0-46.5 / 90.0-92.6 / 90.0-92.6 | 1.99 to 2.01 | 1.00 | Varka, `VARKA-62.md` 11.9, 8 runs; the lane rates, a range, from 16 Varka fork runs, 31 October to 2 November 2026 (41236071283 to 41460150392); the string from `bench/results/exp-epyc7763-2026-11-02.txt` and `log-epyc7763-2026-11-02.txt`; `exp-epyc7763-2026-11-20.txt` reads 46.2 / 92.2 / 92.5 (control 2.00, 512:256 1.00) in its first run and 46.3 / 92.4 / 92.4 in its second, inside the range |
+| Arm Neoverse N2 (GitHub's `ubuntu-24.04-arm` runner, 4 cores) | `neoversen2`, `implementer 0x41 part 0xd49`, with `sve` and `sve2` | `asimd`, `sve`, `sve2`; no x86 flags | `MaxVectorSize=16`, `UseSVE=2` | 26.9 at 128 bits in the probe (26.6 to 26.9 in the census), and the same at 256 and 512, where the species is 128 bits too | unusable: 1.00, there are no 256-bit vectors to double | 1.00, which is no datapath reading | runs 44925264619, 44925367461 and 44925370498 of 21 November 2026 (the fields, three draws); the lane rate and ratios from the census below (332 jobs, `bench/pool/nightly-2026-11-03-to-2026-11-19.tsv`) and the datapath line of `bench/results/alloc-arm-2026-11-20.txt` (an allocation reading, no timing); no timing result exists |
 | AMD EPYC 9V74 (Zen 4) | none: not a benchmark host | `avx512f`, `avx512dq` on 98 of the pool's 104 draws below; neither on 6, nor on Varka's 3 | `UseAVX=3`, `MaxVectorSize=64` with the flags; `UseAVX=2`, `MaxVectorSize=32` without | 54.1-57.6 / 105.0-115.2 / 95.7-103.7 with the flags; 40.6-40.7 / 81.5-81.7 / 81.5-81.6 without | 1.94 to 2.02 | 0.90 to 0.91 with the flags; 1.00 without | "What the pool gives" below, 104 draws, 3 to 19 November 2026; Varka, `VARKA-62.md` 11.9, 3 runs (2.00, and 0.91 to 1.00), after which it was dropped as a host on 2 November 2026, as exposing no AVX-512 |
 | AMD Ryzen AI 9 HX PRO 370 (Zen 5 mobile, 24 threads) | none: the owner's laptop, never a headline | full `avx512` set | `UseAVX=3`, `MaxVectorSize=64` | 65.5 / 130.8 / 149.4 | 2.00 | 1.14 | `bench/datapath.sh`, 2 November 2026, not pinned to one core type; Varka read 68 / 136 / 156, 2.02, 1.14 |
+
+### The Arm host
+
+GitHub's `ubuntu-24.04-arm` runner prints no `model name` in `/proc/cpuinfo`, so the check reads
+the kernel's own fields. Three probe runs of 21 November 2026 (44925264619, 44925367461 and
+44925370498, each a job that printed `/proc/cpuinfo`, `lscpu`, the cores' `MIDR_EL1` and
+`bench/datapath.sh`) read the same on every core of every draw:
+
+| field | value |
+|---|---|
+| `CPU implementer` | `0x41` |
+| `CPU part` | `0xd49` |
+| `CPU variant`, `CPU revision` | `0x0`, `0` (`lscpu`: stepping `r0p0`) |
+| `MIDR_EL1` | `0x00000000410fd490` on cores 0 to 3 |
+| `lscpu` | `Vendor ID: ARM`, `Model name: Neoverse-N2`, 4 cores, 1 thread each |
+| features | `asimd` `asimddp` `asimdhp` `asimdfhm` `sve` `sve2` `sveaes` `svebitperm` `svebf16` `svei8mm` `svesha3` `svesm4`, among others |
+| JVM at the machine's flags | `MaxVectorSize=16 UseSVE=2` |
+| `bench/datapath.sh` | 26.9 / 26.9 / 26.9 lane-ops/ns at 128 / 256 / 512 bits, "unusable" as it says: no 256-bit vectors |
+
+The check matches `implementer 0x41 part 0xd49` whole, for every core, and requires `sve` and
+`sve2`; variant and revision are printed in the probe step's log and not checked, as no other
+host's string names a stepping. The three runs printed the same VM name, so they may be one
+machine read three times, and the census below has no part column: its 332 Arm jobs agree with
+these three on the features and the JVM's flags, and the part `0xd49` itself is read only in
+these. `lscpu`'s name is its own lookup of those fields and is not what the check reads.
+
+**What the host is for today: allocation readings.** `bench/alloc-check.py --preferred-only`
+runs there in `ci.yml` (`bench/results/alloc-arm-2026-11-20.txt`). No timing result exists for
+it, none is claimed, and whether the ports' arms should differ on Arm waits for host runs.
 
 ### The 8573C's two readings
 
@@ -87,7 +119,8 @@ jobs each run `bench/datapath.sh` first, and `bench/pool/pool.py` tallies their 
   and read 1.33 to 1.35, within the two Xeon hosts' range.
 - The 332 Arm jobs of the same nights all read `MaxVectorSize=16 UseSVE=2` and 26.6 to 26.9
   lane-ops/ns at 128 bits. `/proc/cpuinfo` names no model there, and the probe's ratios read
-  1.00 to 1.01, since its three widths all run at the machine's one.
+  1.00 to 1.01, since its three widths all run at the machine's one. The table records no part
+  number; "The Arm host" above has it from three probe runs, and its row.
 
 Which of these CPUs are hosts is the owner's decision (`SKILLS.md`, "Where headline numbers come
 from"); this section records what was drawn.

@@ -1,13 +1,15 @@
 name: Benchmark
 
-# A JMH run on one of four named benchmark hosts, GitHub-hosted runners drawn from the standard
-# ubuntu-latest pool (SKILLS.md, "Where headline numbers come from"): the Intel Xeon Platinum
-# 8573C and the Intel Xeon 6973P-C (AVX-512), the AMD EPYC 9V45 (Zen 5, full-width AVX-512, a
-# rare draw that nobody waits for) and the AMD EPYC 7763 (Zen 3, AVX2). Dispatch it with
-# bench/dispatch-bench.sh, which dispatches again an hour later whenever a run fails the CPU
-# check (a bounded number of times for the 9V45) or fails to fetch the check's script. The host
-# input picks one of the four; each host's CPU string is fixed in bench/host.sh, on purpose,
-# with no free-text input to change it: a run on another CPU is not comparable with the results
+# A JMH run on one of five named benchmark hosts, GitHub-hosted runners: four drawn from the
+# standard ubuntu-latest pool (SKILLS.md, "Where headline numbers come from"), the Intel Xeon
+# Platinum 8573C and the Intel Xeon 6973P-C (AVX-512), the AMD EPYC 9V45 (Zen 5, full-width
+# AVX-512, a rare draw that nobody waits for) and the AMD EPYC 7763 (Zen 3, AVX2), and one from
+# the ubuntu-24.04-arm pool, the Arm Neoverse N2 (128-bit vectors; no timing result exists for
+# it yet). Dispatch it with bench/dispatch-bench.sh, which dispatches again an hour later
+# whenever a run fails the CPU check (a bounded number of times for the 9V45 and the Neoverse
+# N2) or fails to fetch the check's script. The host input picks one of the five, and with it
+# the runner; each host's CPU string and runner are fixed in bench/host.sh, on purpose, with no
+# free-text input to change them: a run on another CPU is not comparable with the results
 # before it.
 #
 # With a base, the job is a pair instead (bench/pair.sh): the benchmarks on the base and on the
@@ -30,6 +32,7 @@ on:
           - xeon8573c
           - xeon6973p
           - epyc9v45
+          - neoversen2
       benchmarks:
         description: 'JMH benchmark regex, e.g. "ExpBenchmark" or "ExpBenchmark.finish256"'
         required: true
@@ -60,7 +63,9 @@ permissions:
 
 jobs:
   benchmark:
-    runs-on: ubuntu-latest
+    # The runner follows from the host (bench/host.sh's table, which its self-test compares
+    # with this line): only the Arm host leaves the ubuntu-latest pool.
+    runs-on: ${{ inputs.host == 'neoversen2' && 'ubuntu-24.04-arm' || 'ubuntu-latest' }}
     env:
       # -foe true: a benchmark whose setUp throws fails the run. Without it JMH prints <failure>
       # for that row, goes on, ends the run and exits 0, and the row is missing from a green
@@ -147,7 +152,8 @@ jobs:
       # comparable with HARDWARE.md's rows. It records and never gates: the CPU check above is
       # the only gate. The header records the probe's datapath line as it is, "unusable" (a
       # control below 1.50, and the step then shows as failed) included; only a probe that
-      # printed no such line leaves "not measured".
+      # printed no such line leaves "not measured". On the Arm host the control reads 1.00,
+      # since its vectors are 128 bits only, so its header says "unusable" there: expected.
       - name: Measure the vector datapath
         continue-on-error: true
         run: |
@@ -162,7 +168,7 @@ jobs:
         run: |
           set -o pipefail
           out=bench-results.txt
-          flags="$(grep -m1 '^flags' /proc/cpuinfo)"
+          flags="$(grep -m1 -E '^(flags|Features)' /proc/cpuinfo || true)"
           has() { if grep -qw "$1" <<<"$flags"; then echo yes; else echo no; fi; }
           datapath="$(sed -n 's/^datapath: //p' datapath.txt 2>/dev/null)"
           append="$INLINE"
@@ -174,13 +180,14 @@ jobs:
             echo "# Commit:      $GITHUB_SHA ($GITHUB_REF_NAME)"
             echo "# Run:         $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
             echo "# JDK:         $(java -version 2>&1 | tail -n 1)"
-            echo "# CPU:         $(grep -m1 'model name' /proc/cpuinfo | sed 's/.*: //')"
+            echo "# CPU:         $(bash bench/host.sh --cpu)"
             echo "# AVX-512:     avx512f=$(has avx512f) avx512dq=$(has avx512dq)"
-            echo "# CPU flags:   $(tr ' ' '\n' <<<"$flags" | grep -E '^avx' | sort -u \
+            echo "# CPU flags:   $(tr ' ' '\n' <<<"$flags" | grep -E '^(avx|sve|asimd)' | sort -u \
               | tr '\n' ' ')"
             # shellcheck disable=SC2086 # the extra JVM options are words
             echo "# Vector:      $(java $JVM_ARGS -XX:+PrintFlagsFinal -version 2>/dev/null \
-              | grep -E ' (MaxVectorSize|UseAVX) ' | awk '{print $2 "=" $4}' | tr '\n' ' ')"
+              | grep -E ' (MaxVectorSize|UseAVX|UseSVE) ' | awk '{print $2 "=" $4}' \
+              | tr '\n' ' ')"
             echo "# Datapath:    ${datapath:-not measured: the probe printed no line, see its step}"
             echo "#              (bench/datapath.sh, at the machine's own JVM flags)"
             echo "# Kernel:      $(uname -r)"
