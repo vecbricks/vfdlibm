@@ -1,0 +1,71 @@
+# Version updates for the workflows' actions and the build's Maven dependencies and plugins. A
+# pull request opened here is merged by a person, after its CI, like any other; nothing here
+# merges one, names a reviewer or assigns it. Titles start with the project's tag (AGENTS.md,
+# "Changes"); the body is Dependabot's own, which the pull request template does not govern.
+# The format is GitHub's "Dependabot options reference" (docs.github.com).
+version: 2
+updates:
+  # The workflows pin each action by commit, with the release's tag in a comment on the same
+  # line (`actions/checkout@<commit> # v5.1.0`). Dependabot moves the commit to the newest
+  # release and rewrites that comment. Minor and patch updates of every action come as one pull
+  # request a week; a major update comes as a pull request of its own, since a major can change
+  # what an action does. A release is considered only a week after it is published, so that a
+  # hijacked or withdrawn one is seen before a pin moves. A pull request runs ci.yml, and the dry
+  # run of release.yml when it touches that workflow's paths; neither runs benchmark.yml or
+  # nightly.yml, so an update to those two is dispatched by hand before it is merged. The
+  # nightly's artifact download, in its alert job, runs only after a failed night or a dispatch
+  # with a planted fault, and a failure of it does not fail the night.
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 3
+    cooldown:
+      default-days: 7
+    commit-message:
+      prefix: "[VFDLIBM] "
+    groups:
+      actions:
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"
+
+  # pom.xml: junit-jupiter and surefire through properties, the other plugins by explicit
+  # version (the JMH versions are a property too, and left out below). Monthly and
+  # at most two open, since each update runs the whole suite. Three things are left out, so that
+  # they move by hand, with their security fixes (an ignore silences those too):
+  #   - JMH (jmh-core and jmh-generator-annprocess): its version decides what a benchmark
+  #     measures, and every committed results file was measured under it; a new one comes with a
+  #     new measurement (AGENTS.md, "Measurements, not adjectives").
+  #   - central-publishing-maven-plugin: CI loads it (it is an extension of the release
+  #     profile) but no job runs its upload, which happens at `deploy`, and a version of it once
+  #     broke a release after the upload.
+  #   - maven-gpg-plugin: CI skips signing, and the dry run signs with a Bouncy Castle key made
+  #     for the run; only the owner's signing, through gpg and its agent, is covered by no run.
+  # Every other plugin is built by CI (the release profile's by ci.yml's jar check). A new
+  # plugin that only a release runs is added to this list, and to the Releases section of
+  # AGENTS.md, which names what is left to a person.
+  - package-ecosystem: "maven"
+    directory: "/"
+    schedule:
+      interval: "monthly"
+    open-pull-requests-limit: 2
+    cooldown:
+      default-days: 7
+    commit-message:
+      prefix: "[VFDLIBM] "
+    ignore:
+      - dependency-name: "org.openjdk.jmh:jmh-core"
+      - dependency-name: "org.openjdk.jmh:jmh-generator-annprocess"
+      - dependency-name: "org.sonatype.central:central-publishing-maven-plugin"
+      - dependency-name: "org.apache.maven.plugins:maven-gpg-plugin"
+    groups:
+      maven:
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"
