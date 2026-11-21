@@ -178,8 +178,8 @@ re-trying a settled question.
   (lanes > 0 && (rareLanes & 1L) != 0) result = result.withLane(0, f(x.lane(0)));` and so on, in all
   seven ports (sinh's and cosh's finishes had the same loop), the loop kept for lanes past eight.
   With it every `*Max` row reads under 0.1 B/op on mixed data at 512 bits and as an AVX2 host at
-  256, 0.033 and 0.072 at most, and all 94 rows of the check pass under both flag sets on a lightly loaded
-  machine, the `*Max` rows now among them
+  256, 0.033 and 0.072 at most, and all 94 rows of the check pass under both flag sets on a lightly
+  loaded machine, the `*Max` rows now among them
   (`bench/results/max-finish-alloc-free-laptop-2026-11-21.txt`). Lanes past eight, and 128 bits, are
   not read. The fixed shapes' finish changes too, so the change goes through a pair on a host (the
   pull request names it).
