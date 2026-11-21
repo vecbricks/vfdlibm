@@ -158,13 +158,10 @@ final class Nightly {
         // it too.
         new Arm("Cosh.coshSlice", x -> Cosh.coshSlice(x, null), Cosh::coshSlice),
         new Arm("Cosh.coshFinish", x -> Cosh.coshFinish(x, null), Cosh::coshFinish))),
-    // In the table, so that dev/nightly.sh and the planted-fault tests can run it; the night's
-    // `all=` list in nightly.yml does not name it yet (the follow-up that adds it is pending).
     ASIN("asin", StrictMath::asin, List.of(
         new Arm("VFdlibm.asin", VFdlibm::asin, VFdlibm::asin))),
     ATAN("atan", StrictMath::atan, List.of(
         new Arm("VFdlibm.atan", VFdlibm::atan, VFdlibm::atan))),
-    // As asin: in the table, and not in the night's `all=` list in nightly.yml yet.
     ACOS("acos", StrictMath::acos, List.of(
         new Arm("VFdlibm.acos", VFdlibm::acos, VFdlibm::acos)));
 
@@ -178,15 +175,22 @@ final class Nightly {
       this.arms = arms;
     }
 
+    /**
+     * The function of one argument named {@code id}; the message of an unknown name lists the
+     * functions of one argument only, and {@link Nightly#subject} lists those of two as well.
+     */
     static Function of(String id) {
       for (Function f : values()) {
         if (f.id.equals(id)) {
           return f;
         }
       }
+      List<String> known = new ArrayList<>();
+      for (Function f : values()) {
+        known.add(f.id);
+      }
       throw new IllegalArgumentException(
-          "unknown function '" + id + "'; known: exp, expm1, log, log10, log1p, sinh, cosh,"
-              + " asin, atan, acos");
+          "unknown function '" + id + "'; known: " + String.join(", ", known));
     }
 
     @Override
@@ -292,8 +296,8 @@ final class Nightly {
   }
 
   /**
-   * The function named {@code id}, of one argument or of two. The message of an unknown name is
-   * the one {@link Function#of} gives while no function of two arguments is registered.
+   * The function named {@code id}, of one argument or of two. The message of an unknown name
+   * lists the functions of one argument and then those of two, each from its registry.
    */
   static Subject subject(String id) {
     for (Function f : Function.values()) {

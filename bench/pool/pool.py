@@ -68,7 +68,10 @@ DATAPATH = re.compile(r"(\S+) / (\S+) / (\S+) lane-ops/ns at 128 / 256 / 512 bit
 
 # What dev/nightly.sh, Sweep and Fuzz print for one species: the bracket's two ends, the first
 # line of the program, the JVM's own options, and the count with its seconds.
-BRACKET = re.compile(r"Z == (sweep|fuzz)-(\w+)-(\w+): (?:(java) |exit (\d+)\s*$)")
+# A function of two arguments has an argument in its names: "sweep-atan2-arg1-256" and the job
+# "sweep (atan2-arg1, stripe 0/2)"; the argument is left out of the function here.
+BRACKET = re.compile(
+    r"Z == (sweep|fuzz)-(\w+?)(?:-arg\d)?-(\w+): (?:(java) |exit (\d+)\s*$)")
 AT_BITS = re.compile(r"Z (?:sweep|fuzz) \w+ at (\d+) bits")
 JDK = re.compile(r"Z jdk: ?(.*?)\s*$")
 JVM_ARGS = re.compile(r"Z jvm args: ?(.*?)\s*$")
@@ -533,8 +536,9 @@ def kind(name):
 
 
 def function_of(name):
-    """The function a sweep, fuzz or Arm job's name gives, "sweep (log1p, stripe 0/2)"."""
-    m = re.match(r"\w+ \((\w+),", name)
+    """The function a sweep, fuzz or Arm job's name gives, "sweep (log1p, stripe 0/2)" or, of two
+    arguments, "sweep (atan2-arg1, stripe 0/2)" (the argument is not part of it)."""
+    m = re.match(r"\w+ \((\w+?)(?:-arg\d)?,", name)
     return m.group(1) if m else None
 
 
@@ -823,6 +827,20 @@ def selftest(args):
     hit = species_runs(log("--add-modules=x -Dvfdlibm.fault=exp.dropCorrection", 1))
     assert hit[0]["exit"] == "1" and planted(hit[0]["jvmargs"]), hit
     assert not planted(plain[0]["jvmargs"])
+
+    # A function of two arguments has the argument in its names (the sweep's bracket and the job's
+    # name), which is not part of the function.
+    stamp = "2026-11-19T10:00:00.0Z "
+    pair = species_runs([stamp + "== sweep-atan2-arg1-256: java --add-modules x Sweep ...",
+                         stamp + "sweep atan2 at 256 bits, --part 0/2 --argument 1: 4096 words",
+                         stamp + "swept 4096 high words (12288 inputs) in 3.0 s: 7/s",
+                         stamp + "== sweep-atan2-arg1-256: exit 0"])
+    assert len(pair) == 1 and pair[0]["function"] == "atan2" and pair[0]["species"] == "256", pair
+    assert pair[0]["exit"] == "0" and pair[0]["bits"] == "256", pair
+    for name, want in (("sweep (atan2-arg2, stripe 1/4)", "atan2"), ("arm (atan2-arg1, stripe 0/4)",
+                       "atan2"), ("fuzz (atan2, as AVX2)", "atan2"), ("sweep (log1p, stripe 0/2)",
+                       "log1p"), ("proofs", None)):
+        assert function_of(name) == want, (name, function_of(name))
 
     # fetch's rule: the run whose reading planted a fault goes, the other stays.
     todo = [("d", 1, {}), ("d", 1, {}), ("d", 2, {}), ("d", 3, {})]

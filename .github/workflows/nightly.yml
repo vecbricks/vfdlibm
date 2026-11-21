@@ -1,8 +1,8 @@
 name: Nightly
 
 # The nightly correctness run (SKILLS.md, "The nightly sweep and fuzz"): every arm of exp,
-# expm1, log, log10, log1p, sinh, cosh and atan, unmasked and masked, compared with StrictMath by
-# raw bits.
+# expm1, log, log10, log1p, sinh, cosh, atan, asin, acos and atan2, unmasked and masked, compared
+# with StrictMath by raw bits.
 #
 # - sweep (x86): every one of the 2^32 high words with three low words each (Sweep.java) at
 #   every width the drawn runner has except 128 bits: 256 and max on every draw, 512 on an
@@ -27,11 +27,12 @@ name: Nightly
 # Every mismatch file is uploaded as an artifact, its inputs one per line as
 # hard-cases/<function>.txt takes them.
 #
-# A function of two arguments (`pairs` in the plan job; none is ported yet) is swept one argument
-# at a time (Sweep.java, `--argument`). The input `pair-passes` says which a night sweeps:
+# A function of two arguments (`pairs` in the plan job; atan2 is the one ported) is swept one
+# argument at a time (Sweep.java, `--argument`). The input `pair-passes` says which a night sweeps:
 # `alternate` (the default) the first argument for a rotation of `nights` nights and the second for
-# the next, `both` both in two jobs, or `1` or `2`. A function of one argument has neither field
-# in its matrix entries, so nothing changes for it.
+# the next (turned over every `slice-nights` nights when a rotation is shorter, so that a slice of
+# the 128-bit sweep meets both), `both` both in two jobs, or `1` or `2`. A function of one argument
+# has neither field in its matrix entries, so nothing changes for it.
 #
 # The functions are named once, in the plan job, which makes every matrix; the input `functions`
 # narrows them. The input `fault` plants a fault (Faults.java) in every sweep and fuzz JVM, so
@@ -61,11 +62,11 @@ on:
         required: false
         default: '1'
       shards:
-        description: 'Sweep (x86): parallel jobs per function and night, a power of two to 32'
+        description: 'Sweep (x86): jobs per function and night, power of two to 32, 256 per matrix'
         required: false
         default: '2'
       arm-shards:
-        description: 'Sweep (Arm): parallel jobs per function and night, a power of two to 32'
+        description: 'Sweep (Arm): jobs per function and night, power of two to 32, 256 per matrix'
         required: false
         default: '4'
       night:
@@ -138,11 +139,11 @@ jobs:
         run: |
           # Every function of the night: each matrix and each check below reads this list, so a
           # new port is added here (and in `reach`, if it computes through another port).
-          all='exp expm1 log log10 log1p sinh cosh atan'
-          # The functions of `all` that take two arguments: none yet. A port of one is added here
+          all='exp expm1 log log10 log1p sinh cosh atan asin acos atan2'
+          # The functions of `all` that take two arguments: atan2. A port of another is added here
           # as well as to `all`, and each sweep matrix then has an entry for each argument the
           # night sweeps (PAIR_PASSES).
-          pairs=''
+          pairs='atan2'
           # A dispatch's text is echoed in errors below: a line break in it would let a line of
           # the dispatcher's be read as a workflow command, so line breaks become spaces (which
           # every check below then refuses).
@@ -189,9 +190,13 @@ jobs:
           # moves) and expm1.guardMissesFilter (the guarded arm's own); cosh through Exp.expCore,
           # whose dropCorrection and constantOffByOneUlp reach it, but not thresholdMoved (the
           # subnormal scale-back, which expCore leaves out) or dropKForcing (the word of 0.5 ln2,
-          # which is cosh's small range, computed from expm1's lines and not from exp).
+          # which is cosh's small range, computed from expm1's lines and not from exp); atan2
+          # through Atan.atan: Atan2Test, run by hand under each of atan's three faults (dropLo,
+          # splitMoved, hiOneUlpOff), failed under each, so they are sent to atan2 too. Whether
+          # the night's own atan2 jobs find each is not checked.
           reach() {
             case "$1" in
+              atan.*) echo 'atan atan2' ;;
               log.*) echo 'log log10' ;;
               expm1.dropCorrection | expm1.constantOffByOneUlp | expm1.dropKForcing)
                 echo 'expm1 sinh' ;;
@@ -225,11 +230,13 @@ jobs:
             fault_args="-Dvfdlibm.fault=$FAULT"
           fi
           # A matrix holds at most 256 jobs, one per function and shard of the run: with all of
-          # today's 8 functions, each of one argument, 32 shards are 256, exactly the cap, so the
-          # 256-job check in the loop below refuses a ninth function at 32 shards. A function of
-          # two arguments is an entry for each argument a night sweeps (once or twice by
-          # PAIR_PASSES), so it counts for that many in the check. A stripe count (nights or
-          # slice-nights times shards) is at most Sweep's 4096 chunks.
+          # today's 11 functions (ten of one argument and atan2, which a night sweeps one argument
+          # of, two with pair-passes both), 16 shards are 176 (192) and 32 shards are 352 (384),
+          # past the cap, so the 256-job check in the loop below refuses 32 shards of all eleven
+          # (eight functions fit at 32, nine do not). A function of two arguments is an entry for
+          # each argument a night sweeps (once or twice by PAIR_PASSES), so it counts for that many
+          # in the check. A stripe count (nights or slice-nights times shards) is at most Sweep's
+          # 4096 chunks.
           case "$PAIR_PASSES" in
             alternate | 1 | 2) pair_count=1 ;;
             both) pair_count=2 ;;
@@ -278,9 +285,16 @@ jobs:
             exit 1
           fi
           # The arguments a night sweeps of a function of two arguments: one by the rotation (the
-          # first for `nights` nights, then the second for as many), both, or the one named.
+          # first for `nights` nights, then the second for as many), both, or the one named. The
+          # slice's night is days % SLICE_NIGHTS, so when a rotation is shorter than the slice's,
+          # the rotation's parity would be the slice night's parity and each slice would keep one
+          # argument for good: the rotation then turns over once every SLICE_NIGHTS nights, so a
+          # slice meets both (one rotation is repeated at each turn).
           case "$PAIR_PASSES" in
-            alternate) pair_arguments="$((days / NIGHTS % 2 + 1))" ;;
+            alternate)
+              turn=0
+              if [ "$NIGHTS" -lt "$SLICE_NIGHTS" ]; then turn=$((days / SLICE_NIGHTS)); fi
+              pair_arguments="$(((days / NIGHTS + turn) % 2 + 1))" ;;
             both) pair_arguments='1 2' ;;
             *) pair_arguments="$PAIR_PASSES" ;;
           esac
