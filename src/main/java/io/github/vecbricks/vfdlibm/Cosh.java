@@ -61,9 +61,11 @@ import jdk.incubator.vector.VectorSpecies;
  * </ul>
  *
  * <p>Both finish per lane the lanes from the overflow window up ({@code ix >= 0x40862E42}), the
- * infinities and the NaNs, and share one division: its numerator is {@code t*t} (small range) or
- * {@code half}, its denominator {@code w+w} or {@code exp(|x|)}, and each lane's sum is its own
- * range's: {@code 1+q}, {@code w}, {@code half*t+q} or {@code half*t}. Each lane takes one of
+ * infinities and the NaNs. They share cosh's own quotient, one division for every other lane:
+ * its numerator is {@code t*t} (small range) or {@code half}, its denominator {@code w+w} or
+ * {@code exp(|x|)}, and each lane's sum is its own range's: {@code 1+q}, {@code w}, {@code
+ * half*t+q} or {@code half*t}. The slice arm divides once more, in the polynomial of its
+ * expm1 lines ({@code (r1-t3)/(6-x*t3)}), which the finish arm never runs. Each lane takes one of
  * the C's branches and does that branch's operations in the C's order; the other branches'
  * values are computed and never kept.
  *
