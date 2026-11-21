@@ -9,206 +9,230 @@
 #              out lanes 0 to 7 with constant indices, guarded by the vector's length, and keeps
 #              its loop for lanes past eight; this is the check's reading with that change and
 #              the *Max rows in its INCLUDE.
-# Commit:      80aa6dd (the branch of the pull request that adds this file). The runs were made
-#              on that code before the comments of its Javadocs were last edited, which no
-#              bytecode reads. Ports: Exp, Expm1, Log, Log10, Log1p and Sinh.
+# Commit:      2c47e14 (the branch of the pull request that adds this file, with main's cosh merged
+#              in). Ports: Exp, Expm1, Log, Log10, Log1p, Sinh and Cosh.
 # JDK:         OpenJDK 64-Bit Server VM, 25.0.5.1+2-1-26.04.1-Ubuntu
 # CPU:         AMD Ryzen AI 9 HX PRO 370 w/ Radeon 890M (24 logical cores, two core types)
 # CPU flags:   avx2, avx512f and avx512dq present
 # Vector:      default flags: MaxVectorSize=64 UseAVX=3 (SPECIES_MAX is 512 bits, 8 lanes);
 #              as AVX2: -XX:UseAVX=2 -XX:MaxVectorSize=32 (SPECIES_MAX is 256 bits, 4 lanes)
 # Datapath:    68.2 / 135.4 / 154.8 lane-ops/ns at 128 / 256 / 512 bits; 256:128 = 1.99
-#              (control), 512:256 = 1.14 (bench/datapath.sh, read after the runs)
+#              (control), 512:256 = 1.14 (bench/datapath.sh, read earlier that day on this machine)
 # Kernel:      7.0.0-43-generic
-# Load:        the load average read 2.33, 2.43, 1.96 between the two runs and 2.58, 2.95, 2.45
-#              after them, on 24 logical cores: a quiet machine, which the 20 November file's
-#              runs were not
+# Load:        1.67, 4.57, 5.50 when the job started (before mvn verify and the width tests),
+#              4.64, 7.14, 7.13 when the two checks started and 1.68, 4.45, 6.47 when they
+#              ended, on 24 logical cores: lightly loaded, which the 20 November file's runs
+#              (55 to 96) were not
 # Command:     bench/alloc-check.py --mvn <mvn>
 #              bench/alloc-check.py --mvn <mvn> --jvm-args="-XX:UseAVX=2 -XX:MaxVectorSize=32"
 #              (-f 1 -wi 3 -w 1s -i 3 -r 1s -prof gc -p inputs=common,mixed -foe true, the body
 #              inlined, over every row named *256, *Preferred or *Max but not *Boxed*)
 #
 # Reading:
-# - Every one of the 82 rows passes at the default flags and as an AVX2 host: no row allocates
+# - Every one of the 94 rows passes at the default flags and as an AVX2 host: no row allocates
 #   1.0 B/op or more, so no helper of any port is refused inlining by NodeCountInliningCutoff
 #   in the *256 and *Preferred rows, and the *Max rows box nothing on mixed data.
-# - The largest reading of any row is 0.051 B/op at the default flags and 0.074 as an
-#   AVX2 host; of the *Max rows alone, 0.023 and 0.074. On main the *Max rows read
+# - The largest reading of any row is 0.059 B/op at the default flags and 0.117 as an
+#   AVX2 host; of the *Max rows alone, 0.033 and 0.072. On main the *Max rows read
 #   30432 to 36992 on mixed data (the 20 November file).
 # - Not read: SPECIES_MAX at 128 bits, or with more than eight lanes (no host here has them),
 #   and Arm, where the check runs the *Preferred rows only.
 # - A result cannot change: each lane gets the same StrictMath call as before; the tests at
 #   every width and at SPECIES_MAX and the planted faults pass (see the pull request).
 #
-# This file holds the check's own verdict lines, 82 for each flag set, and no JMH summary
+# This file holds the check's own verdict lines, 94 for each flag set, and no JMH summary
 # table, which bench/alloc-check.py does not keep except in target/alloc-check.json; so
 # bench/record.py, which reads a host run's artifact, does not apply to it, as it did not to
 # max-finish-laptop-2026-11-20.txt. The pair that compares speed is owed (see the pull request).
 
 # 1. default flags, 512 bits
-ok    ExpBenchmark.blended256 [inputs=common]: max 0.019 B/op over 3 iterations
+ok    CoshBenchmark.finish256 [inputs=common]: max 0.014 B/op over 3 iterations
+ok    CoshBenchmark.finish256 [inputs=mixed]: max 0.019 B/op over 3 iterations
+ok    CoshBenchmark.finishMax [inputs=common]: max 0.011 B/op over 3 iterations
+ok    CoshBenchmark.finishMax [inputs=mixed]: max 0.026 B/op over 3 iterations
+ok    CoshBenchmark.finishPreferred [inputs=common]: max 0.011 B/op over 3 iterations
+ok    CoshBenchmark.finishPreferred [inputs=mixed]: max 0.019 B/op over 3 iterations
+ok    CoshBenchmark.slice256 [inputs=common]: max 0.022 B/op over 3 iterations
+ok    CoshBenchmark.slice256 [inputs=mixed]: max 0.030 B/op over 3 iterations
+ok    CoshBenchmark.sliceMax [inputs=common]: max 0.015 B/op over 3 iterations
+ok    CoshBenchmark.sliceMax [inputs=mixed]: max 0.023 B/op over 3 iterations
+ok    CoshBenchmark.slicePreferred [inputs=common]: max 0.015 B/op over 3 iterations
+ok    CoshBenchmark.slicePreferred [inputs=mixed]: max 0.025 B/op over 3 iterations
+ok    ExpBenchmark.blended256 [inputs=common]: max 0.021 B/op over 3 iterations
 ok    ExpBenchmark.blended256 [inputs=mixed]: max 0.024 B/op over 3 iterations
-ok    ExpBenchmark.blendedMax [inputs=common]: max 0.014 B/op over 3 iterations
-ok    ExpBenchmark.blendedMax [inputs=mixed]: max 0.018 B/op over 3 iterations
-ok    ExpBenchmark.blendedPreferred [inputs=common]: max 0.014 B/op over 3 iterations
-ok    ExpBenchmark.blendedPreferred [inputs=mixed]: max 0.019 B/op over 3 iterations
-ok    ExpBenchmark.finish256 [inputs=common]: max 0.008 B/op over 3 iterations
-ok    ExpBenchmark.finish256 [inputs=mixed]: max 0.012 B/op over 3 iterations
-ok    ExpBenchmark.finishMax [inputs=common]: max 0.006 B/op over 3 iterations
-ok    ExpBenchmark.finishMax [inputs=mixed]: max 0.011 B/op over 3 iterations
-ok    ExpBenchmark.finishPreferred [inputs=common]: max 0.006 B/op over 3 iterations
-ok    ExpBenchmark.finishPreferred [inputs=mixed]: max 0.011 B/op over 3 iterations
-ok    Expm1Benchmark.blended256 [inputs=common]: max 0.046 B/op over 3 iterations
-ok    Expm1Benchmark.blended256 [inputs=mixed]: max 0.051 B/op over 3 iterations
-ok    Expm1Benchmark.blendedMax [inputs=common]: max 0.021 B/op over 3 iterations
-ok    Expm1Benchmark.blendedMax [inputs=mixed]: max 0.019 B/op over 3 iterations
-ok    Expm1Benchmark.blendedPreferred [inputs=common]: max 0.018 B/op over 3 iterations
-ok    Expm1Benchmark.blendedPreferred [inputs=mixed]: max 0.018 B/op over 3 iterations
-ok    Expm1Benchmark.core256 [inputs=common]: max 0.022 B/op over 3 iterations
-ok    Expm1Benchmark.core256 [inputs=mixed]: max 0.022 B/op over 3 iterations
-ok    Expm1Benchmark.coreMax [inputs=common]: max 0.021 B/op over 3 iterations
-ok    Expm1Benchmark.coreMax [inputs=mixed]: max 0.022 B/op over 3 iterations
-ok    Expm1Benchmark.corePreferred [inputs=common]: max 0.018 B/op over 3 iterations
-ok    Expm1Benchmark.corePreferred [inputs=mixed]: max 0.020 B/op over 3 iterations
-ok    Expm1Benchmark.finish256 [inputs=common]: max 0.029 B/op over 3 iterations
-ok    Expm1Benchmark.finish256 [inputs=mixed]: max 0.033 B/op over 3 iterations
-ok    Expm1Benchmark.finishMax [inputs=common]: max 0.018 B/op over 3 iterations
-ok    Expm1Benchmark.finishMax [inputs=mixed]: max 0.019 B/op over 3 iterations
-ok    Expm1Benchmark.finishPreferred [inputs=common]: max 0.015 B/op over 3 iterations
-ok    Expm1Benchmark.finishPreferred [inputs=mixed]: max 0.018 B/op over 3 iterations
-ok    Expm1Benchmark.guarded256 [inputs=common]: max 0.029 B/op over 3 iterations
-ok    Expm1Benchmark.guarded256 [inputs=mixed]: max 0.032 B/op over 3 iterations
-ok    Expm1Benchmark.guardedMax [inputs=common]: max 0.016 B/op over 3 iterations
-ok    Expm1Benchmark.guardedMax [inputs=mixed]: max 0.018 B/op over 3 iterations
-ok    Expm1Benchmark.guardedPreferred [inputs=common]: max 0.016 B/op over 3 iterations
-ok    Expm1Benchmark.guardedPreferred [inputs=mixed]: max 0.018 B/op over 3 iterations
-ok    Log10Benchmark.blended256 [inputs=common]: max 0.020 B/op over 3 iterations
-ok    Log10Benchmark.blended256 [inputs=mixed]: max 0.022 B/op over 3 iterations
-ok    Log10Benchmark.blendedMax [inputs=common]: max 0.015 B/op over 3 iterations
-ok    Log10Benchmark.blendedMax [inputs=mixed]: max 0.017 B/op over 3 iterations
-ok    Log10Benchmark.blendedPreferred [inputs=common]: max 0.016 B/op over 3 iterations
-ok    Log10Benchmark.blendedPreferred [inputs=mixed]: max 0.017 B/op over 3 iterations
-ok    Log10Benchmark.finish256 [inputs=common]: max 0.018 B/op over 3 iterations
-ok    Log10Benchmark.finish256 [inputs=mixed]: max 0.023 B/op over 3 iterations
-ok    Log10Benchmark.finishMax [inputs=common]: max 0.013 B/op over 3 iterations
-ok    Log10Benchmark.finishMax [inputs=mixed]: max 0.018 B/op over 3 iterations
-ok    Log10Benchmark.finishPreferred [inputs=common]: max 0.013 B/op over 3 iterations
-ok    Log10Benchmark.finishPreferred [inputs=mixed]: max 0.017 B/op over 3 iterations
-ok    Log1pBenchmark.blended256 [inputs=common]: max 0.018 B/op over 3 iterations
-ok    Log1pBenchmark.blended256 [inputs=mixed]: max 0.019 B/op over 3 iterations
-ok    Log1pBenchmark.blendedMax [inputs=common]: max 0.013 B/op over 3 iterations
-ok    Log1pBenchmark.blendedMax [inputs=mixed]: max 0.013 B/op over 3 iterations
-ok    Log1pBenchmark.blendedPreferred [inputs=common]: max 0.013 B/op over 3 iterations
-ok    Log1pBenchmark.blendedPreferred [inputs=mixed]: max 0.018 B/op over 3 iterations
-ok    Log1pBenchmark.finish256 [inputs=common]: max 0.024 B/op over 3 iterations
-ok    Log1pBenchmark.finish256 [inputs=mixed]: max 0.027 B/op over 3 iterations
-ok    Log1pBenchmark.finishMax [inputs=common]: max 0.014 B/op over 3 iterations
-ok    Log1pBenchmark.finishMax [inputs=mixed]: max 0.016 B/op over 3 iterations
-ok    Log1pBenchmark.finishPreferred [inputs=common]: max 0.016 B/op over 3 iterations
-ok    Log1pBenchmark.finishPreferred [inputs=mixed]: max 0.018 B/op over 3 iterations
+ok    ExpBenchmark.blendedMax [inputs=common]: max 0.015 B/op over 3 iterations
+ok    ExpBenchmark.blendedMax [inputs=mixed]: max 0.020 B/op over 3 iterations
+ok    ExpBenchmark.blendedPreferred [inputs=common]: max 0.015 B/op over 3 iterations
+ok    ExpBenchmark.blendedPreferred [inputs=mixed]: max 0.030 B/op over 3 iterations
+ok    ExpBenchmark.finish256 [inputs=common]: max 0.015 B/op over 3 iterations
+ok    ExpBenchmark.finish256 [inputs=mixed]: max 0.021 B/op over 3 iterations
+ok    ExpBenchmark.finishMax [inputs=common]: max 0.010 B/op over 3 iterations
+ok    ExpBenchmark.finishMax [inputs=mixed]: max 0.033 B/op over 3 iterations
+ok    ExpBenchmark.finishPreferred [inputs=common]: max 0.018 B/op over 3 iterations
+ok    ExpBenchmark.finishPreferred [inputs=mixed]: max 0.022 B/op over 3 iterations
+ok    Expm1Benchmark.blended256 [inputs=common]: max 0.054 B/op over 3 iterations
+ok    Expm1Benchmark.blended256 [inputs=mixed]: max 0.059 B/op over 3 iterations
+ok    Expm1Benchmark.blendedMax [inputs=common]: max 0.030 B/op over 3 iterations
+ok    Expm1Benchmark.blendedMax [inputs=mixed]: max 0.031 B/op over 3 iterations
+ok    Expm1Benchmark.blendedPreferred [inputs=common]: max 0.037 B/op over 3 iterations
+ok    Expm1Benchmark.blendedPreferred [inputs=mixed]: max 0.031 B/op over 3 iterations
+ok    Expm1Benchmark.core256 [inputs=common]: max 0.035 B/op over 3 iterations
+ok    Expm1Benchmark.core256 [inputs=mixed]: max 0.042 B/op over 3 iterations
+ok    Expm1Benchmark.coreMax [inputs=common]: max 0.019 B/op over 3 iterations
+ok    Expm1Benchmark.coreMax [inputs=mixed]: max 0.025 B/op over 3 iterations
+ok    Expm1Benchmark.corePreferred [inputs=common]: max 0.022 B/op over 3 iterations
+ok    Expm1Benchmark.corePreferred [inputs=mixed]: max 0.017 B/op over 3 iterations
+ok    Expm1Benchmark.finish256 [inputs=common]: max 0.035 B/op over 3 iterations
+ok    Expm1Benchmark.finish256 [inputs=mixed]: max 0.036 B/op over 3 iterations
+ok    Expm1Benchmark.finishMax [inputs=common]: max 0.021 B/op over 3 iterations
+ok    Expm1Benchmark.finishMax [inputs=mixed]: max 0.022 B/op over 3 iterations
+ok    Expm1Benchmark.finishPreferred [inputs=common]: max 0.026 B/op over 3 iterations
+ok    Expm1Benchmark.finishPreferred [inputs=mixed]: max 0.027 B/op over 3 iterations
+ok    Expm1Benchmark.guarded256 [inputs=common]: max 0.038 B/op over 3 iterations
+ok    Expm1Benchmark.guarded256 [inputs=mixed]: max 0.043 B/op over 3 iterations
+ok    Expm1Benchmark.guardedMax [inputs=common]: max 0.023 B/op over 3 iterations
+ok    Expm1Benchmark.guardedMax [inputs=mixed]: max 0.026 B/op over 3 iterations
+ok    Expm1Benchmark.guardedPreferred [inputs=common]: max 0.031 B/op over 3 iterations
+ok    Expm1Benchmark.guardedPreferred [inputs=mixed]: max 0.025 B/op over 3 iterations
+ok    Log10Benchmark.blended256 [inputs=common]: max 0.029 B/op over 3 iterations
+ok    Log10Benchmark.blended256 [inputs=mixed]: max 0.031 B/op over 3 iterations
+ok    Log10Benchmark.blendedMax [inputs=common]: max 0.020 B/op over 3 iterations
+ok    Log10Benchmark.blendedMax [inputs=mixed]: max 0.022 B/op over 3 iterations
+ok    Log10Benchmark.blendedPreferred [inputs=common]: max 0.023 B/op over 3 iterations
+ok    Log10Benchmark.blendedPreferred [inputs=mixed]: max 0.028 B/op over 3 iterations
+ok    Log10Benchmark.finish256 [inputs=common]: max 0.027 B/op over 3 iterations
+ok    Log10Benchmark.finish256 [inputs=mixed]: max 0.035 B/op over 3 iterations
+ok    Log10Benchmark.finishMax [inputs=common]: max 0.020 B/op over 3 iterations
+ok    Log10Benchmark.finishMax [inputs=mixed]: max 0.028 B/op over 3 iterations
+ok    Log10Benchmark.finishPreferred [inputs=common]: max 0.020 B/op over 3 iterations
+ok    Log10Benchmark.finishPreferred [inputs=mixed]: max 0.028 B/op over 3 iterations
+ok    Log1pBenchmark.blended256 [inputs=common]: max 0.029 B/op over 3 iterations
+ok    Log1pBenchmark.blended256 [inputs=mixed]: max 0.029 B/op over 3 iterations
+ok    Log1pBenchmark.blendedMax [inputs=common]: max 0.018 B/op over 3 iterations
+ok    Log1pBenchmark.blendedMax [inputs=mixed]: max 0.019 B/op over 3 iterations
+ok    Log1pBenchmark.blendedPreferred [inputs=common]: max 0.021 B/op over 3 iterations
+ok    Log1pBenchmark.blendedPreferred [inputs=mixed]: max 0.021 B/op over 3 iterations
+ok    Log1pBenchmark.finish256 [inputs=common]: max 0.027 B/op over 3 iterations
+ok    Log1pBenchmark.finish256 [inputs=mixed]: max 0.033 B/op over 3 iterations
+ok    Log1pBenchmark.finishMax [inputs=common]: max 0.016 B/op over 3 iterations
+ok    Log1pBenchmark.finishMax [inputs=mixed]: max 0.022 B/op over 3 iterations
+ok    Log1pBenchmark.finishPreferred [inputs=common]: max 0.017 B/op over 3 iterations
+ok    Log1pBenchmark.finishPreferred [inputs=mixed]: max 0.020 B/op over 3 iterations
 ok    Log1pBenchmark.guarded256 [inputs=common]: max 0.026 B/op over 3 iterations
-ok    Log1pBenchmark.guarded256 [inputs=mixed]: max 0.021 B/op over 3 iterations
-ok    Log1pBenchmark.guardedMax [inputs=common]: max 0.011 B/op over 3 iterations
-ok    Log1pBenchmark.guardedMax [inputs=mixed]: max 0.012 B/op over 3 iterations
-ok    Log1pBenchmark.guardedPreferred [inputs=common]: max 0.012 B/op over 3 iterations
-ok    Log1pBenchmark.guardedPreferred [inputs=mixed]: max 0.012 B/op over 3 iterations
-ok    LogBenchmark.blended256 [inputs=common]: max 0.015 B/op over 3 iterations
-ok    LogBenchmark.blended256 [inputs=mixed]: max 0.017 B/op over 3 iterations
-ok    LogBenchmark.blendedPreferred [inputs=common]: max 0.013 B/op over 3 iterations
-ok    LogBenchmark.blendedPreferred [inputs=mixed]: max 0.013 B/op over 3 iterations
-ok    LogBenchmark.finish256 [inputs=common]: max 0.012 B/op over 3 iterations
-ok    LogBenchmark.finish256 [inputs=mixed]: max 0.016 B/op over 3 iterations
-ok    LogBenchmark.finishMax [inputs=common]: max 0.010 B/op over 3 iterations
-ok    LogBenchmark.finishMax [inputs=mixed]: max 0.015 B/op over 3 iterations
-ok    LogBenchmark.finishPreferred [inputs=common]: max 0.010 B/op over 3 iterations
+ok    Log1pBenchmark.guarded256 [inputs=mixed]: max 0.030 B/op over 3 iterations
+ok    Log1pBenchmark.guardedMax [inputs=common]: max 0.017 B/op over 3 iterations
+ok    Log1pBenchmark.guardedMax [inputs=mixed]: max 0.018 B/op over 3 iterations
+ok    Log1pBenchmark.guardedPreferred [inputs=common]: max 0.017 B/op over 3 iterations
+ok    Log1pBenchmark.guardedPreferred [inputs=mixed]: max 0.016 B/op over 3 iterations
+ok    LogBenchmark.blended256 [inputs=common]: max 0.023 B/op over 3 iterations
+ok    LogBenchmark.blended256 [inputs=mixed]: max 0.023 B/op over 3 iterations
+ok    LogBenchmark.blendedPreferred [inputs=common]: max 0.015 B/op over 3 iterations
+ok    LogBenchmark.blendedPreferred [inputs=mixed]: max 0.017 B/op over 3 iterations
+ok    LogBenchmark.finish256 [inputs=common]: max 0.016 B/op over 3 iterations
+ok    LogBenchmark.finish256 [inputs=mixed]: max 0.020 B/op over 3 iterations
+ok    LogBenchmark.finishMax [inputs=common]: max 0.011 B/op over 3 iterations
+ok    LogBenchmark.finishMax [inputs=mixed]: max 0.017 B/op over 3 iterations
+ok    LogBenchmark.finishPreferred [inputs=common]: max 0.011 B/op over 3 iterations
 ok    LogBenchmark.finishPreferred [inputs=mixed]: max 0.016 B/op over 3 iterations
-ok    SinhBenchmark.finish256 [inputs=common]: max 0.038 B/op over 3 iterations
-ok    SinhBenchmark.finish256 [inputs=mixed]: max 0.043 B/op over 3 iterations
-ok    SinhBenchmark.finishMax [inputs=common]: max 0.021 B/op over 3 iterations
-ok    SinhBenchmark.finishMax [inputs=mixed]: max 0.023 B/op over 3 iterations
-ok    SinhBenchmark.finishPreferred [inputs=common]: max 0.018 B/op over 3 iterations
-ok    SinhBenchmark.finishPreferred [inputs=mixed]: max 0.024 B/op over 3 iterations
+ok    SinhBenchmark.finish256 [inputs=common]: max 0.033 B/op over 3 iterations
+ok    SinhBenchmark.finish256 [inputs=mixed]: max 0.040 B/op over 3 iterations
+ok    SinhBenchmark.finishMax [inputs=common]: max 0.020 B/op over 3 iterations
+ok    SinhBenchmark.finishMax [inputs=mixed]: max 0.027 B/op over 3 iterations
+ok    SinhBenchmark.finishPreferred [inputs=common]: max 0.020 B/op over 3 iterations
+ok    SinhBenchmark.finishPreferred [inputs=mixed]: max 0.026 B/op over 3 iterations
 
 # 2. as an AVX2 host (-XX:UseAVX=2 -XX:MaxVectorSize=32), 256 bits
-ok    ExpBenchmark.blended256 [inputs=common]: max 0.022 B/op over 3 iterations
-ok    ExpBenchmark.blended256 [inputs=mixed]: max 0.027 B/op over 3 iterations
-ok    ExpBenchmark.blendedMax [inputs=common]: max 0.021 B/op over 3 iterations
-ok    ExpBenchmark.blendedMax [inputs=mixed]: max 0.028 B/op over 3 iterations
-ok    ExpBenchmark.blendedPreferred [inputs=common]: max 0.033 B/op over 3 iterations
-ok    ExpBenchmark.blendedPreferred [inputs=mixed]: max 0.033 B/op over 3 iterations
-ok    ExpBenchmark.finish256 [inputs=common]: max 0.009 B/op over 3 iterations
-ok    ExpBenchmark.finish256 [inputs=mixed]: max 0.017 B/op over 3 iterations
-ok    ExpBenchmark.finishMax [inputs=common]: max 0.014 B/op over 3 iterations
-ok    ExpBenchmark.finishMax [inputs=mixed]: max 0.015 B/op over 3 iterations
-ok    ExpBenchmark.finishPreferred [inputs=common]: max 0.015 B/op over 3 iterations
-ok    ExpBenchmark.finishPreferred [inputs=mixed]: max 0.020 B/op over 3 iterations
-ok    Expm1Benchmark.blended256 [inputs=common]: max 0.040 B/op over 3 iterations
-ok    Expm1Benchmark.blended256 [inputs=mixed]: max 0.043 B/op over 3 iterations
-ok    Expm1Benchmark.blendedMax [inputs=common]: max 0.074 B/op over 3 iterations
-ok    Expm1Benchmark.blendedMax [inputs=mixed]: max 0.049 B/op over 3 iterations
-ok    Expm1Benchmark.blendedPreferred [inputs=common]: max 0.040 B/op over 3 iterations
-ok    Expm1Benchmark.blendedPreferred [inputs=mixed]: max 0.032 B/op over 3 iterations
+ok    CoshBenchmark.finish256 [inputs=common]: max 0.017 B/op over 3 iterations
+ok    CoshBenchmark.finish256 [inputs=mixed]: max 0.023 B/op over 3 iterations
+ok    CoshBenchmark.finishMax [inputs=common]: max 0.016 B/op over 3 iterations
+ok    CoshBenchmark.finishMax [inputs=mixed]: max 0.029 B/op over 3 iterations
+ok    CoshBenchmark.finishPreferred [inputs=common]: max 0.021 B/op over 3 iterations
+ok    CoshBenchmark.finishPreferred [inputs=mixed]: max 0.035 B/op over 3 iterations
+ok    CoshBenchmark.slice256 [inputs=common]: max 0.041 B/op over 3 iterations
+ok    CoshBenchmark.slice256 [inputs=mixed]: max 0.074 B/op over 3 iterations
+ok    CoshBenchmark.sliceMax [inputs=common]: max 0.057 B/op over 3 iterations
+ok    CoshBenchmark.sliceMax [inputs=mixed]: max 0.072 B/op over 3 iterations
+ok    CoshBenchmark.slicePreferred [inputs=common]: max 0.057 B/op over 3 iterations
+ok    CoshBenchmark.slicePreferred [inputs=mixed]: max 0.074 B/op over 3 iterations
+ok    ExpBenchmark.blended256 [inputs=common]: max 0.060 B/op over 3 iterations
+ok    ExpBenchmark.blended256 [inputs=mixed]: max 0.073 B/op over 3 iterations
+ok    ExpBenchmark.blendedMax [inputs=common]: max 0.049 B/op over 3 iterations
+ok    ExpBenchmark.blendedMax [inputs=mixed]: max 0.061 B/op over 3 iterations
+ok    ExpBenchmark.blendedPreferred [inputs=common]: max 0.053 B/op over 3 iterations
+ok    ExpBenchmark.blendedPreferred [inputs=mixed]: max 0.063 B/op over 3 iterations
+ok    ExpBenchmark.finish256 [inputs=common]: max 0.024 B/op over 3 iterations
+ok    ExpBenchmark.finish256 [inputs=mixed]: max 0.049 B/op over 3 iterations
+ok    ExpBenchmark.finishMax [inputs=common]: max 0.027 B/op over 3 iterations
+ok    ExpBenchmark.finishMax [inputs=mixed]: max 0.038 B/op over 3 iterations
+ok    ExpBenchmark.finishPreferred [inputs=common]: max 0.024 B/op over 3 iterations
+ok    ExpBenchmark.finishPreferred [inputs=mixed]: max 0.036 B/op over 3 iterations
+ok    Expm1Benchmark.blended256 [inputs=common]: max 0.105 B/op over 3 iterations
+ok    Expm1Benchmark.blended256 [inputs=mixed]: max 0.117 B/op over 3 iterations
+ok    Expm1Benchmark.blendedMax [inputs=common]: max 0.047 B/op over 3 iterations
+ok    Expm1Benchmark.blendedMax [inputs=mixed]: max 0.047 B/op over 3 iterations
+ok    Expm1Benchmark.blendedPreferred [inputs=common]: max 0.046 B/op over 3 iterations
+ok    Expm1Benchmark.blendedPreferred [inputs=mixed]: max 0.044 B/op over 3 iterations
 ok    Expm1Benchmark.core256 [inputs=common]: max 0.023 B/op over 3 iterations
-ok    Expm1Benchmark.core256 [inputs=mixed]: max 0.023 B/op over 3 iterations
-ok    Expm1Benchmark.coreMax [inputs=common]: max 0.025 B/op over 3 iterations
-ok    Expm1Benchmark.coreMax [inputs=mixed]: max 0.025 B/op over 3 iterations
-ok    Expm1Benchmark.corePreferred [inputs=common]: max 0.023 B/op over 3 iterations
-ok    Expm1Benchmark.corePreferred [inputs=mixed]: max 0.023 B/op over 3 iterations
-ok    Expm1Benchmark.finish256 [inputs=common]: max 0.025 B/op over 3 iterations
+ok    Expm1Benchmark.core256 [inputs=mixed]: max 0.025 B/op over 3 iterations
+ok    Expm1Benchmark.coreMax [inputs=common]: max 0.024 B/op over 3 iterations
+ok    Expm1Benchmark.coreMax [inputs=mixed]: max 0.024 B/op over 3 iterations
+ok    Expm1Benchmark.corePreferred [inputs=common]: max 0.026 B/op over 3 iterations
+ok    Expm1Benchmark.corePreferred [inputs=mixed]: max 0.024 B/op over 3 iterations
+ok    Expm1Benchmark.finish256 [inputs=common]: max 0.026 B/op over 3 iterations
 ok    Expm1Benchmark.finish256 [inputs=mixed]: max 0.027 B/op over 3 iterations
 ok    Expm1Benchmark.finishMax [inputs=common]: max 0.026 B/op over 3 iterations
 ok    Expm1Benchmark.finishMax [inputs=mixed]: max 0.027 B/op over 3 iterations
 ok    Expm1Benchmark.finishPreferred [inputs=common]: max 0.027 B/op over 3 iterations
-ok    Expm1Benchmark.finishPreferred [inputs=mixed]: max 0.026 B/op over 3 iterations
-ok    Expm1Benchmark.guarded256 [inputs=common]: max 0.026 B/op over 3 iterations
-ok    Expm1Benchmark.guarded256 [inputs=mixed]: max 0.039 B/op over 3 iterations
+ok    Expm1Benchmark.finishPreferred [inputs=mixed]: max 0.027 B/op over 3 iterations
+ok    Expm1Benchmark.guarded256 [inputs=common]: max 0.027 B/op over 3 iterations
+ok    Expm1Benchmark.guarded256 [inputs=mixed]: max 0.033 B/op over 3 iterations
 ok    Expm1Benchmark.guardedMax [inputs=common]: max 0.026 B/op over 3 iterations
-ok    Expm1Benchmark.guardedMax [inputs=mixed]: max 0.032 B/op over 3 iterations
+ok    Expm1Benchmark.guardedMax [inputs=mixed]: max 0.033 B/op over 3 iterations
 ok    Expm1Benchmark.guardedPreferred [inputs=common]: max 0.026 B/op over 3 iterations
-ok    Expm1Benchmark.guardedPreferred [inputs=mixed]: max 0.043 B/op over 3 iterations
-ok    Log10Benchmark.blended256 [inputs=common]: max 0.051 B/op over 3 iterations
-ok    Log10Benchmark.blended256 [inputs=mixed]: max 0.028 B/op over 3 iterations
+ok    Expm1Benchmark.guardedPreferred [inputs=mixed]: max 0.033 B/op over 3 iterations
+ok    Log10Benchmark.blended256 [inputs=common]: max 0.026 B/op over 3 iterations
+ok    Log10Benchmark.blended256 [inputs=mixed]: max 0.027 B/op over 3 iterations
 ok    Log10Benchmark.blendedMax [inputs=common]: max 0.026 B/op over 3 iterations
 ok    Log10Benchmark.blendedMax [inputs=mixed]: max 0.028 B/op over 3 iterations
-ok    Log10Benchmark.blendedPreferred [inputs=common]: max 0.026 B/op over 3 iterations
+ok    Log10Benchmark.blendedPreferred [inputs=common]: max 0.066 B/op over 3 iterations
 ok    Log10Benchmark.blendedPreferred [inputs=mixed]: max 0.028 B/op over 3 iterations
-ok    Log10Benchmark.finish256 [inputs=common]: max 0.022 B/op over 3 iterations
-ok    Log10Benchmark.finish256 [inputs=mixed]: max 0.030 B/op over 3 iterations
+ok    Log10Benchmark.finish256 [inputs=common]: max 0.021 B/op over 3 iterations
+ok    Log10Benchmark.finish256 [inputs=mixed]: max 0.026 B/op over 3 iterations
 ok    Log10Benchmark.finishMax [inputs=common]: max 0.021 B/op over 3 iterations
-ok    Log10Benchmark.finishMax [inputs=mixed]: max 0.026 B/op over 3 iterations
-ok    Log10Benchmark.finishPreferred [inputs=common]: max 0.022 B/op over 3 iterations
-ok    Log10Benchmark.finishPreferred [inputs=mixed]: max 0.026 B/op over 3 iterations
-ok    Log1pBenchmark.blended256 [inputs=common]: max 0.030 B/op over 3 iterations
-ok    Log1pBenchmark.blended256 [inputs=mixed]: max 0.027 B/op over 3 iterations
-ok    Log1pBenchmark.blendedMax [inputs=common]: max 0.026 B/op over 3 iterations
+ok    Log10Benchmark.finishMax [inputs=mixed]: max 0.025 B/op over 3 iterations
+ok    Log10Benchmark.finishPreferred [inputs=common]: max 0.020 B/op over 3 iterations
+ok    Log10Benchmark.finishPreferred [inputs=mixed]: max 0.025 B/op over 3 iterations
+ok    Log1pBenchmark.blended256 [inputs=common]: max 0.023 B/op over 3 iterations
+ok    Log1pBenchmark.blended256 [inputs=mixed]: max 0.023 B/op over 3 iterations
+ok    Log1pBenchmark.blendedMax [inputs=common]: max 0.023 B/op over 3 iterations
 ok    Log1pBenchmark.blendedMax [inputs=mixed]: max 0.024 B/op over 3 iterations
 ok    Log1pBenchmark.blendedPreferred [inputs=common]: max 0.023 B/op over 3 iterations
-ok    Log1pBenchmark.blendedPreferred [inputs=mixed]: max 0.023 B/op over 3 iterations
-ok    Log1pBenchmark.finish256 [inputs=common]: max 0.020 B/op over 3 iterations
-ok    Log1pBenchmark.finish256 [inputs=mixed]: max 0.024 B/op over 3 iterations
+ok    Log1pBenchmark.blendedPreferred [inputs=mixed]: max 0.024 B/op over 3 iterations
+ok    Log1pBenchmark.finish256 [inputs=common]: max 0.021 B/op over 3 iterations
+ok    Log1pBenchmark.finish256 [inputs=mixed]: max 0.022 B/op over 3 iterations
 ok    Log1pBenchmark.finishMax [inputs=common]: max 0.020 B/op over 3 iterations
-ok    Log1pBenchmark.finishMax [inputs=mixed]: max 0.035 B/op over 3 iterations
-ok    Log1pBenchmark.finishPreferred [inputs=common]: max 0.029 B/op over 3 iterations
-ok    Log1pBenchmark.finishPreferred [inputs=mixed]: max 0.033 B/op over 3 iterations
-ok    Log1pBenchmark.guarded256 [inputs=common]: max 0.023 B/op over 3 iterations
-ok    Log1pBenchmark.guarded256 [inputs=mixed]: max 0.022 B/op over 3 iterations
-ok    Log1pBenchmark.guardedMax [inputs=common]: max 0.021 B/op over 3 iterations
-ok    Log1pBenchmark.guardedMax [inputs=mixed]: max 0.025 B/op over 3 iterations
-ok    Log1pBenchmark.guardedPreferred [inputs=common]: max 0.032 B/op over 3 iterations
-ok    Log1pBenchmark.guardedPreferred [inputs=mixed]: max 0.035 B/op over 3 iterations
-ok    LogBenchmark.blended256 [inputs=common]: max 0.022 B/op over 3 iterations
-ok    LogBenchmark.blended256 [inputs=mixed]: max 0.021 B/op over 3 iterations
+ok    Log1pBenchmark.finishMax [inputs=mixed]: max 0.022 B/op over 3 iterations
+ok    Log1pBenchmark.finishPreferred [inputs=common]: max 0.019 B/op over 3 iterations
+ok    Log1pBenchmark.finishPreferred [inputs=mixed]: max 0.022 B/op over 3 iterations
+ok    Log1pBenchmark.guarded256 [inputs=common]: max 0.020 B/op over 3 iterations
+ok    Log1pBenchmark.guarded256 [inputs=mixed]: max 0.021 B/op over 3 iterations
+ok    Log1pBenchmark.guardedMax [inputs=common]: max 0.020 B/op over 3 iterations
+ok    Log1pBenchmark.guardedMax [inputs=mixed]: max 0.021 B/op over 3 iterations
+ok    Log1pBenchmark.guardedPreferred [inputs=common]: max 0.020 B/op over 3 iterations
+ok    Log1pBenchmark.guardedPreferred [inputs=mixed]: max 0.022 B/op over 3 iterations
+ok    LogBenchmark.blended256 [inputs=common]: max 0.017 B/op over 3 iterations
+ok    LogBenchmark.blended256 [inputs=mixed]: max 0.019 B/op over 3 iterations
 ok    LogBenchmark.blendedPreferred [inputs=common]: max 0.017 B/op over 3 iterations
 ok    LogBenchmark.blendedPreferred [inputs=mixed]: max 0.019 B/op over 3 iterations
-ok    LogBenchmark.finish256 [inputs=common]: max 0.014 B/op over 3 iterations
-ok    LogBenchmark.finish256 [inputs=mixed]: max 0.019 B/op over 3 iterations
-ok    LogBenchmark.finishMax [inputs=common]: max 0.017 B/op over 3 iterations
-ok    LogBenchmark.finishMax [inputs=mixed]: max 0.019 B/op over 3 iterations
-ok    LogBenchmark.finishPreferred [inputs=common]: max 0.014 B/op over 3 iterations
-ok    LogBenchmark.finishPreferred [inputs=mixed]: max 0.017 B/op over 3 iterations
+ok    LogBenchmark.finish256 [inputs=common]: max 0.013 B/op over 3 iterations
+ok    LogBenchmark.finish256 [inputs=mixed]: max 0.017 B/op over 3 iterations
+ok    LogBenchmark.finishMax [inputs=common]: max 0.013 B/op over 3 iterations
+ok    LogBenchmark.finishMax [inputs=mixed]: max 0.017 B/op over 3 iterations
+ok    LogBenchmark.finishPreferred [inputs=common]: max 0.013 B/op over 3 iterations
+ok    LogBenchmark.finishPreferred [inputs=mixed]: max 0.018 B/op over 3 iterations
 ok    SinhBenchmark.finish256 [inputs=common]: max 0.030 B/op over 3 iterations
 ok    SinhBenchmark.finish256 [inputs=mixed]: max 0.035 B/op over 3 iterations
-ok    SinhBenchmark.finishMax [inputs=common]: max 0.030 B/op over 3 iterations
-ok    SinhBenchmark.finishMax [inputs=mixed]: max 0.034 B/op over 3 iterations
-ok    SinhBenchmark.finishPreferred [inputs=common]: max 0.030 B/op over 3 iterations
-ok    SinhBenchmark.finishPreferred [inputs=mixed]: max 0.034 B/op over 3 iterations
+ok    SinhBenchmark.finishMax [inputs=common]: max 0.029 B/op over 3 iterations
+ok    SinhBenchmark.finishMax [inputs=mixed]: max 0.036 B/op over 3 iterations
+ok    SinhBenchmark.finishPreferred [inputs=common]: max 0.029 B/op over 3 iterations
+ok    SinhBenchmark.finishPreferred [inputs=mixed]: max 0.035 B/op over 3 iterations
