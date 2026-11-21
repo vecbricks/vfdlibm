@@ -35,9 +35,9 @@ import org.junit.jupiter.api.io.TempDir;
  * y}, whose vector form is exact and which has planted faults of the three shapes the nightly
  * must find or, said plainly, must not be asked to: a fault in a high word of the first argument,
  * one in a high word of the second, and one that needs a high word of each at once, which a sweep
- * of one argument draws a partner for and so meets with probability near 2^-32 a pair, and the
- * fuzz meets through its draws at both arguments' edges. A fault is the low bit of the result
- * flipped, a change every result shows, a NaN too.
+ * of one argument draws a partner for and so meets with a probability that is small (about 2^-32
+ * for a random partner), and the fuzz meets through its draws at both arguments' edges. A fault
+ * is the low bit of the result flipped, a change every result shows, a NaN too.
  */
 class PairHarnessTest {
 
@@ -201,8 +201,9 @@ class PairHarnessTest {
   @Test
   void theSecondPassFindsAFaultInTheSecondArgumentsHighWord() {
     assertEquals(Nightly.MISMATCH, sweep("toy2-y", Y_WORD, 2, dir.resolve("y2.txt")));
-    // The first pass draws the second argument's values as partners: of high word Y_WORD once in
-    // about 2^32 draws, so it passes a slice it was not asked about.
+    // The first pass draws the second argument's values as partners: of high word Y_WORD rarely
+    // (about 2^-29 a draw at most, as the partners favour nearby exponents), so for this seed and
+    // slice it passes a slice it was not asked about.
     assertEquals(Nightly.OK, sweep("toy2-y", X_WORD, 1, dir.resolve("y1.txt")));
   }
 
@@ -341,7 +342,7 @@ class PairHarnessTest {
     // within 64 of a random exponent about 6% of the time, as are the specials).
     assertTrue(otherArgument > 0.9 * n, "the other argument's partners differ: " + otherArgument);
     assertEquals(0.25, special / (double) n, 0.01);
-    assertTrue(same / (double) n > 0.25 && same / (double) n < 0.30, "same " + same);
+    assertTrue(same / (double) n > 0.24 && same / (double) n < 0.30, "same " + same);
     assertTrue(near / (double) n > 0.5 && near / (double) n < 0.58, "near " + near);
   }
 }

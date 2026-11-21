@@ -655,7 +655,8 @@ re-trying a settled question.
   alone (`Sweep.partner`; a quarter each of special values, the swept value's exponent, an exponent
   within 64 of it, and random bits), so a pair replays from the seed and its replay line says
   `--argument`. A pass checks 3 * 2^32 of the 2^128 pairs, so **what it can miss**: a bug that needs
-  a high word of each argument at once, which the sweep meets with probability near 2^-32 a pair and
+  a high word of each argument at once, which a partner drawn as above meets with probability about
+  2^-32 for a random partner and more where the two exponents are near, and which
   the fuzz meets because its draws put both arguments at their edges at once (`toy2-xy` in
   `PairHarnessTest`: both sweeps pass it, the fuzz finds it). The masked form of an arm keeps the
   first argument's bits in a lane that is not live (`Oracle.assertBinaryMasked`'s contract). A pair

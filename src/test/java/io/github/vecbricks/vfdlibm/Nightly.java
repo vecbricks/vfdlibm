@@ -220,6 +220,7 @@ final class Nightly {
       implements Subject {
 
     PairFunction {
+      arms = List.copyOf(arms);
       if (arms.isEmpty() || edges.specials().length == 0
           || edges.x().words().length == 0 || edges.y().words().length == 0
           || edges.x().points().length == 0 || edges.y().points().length == 0) {
