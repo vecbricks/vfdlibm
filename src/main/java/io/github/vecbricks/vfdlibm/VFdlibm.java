@@ -18,9 +18,9 @@ import jdk.incubator.vector.VectorMask;
  *
  * <p>Every method works on a vector of any species of 128 bits or more (exp, expm1, log, log10,
  * log1p, sinh, cosh and asin hold fdlibm's {@code int} words in int lanes of half the vector's
- * size). Each comes in two forms: one computes every lane, and a masked form computes only the lanes set
- * in {@code live} and returns every other lane of its argument untouched, raw bits and all. An
- * inactive lane never sends the vector down a slow path.
+ * size). Each comes in two forms: one computes every lane, and a masked form computes only the
+ * lanes set in {@code live} and returns every other lane of its argument untouched, raw bits and
+ * all. An inactive lane never sends the vector down a slow path.
  *
  * <p>Which species to pass. Every species of 128 bits or more gives the same bits. The files
  * under {@code bench/results/}, in the source repository and not in the jar, read what the body

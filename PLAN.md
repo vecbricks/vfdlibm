@@ -85,7 +85,8 @@ five are a later, optional set; the large-argument reduction of the trigonometri
   -XX:MaxVectorSize=32`, 128 and 256 bits on every draw), on x86 with `-XX:MaxVectorSize=16`
   (all of it at 128 bits) and on Arm (128 bits).
 - **Nightly:** `.github/workflows/nightly.yml` sweeps every high word of exp, expm1, log, log10,
-  log1p, sinh and cosh with three low words each (every branch fdlibm decides on the high word) at
+  log1p, sinh and cosh (asin is in `Nightly`'s table and not yet in the night's list) with three
+  low words each (every branch fdlibm decides on the high word) at
   every width but 128 bits on x86, where a rotating 1/32 slice a night covers it in 32 nights, and
   at 128 bits on Arm every night; it fuzzes from a fresh seed at every width, and runs every proof
   under both solvers; a failure opens an issue labelled `nightly-failure` with the mismatching
@@ -152,11 +153,13 @@ five are a later, optional set; the large-argument reduction of the trigonometri
   function adds its own benchmark the same way. `Log10Benchmark` does the same for `log10`, at 256
   and 512 bits, the preferred species and `SPECIES_MAX`. `Log1pBenchmark` does the same for `log1p`,
   with a third arm that blends the rare paths only when a vector holds a rare lane; `Expm1Benchmark`
-  has the same three arms for `expm1`, `SinhBenchmark` one for `sinh` and `CoshBenchmark` two for
-  `cosh`. Each of the seven has rows at `SPECIES_MAX` (`*Max`), which the allocation check covers:
-  every port's finish boxed there on mixed data until its first eight lanes were written out
+  has the same three arms for `expm1`, `SinhBenchmark` one for `sinh`, `CoshBenchmark` two for
+  `cosh` and `AsinBenchmark` one for `asin`. Each of the eight has rows at `SPECIES_MAX`
+  (`*Max`), which the allocation check covers: the first seven ports' finish boxed there on mixed
+  data until its first eight lanes were written out
   (`bench/results/max-finish-laptop-2026-11-20.txt`, then
-  `bench/results/max-finish-alloc-free-laptop-2026-11-21.txt`). `ExpKindsBench` runs exp's two arms
+  `bench/results/max-finish-alloc-free-laptop-2026-11-21.txt`; neither has an asin row, whose
+  finish was written in the new shape from the start). `ExpKindsBench` runs exp's two arms
   on one kind of rare input at a time (a NaN, an overflow, an underflow, a subnormal result), to
   find which kind costs an arm its time on mixed data (#41); it is named apart so that a run of
   `ExpBenchmark` and the allocation check's default regex leave it out, as `CoshKindsBench`, which

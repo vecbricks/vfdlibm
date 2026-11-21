@@ -319,7 +319,7 @@ class AsinTest {
   /**
    * Each of asin's faults, with a check that must fail while it is planted: the vector form over
    * {@link #faultRunInputs()} at every width the host has. Each was sized on 2^22 draws before it
-   * was wired ({@link Asin}; the counts are in the PR and in {@code SKILLS.md}).
+   * was wired ({@link Asin}; the counts are in {@code SKILLS.md}).
    */
   static Map<String, Executable> faultCatchers() {
     Map<String, Executable> catchers = new LinkedHashMap<>();

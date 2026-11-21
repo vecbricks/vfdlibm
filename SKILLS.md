@@ -905,11 +905,11 @@ next port re-trying a settled question.
 
 - **The first port over `sqrt`.** The body calls `VectorOperators.SQRT` on `t`; `SqrtTest`
   checks the operator's raw bits against `StrictMath.sqrt` (PROOFS.md, (R4)), and
-  `bench/alloc-check.py` reads `AsinBenchmark`'s rows (`finish256`, `finishPreferred`, common and
-  mixed data) under 0.03 B/op both at this laptop's flags and as an AVX2 host (`-XX:UseAVX=2 -XX:MaxVectorSize=32`),
-  and `SqrtBenchmark`'s the same: the operator lowers at 256 bits and the preferred species
-  without boxing on both. That says nothing of 128 bits or of the masked form's lowering; no
-  figure of timing is committed, so the port claims no speed.
+  `bench/alloc-check.py` passed on `AsinBenchmark`'s rows (`finish256`, `finishPreferred`, common
+  and mixed data) and on `SqrtBenchmark`'s, at this laptop's flags and as an AVX2 host
+  (`-XX:UseAVX=2 -XX:MaxVectorSize=32`); CI runs it. The readings are not committed as results
+  files, so no figure of them is quoted. That says nothing of 128 bits or of the masked form's
+  lowering; no timing is committed either, so the port claims no speed.
 - **One arm, no tie to break.** The three ranges below 1 share `t`'s polynomials and the one
   division `p/q`, and the split range's second division is computed on every lane; the rare lanes
   (`|x| >= 1`, NaN) are finished per lane. There is no second body to compare, so the arm needs

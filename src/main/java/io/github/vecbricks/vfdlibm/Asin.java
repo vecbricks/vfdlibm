@@ -99,12 +99,18 @@ final class Asin {
   static final String SPLIT_MOVED = "asin.splitMoved";
   static final String SKIP_LOW_CLEAR = "asin.skipLowClear";
   // Read once into constants, so the body holds no call and an unplanted fault folds away.
-  /** {@code pio2_lo} as {@code 0.0} in both forms that use it (sized in {@code AsinTest}). */
+  /**
+   * {@code pio2_lo} as {@code 0.0} in both forms that use it (sized in SKILLS.md, "What the asin
+   * port taught").
+   */
   private static final double PIO2_LO_USED = Faults.is(DROP_PIO2_LO) ? 0.0 : PIO2_LO;
-  /** Moves line 101's {@code 0.975} word (see {@code AsinTest} for the size of the move). */
+  /** Moves line 101's {@code 0.975} word (sized in SKILLS.md, "What the asin port taught"). */
   private static final int HX_SPLIT_USED =
       Faults.is(SPLIT_MOVED) ? HX_SPLIT + 0x00100000 : HX_SPLIT;
-  /** The low-word clear skipped: the mask keeps every bit (sized in {@code AsinTest}). */
+  /**
+   * The low-word clear skipped: the mask keeps every bit (sized in SKILLS.md, "What the asin port
+   * taught").
+   */
   private static final long CLEAR_LOW_WORD_USED = Faults.is(SKIP_LOW_CLEAR) ? -1L : CLEAR_LOW_WORD;
 
   private Asin() {}
