@@ -34,11 +34,12 @@ import org.openjdk.jmh.annotations.Warmup;
  * benchmarks run in software and measure nothing useful.
  *
  * <p>{@code inputs} picks the data: {@code common} draws from {@code (-60, 60)}, where the small
- * range is 0.6% of the lanes, {@code half*t + half/t} 36% and {@code half*exp(|x|)} the rest,
- * and no lane takes the per-lane finish of both arms; {@code mixed} replaces one input in 16
- * with a rare one (the overflow window, overflow, an infinity or a NaN, or {@code 0.2}, which
- * only the finish arm finishes), so many vectors hold one. The share of the small range, which
- * is all the arms differ in, is in {@code CoshKindsBench}.
+ * range is 0.6% of the lanes, {@code half*t + half/t} 36% and {@code half*exp(|x|)} the rest, so
+ * only that 0.6% (the lanes {@code coshFinish} finishes per lane) separates the two arms there;
+ * {@code mixed} replaces one input in 16 with a rare one (the overflow window, overflow, an
+ * infinity or a NaN, or {@code 0.2}, which only the finish arm finishes), so many vectors hold
+ * one. The share of the small range, which is all the arms differ in, is in {@code
+ * CoshKindsBench}.
  *
  * <p>The vector forms are larger than C2 inlines by default ({@code FreqInlineSize}), so a call
  * from the loop may pass boxed vectors. Varka emits the sequence inline instead; to measure that,

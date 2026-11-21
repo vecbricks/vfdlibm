@@ -754,19 +754,15 @@ re-trying a settled question.
   body, with its reduction and its seven forms, beside `Exp`'s would be two port bodies in one
   graph (above). With one `expCore` and about 35 more operations, `CoshBenchmark`'s rows are
   held by `bench/alloc-check.py` (CI runs it, and it was run locally before any test was
-  written), at the runner's flags and as AVX2; the laptop file's `gc.alloc.rate.norm` rows are
-  under 0.1 B/op.
+  written), at the runner's flags and as AVX2.
 - **Two arms, one provisional default.** `coshSlice` computes the small range in the vector and
   `coshFinish` finishes its lanes per lane; `VFdlibm.cosh` runs the slice arm. The arms differ
   only on `|x| < 0.5*ln2`, so their cost follows the share of that range, which is 3.5% in
   Varka's baseline benchmark and 17% in Spark's unit tests (issue #32): at 8 lanes a vector
-  holds one in 27% and 82% of the cases. `CoshKindsBench` has those two shares. The one run
-  there is, on a laptop under load, `bench/results/cosh-laptop-2026-11-21.txt`, and its file
-  disowns it: the errors are a third to a half of the scores and its rows disagree (at 512 bits
-  the finish arm is 2.1 and 3.5 times the slice arm's time on those shares, while
-  `CoshBenchmark`'s common and mixed rows put it ahead, and at 256 bits no order shows). So the
-  default is the plan's baseline design, chosen without a measurement that reads, and a benchmark
-  host's run decides it.
+  holds one in 27% and 82% of the cases. `CoshKindsBench` has those two shares, and
+  `CoshBenchmark`'s common data 0.6% of them. No timing of the two arms exists yet: a laptop
+  run under load read no direction and was not kept. So the default is the plan's baseline
+  design, not a measurement, and a benchmark host's run of both classes decides it.
 - **Which exp faults reach cosh.** `exp.dropCorrection` and `exp.constantOffByOneUlp`, which
   change `expCore`'s lanes of `|x| >= 0.5 ln2`. `exp.thresholdMoved` moves the subnormal
   scale-back, which `expCore` leaves out, and `exp.dropKForcing` the lanes of the word of 0.5
@@ -777,8 +773,10 @@ re-trying a settled question.
   0.5 ln2 to 1: 2070784 of the draws of `(-1, 1)` change, about three quarters of those in
   `[0.3466, 1)`, and none do when it moves by one word.
   `cosh.halfOneUlpOff` changes 4144395 of the draws of `(-30, 30)`, `cosh.dropHalfOverT` 2568400
-  and `cosh.finishMissesSmall` 503123 of those of `(-0.34, 0.34)`. The last is the finish arm's
-  alone and the first the slice arm's alone, so their catchers name one arm each.
+  and `cosh.finishMissesSmall` 503123 of those of `(-0.34, 0.34)`; `cosh.dropSmallTerm`, which drops
+  the `- hxs` of the small range's polynomial, changes 4194245 of those of `(-0.34, 0.34)` and
+  1793307 of `(-1e-5, 1e-5)`. `finishMissesSmall` is the finish arm's alone, and `splitMoved` and
+  `dropSmallTerm` the slice arm's alone, so their catchers name one arm each.
 - **Lefevre's list has 2026 `ch` lines,** positive inputs only, rechecked and written by
   `dev/testlibm-extract.py` as sinh's were, each with 46 or more bits after the round bit
   pointing at the midpoint.

@@ -77,9 +77,9 @@ import jdk.incubator.vector.VectorSpecies;
  * the body.
  *
  * <p>{@link #cosh(DoubleVector, VectorMask)}, which {@code VFdlibm.cosh} calls, is the slice
- * arm, provisionally: the arms were timed on a laptop only, under load, and no host has decided
- * it ({@code bench/results/cosh-laptop-2026-11-21.txt}, {@code SKILLS.md}). The choice stands
- * until a benchmark host's rows do.
+ * arm, provisionally: no timing of the two arms exists yet, so the choice is the design's, not a
+ * measurement's, and a benchmark host's run of {@code CoshBenchmark} and {@code CoshKindsBench}
+ * will decide it ({@code SKILLS.md}).
  */
 final class Cosh {
 
@@ -102,6 +102,7 @@ final class Cosh {
   static final String HALF_ONE_ULP_OFF = "cosh.halfOneUlpOff";
   static final String DROP_HALF_OVER_T = "cosh.dropHalfOverT";
   static final String FINISH_MISSES_SMALL = "cosh.finishMissesSmall";
+  static final String DROP_SMALL_TERM = "cosh.dropSmallTerm";
   // Read once into constants, so the body holds no call and an unplanted fault folds away.
   /**
    * Moves line 62's {@code 0x3fd62e43} to {@code 0x3ff00000} in the slice arm: the lanes of
@@ -132,6 +133,14 @@ final class Cosh {
    * 0.34)}). The slice arm has no such mask.
    */
   private static final boolean FINISH_MISSING_SMALL = Faults.is(FINISH_MISSES_SMALL);
+  /**
+   * Drops the {@code - hxs} of line 189's {@code x - (x*e-hxs)} in the small range's polynomial:
+   * its result is then wrong by {@code hxs}, about {@code x*x/2}, which moves {@code cosh} for
+   * every {@code |x|} above about 1e-5 (sized on 2^22 draws: 4194245 changed of {@code (-0.34,
+   * 0.34)}, 4170398 of {@code (-1e-3, 1e-3)}, 1793307 of {@code (-1e-5, 1e-5)}). Only the slice
+   * arm reads it: the finish arm never runs that range.
+   */
+  private static final boolean DROPPING_SMALL_TERM = Faults.is(DROP_SMALL_TERM);
 
   /** How the small range is computed: in the vector, or per lane. */
   private static final int SLICE = 0;
@@ -203,7 +212,8 @@ final class Cosh {
       DoubleVector t3 = DoubleVector.broadcast(species, 3.0).sub(r1.mul(hfx));
       DoubleVector ee = hxs.mul(r1.sub(t3).div(DoubleVector.broadcast(species, 6.0)
           .sub(ax.mul(t3))));
-      DoubleVector primary = ax.sub(ax.mul(ee).sub(hxs));
+      DoubleVector xe = ax.mul(ee);
+      DoubleVector primary = ax.sub(DROPPING_SMALL_TERM ? xe : xe.sub(hxs));
       // Lines 177-179: |x| < 2^-54 returns x - (t-(huge+x)) with t = huge+x.
       DoubleVector hugeX = ax.add(Expm1.HUGE);
       DoubleVector tinyReturn = ax.sub(hugeX.sub(ax.add(Expm1.HUGE)));

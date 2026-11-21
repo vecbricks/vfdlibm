@@ -380,13 +380,15 @@ class CoshTest {
   /**
    * Each of cosh's faults, with a check that must fail while it is planted: the vector forms
    * over {@link #faultRunInputs()} at every width the host has. {@code splitMoved} is read by
-   * the slice arm ({@code VFdlibm.cosh}) only, {@code finishMissesSmall} by the finish arm only;
-   * the other two reach every arm. Each was sized on 2^22 draws before it was wired ({@link
+   * the slice arm ({@code VFdlibm.cosh}) only, as is {@code dropSmallTerm} (the finish arm never
+   * runs the small range), {@code finishMissesSmall} by the finish arm only; the other two reach
+   * every arm. Each was sized on 2^22 draws before it was wired ({@link
    * Cosh}).
    */
   static Map<String, Executable> faultCatchers() {
     Map<String, Executable> catchers = new LinkedHashMap<>();
     catchers.put(Cosh.SPLIT_MOVED, caughtBy("VFdlibm.cosh", Cosh.SPLIT_MOVED));
+    catchers.put(Cosh.DROP_SMALL_TERM, caughtBy("VFdlibm.cosh", Cosh.DROP_SMALL_TERM));
     catchers.put(Cosh.FINISH_MISSES_SMALL,
         caughtBy("Cosh.coshFinish", Cosh.FINISH_MISSES_SMALL));
     for (String fault : new String[] {Cosh.HALF_ONE_ULP_OFF, Cosh.DROP_HALF_OVER_T}) {
