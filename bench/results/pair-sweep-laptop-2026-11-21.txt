@@ -1,0 +1,85 @@
+# What a pass of the nightly sweep over a function of two arguments costs: the harness, and an
+# upper bound for an arm, measured one stripe at a time on a laptop, 21 November 2026
+#
+# A LAPTOP FILE, NOT A HEADLINE, AND NOT A JMH FILE: it has the median of three runs a row, not
+# minimum, average and maximum, no datapath reading and no vector-flags line, and was run on the
+# tree before it was committed (the head is the commit that adds this file). It sizes the pair sweep before any function of two arguments is
+# ported; the nightly's own logs replace it once one is (SKILLS.md, "The budget").
+#
+# What was run:  Sweep over one stripe, 255/256 (2^24 high words, 16 chunks across the exponents
+#                of both signs, 3 * 2^24 inputs), through PairCostProbe, which registers two
+#                stand-ins that exist for it alone:
+#                toy2           x * 0.5 + y, an oracle and an arm that cost almost nothing: the
+#                               harness's own cost (partners, arrays, the check, the masks), so
+#                               a lower bound for any function;
+#                atan2-scratch  the oracle StrictMath.atan2 and one arm that calls it lane by
+#                               lane: the harness and, a pair, three calls of the C's own
+#                               function (the oracle, the arm unmasked, the arm masked), the
+#                               cost of an arm that finishes every lane per lane. No port: it
+#                               bounds the arm's cost, and a vector arm may be cheaper.
+#                For comparison, the unary Sweep of exp and log1p over the same stripe.
+#                A NaN is canonical in both stand-ins (see "A finding" below).
+# Host:          AMD Ryzen AI 9 HX PRO 370 w/ Radeon 890M
+#                flags: avx512f avx512dq; kernel 7.0.0-43-generic
+# JDK:           openjdk version "25.0.5.1" 2026-11-17
+# Code:          main at 680343d plus this change (Sweep, Fuzz and Nightly with pair
+#                support, as merged in #107, and PairCostProbe)
+# Machine:       a shared laptop; the lane (the heavy-job lock) held, 4 threads pinned to CPUs
+#                0, 1, 12, 13 (two cores and their SMT siblings: the shape of a 4-vCPU runner)
+# Load average:  11.53 8.70 7.95 10/2311 3784016 at the start; 9.99 9.25 8.26 4/2313 3802897 after
+# Command:       taskset -c 0,1,12,13 java --add-modules jdk.incubator.vector -cp
+#                target/classes:target/test-classes io.github.vecbricks.vfdlibm.PairCostProbe \
+#                  sweep --function <f> --species <s> --stripe 255/256 --argument <a> \
+#                  --seed 0x5eed --threads 4 --out <file>
+#                and the same through Sweep for exp and log1p; three runs of each.
+#
+# Seconds a stripe took (the three runs; the median in brackets)
+#   function        species  argument    run 1   run 2   run 3   median
+#   toy2            128      1            2.2     2.2     2.2     2.2
+#   toy2            256      1            0.9     0.9     0.9     0.9
+#   toy2            max      1            0.9     0.8     0.9     0.9
+#   atan2-scratch   128      1            2.0     2.0     2.1     2.0
+#   atan2-scratch   256      1            1.7     1.8     1.9     1.8
+#   atan2-scratch   max      1            1.6     1.7     1.9     1.7
+#   toy2            256      2            1.1     0.9     1.0     1.0
+#   atan2-scratch   256      2            1.8     1.9     1.8     1.8
+#   exp             256      -            2.9     2.9     2.6     2.9
+#   log1p           256      -            3.4     3.6     4.0     3.6
+#
+# The cost of a pass, by the median of three
+# A whole pass is 256 stripes of 255/256's size (2^32 high words), 3 * 2^32 pairs. On x86 the
+# nightly sweeps every high word at 256 bits and at max (and at 512 bits on an AVX-512 draw),
+# and 1/32 of them at 128 bits; one runner is 4 vCPUs. So the x86 sweep jobs of a pass are
+#   AVX2 draw:    256 * (2 * t256) + 8 * t128 seconds (max is 256 bits there)
+#   AVX-512 draw: 256 * (t256 + 2 * tmax) + 8 * t128 seconds (512 bits and max are one width)
+# and Arm's, which this laptop cannot measure, are every high word at 128 bits natively and the
+# slice at max. Minutes of one runner, measured here with 4 threads on 4 CPUs:
+#   function        one whole pass at 256 bits   x86 jobs, AVX2 draw   x86 jobs, AVX-512 draw
+#   toy2               3.8 minutes                    8.0 minutes          11.8 minutes
+#   atan2-scratch      7.7 minutes                   15.6 minutes          22.5 minutes
+#   exp               12.4 minutes (the unary sweep of one function, for comparison)
+#   log1p             15.4 minutes (the unary sweep of one function, for comparison)
+# The second argument's pass costs what the first's does: toy2 1.0 s against 0.9 s a stripe,
+# atan2-scratch 1.8 s against 1.8 s. Both passes in one night therefore cost twice a pass, and
+# alternating costs one: for the stand-in that bounds an arm, twice the AVX2 draw's
+# 16 minutes is 31, the harness alone 16.
+#
+# Reading. Nothing here is a port: the cost of a pair function's own arms and oracle is added to
+# the harness's, and these two stand-ins bracket it only for an arm that is a call a lane. The
+# whole pass of atan2-scratch at 256 bits is 7.7 minutes against 12.4 for exp and 15.4 for log1p,
+# on this laptop: a pass is of the order of a unary sweep, not a multiple of it.
+#
+# A finding: two NaNs. The first measurement (three runs of the same commands, load average
+# 5.09 6.97 7.37 at the start) used the stand-in atan2-scratch with StrictMath.atan2 as it is,
+# for the oracle and for the arm. Each of its 12 runs of the sweep reported lane checks that
+# differ, 122 to 6495 of 50,331,648 inputs a run, at 128, 256 and max bits and for both
+# arguments. The first four mismatches of one further run (the only ones read) were each a pair
+# of two NaNs, for which StrictMath.atan2 returns x + y: the payload of that sum differed between
+# the oracle's call and the arm's loop,
+#   x=0x7ff00a08ffffffff y=0x7ff4cc8698960c05 expected=0x7ff80a08ffffffff actual=0x7ffccc8698960c05
+#   x=0x7ff00a09ffffffff y=0x7ff9c713ae6c8f94 expected=0x7ff80a09ffffffff actual=0x7ff9c713ae6c8f94
+# (the oracle's result carries x's payload, the arm's y's). If that is how it goes on every
+# pair of NaNs, one function in one JVM is not one bit pattern there, and a port of atan2, hypot
+# or pow cannot be held to StrictMath on two NaNs by bits unless the oracle's payload is fixed;
+# not read further here. The stand-ins in this file make a NaN canonical, and the 30 runs above all
+# matched.

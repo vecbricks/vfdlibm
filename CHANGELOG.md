@@ -19,6 +19,10 @@ contract of every version is the same: each lane of each function equals
 - `VFdlibm.cosh`, in the two forms `cosh(x)` and `cosh(x, live)`, over `DoubleVector` lanes of
   any species of 128 bits or more. Every lane is bit-identical to `StrictMath.cosh`, NaN payloads
   and signed zeros included.
+- `VFdlibm.asin`, in the two forms `asin(x)` and `asin(x, live)`, over `DoubleVector` lanes of
+  any species of 128 bits or more. Every lane is bit-identical to `StrictMath.asin`, NaN payloads
+  and signed zeros included. Lanes of magnitude 1 or more and NaNs are finished per lane by
+  `StrictMath.asin`.
 
 ### Changed
 

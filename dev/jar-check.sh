@@ -461,6 +461,8 @@ public final class Consumer {
     return names;
   }
 
+  // A function of two arguments must compare through a copy of the rule of PairBits.matches (a
+  // lane of two NaNs with different bits equals one argument's bits, quieted), not this one.
   private static void same(String name, double in, double got, double expected) {
     lanes++;
     if (Double.doubleToRawLongBits(got) != Double.doubleToRawLongBits(expected)) {
@@ -482,6 +484,7 @@ public final class Consumer {
     check("log1p", StrictMath::log1p);
     check("sinh", StrictMath::sinh);
     check("cosh", StrictMath::cosh);
+    check("asin", StrictMath::asin);
     Module module = VFdlibm.class.getModule();
     String in = module.isNamed() ? module.getName() : "";
     System.out.printf("%d lanes at %d bits, %d wrong; the library is in %s%n", lanes,

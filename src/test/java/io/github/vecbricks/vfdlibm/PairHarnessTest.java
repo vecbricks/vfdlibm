@@ -50,7 +50,7 @@ class PairHarnessTest {
   private static final int Y_WORD = 0x3ff00004;
 
   /** Which fault a toy has. */
-  private enum Fault { NONE, X_WORD_FAULT, Y_WORD_FAULT, BOTH_WORDS_FAULT, DEAD_LANES }
+  enum Fault { NONE, X_WORD_FAULT, Y_WORD_FAULT, BOTH_WORDS_FAULT, DEAD_LANES }
 
   private static final String[] NAMES = {
     "toy2", "toy2-x", "toy2-y", "toy2-xy", "toy2-dead"
@@ -89,17 +89,20 @@ class PairHarnessTest {
   }
 
   /**
-   * The oracle. A NaN result is the canonical NaN: which operand's payload a NaN sum keeps is
-   * the hardware's and the compiler's (it may commute an addition), which the toy is not about.
+   * The oracle. A NaN made from arguments that are not NaN is the canonical NaN, so that the
+   * constant a compiler folds and the hardware's default NaN cannot differ. A NaN argument gives
+   * its payload, quieted; two NaNs give one of the two, which one is the hardware's and the
+   * compiler's (it may commute an addition), and {@link PairBits} does not ask which.
    */
-  private static double scalar(double x, double y) {
+  static double scalar(double x, double y) {
     double r = x * 0.5 + y;
-    return Double.isNaN(r) ? Double.NaN : r;
+    return Double.isNaN(r) && !Double.isNaN(x) && !Double.isNaN(y) ? Double.NaN : r;
   }
 
-  private static DoubleVector vector(DoubleVector x, DoubleVector y, Fault fault) {
+  static DoubleVector vector(DoubleVector x, DoubleVector y, Fault fault) {
     DoubleVector r = x.mul(0.5).add(y);
-    r = r.blend(Double.NaN, r.test(VectorOperators.IS_NAN));
+    r = r.blend(Double.NaN, r.test(VectorOperators.IS_NAN)
+        .and(x.test(VectorOperators.IS_NAN).not()).and(y.test(VectorOperators.IS_NAN).not()));
     VectorMask<Double> bad = switch (fault) {
       case NONE, DEAD_LANES -> null;
       case X_WORD_FAULT -> highWordIs(x, X_WORD);
@@ -299,10 +302,12 @@ class PairHarnessTest {
     // The message of an unknown function lists the pair functions too.
     IllegalArgumentException e =
         assertThrows(IllegalArgumentException.class, () -> Nightly.subject("nope"));
-    assertTrue(e.getMessage().startsWith(
-        "unknown function 'nope'; known: exp, expm1, log, log10, log1p, sinh, cosh"),
-        e.getMessage());
-    assertTrue(e.getMessage().contains(", toy2"), e.getMessage());
+    // Whatever the unary functions are: the message lists each of them, and the pair functions.
+    assertTrue(e.getMessage().startsWith("unknown function 'nope'; known: "), e.getMessage());
+    for (Nightly.Function f : Nightly.Function.values()) {
+      assertTrue(e.getMessage().contains(f.id()), f.id() + " in " + e.getMessage());
+    }
+    assertTrue(e.getMessage().contains("toy2"), e.getMessage());
   }
 
   /** The partner is a function of the seed, the argument and the index alone, in four kinds. */
