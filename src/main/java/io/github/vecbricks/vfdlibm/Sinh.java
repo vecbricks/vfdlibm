@@ -37,7 +37,8 @@ import jdk.incubator.vector.VectorSpecies;
  * {@code 2^-28} return {@code x}. From {@code 22} up the C needs {@code exp}: {@code
  * h*exp(|x|)} up to {@code o_threshold}, and {@code exp(|x|/2)} squared with {@code h} until the
  * overflow. Every operation is the C's, in the C's order, with no fused multiply-add and no
- * reassociation, so no lemma of its own is needed; what it rests on through {@link
+ * reassociation, so no lemma of its own is needed beyond L13's blend argument ({@code
+ * PROOFS.md}); what it rests on through {@link
  * Expm1#expm1Core}, L10 and L11 and through them exp's L1, L2 and L5, is in {@code PROOFS.md}'s
  * sinh section.
  *
@@ -61,7 +62,7 @@ import jdk.incubator.vector.VectorSpecies;
  * <p>The two forms of {@code t} share one division: its numerator is {@code t*t} below {@code
  * |x| = 1} and {@code t} from it on, over {@code t+1}, and each lane then does its own form's
  * operations, {@code 2.0*t - q} or {@code t + q}, before the product with {@code h}; both forms
- * are computed and blended by the high word.
+ * are computed and blended by the high word (L13).
  *
  * <p>The C's {@code int} words stay in int lanes: {@code jx} is the high word, signed, with the
  * double vector's lane count at half its bits, and every test is the C's compare of {@code ix =

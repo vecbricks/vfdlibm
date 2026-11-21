@@ -45,7 +45,8 @@ import jdk.incubator.vector.VectorSpecies;
  * {@code half*t + half/t} with {@code t = exp(|x|)}; up to {@code o_threshold}'s word {@code
  * 0x40862E42} return {@code half*exp(|x|)}; then {@code exp(half*|x|)} squared with {@code half}
  * until the overflow. Every operation is the C's, in the C's order, with no fused multiply-add
- * and no reassociation, so no lemma of its own is needed; what it rests on through {@link
+ * and no reassociation, so no lemma of its own is needed beyond L13's blend argument ({@code
+ * PROOFS.md}); what it rests on through {@link
  * Exp#expCore}, exp's L2 and L5 (L1 is not used), is in {@code PROOFS.md}'s cosh section.
  *
  * <p>Two arms differ in the small range, {@code |x| < 0.5*ln2}:
