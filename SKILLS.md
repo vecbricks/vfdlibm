@@ -670,7 +670,7 @@ re-trying a settled question.
 - **What a pass over a function of two arguments costs** (laptop, 21 November 2026,
   `bench/results/pair-sweep-laptop-2026-11-21.txt`; no pair function is ported, so this is two
   stand-ins run through `PairCostProbe`, not a port). A stripe of 2^24 high words at 256 bits took
-  1.0 s for the harness alone (`toy2`) and 1.8 s for an arm that calls `StrictMath.atan2` lane by
+  0.9 s for the harness alone (`toy2`) and 1.8 s for an arm that calls `StrictMath.atan2` lane by
   lane, against 2.9 s and 3.6 s for the unary sweeps of exp and log1p, at 4 threads on 4 CPUs.
   Scaled to a whole pass (256 stripes), the x86 sweep jobs of the arm-bound stand-in come to about
   16 runner-minutes on an AVX2 draw and 23 on an AVX-512 one, and the second argument's pass costs
