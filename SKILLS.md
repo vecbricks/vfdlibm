@@ -645,6 +645,24 @@ re-trying a settled question.
   draws the same inputs on a slower or busier machine, which a time limit does not.
   `NightlyTest`'s planted-fault test passes it; `dev/nightly.sh` passes only `--seconds`, so to
   replay a bounded run call `Fuzz` directly (its class comment has the command).
+- **Functions of two arguments** (`Nightly.PairFunction`, test-only code like the rest: a port
+  registers its function in `PairFunction.KNOWN`; none is ported yet, and `PairHarnessTest` runs the
+  harness on a toy, `x * 0.5 + y`, with planted faults). `dev/nightly.sh` and `nightly.yml` do not
+  take `--argument` yet, so a pair function is not listed in the workflow until they do; by hand,
+  `Sweep --argument 2` sweeps the second argument. The sweep takes `--argument 1` (the default) or
+  `2`: the high words swept are that argument's, each with its three low words, and each swept value
+  gets a partner for the other argument drawn from the seed, the argument and the input's index
+  alone (`Sweep.partner`; a quarter each of special values, the swept value's exponent, an exponent
+  within 64 of it, and random bits), so a pair replays from the seed and its replay line says
+  `--argument`. A pass checks 3 * 2^32 of the 2^128 pairs, so **what it can miss**: a bug that needs
+  a high word of each argument at once, which a partner drawn as above meets with probability about
+  2^-32 for a random partner and more where the two exponents are near, and which
+  the fuzz meets because its draws put both arguments at their edges at once (`toy2-xy` in
+  `PairHarnessTest`: both sweeps pass it, the fuzz finds it). The masked form of an arm keeps the
+  first argument's bits in a lane that is not live (`Oracle.assertBinaryMasked`'s contract). A pair
+  function's mismatch file, and a hard-cases file of one, say `# arity: 2` before the first input
+  and hold `0x<x> 0x<y>` on a line: `Inputs.hardCasePairs` reads one, and `Inputs.hardCases` refuses
+  it by that line.
 - **Its cost, measured (the logs of 3 to 19 November 2026).** The first sizing was a laptop's,
   from a sample of high words, before any night had run; the nights' own logs replaced it.
   `bench/pool/pool.py cost --since 2026-11-05
