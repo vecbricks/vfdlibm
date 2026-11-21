@@ -144,10 +144,14 @@ libraries go in `readings/`, with each source's licence named; never notes on GP
 
 Changes go through pull requests on branches, never straight to `main` (the owner's two
 release commits, made by `dev/release.sh`, are the one exception: "Releases"). Each function
-comes in its own PR, paired with the Varka PR that emits it. Commit messages and PR descriptions
-end with
-`Generated-by: <tool> (<model and version>)` when AI tooling was used (Apache's convention); no
-`Co-Authored-By`.
+comes in its own PR, paired with the Varka PR that emits it.
+
+A pull request's title reads `[VFDLIBM-<issue number>] <what the change achieves>` when it
+belongs to an issue, and `[VFDLIBM] <what it achieves>` when it belongs to none: short and
+goal-oriented. Its description follows `.github/PULL_REQUEST_TEMPLATE` (adapted from Varka's),
+fills all five sections and explains the mechanism in prose, not only the diff. Commit messages
+and the last section of the description end with `Generated-by: <tool> (<model and version>)`
+when AI tooling was used (Apache's convention); no `Co-Authored-By`.
 
 ## Releases
 
