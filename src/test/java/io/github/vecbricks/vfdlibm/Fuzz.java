@@ -42,13 +42,20 @@ import jdk.incubator.vector.VectorSpecies;
  * <pre>
  *   java --add-modules jdk.incubator.vector -cp target/classes:target/test-classes \
  *     io.github.vecbricks.vfdlibm.Fuzz --function log --species 256 --seconds 60 \
- *     --seed 0x1234 --out target/nightly/fuzz-mismatches.txt
+ *     [--draws 1000000] --seed 0x1234 --out target/nightly/fuzz-mismatches.txt
  * </pre>
  *
+ * <p>{@code --draws} bounds each thread to that many inputs (rounded up to a block), besides
+ * {@code --seconds}: a run that ends on it, with no mismatch found first, draws the same inputs
+ * whatever the machine's load, which a time limit does not. {@code --seconds} stays required, and
+ * a run that it ends first has drawn fewer inputs than {@code --draws}. {@code --stop-after N}
+ * ends the run once N lane checks have differed (each thread stops after its block), so that a
+ * test which only asks whether the fuzz finds a fault pays for the inputs up to it, no more.
+ *
  * <p>Each thread draws from its own stream, {@code seed} mixed with the thread's number, so a run
- * is the same inputs in the same order per thread; how far each thread gets depends on the time.
- * A mismatch is reported with its input's bits, which replay it with no seed at all. The exit
- * status is as {@link Sweep}'s.
+ * is the same inputs in the same order per thread; how far each thread gets depends on the time,
+ * unless {@code --draws} ends the run first. A mismatch is reported with its input's bits, which
+ * replay it with no seed at all. The exit status is as {@link Sweep}'s.
  */
 final class Fuzz {
 
@@ -186,19 +193,25 @@ final class Fuzz {
     VectorSpecies<Double> species;
     long seed;
     double budget;
+    long draws;
+    long stopAfter;
     int threads;
     Path out;
     try {
       Map<String, String> options =
-          Nightly.options(args, "function", "species", "seed", "seconds", "threads", "out");
+          Nightly.options(args, "function", "species", "seed", "seconds", "draws",
+              "stop-after", "threads", "out");
       function = Nightly.Function.of(Nightly.require(options, "function"));
       species = Nightly.species(options.getOrDefault("species", "preferred"));
       seed = Nightly.parseNumber(Nightly.require(options, "seed"));
       budget = Double.parseDouble(Nightly.require(options, "seconds"));
+      draws = Long.parseLong(options.getOrDefault("draws", "" + Long.MAX_VALUE));
+      stopAfter = Long.parseLong(options.getOrDefault("stop-after", "" + Long.MAX_VALUE));
       threads = Integer.parseInt(
           options.getOrDefault("threads", "" + Runtime.getRuntime().availableProcessors()));
-      if (threads < 1 || !(budget > 0)) {
-        throw new IllegalArgumentException("--threads and --seconds take positive numbers");
+      if (threads < 1 || !(budget > 0) || draws < 1 || stopAfter < 1) {
+        throw new IllegalArgumentException(
+            "--threads, --seconds, --draws and --stop-after take positive numbers");
       }
       out = Path.of(options.getOrDefault("out", "target/nightly/fuzz-mismatches.txt"));
     } catch (IllegalArgumentException e) {
@@ -206,8 +219,9 @@ final class Fuzz {
       return Nightly.ERROR;
     }
 
-    String what = String.format("fuzz %s at %d bits for %.0f s", function.id,
-        species.vectorBitSize(), budget);
+    String bound = draws == Long.MAX_VALUE ? "" : " or " + draws + " inputs a thread";
+    String what = String.format("fuzz %s at %d bits for %.0f s%s", function.id,
+        species.vectorBitSize(), budget, bound);
     System.out.println(what);
     System.out.println("seed: " + Nightly.seedText(seed));
     System.out.println("arms: " + Nightly.armNames(function));
@@ -215,8 +229,9 @@ final class Fuzz {
     Nightly.printHost(species);
     String context = String.format("function=%s species=%s seed=%s", function.id, species,
         Nightly.seedText(seed));
-    String replay = String.format("Fuzz --function %s --species %s --seed %s --threads %d",
-        function.id, Nightly.speciesName(species), Nightly.seedText(seed), threads);
+    String replay = String.format("Fuzz --function %s --species %s --seed %s --threads %d%s",
+        function.id, Nightly.speciesName(species), Nightly.seedText(seed), threads,
+        draws == Long.MAX_VALUE ? "" : " --draws " + draws);
 
     Edges edges = edges(function);
     long start = System.nanoTime();
@@ -236,7 +251,8 @@ final class Fuzz {
             Nightly.Checker checker =
                 new Nightly.Checker(function, species, maskSeed, mismatches);
             double[] xs = new double[BLOCK];
-            for (long position = 0; System.nanoTime() < deadline && !mismatches.enough();
+            for (long position = 0; position < draws && System.nanoTime() < deadline
+                && mismatches.count() < stopAfter && !mismatches.enough();
                 position += BLOCK) {
               for (int i = 0; i < BLOCK; i++) {
                 xs[i] = draw(random, edges);

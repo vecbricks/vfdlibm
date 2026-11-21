@@ -552,7 +552,8 @@ re-trying a settled question.
   high-word branch is not seeing a moved split. The planted `log.thresholdMoved`, a split one
   step off on the high word, gave no mismatch on sweep stripe `255/256` and 2 on stripe `0/4`,
   both through the seed's low word, while the fuzz, which draws each split's neighbourhood,
-  catches it within a second (`NightlyTest`'s fault runs). The sweep is for bands nothing
+  catches it at input 16,384 of the first thread at seed 0x5eed (`NightlyTest`'s fault runs;
+  `NightlyTest.DRAWS` has the indices of the others). The sweep is for bands nothing
   samples; the fuzz is for splits.
 - **A slice by hand.** After `mvn -B -q test-compile`, `dev/nightly.sh sweep exp 1023/4096 0x5eed
   256` sweeps the 2^20 high words of `[1, 2)` at 256 bits (a second or two);
@@ -574,6 +575,10 @@ re-trying a settled question.
   per arm and mask form are written, and a stopped run's total, vary. On the laptop, take the
   heavy lock and pin to one core type, for example
   `flock ~/proj/.varka-locks/heavy.lock taskset -c 0,1,12,13 dev/nightly.sh ...`.
+- **`Fuzz --draws N`.** It bounds each thread to N inputs besides `--seconds`, so that a run
+  draws the same inputs on a slower or busier machine, which a time limit does not.
+  `NightlyTest`'s planted-fault test passes it; `dev/nightly.sh` passes only `--seconds`, so to
+  replay a bounded run call `Fuzz` directly (its class comment has the command).
 - **Its cost, measured (the logs of 3 to 19 November 2026).** The first sizing was a laptop's,
   from a sample of high words, before any night had run; the nights' own logs replaced it.
   `bench/pool/pool.py cost --since 2026-11-05
