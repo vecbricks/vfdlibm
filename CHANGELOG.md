@@ -10,6 +10,13 @@ contract of every version is the same: each lane of each function equals
 
 ## [Unreleased]
 
+### Added
+
+- `VFdlibm.sinh`, in the two forms `sinh(x)` and `sinh(x, live)`, over `DoubleVector` lanes of any
+  species of 128 bits or more. Every lane is bit-identical to `StrictMath.sinh`, NaN payloads and
+  signed zeros included. Lanes of magnitude 22 or more, the infinities and NaNs are finished
+  per lane by `StrictMath.sinh`.
+
 ## [0.1.0] - 2026-11-20
 
 ### Added
