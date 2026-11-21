@@ -185,6 +185,8 @@ final class Fuzz {
       new int[0],
       false,
       new double[] {0x1p-27, 0.5, 0.975, 1.0, Math.nextDown(1.0), Math.sqrt(0.5), 0.9});
+
+  /**
    * atan: s_atan.c's high-word tests (the tiny return, the four range splits at 7/16, 11/16,
    * 19/16 and 39/16, the {@code 2^66} word and the non-finite words), the doubles at those
    * edges, the word and the double 2 where {@code atan.splitMoved} moves the 19/16 split, and the

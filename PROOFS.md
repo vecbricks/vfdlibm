@@ -1108,6 +1108,7 @@ scalar Java, is `StrictMath.asin`. L13's own tests are `ProofsTest.l13*`.
 
 **Encoding.** No file of its own: nothing here is a fold. Informal here: that the port's blends
 take each branch on exactly the C's lanes, and that it computes these steps, the code's text.
+
 ## atan (`Atan.java`, from `s_atan.c`)
 
 s_atan.c returns, from `|x| >= 2^66`, `x + x` for a NaN and `atanhi[3] + atanlo[3]` with `x`'s
