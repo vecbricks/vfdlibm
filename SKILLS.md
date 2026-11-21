@@ -824,29 +824,52 @@ stops the next port re-trying a settled question.
     has not been rerun for eight, and atan's own cost is not measured, nor are sinh's and
     cosh's: the first nights with them are, with `pool.py fetch` and `cost`, and this entry is
     requoted from those.
+  - **Eleven functions: unmeasured.** asin, acos and atan2 join the night's list, so the scheduled
+    night runs eleven (atan2 sweeps one argument a night by `pair-passes=alternate`, so its jobs are
+    one function's worth at the defaults), and no night has run them. Everything here is an
+    extrapolation, not a reading. An estimate made for ten functions of one argument, not derived in
+    this document, was about 730 runner-minutes at the default 2 shards and 4 Arm shards (the 72
+    runner-minutes a function of the budget entry above would give 720); atan2 adds a function whose
+    cost is not estimated. The plan job at the defaults makes 22 sweep entries, 44 for Arm and 22
+    for the fuzz, against the 256 each may hold; a run of nine or more functions at 32 shards (288
+    for nine, more for eleven) exceeds that cap and the plan job refuses it, and eight fit. No span
+    is modelled here: the entry below computes its figures for eight functions (about 72 minutes);
+    scaling that by the count of functions gives about 90 for ten and 99 for eleven, the budget's 90
+    and over it, which is arithmetic on an extrapolation and no prediction. The first nights with
+    eleven are the measurement, read as above; the levers below are the answer if the median passes
+    90. **What `alternate` does about the slice:** the argument it picks is `days / nights % 2 + 1`
+    and the slice's night is `days % slice-nights`, and at the defaults (1 and 32) the parity of the
+    day is the parity of the slice's index, so a slice would keep one argument for good, half of
+    each argument's 128-bit slices never swept. The rotation therefore turns over once every
+    `slice-nights` nights when `nights` is below it (`(days / nights + days / slice-nights) % 2 +
+    1`), so a slice meets both arguments in two cycles of 32 nights, and the same argument is swept
+    on two nights running at each turn. Simulated over 20000 days for `nights` and `slice-nights` of
+    1 and 32, 2 and 32, 4 and 32, 32 and 32, 64 and 32, 1 and 1, and 2 and 1, every slice meets
+    both; the plan job was not run on a real night. `pair-passes=both` sweeps both every night.
   - **Slots 6, 8 and 5, and the 20 jobs (21 November 2026).** The matrices' `max-parallel` is 6
     for the sweep, 8 for the fuzz and 5 for Arm: 19, and the proofs job makes 20, all of the free
     plan's jobs while the matrices are full. The plan job runs before them and the fault-caught
     and alert jobs after, so nothing else of the night overlaps. Other jobs (a CI run on a pull
     request, a benchmark dispatch) share the same 20 and queue ahead of or behind the night's.
-    The split uses eight functions at the five's average cost, 191, 220 and 174 minutes for the
-    sweep, the fuzz and Arm in 16, 16 and 32 jobs, which is an extrapolation: sinh, cosh and atan
-    are not measured. Over 19 slots the best split by whole waves of jobs is 6, 8 and 5, at 36,
-    27 and 38 minutes, where 5, 6 and 4 give 48, 41 and 43; by minutes over slots, with no
-    waves, 6, 8 and 5 give 32, 27 and 35 where 5, 6 and 4 give 38, 37 and 43 (6, 7 and 6 would
-    give 32, 31 and 29, but 41 minutes by waves). As a prediction only, scaling the 90 minutes
-    that the same extrapolation gives for eight functions on 5, 6 and 4 by the slowest kind's
-    ratio (38 to 48 by waves, 35 to 43 by minutes) gives about 72. The anchor night (run
-    44891868803, five functions) peaked at 11 jobs at once on 5, 6 and 4 slots, so the slots
-    are not the only limit. The first night on these slots is the first measurement.
+    The split (not redone for eleven) uses eight functions at the five's average cost, 191, 220 and
+    174 minutes for the sweep, the fuzz and Arm in 16, 16 and 32 jobs, which is an extrapolation:
+    sinh, cosh and atan are not measured. Over 19 slots the best split by whole waves of jobs is 6,
+    8 and 5, at 36, 27 and 38 minutes, where 5, 6 and 4 give 48, 41 and 43; by minutes over slots,
+    with no waves, 6, 8 and 5 give 32, 27 and 35 where 5, 6 and 4 give 38, 37 and 43 (6, 7 and 6
+    would give 32, 31 and 29, but 41 minutes by waves). As a prediction only, scaling the 90 minutes
+    that the same extrapolation gives for eight functions on 5, 6 and 4 by the slowest kind's ratio
+    (38 to 48 by waves, 35 to 43 by minutes) gives about 72. The anchor night (run 44891868803, five
+    functions) peaked at 11 jobs at once on 5, 6 and 4 slots, so the slots are not the only limit.
+    The first night on these slots is the first measurement.
   - **What gives when it does not fit,** cheapest first, with what each buys at 13 functions
     (the table's means times 2.6): `fuzz-seconds` 120 saves 224 runner-minutes a night (172 in
     the fuzz jobs, 52 in Arm's) and halves what a species is fuzzed; `nights` 2 saves 192, 124
     of them on x86, and sweeps every high word every second night; `slice-nights` 64 saves 26;
     `arm-shards` 2 saves 14 and buys nothing, since a job's setup is half a minute, so the slots
     and not the shards bound the span. Which of these to give up first is the owner's.
-  - **Not in it.** The two-argument functions (#33, #34) need another sweep and a cost of their
-    own, measured before they join; 13 times 72 assumes none.
+  - **Not in it.** A cost of atan2's pair sweep: 13 times 72 assumes functions of one argument,
+    and atan2 joined with no night of its own run, so its place in the arithmetic is an
+    assumption (one function's worth at the defaults), not a reading.
 - **When a night fails,** the `alert` job (the only one with `issues: write`) opens an issue
   labelled `nightly-failure`, or comments on the open one, with the run's link, the seed, each
   job's result, the dispatch inputs that replay the run (seed, `nights`, `shards`, `arm-shards`,
