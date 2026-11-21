@@ -48,9 +48,10 @@ import org.openjdk.jmh.annotations.Warmup;
  * <p>{@code bench/alloc-check.py} runs the vector benchmarks named {@code *256}, {@code
  * *Preferred} and {@code *Max} on {@code common} and {@code mixed} inputs and fails if any
  * allocates, which means the body boxed. The {@code *Max} rows are at {@code
- * DoubleVector.SPECIES_MAX}, where the finish walked the set bits of the rare mask, a variable
- * lane index that boxes there, until it wrote out its first eight lanes with constant indices
- * (bench/results/max-finish-alloc-free-laptop-2026-11-21.txt).
+ * DoubleVector.SPECIES_MAX}, where the finish writes out its first eight lanes with constant
+ * indices and a loop takes any past eight; the rows read under 0.1 B/op in the laptop reading of
+ * bench/results/max-finish-alloc-free-laptop-2026-11-21.txt (allocation only, no timing). No
+ * file reads the finish they replaced.
  */
 @State(Scope.Thread)
 @BenchmarkMode(Mode.AverageTime)
