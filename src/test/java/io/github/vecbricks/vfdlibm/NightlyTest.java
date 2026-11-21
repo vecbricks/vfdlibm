@@ -91,11 +91,15 @@ class NightlyTest {
    * Inputs each fuzz thread draws in {@link #fuzzCatchesThePlantedFault}. The streams are fixed
    * by the seed, so the fuzz finds each fault at one input index, the same at the 128, 256, 512,
    * preferred and max species of the host measured; only the time to reach it varies with the
-   * machine. Measured on an x86 laptop, one stream per run, for the 23 faults the test runs: with
-   * the test's seed 0x5eed (first thread) the index is 4,096 for 19 faults and, for the others,
-   * 69,632 (exp.thresholdMoved), 57,344 (exp.dropKForcing), 20,480 (expm1.dropKForcing) and
-   * 16,384 (log.thresholdMoved); the second thread's seed 0x5eee finds them at 24,576, 159,744,
-   * 110,592 and 4,096. Over 20 seeds sinh's faults need at most 8,192 and the longest is 614,400
+   * machine. The test runs 30 faults (pom.xml's 31 function faults less log1p.foldShortPath).
+   * Measured on an x86 laptop, one stream per run, for the faults of the ports before cosh and
+   * atan: with the test's seed 0x5eed (first thread) the index is 4,096 for 19 faults and, for
+   * the others, 69,632 (exp.thresholdMoved), 57,344 (exp.dropKForcing), 20,480
+   * (expm1.dropKForcing) and 16,384 (log.thresholdMoved); the second thread's seed 0x5eee finds
+   * them at 24,576, 159,744, 110,592 and 4,096. Atan's three faults (atan.dropLo,
+   * atan.splitMoved, atan.hiOneUlpOff), measured the same way with one thread, no draw bound
+   * and a stop at the first mismatch, are found at 4,096 by both seeds; cosh's five were not
+   * measured. Over 20 seeds sinh's faults need at most 8,192 and the longest is 614,400
    * (exp.dropKForcing), which a million would clear only 1.6 times, but the seed is fixed. One
    * thread finding the fault is enough, so a fault's index is the smaller of its two threads':
    * the largest is 57,344 (exp.dropKForcing), and a million inputs is 17 times that (14 times the

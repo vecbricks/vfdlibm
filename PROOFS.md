@@ -1062,7 +1062,8 @@ not the C's:
   `StrictMath.atan`, which is the C.
 
 **What it rests on.** (R4) for `+ - * /`, and nothing of exp's or expm1's: the port calls no
-other port body.
+other port body. L13's hinge tests model a two-way blend; atan's four-range nesting is covered
+by `AtanTest` only.
 
 **Checks.** `constantsAreTheSourcesBits` checks that the six words, `one`, `atanhi`, `atanlo` and
 `aT` are the C's. `AtanTest` compares `VFdlibm.atan` with `StrictMath.atan` at every width and

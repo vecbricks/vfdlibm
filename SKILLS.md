@@ -863,10 +863,12 @@ next port re-trying a settled question.
 - **One finish arm.** The rare lanes (`|x| >= 2^66`, the infinities and the NaNs) have results
   that are a constant or `x+x`, so a guarded arm that blends them is possible; none is built,
   because the tie-break rule of #30 sends a tie to the finish arm and no timing says otherwise.
-- **Sizes of its faults, on 2^22 draws.** `atan.dropLo`: 855028 changed of `(-5, 5)`, none below
-  7/16. `atan.splitMoved` (19/16 moved to 2): 431802 changed of `[19/16, 2)` and none elsewhere.
-  `atan.hiOneUlpOff` (`atanhi[1]` one ulp up): 3972483 changed of `[11/16, 19/16)` and none
-  elsewhere. The unplanted port changed none in any of the ranges.
+- **Sizes of its faults, each of 2^22 uniform draws from its own interval.** `atan.dropLo`:
+  855028 changed of 2^22 draws from `(-5, 5)`, none of those below 7/16. `atan.splitMoved`
+  (19/16 moved to 2): 431802 changed of 2^22 draws from `[19/16, 2)`, none from the ranges
+  below 19/16 or above 2. `atan.hiOneUlpOff` (`atanhi[1]` one ulp up): 3972483 changed of 2^22
+  draws from `[11/16, 19/16)`, none from the other ranges. The unplanted port changed none of
+  any of these draws. The throwaway program that counted them is not committed.
 - **Lefevre's list has 1735 `atn` lines,** positive inputs only, distinct, each with 45 or more
   bits after the round bit pointing at the midpoint, rechecked and written by
   `dev/testlibm-extract.py`, which derives atan's exact value itself.
