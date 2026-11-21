@@ -558,7 +558,9 @@ a settled question.
   256` sweeps the 2^20 high words of `[1, 2)` at 256 bits (a second or two);
   `dev/nightly.sh sweep log stripe:255/256 0x5eed` sweeps a stripe of 2^24 high words at
   every width the host has (`NIGHTLY_EXCEPT=128` leaves one out, as the nightly does);
-  `dev/nightly.sh fuzz log1p 30 0x5eed` fuzzes for 30 seconds a species. A width the host lacks
+  `dev/nightly.sh fuzz log1p 30 0x5eed` fuzzes for 30 seconds a species (`Fuzz --draws N`
+  bounds each thread to N inputs as well, which a test uses, since a time limit draws fewer
+  inputs on a slower or busier machine). A width the host lacks
   is named in the output (`512: not on this host`). `NIGHTLY_JVM_ARGS` passes JVM options,
   `-XX:UseAVX=2 -XX:MaxVectorSize=32` or a planted fault:
   `NIGHTLY_JVM_ARGS=-Dvfdlibm.fault=exp.dropCorrection dev/nightly.sh sweep exp 1023/4096 0x5eed

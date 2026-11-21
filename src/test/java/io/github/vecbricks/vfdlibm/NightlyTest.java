@@ -60,6 +60,18 @@ class NightlyTest {
     assertEquals(Nightly.OK, status);
   }
 
+  @Test
+  void fuzzDrawsAreBoundedAndValidated() {
+    assumeTrue(Faults.planted() == null);
+    String out = dir.resolve("fuzz.txt").toString();
+    assertEquals(Nightly.OK, Fuzz.run(new String[] {
+      "--function", "exp", "--seed", "0x5eed", "--seconds", "600", "--draws", "4096",
+      "--threads", "2", "--out", out}));
+    assertEquals(Nightly.ERROR, Fuzz.run(new String[] {
+      "--function", "exp", "--seed", "0x5eed", "--seconds", "600", "--draws", "0",
+      "--threads", "2", "--out", out}));
+  }
+
   /**
    * Faults the fuzz cannot be asked to find: the inputs where they change a result are about one
    * in 2^29 of a window of 2^35 doubles, and only {@code Log1pTest}'s witnesses reach them.
@@ -67,8 +79,26 @@ class NightlyTest {
   private static final Set<String> NOT_FOR_THE_FUZZ = Set.of(Log1p.FOLD_SHORT_PATH);
 
   /**
-   * The fuzz finds each planted fault of the five functions in a second at most, but those of
-   * {@link #NOT_FOR_THE_FUZZ}.
+   * Inputs each fuzz thread draws in {@link #fuzzCatchesThePlantedFault}. The streams are fixed
+   * by the seed, so the fuzz finds each fault at one input index, the same at every species;
+   * only the time to reach it varies with the machine. Measured on a laptop, one stream per run,
+   * for the 20 faults the test runs: with the test's seed 0x5eed (first thread) the index is
+   * 4,096 for 16 faults and, for the others, 69,632 (exp.thresholdMoved), 57,344
+   * (exp.dropKForcing), 20,480 (expm1.dropKForcing) and 16,384 (log.thresholdMoved); the second
+   * thread's seed 0x5eee finds them at 24,576, 159,744, 110,592 and 4,096. Over 20 seeds the
+   * longest is 614,400 (exp.dropKForcing). A million inputs is 14 times the largest index of the
+   * test's own streams. The time was the trouble: a first block of 4,096 inputs takes 0.1 to
+   * 0.2 s here, JIT warm-up, and the 20,480 inputs of expm1.dropKForcing 0.38 s at 128 bits,
+   * of the one second the test used to allow. On GitHub's x86 runner (4 cores, 128 bits) the
+   * one second drew 32,768 inputs, 16,384 a thread, about 31,000 a second, one block short of
+   * that fault (run 44893905573, job 136815350908). Now the inputs are bounded and the seconds
+   * only end a hung run. The test takes 0.4 to 2.5 s here, 1.0 to 2.5 s at 128 bits.
+   */
+  private static final String DRAWS = "1000000";
+
+  /**
+   * The fuzz finds each planted fault of the five functions within {@link #DRAWS} inputs per
+   * thread, but those of {@link #NOT_FOR_THE_FUZZ}.
    */
   @Test
   @Tag("fault")
@@ -78,8 +108,8 @@ class NightlyTest {
     assumeTrue(!NOT_FOR_THE_FUZZ.contains(fault), "a fault the fuzz is not asked to find");
     String function = fault.substring(0, fault.indexOf('.'));
     int status = Fuzz.run(new String[] {
-      "--function", function, "--seed", "0x5eed", "--seconds", "1", "--threads", "2",
-      "--out", dir.resolve("fuzz.txt").toString()});
+      "--function", function, "--seed", "0x5eed", "--draws", DRAWS, "--seconds", "600",
+      "--threads", "2", "--out", dir.resolve("fuzz.txt").toString()});
     assertEquals(Nightly.MISMATCH, status, "the fuzz missed planted fault " + fault);
   }
 
