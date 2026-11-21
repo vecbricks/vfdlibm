@@ -82,7 +82,7 @@ class PairHarnessTest {
         new int[] {X_WORD, 0x3ff00000, 0}, new int[0], false, new double[] {1.0, 4.0});
     Fuzz.Edges yEdges = new Fuzz.Edges(
         new int[] {Y_WORD, 0x40000000, 0}, new int[0], false, new double[] {1.0, 2.0});
-    return new Nightly.PairFunction(id, PairHarnessTest::scalar,
+    return new Nightly.PairFunction(id, PairHarnessTest::scalar, PairBits.Candidates.OPERANDS,
         List.of(new Nightly.Arm2("Toy.masked", all, masked),
             new Nightly.Arm2("Toy.unmaskedOnly", all, null)),
         new Fuzz.PairEdges(xEdges, yEdges, Fuzz.PAIR_SPECIALS));

@@ -20,6 +20,7 @@ import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.BiFunction;
@@ -215,15 +216,18 @@ final class Nightly {
   record Arm2(String name, BinaryOperator<DoubleVector> all, Oracle.MaskedBinary masked) {}
 
   /**
-   * A function of two arguments: its oracle, every arm and where its branches are (for the
+   * A function of two arguments: its oracle, what its result may be on a lane of two NaNs with
+   * different bits ({@link PairBits}; no default), every arm and where its branches are (for the
    * {@link Fuzz}). No ported function is one yet, so {@link #KNOWN} is empty until a test or a
    * port registers one; a pair function that is not listed in nightly.yml is never run there.
    */
   record PairFunction(
-      String id, DoubleBinaryOperator oracle, List<Arm2> arms, Fuzz.PairEdges edges)
+      String id, DoubleBinaryOperator oracle, PairBits.Candidates candidates, List<Arm2> arms,
+      Fuzz.PairEdges edges)
       implements Subject {
 
     PairFunction {
+      Objects.requireNonNull(candidates, id + " declares no candidates for a lane of two NaNs");
       arms = List.copyOf(arms);
       if (arms.isEmpty() || edges.specials().length == 0
           || edges.x().words().length == 0 || edges.y().words().length == 0
@@ -511,14 +515,21 @@ final class Nightly {
     /** Records one lane that differed. {@code mask} is the vector's mask bits, or -1 unmasked. */
     synchronized void add(String arm, long mask, int lane, long x, long want, long got) {
       requireArity(1);
-      add(arm, mask, lane, x, 0L, want, got, false);
+      add(arm, mask, lane, x, 0L, String.format("0x%016x", want), got, false);
     }
 
     /** As {@link #add(String, long, int, long, long, long)}, for the pair {@code (x, y)}. */
     synchronized void add(
         String arm, long mask, int lane, long x, long y, long want, long got) {
       requireArity(2);
-      add(arm, mask, lane, x, y, want, got, true);
+      add(arm, mask, lane, x, y, String.format("0x%016x", want), got, true);
+    }
+
+    /** As the pair {@code add}, with the expected result said in words (two candidates). */
+    synchronized void add(
+        String arm, long mask, int lane, long x, long y, String expected, long got) {
+      requireArity(2);
+      add(arm, mask, lane, x, y, expected, got, true);
     }
 
     private void requireArity(int given) {
@@ -528,7 +539,7 @@ final class Nightly {
       }
     }
 
-    private void add(String arm, long mask, int lane, long x, long y, long want, long got,
+    private void add(String arm, long mask, int lane, long x, long y, String expected, long got,
         boolean pair) {
       count.incrementAndGet();
       String kind = arm + (mask < 0 ? " unmasked" : " masked");
@@ -541,9 +552,9 @@ final class Nightly {
           : String.format("x=0x%016x", x);
       String data = pair ? String.format("0x%016x 0x%016x", x, y) : String.format("0x%016x", x);
       String line = String.format(
-          "MISMATCH %s arm=%s masked=%s%s lane=%d %s expected=0x%016x actual=0x%016x",
+          "MISMATCH %s arm=%s masked=%s%s lane=%d %s expected=%s actual=0x%016x",
           context, arm, mask >= 0, mask >= 0 ? String.format(" mask=0x%x", mask) : "", lane,
-          inputs, want, got);
+          inputs, expected, got);
       if (printed < PRINTED) {
         printed++;
         System.out.println(line);
@@ -673,6 +684,7 @@ final class Nightly {
   static final class PairChecker implements BlockCheck {
 
     private final PairFunction function;
+    private final PairBits.Candidates candidates;
     private final VectorSpecies<Double> species;
     private final long maskSeed;
     private final Mismatches mismatches;
@@ -684,6 +696,7 @@ final class Nightly {
     PairChecker(
         PairFunction function, VectorSpecies<Double> species, long maskSeed, Mismatches sink) {
       this.function = function;
+      this.candidates = function.candidates();
       this.species = species;
       this.maskSeed = maskSeed;
       this.mismatches = sink;
@@ -716,8 +729,9 @@ final class Nightly {
           long bits = Double.doubleToRawLongBits(got[i]);
           long xb = Double.doubleToRawLongBits(xs[i]);
           long yb = Double.doubleToRawLongBits(ys[i]);
-          if (!PairBits.matches(xb, yb, want[i], bits)) {
-            mismatches.add(arm.name(), -1, i % lanes, xb, yb, want[i], bits);
+          if (!PairBits.matches(candidates, xb, yb, want[i], bits)) {
+            mismatches.add(arm.name(), -1, i % lanes, xb, yb,
+                PairBits.expected(candidates, xb, yb, want[i]), bits);
           }
         }
         if (arm.masked() == null) {
@@ -734,8 +748,11 @@ final class Nightly {
             boolean active = (live >>> lane & 1) != 0;
             long expected = active ? want[i + lane] : x;
             long bits = Double.doubleToRawLongBits(got[i + lane]);
-            if (active ? !PairBits.matches(x, y, expected, bits) : bits != expected) {
-              mismatches.add(arm.name(), live, lane, x, y, expected, bits);
+            if (active ? !PairBits.matches(candidates, x, y, expected, bits) : bits != expected) {
+              mismatches.add(arm.name(), live, lane, x, y,
+                  active ? PairBits.expected(candidates, x, y, expected)
+                      : String.format("0x%016x", expected),
+                  bits);
             }
           }
         }

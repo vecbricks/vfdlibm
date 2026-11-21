@@ -34,10 +34,14 @@ import org.opentest4j.AssertionFailedError;
  * a result that is exactly one argument's bits quieted passes on a lane of two different NaNs, and
  * a canonical NaN, a NaN of a third payload, the wrong sign, or one payload bit off on any other
  * kind of lane is caught, by {@code Oracle}'s asserts, masked and not, and by the nightly's pair
- * check, whose mismatch file replays the lane.
+ * check, whose mismatch file replays the lane. A function that declares the candidates of the
+ * other kind (operands for one that clears the sign of a NaN, magnitudes for one that keeps it),
+ * and one that declares none, fail too.
  */
 class PairNanTest {
 
+  private static final PairBits.Candidates OPERANDS = PairBits.Candidates.OPERANDS;
+  private static final PairBits.Candidates MAGNITUDES = PairBits.Candidates.MAGNITUDES;
   private static final long QUIET = PairBits.QUIET;
   private static final long CANONICAL = 0x7ff8000000000000L;
 
@@ -128,34 +132,72 @@ class PairNanTest {
   @Test
   void theRuleOnEachKindOfLane() {
     long q = QUIET;
-    // two NaNs with different bits: either argument's bits, quieted, all 64 bits
-    assertTrue(PairBits.matches(A, B, 0L, A | q));
-    assertTrue(PairBits.matches(A, B, 0L, B | q));
-    assertTrue(PairBits.matches(C, D, 0L, C | q));
-    assertFalse(PairBits.matches(A, B, A | q, CANONICAL));
-    assertFalse(PairBits.matches(A, B, A | q, (A | q) ^ 1));
-    assertFalse(PairBits.matches(A, B, A | q, (A | q) ^ (1L << 63)));
-    assertFalse(PairBits.matches(C, D, C | q, C), "a signalling NaN is quieted");
+    PairBits.Candidates op = PairBits.Candidates.OPERANDS;
+    // two NaNs with different bits: either argument's bits, quieted, all 64 bits, and the
+    // oracle's bits too
+    assertTrue(PairBits.matches(op, A, B, A | q, A | q));
+    assertTrue(PairBits.matches(op, A, B, B | q, A | q));
+    assertTrue(PairBits.matches(op, A, B, A | q, B | q));
+    assertTrue(PairBits.matches(op, C, D, D | q, C | q));
+    assertFalse(PairBits.matches(op, A, B, A | q, CANONICAL));
+    assertFalse(PairBits.matches(op, A, B, A | q, (A | q) ^ 1));
+    assertFalse(PairBits.matches(op, A, B, A | q, (A | q) ^ (1L << 63)));
+    assertFalse(PairBits.matches(op, C, D, C | q, C), "a signalling NaN is quieted");
+    assertFalse(PairBits.matches(op, A, B, CANONICAL, A | q), "the oracle's bits are a candidate");
     // the same bits: the oracle's, raw
-    assertTrue(PairBits.matches(A, A, A, A));
-    assertFalse(PairBits.matches(A, A, A, CANONICAL));
-    assertFalse(PairBits.matches(C, C, C | q, C));
+    assertTrue(PairBits.matches(op, A, A, A, A));
+    assertFalse(PairBits.matches(op, A, A, A, CANONICAL));
+    assertFalse(PairBits.matches(op, C, C, C | q, C));
     // one NaN: the oracle's, raw, though the NaN argument's bits would be accepted on a pair
-    assertTrue(PairBits.matches(A, bits(1.0), A, A));
-    assertFalse(PairBits.matches(A, bits(1.0), A, A ^ 1));
-    assertFalse(PairBits.matches(bits(1.0), B, B | q, (B | q) ^ 1));
+    assertTrue(PairBits.matches(op, A, bits(1.0), A, A));
+    assertFalse(PairBits.matches(op, A, bits(1.0), A, A ^ 1));
+    assertFalse(PairBits.matches(op, bits(1.0), B, B | q, (B | q) ^ 1));
     // no NaN: raw, a NaN made from infinities included
-    assertTrue(PairBits.matches(bits(1.0), bits(2.0), bits(2.5), bits(2.5)));
-    assertFalse(PairBits.matches(bits(1.0), bits(2.0), bits(2.5), bits(2.5) + 1));
-    assertFalse(PairBits.matches(bits(Double.POSITIVE_INFINITY), bits(Double.NEGATIVE_INFINITY),
-        CANONICAL, CANONICAL | (1L << 63)));
+    assertTrue(PairBits.matches(op, bits(1.0), bits(2.0), bits(2.5), bits(2.5)));
+    assertFalse(PairBits.matches(op, bits(1.0), bits(2.0), bits(2.5), bits(2.5) + 1));
+    assertFalse(PairBits.matches(op, bits(Double.POSITIVE_INFINITY),
+        bits(Double.NEGATIVE_INFINITY), CANONICAL, CANONICAL | (1L << 63)));
     // a NaN's bits are never taken for a number's: infinity is not a NaN
     assertFalse(PairBits.isNaN(bits(Double.POSITIVE_INFINITY)));
     assertTrue(PairBits.isNaN(0xfff0000000000001L));
     // one pair that quieting makes alike is still a pair of different bits
-    assertTrue(PairBits.matches(C, C | q, 0L, C | q));
-    assertFalse(PairBits.matches(C, C | q, 0L, C));
+    assertTrue(PairBits.matches(op, C, C | q, C | q, C | q));
+    assertFalse(PairBits.matches(op, C, C | q, C | q, C));
   }
+
+  @Test
+  void theMagnitudesDeclarationAcceptsTheArgumentsWithTheSignCleared() {
+    long q = QUIET;
+    long abs = ~(1L << 63);
+    PairBits.Candidates mag = PairBits.Candidates.MAGNITUDES;
+    // B is negative: its candidate is its payload quieted, positive
+    assertTrue(PairBits.matches(mag, B, A, (B | q) & abs, (B | q) & abs));
+    assertTrue(PairBits.matches(mag, B, A, A | q, (B | q) & abs));
+    assertFalse(PairBits.matches(mag, B, A, (B | q) & abs, B | q), "the sign is kept");
+    assertFalse(PairBits.matches(mag, B, A, B | q, (B | q) & abs), "the oracle's sign is kept");
+    assertFalse(PairBits.matches(mag, B, A, (B | q) & abs, CANONICAL));
+    // a lane that is not two NaNs with different bits is raw, the sign included
+    assertTrue(PairBits.matches(mag, B, B, (B | q) & abs, (B | q) & abs));
+    assertFalse(PairBits.matches(mag, B, B, (B | q) & abs, B | q));
+    assertFalse(PairBits.matches(mag, B, bits(1.0), (B | q) & abs, B | q));
+  }
+
+  @Test
+  void aFunctionThatDeclaresNothingFails() {
+    Fuzz.Edges edges =
+        new Fuzz.Edges(new int[] {0x3ff00000}, new int[0], false, new double[] {1.0});
+    List<Nightly.Arm2> arms = List.of(new Nightly.Arm2("Toy", (x, y) -> x, null));
+    Fuzz.PairEdges pairEdges = new Fuzz.PairEdges(edges, edges, Fuzz.PAIR_SPECIALS);
+    assertThrows(NullPointerException.class, () -> new Nightly.PairFunction(
+        "toy2-none", PairHarnessTest::scalar, null, arms, pairEdges));
+    assertThrows(NullPointerException.class, () -> PairBits.matches(null, A, B, A, A));
+    VectorSpecies<Double> species = DoubleVector.SPECIES_128;
+    assertThrows(NullPointerException.class, () -> Oracle.assertPair("none", species, null,
+        (x, y) -> x, PairHarnessTest::scalar, column(0), column(1)));
+    assertThrows(NullPointerException.class, () -> Oracle.assertPairMasked("none", species, null,
+        (x, y, live) -> x, PairHarnessTest::scalar, column(0), column(1), 7));
+  }
+
 
   @ParameterizedTest
   @EnumSource(VectorWidth.class)
@@ -164,10 +206,10 @@ class PairNanTest {
     for (Toy toy : Toy.values()) {
       BinaryOperator<DoubleVector> all = (x, y) -> apply(toy, x, y);
       Oracle.MaskedBinary masked = (x, y, live) -> x.blend(apply(toy, x, y), live);
-      Runnable plain = () -> Oracle.assertPair(
-          toy.name(), species, all, PairHarnessTest::scalar, column(0), column(1));
-      Runnable maskedCheck = () -> Oracle.assertPairMasked(
-          toy.name(), species, masked, PairHarnessTest::scalar, column(0), column(1), 7);
+      Runnable plain = () -> Oracle.assertPair(toy.name(), species, OPERANDS, all,
+          PairHarnessTest::scalar, column(0), column(1));
+      Runnable maskedCheck = () -> Oracle.assertPairMasked(toy.name(), species, OPERANDS, masked,
+          PairHarnessTest::scalar, column(0), column(1), 7);
       for (Runnable check : List.of(plain, maskedCheck)) {
         if (toy.caught) {
           assertThrows(AssertionFailedError.class, check::run, toy + " at " + species);
@@ -186,7 +228,8 @@ class PairNanTest {
     // the oracle's bits on two different NaNs are those of the sum, which FIRST changes on a lane
     // where the sum keeps the second argument; the canonical NaN is neither
     BinaryOperator<DoubleVector> canonical = (x, y) -> apply(Toy.CANONICAL_NAN, x, y);
-    Oracle.assertPair("first", species, first, PairHarnessTest::scalar, column(0), column(1));
+    Oracle.assertPair("first", species, OPERANDS, first, PairHarnessTest::scalar,
+        column(0), column(1));
     assertThrows(AssertionFailedError.class, () -> Oracle.assertBinary(
         "canonical", species, canonical, PairHarnessTest::scalar, column(0), column(1)));
     double[] xs = {Double.longBitsToDouble(A), Double.longBitsToDouble(A)};
@@ -196,7 +239,7 @@ class PairNanTest {
     DoubleBinaryOperator wantsFirst = (x, y) -> Double.longBitsToDouble(bits(x) | QUIET);
     assertThrows(AssertionFailedError.class,
         () -> Oracle.assertBinary("second", species, second, wantsFirst, xs, ys));
-    Oracle.assertPair("second", species, second, wantsFirst, xs, ys);
+    Oracle.assertPair("second", species, OPERANDS, second, wantsFirst, xs, ys);
   }
 
   @ParameterizedTest
@@ -214,17 +257,23 @@ class PairNanTest {
       return DoubleVector.fromArray(species, r, 0);
     };
     assertThrows(AssertionFailedError.class, () -> Oracle.assertPairMasked(
-        "quietsX", species, quietsX, PairHarnessTest::scalar, column(0), column(1), 7));
+        "quietsX", species, OPERANDS, quietsX, PairHarnessTest::scalar, column(0), column(1), 7));
   }
 
   private long mismatches(Toy toy, VectorSpecies<Double> species, double[] xs, double[] ys,
       Path file) throws IOException {
+    return mismatches("toy2-nan-" + toy.name().toLowerCase(), PairHarnessTest::scalar, OPERANDS,
+        (x, y) -> apply(toy, x, y), species, xs, ys, file);
+  }
+
+  private long mismatches(String id, DoubleBinaryOperator oracle, PairBits.Candidates candidates,
+      BinaryOperator<DoubleVector> arm, VectorSpecies<Double> species, double[] xs, double[] ys,
+      Path file) throws IOException {
     Fuzz.Edges edges =
         new Fuzz.Edges(new int[] {0x3ff00000}, new int[0], false, new double[] {1.0});
-    Nightly.PairFunction f = new Nightly.PairFunction("toy2-nan-" + toy.name().toLowerCase(),
-        PairHarnessTest::scalar,
-        List.of(new Nightly.Arm2("Toy.masked", (x, y) -> apply(toy, x, y),
-            (x, y, live) -> x.blend(apply(toy, x, y), live))),
+    Nightly.PairFunction f = new Nightly.PairFunction(id, oracle, candidates,
+        List.of(new Nightly.Arm2(
+            "Toy.masked", arm, (x, y, live) -> x.blend(arm.apply(x, y), live))),
         new Fuzz.PairEdges(edges, edges, Fuzz.PAIR_SPECIALS));
     try (Nightly.Mismatches sink = new Nightly.Mismatches(file, "header\nreplay: x", "ctx", 2)) {
       f.newChecker(species, 5, sink).check(xs, ys, xs.length, 0);
@@ -257,6 +306,64 @@ class PairNanTest {
       Path again = dir.resolve("replay-" + toy + "-" + width + ".txt");
       assertTrue(mismatches(toy, species, xs, ys, again) > 0,
           "the replay of " + toy + " at " + species);
+    }
+  }
+
+  /** A NaN result with its sign cleared, as fdlibm's hypot adds absolute values. */
+  private static DoubleVector signCleared(DoubleVector r) {
+    double[] v = r.toArray();
+    for (int lane = 0; lane < v.length; lane++) {
+      long b = bits(v[lane]);
+      v[lane] = Double.longBitsToDouble(PairBits.isNaN(b) ? b & ~(1L << 63) : b);
+    }
+    return DoubleVector.fromArray(r.species(), v, 0);
+  }
+
+  private static double signCleared(double r) {
+    long b = bits(r);
+    return Double.longBitsToDouble(PairBits.isNaN(b) ? b & ~(1L << 63) : b);
+  }
+
+  /**
+   * A function (its oracle and its arm either keep the sign of a NaN or clear it) and what it
+   * declares. The oracle is {@code StrictMath}'s stand-in; the arm is the port.
+   */
+  private record Declared(String name, boolean oracleClears, boolean armClears,
+      PairBits.Candidates candidates, boolean caught) {}
+
+  private static final List<Declared> DECLARED = List.of(
+      new Declared("atan2-like, operands", false, false, OPERANDS, false),
+      new Declared("hypot-like, magnitudes", true, true, MAGNITUDES, false),
+      new Declared("hypot-like declared as operands", true, true, OPERANDS, true),
+      new Declared("atan2-like declared as magnitudes", false, false, MAGNITUDES, true),
+      new Declared("hypot-like port that keeps the sign", true, false, MAGNITUDES, true));
+
+  @ParameterizedTest
+  @EnumSource(VectorWidth.class)
+  void aFunctionDeclaredTheWrongWayFailsInEveryCheck(VectorWidth width) throws IOException {
+    VectorSpecies<Double> species = width.species();
+    for (Declared d : DECLARED) {
+      DoubleBinaryOperator oracle = (x, y) -> d.oracleClears
+          ? signCleared(PairHarnessTest.scalar(x, y)) : PairHarnessTest.scalar(x, y);
+      BinaryOperator<DoubleVector> arm = (x, y) -> {
+        DoubleVector r = apply(Toy.BASE, x, y);
+        return d.armClears ? signCleared(r) : r;
+      };
+      Oracle.MaskedBinary masked = (x, y, live) -> x.blend(arm.apply(x, y), live);
+      List<Runnable> checks = List.of(
+          () -> Oracle.assertPair(d.name, species, d.candidates, arm, oracle, column(0), column(1)),
+          () -> Oracle.assertPairMasked(
+              d.name, species, d.candidates, masked, oracle, column(0), column(1), 7));
+      for (Runnable check : checks) {
+        if (d.caught) {
+          assertThrows(AssertionFailedError.class, check::run, d.name + " at " + species);
+        } else {
+          check.run();
+        }
+      }
+      long found = mismatches("toy2-decl", oracle, d.candidates, arm, species, column(0),
+          column(1), dir.resolve("decl-" + width + "-" + Math.abs(d.name.hashCode()) + ".txt"));
+      assertEquals(d.caught, found > 0, d.name + " by the nightly's check at " + species);
     }
   }
 }
