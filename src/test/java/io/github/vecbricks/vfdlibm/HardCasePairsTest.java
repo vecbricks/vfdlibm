@@ -40,6 +40,7 @@ class HardCasePairsTest {
       for (int scale = 0; scale < 3; scale++) {
         for (int k = 0; k < 4; k++) {
           // x is +2^j then -2^j, and for each y is +|t| * 2^j then -|t| * 2^j
+          // the file's first column is atan2's first argument, y: Pairs.x() is that column
           double y = pairs.x()[at];
           double x = pairs.y()[at];
           double power = Math.scalb(1.0, SCALES[scale]);
@@ -55,7 +56,8 @@ class HardCasePairsTest {
           at++;
         }
       }
-      assertTrue(t > 0 && Double.isFinite(t), "t of group " + group);
+      // inside e_atan2.c's range where atan(|y/x|) is taken for every sign of x: |k| <= 60
+      assertTrue(t > 0x1p-60 && t < 0x1p60, "t of group " + group);
       assertTrue(seen.add(t), "t of group " + group + " is a repeat");
     }
     assertEquals(INPUTS, seen.size());

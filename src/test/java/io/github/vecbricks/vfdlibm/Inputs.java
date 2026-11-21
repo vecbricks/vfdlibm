@@ -187,8 +187,10 @@ final class Inputs {
 
   /**
    * The hard cases of a function of two arguments, from {@code hard-cases/<function>.txt}: the
-   * file says {@link #PAIR_HEADER} before its first input, and each input is the raw bits of
-   * {@code x} and of {@code y}, as {@code 0x} and sixteen hex digits each, one pair a line.
+   * file says {@link #PAIR_HEADER} before its first input, and each input is the raw bits of the
+   * first and of the second argument ({@code x} and {@code y} of {@link Pairs}), as {@code 0x}
+   * and sixteen hex digits each, one pair a line. For {@code atan2(y, x)} the first column is
+   * {@code y}.
    */
   static Pairs hardCasePairs(String function) {
     String resource = "hard-cases/" + function + ".txt";
