@@ -11,14 +11,12 @@ package io.github.vecbricks.vfdlibm;
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.junit.jupiter.api.Assertions.assertTimeoutPreemptively;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.time.Duration;
 import java.util.List;
 import java.util.Set;
 import org.junit.jupiter.api.Tag;
@@ -31,7 +29,8 @@ import org.junit.jupiter.params.provider.EnumSource;
  * Keeps the nightly runs, {@link Sweep} and {@link Fuzz}, working between nights: each runs on a
  * few thousand inputs and must pass, their mismatch file must be in {@code Inputs.hardCases}
  * form, and in each fault run but {@link #NOT_FOR_THE_FUZZ}'s the fuzz must catch the planted
- * fault, so the nightly can fail.
+ * fault within {@link #DRAWS} inputs a thread, stopping at its first mismatch, so the nightly
+ * can fail.
  */
 class NightlyTest {
 
@@ -66,11 +65,12 @@ class NightlyTest {
   void fuzzDrawsAreBoundedAndValidated() {
     assumeTrue(Faults.planted() == null);
     String out = dir.resolve("fuzz.txt").toString();
-    // A run that ignored --draws would go on for the 60 seconds: 30 fail it.
-    assertEquals(Nightly.OK, assertTimeoutPreemptively(Duration.ofSeconds(30), () ->
-        Fuzz.run(new String[] {
-          "--function", "exp", "--seed", "0x5eed", "--seconds", "60", "--draws", "4096",
-          "--threads", "2", "--out", out})));
+    // A run that ignored --draws would end itself at the 20 seconds, with nothing left running.
+    long start = System.nanoTime();
+    assertEquals(Nightly.OK, Fuzz.run(new String[] {
+      "--function", "exp", "--seed", "0x5eed", "--seconds", "20", "--draws", "4096",
+      "--threads", "2", "--out", out}));
+    assertTrue(System.nanoTime() - start < 10_000_000_000L, "the run ended on its seconds");
     assertEquals(Nightly.ERROR, Fuzz.run(new String[] {
       "--function", "exp", "--seed", "0x5eed", "--seconds", "600", "--draws", "0",
       "--threads", "2", "--out", out}));
@@ -102,7 +102,9 @@ class NightlyTest {
    * first thread's alone, 69,632). The time was the trouble: on GitHub's x86 runner (4 cores, 128
    * bits) the one second the test used to allow drew 32,768 inputs, 16,384 a thread, one block
    * short of expm1.dropKForcing's 20,480 (run 44893905573, job 136815350908). Now the inputs are
-   * bounded and the seconds only end a hung run.
+   * bounded and the seconds only end a hung run. The test also passes {@code --stop-after 1}, so
+   * a fault found costs the inputs up to it and the bound is paid in full only by a fault the
+   * fuzz misses, which fails.
    */
   private static final String DRAWS = "1000000";
 
@@ -118,8 +120,8 @@ class NightlyTest {
     assumeTrue(!NOT_FOR_THE_FUZZ.contains(fault), "a fault the fuzz is not asked to find");
     String function = fault.substring(0, fault.indexOf('.'));
     int status = Fuzz.run(new String[] {
-      "--function", function, "--seed", "0x5eed", "--draws", DRAWS, "--seconds", "600",
-      "--threads", "2", "--out", dir.resolve("fuzz.txt").toString()});
+      "--function", function, "--seed", "0x5eed", "--draws", DRAWS, "--stop-after", "1",
+      "--seconds", "600", "--threads", "2", "--out", dir.resolve("fuzz.txt").toString()});
     assertEquals(Nightly.MISMATCH, status, "the fuzz missed planted fault " + fault);
   }
 

@@ -48,7 +48,9 @@ import jdk.incubator.vector.VectorSpecies;
  * <p>{@code --draws} bounds each thread to that many inputs (rounded up to a block), besides
  * {@code --seconds}: a run that ends on it, with no mismatch found first, draws the same inputs
  * whatever the machine's load, which a time limit does not. {@code --seconds} stays required, and
- * a run that it ends first has drawn fewer inputs than {@code --draws}.
+ * a run that it ends first has drawn fewer inputs than {@code --draws}. {@code --stop-after N}
+ * ends the run once N lane checks have differed (each thread stops after its block), so that a
+ * test which only asks whether the fuzz finds a fault pays for the inputs up to it, no more.
  *
  * <p>Each thread draws from its own stream, {@code seed} mixed with the thread's number, so a run
  * is the same inputs in the same order per thread; how far each thread gets depends on the time,
@@ -192,22 +194,24 @@ final class Fuzz {
     long seed;
     double budget;
     long draws;
+    long stopAfter;
     int threads;
     Path out;
     try {
       Map<String, String> options =
-          Nightly.options(
-              args, "function", "species", "seed", "seconds", "draws", "threads", "out");
+          Nightly.options(args, "function", "species", "seed", "seconds", "draws",
+              "stop-after", "threads", "out");
       function = Nightly.Function.of(Nightly.require(options, "function"));
       species = Nightly.species(options.getOrDefault("species", "preferred"));
       seed = Nightly.parseNumber(Nightly.require(options, "seed"));
       budget = Double.parseDouble(Nightly.require(options, "seconds"));
       draws = Long.parseLong(options.getOrDefault("draws", "" + Long.MAX_VALUE));
+      stopAfter = Long.parseLong(options.getOrDefault("stop-after", "" + Long.MAX_VALUE));
       threads = Integer.parseInt(
           options.getOrDefault("threads", "" + Runtime.getRuntime().availableProcessors()));
-      if (threads < 1 || !(budget > 0) || draws < 1) {
+      if (threads < 1 || !(budget > 0) || draws < 1 || stopAfter < 1) {
         throw new IllegalArgumentException(
-            "--threads, --seconds and --draws take positive numbers");
+            "--threads, --seconds, --draws and --stop-after take positive numbers");
       }
       out = Path.of(options.getOrDefault("out", "target/nightly/fuzz-mismatches.txt"));
     } catch (IllegalArgumentException e) {
@@ -248,7 +252,8 @@ final class Fuzz {
                 new Nightly.Checker(function, species, maskSeed, mismatches);
             double[] xs = new double[BLOCK];
             for (long position = 0; position < draws && System.nanoTime() < deadline
-                && !mismatches.enough(); position += BLOCK) {
+                && mismatches.count() < stopAfter && !mismatches.enough();
+                position += BLOCK) {
               for (int i = 0; i < BLOCK; i++) {
                 xs[i] = draw(random, edges);
               }

@@ -552,7 +552,8 @@ re-trying a settled question.
   high-word branch is not seeing a moved split. The planted `log.thresholdMoved`, a split one
   step off on the high word, gave no mismatch on sweep stripe `255/256` and 2 on stripe `0/4`,
   both through the seed's low word, while the fuzz, which draws each split's neighbourhood,
-  catches it within 16,384 inputs (`NightlyTest`'s fault runs). The sweep is for bands nothing
+  catches it at input 16,384 of the first thread at seed 0x5eed (`NightlyTest`'s fault runs;
+  `NightlyTest.DRAWS` has the indices of the others). The sweep is for bands nothing
   samples; the fuzz is for splits.
 - **A slice by hand.** After `mvn -B -q test-compile`, `dev/nightly.sh sweep exp 1023/4096 0x5eed
   256` sweeps the 2^20 high words of `[1, 2)` at 256 bits (a second or two);
