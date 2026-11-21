@@ -1,7 +1,8 @@
 # Working in vfdlibm, for agents and people alike
 
 vfdlibm ports fdlibm's double functions to the Java Vector API, each lane bit-identical to
-`java.lang.StrictMath`. `PLAN.md` is the plan and the rules; read it before changing anything.
+`java.lang.StrictMath`, but for a two-NaN lane of a function of two arguments ("Releases").
+`PLAN.md` is the plan and the rules; read it before changing anything.
 
 ## The rules that matter most
 
@@ -9,22 +10,23 @@ vfdlibm ports fdlibm's double functions to the Java Vector API, each lane bit-id
   read OpenJDK's `FdLibm.java`, HotSpot's math stubs or glibc in order to write code here; they are
   GPL or LGPL. `StrictMath` is the oracle, called from tests, never a source to copy.
 - **Bit identity.** A function is done when every test compares its lanes with `StrictMath` by
-  `Double.doubleToRawLongBits` and passes, at every vector width the host has.
-- **Same result, proven.** Every lane's result stays bit-identical to `StrictMath`. A port
-  follows fdlibm's C operation by operation, or computes differently where a written proof shows
-  the result equal for every input. The proof goes in `PROOFS.md` as a numbered lemma: its
-  hypotheses (the input domain, each hinge condition with the range where it holds and why the
-  lanes are in it), the IEEE property it rests on, the proof, and the test that checks its
-  hinges, which must fail if a hinge were false; the code carries a short Javadoc pointer to it.
-  A proof is informal (step by step, citing each IEEE property used) or formal: machine-checked,
-  or reduced to a finite check by a theorem, such as monotonicity of correctly rounded operations
-  plus evaluation at the boundary doubles. Machine-checked proofs follow the conventions of
-  Varka's `sql/varka/proofs/` (SMT-LIB over integers, a double as `M * 2^E` with a round-to-nearest
-  relation per binade, `unsat` checks as the proofs and `sat` checks for non-vacuity and for a
-  constant changed by one being refuted); here they live in `proofs/`, run by `dev/prove.sh` as
-  `proofs/README.md` describes. Fused multiply-add, reassociation and division by a
-  reciprocal stay out because they change results in general, so no proof covers them as a
-  rule; a specific use proven equal for every input would follow the proof rule like any other.
+  `Double.doubleToRawLongBits` and passes, at every vector width the host has. A function of two
+  arguments is compared by `PairBits`, which relaxes only a lane of two NaNs with different bits.
+- **Same result, proven.** Every lane's result stays bit-identical to `StrictMath` (the two-NaN lane
+  aside, "Releases"). A port follows fdlibm's C operation by operation, or computes differently
+  where a written proof shows the result equal for every input. The proof goes in `PROOFS.md` as a
+  numbered lemma: its hypotheses (the input domain, each hinge condition with the range where it
+  holds and why the lanes are in it), the IEEE property it rests on, the proof, and the test that
+  checks its hinges, which must fail if a hinge were false; the code carries a short Javadoc pointer
+  to it. A proof is informal (step by step, citing each IEEE property used) or formal:
+  machine-checked, or reduced to a finite check by a theorem, such as monotonicity of correctly
+  rounded operations plus evaluation at the boundary doubles. Machine-checked proofs follow the
+  conventions of Varka's `sql/varka/proofs/` (SMT-LIB over integers, a double as `M * 2^E` with a
+  round-to-nearest relation per binade, `unsat` checks as the proofs and `sat` checks for
+  non-vacuity and for a constant changed by one being refuted); here they live in `proofs/`, run by
+  `dev/prove.sh` as `proofs/README.md` describes. Fused multiply-add, reassociation and division by
+  a reciprocal stay out because they change results in general, so no proof covers them as a rule; a
+  specific use proven equal for every input would follow the proof rule like any other.
 
 ## Build and test
 
@@ -46,10 +48,10 @@ vfdlibm ports fdlibm's double functions to the Java Vector API, each lane bit-id
   and then one forked surefire execution per fault, running only the tests tagged `fault`.
   A new fault goes in `PlantedFaultTest.CATCHERS` with the check that must catch it, and gets an
   execution in `pom.xml`; `PlantedFaultTest` fails if either is missing.
-- The harness is in `src/test/java`: `Oracle` compares lanes with `StrictMath` by raw bits,
-  `Inputs` makes the inputs, `VectorWidth` runs a test at 128, 256 and 512 bits and the preferred
-  species, and `PlantedFaultTest` requires each fault planted through `Faults` (in the main
-  sources) to be caught by its check. `HarnessSelfTest` tests them.
+- The harness is in `src/test/java`: `Oracle` compares lanes with `StrictMath` by raw bits (by
+  `PairBits` for two arguments), `Inputs` makes the inputs, `VectorWidth` runs a test at 128, 256
+  and 512 bits and the preferred species, and `PlantedFaultTest` requires each fault planted through
+  `Faults` (in the main sources) to be caught by its check. `HarnessSelfTest` tests them.
 - A width wider than the host's vectors is skipped. To see an AVX2 host's skips on an AVX-512
   one: `mvn -B test -Dvfdlibm.test.jvmArgs=-XX:MaxVectorSize=32`. That keeps AVX-512's
   instructions at 256 bits, though: to make C2 compile as on an AVX2 host such as the EPYC
@@ -84,7 +86,8 @@ vfdlibm ports fdlibm's double functions to the Java Vector API, each lane bit-id
   otherwise (`ExpKindsBench`), so CI leaves it out; check it by name and on its own inputs
   before reading its times (`--include` with `--inputs`; the command is in its Javadoc). Its
   `setUp` must throw on an `inputs` value it does not know, and a test must pin that, or a row
-  named for one kind could pass on another's data.
+  named for one kind could pass on another's data. A raw-operator row (`SqrtBenchmark`) may take
+  the `*Benchmark` name.
 
 ## Lessons
 
@@ -173,18 +176,24 @@ vfdlibm is released to Maven Central as `io.github.vecbricks:vfdlibm`, the way v
 sees (the API, a behaviour, a speed worth quoting) adds one line under `Unreleased`, in Added,
 Changed or Fixed; a change to tests, docs or the build alone does not.
 
-**The promise, while the version is 0.x.** A minor version may break the public API and a patch
-may not. Adding a function is a patch. Changing an arm (how a function reaches its result: the
-blend, the per-lane finish, the order of a branch) is a patch too, because every arm gives the
-same bits. 0.1.x supports JDK 25 only (`README.md`, "Supported JDKs"). What no version may
-change is the contract: **each lane of each function equals
-`StrictMath`'s result on that input, by `Double.doubleToRawLongBits`**. A result that differs
-from `StrictMath`'s is a bug and a fix, never a breaking change. The property `vfdlibm.fault`
-and the fault names are for this project's tests only: they are not part of the public API or of
-the compatibility promise, and any release, a patch included, may rename or remove them. With the
-property unset, the results are unchanged, and each lane still equals `StrictMath`'s. A breaking
-change has a changelog line that starts with `**Breaking:**` and says what a client must do, and
-its pull request says the same. 1.0.0 promises that the surface stays; it is not scheduled.
+**The promise, while the version is 0.x.** A minor version may break the public API and a patch may
+not. Adding a function is a patch. Changing an arm (how a function reaches its result: the blend,
+the per-lane finish, the order of a branch) is a patch too, because every arm gives the same bits
+(on a two-NaN lane, one of the declared candidates). 0.1.x supports JDK 25 only (`README.md`,
+"Supported JDKs"). What no version may change is the contract: **each lane of each function equals
+`StrictMath`'s result on that input, by `Double.doubleToRawLongBits`**, NaN payloads included. One
+exception: a lane of a function of two arguments where both arguments are NaN with different bits is
+one of two candidates the function declares, the arguments' bits with the quiet bit set (`OPERANDS`:
+`atan2`, `pow`) or the same with the sign cleared (`MAGNITUDES`: `hypot`), and which one is not
+specified, since `StrictMath`'s own choice varies by JIT tier. Every other lane of such a function,
+and every lane of a function of one argument (its NaN results do not vary by tier), keeps the
+raw-bit rule. Outside that exception, a result that differs from `StrictMath`'s is a bug and a fix,
+never a breaking change. The property `vfdlibm.fault` and the fault names are for this project's
+tests only: they are not part of the public API or of the compatibility promise, and any release, a
+patch included, may rename or remove them. With the property unset, the results are unchanged, and
+each lane still meets that contract. A breaking change has a changelog line that starts with
+`**Breaking:**` and says what a client must do, and its pull request says the same. 1.0.0 promises
+that the surface stays; it is not scheduled.
 
 **The release is owner-run, from a tag.** `.github/workflows/release.yml` is a dry run only: it
 publishes nothing and holds no secret; it shows on GitHub's runners that a tag would build, sign

@@ -3,7 +3,8 @@
 ## 1. Goal
 
 Vector API versions of fdlibm's double functions, each lane bit-identical to
-`java.lang.StrictMath`, released as a small library under `io.github.vecbricks`.
+`java.lang.StrictMath` (a two-NaN lane of a function of two arguments aside), released as a small
+library under `io.github.vecbricks`.
 
 ## 2. How it grows: one function at a time, with Varka
 
@@ -15,7 +16,8 @@ function is ported here and in Varka's kernel together, and the two are cross-ch
    files are committed unchanged under `reference/fdlibm-5.3/`, and a port cites the one it follows.
    The port may compute differently from the C where a proof in `PROOFS.md` shows every result
    equal (section 6).
-2. **Test it here** against `StrictMath`, lane by lane and bit for bit (section 4).
+2. **Test it here** against `StrictMath`, lane by lane and bit for bit (section 4;
+   a two-NaN lane of a function of two arguments by `PairBits`).
 3. **Build Varka's side.** Varka's kernel emits the same sequence of operations as its own IR
    nodes. A large function body is not inlined by C2, so a call into the library from a kernel
    would box the vectors, and Varka uses this library as its reference rather than calling it.
@@ -136,14 +138,14 @@ five are a later, optional set; the large-argument reduction of the trigonometri
   copy from or translate OpenJDK's `FdLibm.java`, HotSpot's Intel LIBM stubs or glibc, which are
   GPL or LGPL.
 - The result must be the same; the implementation may differ. Every lane stays bit-identical to
-  `StrictMath`, and a port may compute differently from the C only where a written proof, formal
-  or informal, shows the result equal for every input. Informal: step by step, citing each IEEE
-  property used and each hinge condition, with the input range where it holds and why the lanes
-  are in it. Formal: machine-checked, following Varka's `sql/varka/proofs/` conventions, or
-  reduced to a finite check by a theorem (for example, monotonicity of correctly rounded
-  operations plus evaluation at the boundary doubles). Proofs live in `PROOFS.md` as numbered
-  lemmas (statement, hypotheses, proof, and the test that checks the hinges, which must fail if a
-  hinge were false), with a short Javadoc pointer at the code.
+  `StrictMath` (a two-NaN lane of a function of two arguments aside), and a port may compute
+  differently from the C only where a written proof, formal or informal, shows the result equal for
+  every input. Informal: step by step, citing each IEEE property used and each hinge condition, with
+  the input range where it holds and why the lanes are in it. Formal: machine-checked, following
+  Varka's `sql/varka/proofs/` conventions, or reduced to a finite check by a theorem (for example,
+  monotonicity of correctly rounded operations plus evaluation at the boundary doubles). Proofs live
+  in `PROOFS.md` as numbered lemmas (statement, hypotheses, proof, and the test that checks the
+  hinges, which must fail if a hinge were false), with a short Javadoc pointer at the code.
 - No fused multiply-add, no reassociation, no division by a reciprocal: they change results in
   general, so no proof covers them as a rule. A specific use proven equal for every input would
   follow the proof rule above like any other different computation. No `Math.*` call inside a
@@ -186,10 +188,11 @@ released version, and the next function arrives as a patch or a minor.
 
 - **What it holds:** the five ports, `exp`, `expm1`, `log`, `log1p` and `log10`, each in the
   forms `f(x)` and `f(x, live)`, each lane bit-identical to `StrictMath`.
-- **The contract:** bit identity with `StrictMath` for every `double` input, compared by raw
-  bits at every vector width of 128 bits or more. It is the one thing no version changes. How a
-  function reaches its bits (an arm) may change in a patch, since every arm gives the same
-  results; a result that differs from `StrictMath`'s is a bug, fixed in a patch.
+- **The contract:** bit identity with `StrictMath` for every `double` input (a two-NaN lane of a
+  function of two arguments aside: `AGENTS.md`, "Releases"), compared by raw bits at every vector
+  width of 128 bits or more. It is the one thing no version changes. How a function reaches its bits
+  (an arm) may change in a patch, since every arm gives the same results; a result that differs from
+  `StrictMath`'s is a bug, fixed in a patch.
 - **The version promise (0.x):** a minor may break the public API, a patch may not; adding a
   function is a patch (`AGENTS.md`, "Releases").
 - **What must hold on the commit that is tagged:** `mvn -B clean verify` with every test; the

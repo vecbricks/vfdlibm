@@ -1,13 +1,13 @@
 # vfdlibm
 
 fdlibm on the Java Vector API: math functions over `DoubleVector` lanes whose every lane is
-bit-identical to `java.lang.StrictMath`.
+bit-identical to `java.lang.StrictMath`, but for a two-NaN lane of `atan2` (unreleased).
 
 **Status: 0.x.** `exp`, `expm1`, `log`, `log1p` and `log10` are ported and released:
 `io.github.vecbricks:vfdlibm` 0.1.0 is on Maven Central. Functions are added one at a time, as
 [Varka](https://github.com/vecbricks/varka) needs them. A minor version may break the API and a
 patch may not; adding a function is a patch. Bit identity with `StrictMath` is the contract, and
-no version changes it (`CHANGELOG.md`).
+no version changes it (`CHANGELOG.md`), and no released function has a two-NaN lane to except.
 
 ## Use
 
@@ -127,7 +127,7 @@ through `JAVA_TOOL_OPTIONS`; a JVM that has it set prints a warning to `System.e
 property and the fault names are for this
 project's tests only: they are not part of the public API or of the compatibility promise, and
 any release, a patch included, may rename or remove them. With the property unset, the results
-are unchanged, and each lane still equals `StrictMath`'s.
+are unchanged, and each lane still meets the contract below.
 
 **Which species to pass.** Every species of 128 bits or more gives the same bits; what the body
 allocates differs. The allocation check (`bench/alloc-check.py`, run by CI) covers 256 bits, the
@@ -164,7 +164,7 @@ fdlibm's own sequence of operations, lane by lane. That is this library.
 - **Bit identity.** For every `double` input, each lane equals `StrictMath.f` on that input,
   compared by `Double.doubleToRawLongBits`. NaN payloads and signed zeros are included. For a
   function of two arguments (`atan2`, `pow`, `hypot`), a lane where both arguments are NaN with
-  different bits equals one of the two arguments' bits with the quiet bit set (for `hypot`, also
+  different bits equals one of the two arguments' bits with the quiet bit set (for `hypot`, the same
   with the sign bit cleared); which one is not specified, since `StrictMath`'s own choice varies.
 - **fdlibm's operations, in fdlibm's order.** Only IEEE `+ - * /`, `sqrt` and bit operations. There
   is no fused multiply-add and no reassociation, so the rounding of every step is fdlibm's.
@@ -185,10 +185,11 @@ Each function is checked against `StrictMath` on the same JVM:
 - exhaustively where a range is small enough;
 - by sampled bit patterns over the whole domain;
 - with fdlibm's thresholds and the known hard cases as fixed vectors;
-- every night (`.github/workflows/nightly.yml`), by a sweep of all 2^32 high words, three low
-  words each, and by fuzzing from a fresh seed, every arm at every width the runner has; x86's
-  128 bits, which run lane by lane there, are swept a 1/32 slice a night, and Arm's 128 bits
-  whole every night (`SKILLS.md`, "The nightly sweep and fuzz").
+- every night (`.github/workflows/nightly.yml`), by a sweep of all 2^32 high words, three low words
+  each (of one argument a night for a function of two arguments, the two alternating by default:
+  `pair-passes`), and by fuzzing from a fresh seed, every arm at every width the runner has; x86's
+  128 bits, which run lane by lane there, are swept a 1/32 slice a night, and Arm's 128 bits whole
+  every night (`SKILLS.md`, "The nightly sweep and fuzz").
 
 ## Licence
 

@@ -6,7 +6,8 @@ break the API and a patch may not (`AGENTS.md`, "Releases"). A pull request that
 user sees adds its line under `Unreleased`; a change to tests, docs or the build alone does not.
 A line for a breaking change starts with `**Breaking:**` and says what a client must do. The
 contract of every version is the same: each lane of each function equals
-`java.lang.StrictMath`'s result on that input, by `Double.doubleToRawLongBits`.
+`java.lang.StrictMath`'s result on that input, by `Double.doubleToRawLongBits`, except a lane of
+two NaNs with different bits in a function of two arguments (`AGENTS.md`, "Releases").
 
 ## [Unreleased]
 
@@ -40,6 +41,10 @@ contract of every version is the same: each lane of each function equals
 
 ### Changed
 
+- The contract is stated for functions of two arguments (`atan2`; `pow` and `hypot` later): a lane
+  where both arguments are NaN with different bits is one of two candidates the function declares,
+  and no other lane differs from `StrictMath`'s bits. No result of a released function changes, and
+  a client does nothing.
 - The per-lane finish of `exp`, `expm1`, `log`, `log10`, `log1p`, `sinh` and `cosh` writes out its
   first eight lanes with constant indices. Before the change, at `DoubleVector.SPECIES_MAX` (up to
   eight lanes) the finish of `exp`, `expm1`, `log`, `log10` and `log1p` allocated 30,432 to 36,992
