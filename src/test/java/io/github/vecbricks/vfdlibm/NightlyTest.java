@@ -119,10 +119,20 @@ class NightlyTest {
     assumeTrue(fault != null && !fault.startsWith("selftest."), "not a function's fault");
     assumeTrue(!NOT_FOR_THE_FUZZ.contains(fault), "a fault the fuzz is not asked to find");
     String function = fault.substring(0, fault.indexOf('.'));
-    int status = Fuzz.run(new String[] {
-      "--function", function, "--seed", "0x5eed", "--draws", DRAWS, "--stop-after", "1",
-      "--seconds", "600", "--threads", "2", "--out", dir.resolve("fuzz.txt").toString()});
-    assertEquals(Nightly.MISMATCH, status, "the fuzz missed planted fault " + fault);
+    FuzzOptionsTest.Run run = FuzzOptionsTest.run(
+        "--function", function, "--seed", "0x5eed", "--draws", DRAWS, "--stop-after", "1",
+        "--seconds", "600", "--threads", "2", "--out", dir.resolve("fuzz.txt").toString());
+    assertEquals(Nightly.MISMATCH, run.status(),
+        "the fuzz missed planted fault " + fault + ": " + run.out() + run.err());
+    // Without --stop-after a fault that is rare runs on to the bound (DRAWS inputs, rounded up to
+    // a block, from each of two threads), and one that is dense runs on to Mismatches.ENOUGH
+    // differing lane checks; these two assertions fail such a run. They do not pin the stop to
+    // the first block. The test passes under every function's fault, so the first block of two
+    // threads stays under ENOUGH for them; a function with many more arms may need it looked at.
+    assertTrue(run.fuzzed() < 2 * Long.parseLong(DRAWS),
+        fault + ": " + run.fuzzed() + " inputs fuzzed, not stopped at the first mismatch");
+    assertTrue(run.differing() < Nightly.Mismatches.ENOUGH,
+        fault + ": " + run.differing() + " lane checks differ, not stopped at the first mismatch");
   }
 
   @Test

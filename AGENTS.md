@@ -28,7 +28,10 @@ vfdlibm ports fdlibm's double functions to the Java Vector API, each lane bit-id
 
 ## Build and test
 
-- `mvn -B verify` builds and runs the tests; the Vector API module is added by `pom.xml`.
+- `mvn -B verify` builds and runs the tests; the Vector API module is added by `pom.xml`. It
+  needs Java 25 and Maven 3.9 or later: `build-helper-maven-plugin` 3.8.0 and, for the `jmh`
+  profile, `exec-maven-plugin` 3.7.0 declare 3.9.0 as their minimum (the other plugins were not
+  checked for a higher one, and no older Maven was tried). `pom.xml` enforces nothing.
 - One test: `mvn -q test -Dtest=ExpTest`. A `-Dtest` filter skips the fault runs below (the
   profile `one-test` in `pom.xml`), since it would leave them no test, and a fault run that runs
   no test fails.
@@ -184,7 +187,9 @@ publishes nothing and holds no secret; it shows on GitHub's runners that a tag w
 and pass `dev/jar-check.sh --release`. The steps:
 
 1. In a pull request, move the `Unreleased` lines under a `## [<version>]` heading of
-   `CHANGELOG.md`, and add its `[<version>]:` link line.
+   `CHANGELOG.md`, add its `[<version>]:` link line, and update `README.md`: its status
+   paragraph and the sentence "Released in ...: ..." name the release's functions, and the
+   sentence "On `main`, unreleased: ..." goes when nothing is left on `main` only.
 2. On an up-to-date `main`, `dev/release.sh <version>` checks the tree, sets the pom's version
    (from any `-SNAPSHOT`, so a minor is released the same way),
    its `<scm><tag>` and `project.build.outputTimestamp` (so that the jars are reproducible), runs
