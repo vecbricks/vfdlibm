@@ -127,6 +127,10 @@ What the nights say is quoted in `SKILLS.md`, "The nightly sweep and fuzz", unde
 measured", from `cost --since 2026-11-05`, the 15 nights of five functions; `cost` alone counts
 all 17, whose first two ran four functions, so its means differ from those.
 
+An x86 draw is not one machine to size by: the sweep table's ranges for one species widen
+with the draws. `--by-cpu` shows which CPU gave which, and keeps the EPYC 9V74's draws without
+AVX-512 apart from those with it.
+
 ## Adding nights
 
 Fetch a later range into files of their own, named for the first and last night, and quote the
