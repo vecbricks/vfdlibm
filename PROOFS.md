@@ -888,8 +888,9 @@ reassociation, and **needs no lemma of its own**. Where its text is not the C's:
   or `half/t`, and the sum after it, `1+q`, `w`, `half*t + q` or `half*t`, is picked by the same
   test. Each operation is one IEEE operation on the same operands as the C's (R4); the values
   the other branches' operations take in a lane are computed and never kept. There is nothing
-  to prove, and no hinge: the one thing that could differ is the tests, and they are the C's,
-  made on the same high word, so `CoshTest`'s thresholds are a check and no hinge.
+  to prove, and no hinge of its own: the one thing that could differ is the tests, and they are
+  the C's, made on the same high word. `CoshTest`'s thresholds check them, and the planted fault
+  `cosh.splitMoved` fails them if the split moves.
 - The lanes from `0x40862E42` up, the infinities and the NaNs are finished per lane by
   `StrictMath.cosh`, which is the C.
 

@@ -61,7 +61,8 @@ import jdk.incubator.vector.VectorSpecies;
  * </ul>
  *
  * <p>Both finish per lane the lanes from the overflow window up ({@code ix >= 0x40862E42}), the
- * infinities and the NaNs. They share cosh's own quotient, one division for every other lane:
+ * infinities and the NaNs. They share cosh's own quotient, one division that serves the small
+ * range and the exp branches in the slice arm and the exp branches alone in the finish arm:
  * its numerator is {@code t*t} (small range) or {@code half}, its denominator {@code w+w} or
  * {@code exp(|x|)}, and each lane's sum is its own range's: {@code 1+q}, {@code w}, {@code
  * half*t+q} or {@code half*t}. The slice arm divides once more, in the polynomial of its
