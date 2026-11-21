@@ -1,0 +1,38 @@
+name: README check
+
+# Runs README.md's worked client example, as written, against the latest release of the library
+# on Maven Central, and compares its output with the README's (dev/readme-check.sh says how:
+# an empty local Maven repository, the class path and the module path). A red run is the
+# signal; nothing here opens an issue.
+#
+# It checks the README only after a release: it reads the latest version from Central, so it
+# cannot check a README whose version is not there yet. It is no part of a pull request's CI,
+# since Central has answered a build with 403 and 429, and it holds no secret.
+
+on:
+  schedule:
+    - cron: '23 5 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: readme-check
+  cancel-in-progress: false
+
+jobs:
+  readme:
+    name: readme (latest release on Central)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5.7.0
+        with:
+          distribution: zulu
+          java-version: 25
+      - name: Check the script itself
+        run: dev/readme-check.sh --self-test
+      - name: Run the README's example against Central
+        run: dev/readme-check.sh
