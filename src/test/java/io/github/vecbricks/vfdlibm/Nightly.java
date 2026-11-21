@@ -118,7 +118,9 @@ final class Nightly {
         // VFdlibm.log1p is Log1p.log1pGuarded, so the guarded arm is checked under that name.
         new Arm("VFdlibm.log1p", VFdlibm::log1p, VFdlibm::log1p),
         new Arm("Log1p.log1pBlended", x -> Log1p.log1pBlended(x, null), Log1p::log1pBlended),
-        new Arm("Log1p.log1pFinish", x -> Log1p.log1pFinish(x, null), Log1p::log1pFinish)));
+        new Arm("Log1p.log1pFinish", x -> Log1p.log1pFinish(x, null), Log1p::log1pFinish))),
+    SINH("sinh", StrictMath::sinh, List.of(
+        new Arm("VFdlibm.sinh", VFdlibm::sinh, VFdlibm::sinh)));
 
     final String id;
     final DoubleUnaryOperator oracle;
@@ -137,7 +139,7 @@ final class Nightly {
         }
       }
       throw new IllegalArgumentException(
-          "unknown function '" + id + "'; known: exp, expm1, log, log10, log1p");
+          "unknown function '" + id + "'; known: exp, expm1, log, log10, log1p, sinh");
     }
   }
 

@@ -811,3 +811,51 @@ inputs that differ are about one in `2^29` of a window), so
 **Encoding.** None. The two results are Java's evaluation of the transcription, not a solver's,
 and the search is a program, so nothing here is machine-checked in `proofs/`; an evaluation of
 the chain like L4's is not written.
+
+## sinh (`Sinh.java`, from `e_sinh.c`)
+
+e_sinh.c returns `x + x` for a non-finite `x` (line 56), `x` itself below `2^-28` (62-63), and for
+`|x| < 22` with `t = expm1(|x|)`: `h*(2.0*t - t*t/(t+one))` below `|x| = 1` (65) and
+`h*(t + t/(t+one))` from it on (66), `h` being `0.5` with `x`'s sign (58-59). From `22` up it
+needs `exp` (70-81). The port computes the lines below 22 in the C's order, with no fused
+multiply-add and no reassociation, and **needs no lemma of its own**. Where its text is not the
+C's:
+
+- `h` is `0.5` with `x`'s sign bit, the bits of `0.5` or'ed with `x`'s sign bit, as exp's `halF`
+  is: that is exp's L5, for the same two doubles.
+- The two forms share one division: the lane's numerator is `t*t` or `t`, its denominator `t+one`
+  in both, and the quotient is `t*t/(t+one)` or `t/(t+one)`, each the C's operation on its lane
+  (the C reads `t*t/(t+one)` as `(t*t)/(t+one)`). Both forms' remaining operations are computed
+  in every lane, `2.0*t - q` and `t + q`, and blended by the high word of `|x|`; a form's value
+  on a lane that does not take it is never kept.
+- The lanes of `|x| >= 22`, the infinities and the NaNs, which the C answers with `exp`, are
+  finished per lane by `StrictMath.sinh`, which is the C: no computation of the port is in them.
+
+**What it rests on.** The `expm1` of line 64 is `Expm1.expm1Core(|x|)`: expm1's own body, the same
+lines, with the rare paths and the rare-lane finish left out. So the lemmas of expm1 hold for
+sinh's lanes as they stand:
+
+- L10, expm1's reduction as exp's: the far form on every lane, with the near band's `k`, `hi` and
+  `lo` exact (exp's L2), the unreduced lanes forced to `k = 0` (exp's L1) and `(xsb==0)?0.5:-0.5`
+  as `0.5` with the sign bit (exp's L5). Its domain holds for every `|x|` of `[2^-28, 22)`: `k`
+  stays between 0 and 32, far from the lanes L10 sets aside.
+- L11, the `k == 0` return as `x - e`, for the lanes of `|x| <= 0.5*ln2`.
+
+What `expm1Core` leaves unspecified, the lanes of `Expm1.expm1Rare`, sinh never reads: the
+non-finite lanes and `|x| >= 22` are finished per lane, `|x| < 2^-54` is below `2^-28`, whose
+result is `x`, and `x < -56*ln2` and `x > o_threshold` do not occur for `|x|` (the argument is
+non-negative) below 22.
+
+**Hinge tests.** Those of L10 and L11 (`ProofsTest.l10*`, `l11*`), which run on `Expm1`'s scalar
+words. The vector tie is `SinhTest`: `VFdlibm.sinh` against `StrictMath.sinh` at every width and
+`SPECIES_MAX`, unmasked and masked, on the thresholds of line 61, 62 and 65 and their
+neighbours, sampled bit patterns, dense draws of `(-30, 30)` and of `[20, 24]`, the magnitudes
+from `2^-60` to `2^10`, the published hard cases and their negations, and every subset of a
+vector's lanes rare (`everySubsetOfLanesRare`); `scalarTranscriptionIsStrictMath` checks that
+`cSinh`, e_sinh.c in scalar Java, is `StrictMath.sinh`; and
+`Expm1Test.coreAndRareMaskAreTheFinishArm` checks the mask and the core.
+
+**Encoding.** No file of its own. `proofs/expm1_k_zero_return.smt2` (L11) and the files of L10 and
+exp's lemmas check their steps for sinh as they stand, `expm1Core` being the same body. Informal
+here: that the port's blends take each form on exactly the C's lanes, and that it computes these
+steps, the code's text.

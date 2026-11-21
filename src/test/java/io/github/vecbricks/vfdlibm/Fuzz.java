@@ -119,6 +119,21 @@ final class Fuzz {
         -1.0, Math.sqrt(2.0) - 1.0, -0.29289321881345247, 0x1p53, 0x1p-29, 0x1p-54, 0x1p-20
       });
 
+  /**
+   * sinh: e_sinh.c's high-word tests (the tiny return, the split at 1, 22, the exp filter, the
+   * overflow threshold's word and the non-finite words), and the doubles at those edges and the
+   * overflow threshold itself, whose low word its test reads.
+   */
+  static final Edges SINH = new Edges(
+      new int[] {
+        Sinh.HX_TINY, Sinh.HX_ONE, Sinh.HX_LIMIT, 0x40862E42, 0x408633ce, 0x7ff00000, 0
+      },
+      new int[0],
+      false,
+      new double[] {
+        1.0, 22.0, 0x1p-28, Double.longBitsToDouble(0x408633ce_8fb9f87dL), Exp.O_THRESHOLD
+      });
+
   /** exp's limits, 0.5 ln2 and 1.5 ln2, and {@code (k + 1/2) ln2} for every k a result has. */
   private static double[] expPoints() {
     List<Double> points = new ArrayList<>(List.of(
@@ -147,6 +162,7 @@ final class Fuzz {
       case LOG -> LOG;
       case LOG10 -> LOG10;
       case LOG1P -> LOG1P;
+      case SINH -> SINH;
     };
   }
 

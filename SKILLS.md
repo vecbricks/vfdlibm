@@ -707,6 +707,37 @@ a settled question.
   replaces one that is waiting: dispatch it when no night is running or waiting. Close the test's
   issue once read: a later test comments on an open one. No such dispatch has been made yet.
 
+## What the sinh port taught
+
+- **One arm, because the rare range needs a second body.** `sinh` below 22 is `expm1(|x|)` and a
+  dozen operations, so it nests `Expm1.expm1Core` as `Log10` nests `Log.logCore`: the `Lanes`
+  calls first, the core as soon as its argument exists, then only Vector API operations. From 22
+  up the C needs `exp`, and `Exp.expCore` beside `Expm1`'s body would be two port bodies in one
+  graph (above), so those lanes, the infinities and the NaNs are finished per lane by
+  `StrictMath.sinh`. The rows of `SinhBenchmark` (`finish256`, `finishPreferred`) pass
+  `bench/alloc-check.py` on common and mixed data, at the host's flags and as AVX2; they were
+  run before any test was written, so a body that boxed would have shown first.
+- **The two forms of the first range share one division.** `h*(2.0*t-t*t/(t+one))` below `|x| =
+  1` and `h*(t+t/(t+one))` from it on differ in the numerator and in the sign of `q`'s term; each
+  lane's numerator is picked and the one quotient is formed, and both sums are computed and
+  blended, so every lane does its form's operations.
+- **A planted threshold must sit where the result changes (again).** The two forms are equal in
+  exact arithmetic, so moving their split by one word changes the lanes of that one word only:
+  none of 2^22 draws of `[-30, 30]`, 16 of the 512 neighbours of `1` and `22`. Moving it to 2
+  changed 32877 of those draws. Likewise `22` moved by one word changed none, and moved to 32
+  changed 63885 of 2^22 draws of `[22, 32)` (1.5%). `sinh.splitMoved` and `sinh.thresholdMoved`
+  are those two; `sinh.halfOneUlpOff` changes 73% of the draws. The sizing was a throwaway
+  program over the C in scalar Java, as `SinhTest.cSinh` is.
+- **Which expm1 faults reach sinh.** Those that change a lane of `|x| < 22`: `dropCorrection`,
+  `constantOffByOneUlp` and `dropKForcing`. `expm1.thresholdMoved` moves the form of `k = 56`,
+  which sinh's `k` (at most 32) never takes, and `guardMissesFilter` belongs to the guarded arm.
+  The nightly's `reach` map is per fault for that reason.
+- **Lefevre's list has `sh` and `ch` lines.** 2215 and 2026 lines of mode N, positive inputs
+  only, so `SinhTest` draws the negations too. Rechecked with 400-digit decimal arithmetic as the
+  other files were: every result is the correctly rounded value, every direction bit the 54th
+  bit of the exact result, and every input has 46 or more bits after the round bit pointing at
+  the midpoint.
+
 ## What the mutant survey taught
 
 - **What it is.** `dev/survey.sh` changes one constant, threshold or correction term of a

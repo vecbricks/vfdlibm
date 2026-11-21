@@ -120,12 +120,13 @@ java --module-path "target/classes:$(cat cp.txt)" -m example/example.Main
 ```
 
 Each function takes a vector of any species of 128 bits or more. Ported so far: `exp`,
-`expm1`, `log`, `log10` and `log1p`. The system property `vfdlibm.fault` plants a fault, for
-this project's tests only, and works in the shipped jar too: never set it, including through
-`JAVA_TOOL_OPTIONS`; a JVM that has it set prints a warning to `System.err` once. The property
-and the fault names are for this project's tests only: they are not part of the public API or of
-the compatibility promise, and any release, a patch included, may rename or remove them. With the
-property unset, the results are unchanged, and each lane still equals `StrictMath`'s.
+`expm1`, `log`, `log10`, `log1p` and `sinh` (the last not yet released). The system property
+`vfdlibm.fault` plants a fault, for this project's tests only, and works in the shipped jar too:
+never set it, including through `JAVA_TOOL_OPTIONS`; a JVM that has it set prints a warning to
+`System.err` once. The property and the fault names are for this project's tests only: they are
+not part of the public API or of the compatibility promise, and any release, a patch included,
+may rename or remove them. With the property unset, the results are unchanged, and each lane
+still equals `StrictMath`'s.
 
 ## Supported JDKs
 
