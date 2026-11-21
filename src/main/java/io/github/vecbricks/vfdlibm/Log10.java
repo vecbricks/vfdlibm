@@ -223,8 +223,9 @@ final class Log10 {
       }
       // The finish is written out here, with no call that takes a vector, as Log's is: lane and
       // withLane are lane extract and insert, which C2 intrinsifies for the fixed shapes, and the
-      // only call is StrictMath.log10 on a double. rare is already and-ed with live, so an
-      // inactive lane is never rewritten.
+      // only call is StrictMath.log10 on a double. The first eight lanes have constant indices,
+      // which C2 intrinsifies at SPECIES_MAX too, and the loop takes the lanes past eight. rare
+      // is already and-ed with live, so an inactive lane is never rewritten.
       if (rare.anyTrue()) {
         long rareLanes = rare.toLong();
         int lanes = x.length();

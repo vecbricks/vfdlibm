@@ -387,8 +387,10 @@ final class Expm1 {
       // The per-lane finish is written out here, with no call into vfdlibm, as Log1p's is: a
       // vfdlibm call this late in the body is refused (NodeCountInliningCutoff) and would take
       // its vectors boxed. lane and withLane are lane extract and insert, which C2 intrinsifies
-      // at a variable lane index for the fixed shapes. rare is already and-ed with live, so an
-      // inactive lane is never rewritten.
+      // at a variable lane index for the fixed shapes only, so the first eight lanes are written
+      // out with constant indices, which it intrinsifies at SPECIES_MAX too, and the loop takes
+      // the lanes past eight. rare is already and-ed with live, so an inactive lane is never
+      // rewritten.
       long rareLanes = rare.toLong();
       int lanes = x.length();
       if (lanes > 0 && (rareLanes & 1L) != 0) {

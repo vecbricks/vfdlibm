@@ -133,7 +133,8 @@ allocates differs. The allocation check (`bench/alloc-check.py`, run by CI) cove
 preferred species and `SPECIES_MAX` (up to eight lanes) on x86, and the preferred species, 128
 bits, on GitHub's Arm runner. The files under `bench/results/` read as allocating, and the check
 does not cover: `exp` and `log` at 128 bits on x86, and every function at 512 bits on an AVX2
-host. `SPECIES_MAX` was read on a laptop only (`max-finish-alloc-free-laptop-2026-11-21.txt`).
+host. `SPECIES_MAX` was read on a laptop only (`max-finish-alloc-free-laptop-2026-11-21.txt`); the
+host files of `exp` and `log10` read the old finish.
 The Javadoc of `VFdlibm` gives each reading with its file, and lists what is not measured: the
 speed of 512 bits against 256 on the EPYC 9V74 draws that have AVX-512, and any port's speed on
 Arm.

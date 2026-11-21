@@ -158,8 +158,9 @@ final class Sinh {
     // Everything from 22 up, infinities and NaN included, is finished per lane, written out here
     // with no call that takes a vector, as Log's and Expm1's finishes are: lane and withLane are
     // lane extract and insert, which C2 intrinsifies for the fixed shapes, and the only call is
-    // StrictMath.sinh on a double. rare is and-ed with live, so an inactive lane is never
-    // rewritten.
+    // StrictMath.sinh on a double. The first eight lanes have constant indices, which C2
+    // intrinsifies at SPECIES_MAX too, and the loop takes the lanes past eight. rare is and-ed
+    // with live, so an inactive lane is never rewritten.
     VectorMask<Double> rare = common.not();
     if (live != null) {
       rare = rare.and(live);

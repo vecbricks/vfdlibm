@@ -48,8 +48,8 @@ import org.openjdk.jmh.annotations.Warmup;
  * allocates, which means the body boxed. A new arm named that way is checked with no further
  * change. The {@code *Max} rows are at {@code DoubleVector.SPECIES_MAX}, where the finish arm
  * boxed on mixed data until it wrote out its first eight lanes with constant indices
- * (bench/results/max-finish-laptop-2026-11-20.txt, then bench/results/max-finish-alloc-free-
- * laptop-2026-11-21.txt).
+ * (bench/results/max-finish-laptop-2026-11-20.txt, then
+ * bench/results/max-finish-alloc-free-laptop-2026-11-21.txt).
  */
 @State(Scope.Thread)
 @BenchmarkMode(Mode.AverageTime)

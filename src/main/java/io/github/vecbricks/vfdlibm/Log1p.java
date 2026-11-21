@@ -317,7 +317,9 @@ final class Log1p {
       // result and rare as heap objects, boxed on every vector. This finish visits only the set
       // lanes of rare, through its bits, and moves no lane through an array: lane and withLane
       // are lane extract and insert, which C2 intrinsifies at a variable lane index for the
-      // fixed shapes. rare is already and-ed with live, so an inactive lane is never rewritten.
+      // fixed shapes only, so the first eight lanes are written out with constant indices,
+      // which it intrinsifies at SPECIES_MAX too, and the loop takes the lanes past eight. rare
+      // is already and-ed with live, so an inactive lane is never rewritten.
       long rareLanes = rare.toLong();
       int lanes = x.length();
       if (lanes > 0 && (rareLanes & 1L) != 0) {
