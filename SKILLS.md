@@ -592,18 +592,18 @@ a settled question.
     128 bits on Arm, natively, 7.2, 9.5, 9.7, 13.4 and 12.7. An x86 draw with 512-bit vectors
     is faster and its range wide (exp at 512 bits: 3.5 to 7.1 minutes), and `--by-cpu` splits
     the draws.
-- **Why x86 sweeps 128 bits by a slice (Max, 2 November 2026).** The 128-bit species is 80 to
-  91% of a whole sweep's cost on a 256-bit x86 machine (the medians above: exp 80.7 of 100.2
-  minutes, expm1 262.1 of 288.0): x86 C2 lowers no mask at two 64-bit lanes (above), so that
-  width runs lane by lane in Java, and Varka declines 128-bit doubles on x86, so no user of the
-  port runs it there. So on x86 the nightly sweeps every high word at 256 bits and max (and 512
-  on an AVX-512 draw), and at 128 bits a rotating slice: on night n of 32, stripe `n*shards + j`
-  of `32*shards` in shard j's job, every high word in 32 nights. At 1/32 the slice costs 17.9
-  minutes a night, 16% of the x86 sweep jobs' sweeping, while covering it every month; the
-  128-bit logic itself is swept whole every night on Arm, natively, so what the slice alone
-  guards is x86's per-lane fallback. The fuzz still runs at 128 bits on x86 every night. The
-  dispatch inputs `slice-nights` and `slice-night` change or replay the rotation; `nights` and
-  `shards` do the same for the rest.
+- **Why x86 sweeps 128 bits by a slice (the owner's decision, 2 November 2026).** The 128-bit
+  species is 80 to 91% of a whole sweep's cost on a 256-bit x86 machine (the medians above: exp 80.7
+  of 100.2 minutes, expm1 262.1 of 288.0): x86 C2 lowers no mask at two 64-bit lanes (above), so
+  that width runs lane by lane in Java, and Varka declines 128-bit doubles on x86, so no user of the
+  port runs it there. So on x86 the nightly sweeps every high word at 256 bits and max (and 512 on
+  an AVX-512 draw), and at 128 bits a rotating slice: on night n of 32, stripe `n*shards + j` of
+  `32*shards` in shard j's job, every high word in 32 nights. At 1/32 the slice costs 17.9 minutes a
+  night, 16% of the x86 sweep jobs' sweeping, while covering it every month; the 128-bit logic
+  itself is swept whole every night on Arm, natively, so what the slice alone guards is x86's
+  per-lane fallback. The fuzz still runs at 128 bits on x86 every night. The dispatch inputs
+  `slice-nights` and `slice-night` change or replay the rotation; `nights` and `shards` do the same
+  for the rest.
 - **The Arm job** sweeps every high word at 128 bits every night, in 4 stripes per function
   (`arm-shards`), the same rotating 1/32 slice at max (128 bits wide on Arm too, a second
   species of the same width), and fuzzes both species once per function, in shard 0's job. It
