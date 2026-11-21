@@ -11,12 +11,14 @@ package io.github.vecbricks.vfdlibm;
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTimeoutPreemptively;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Duration;
 import java.util.List;
 import java.util.Set;
 import org.junit.jupiter.api.Tag;
@@ -64,9 +66,11 @@ class NightlyTest {
   void fuzzDrawsAreBoundedAndValidated() {
     assumeTrue(Faults.planted() == null);
     String out = dir.resolve("fuzz.txt").toString();
-    assertEquals(Nightly.OK, Fuzz.run(new String[] {
-      "--function", "exp", "--seed", "0x5eed", "--seconds", "600", "--draws", "4096",
-      "--threads", "2", "--out", out}));
+    // A run that ignored --draws would go on for the 600 seconds: two minutes fail it.
+    assertEquals(Nightly.OK, assertTimeoutPreemptively(Duration.ofSeconds(120), () ->
+        Fuzz.run(new String[] {
+          "--function", "exp", "--seed", "0x5eed", "--seconds", "600", "--draws", "4096",
+          "--threads", "2", "--out", out})));
     assertEquals(Nightly.ERROR, Fuzz.run(new String[] {
       "--function", "exp", "--seed", "0x5eed", "--seconds", "600", "--draws", "0",
       "--threads", "2", "--out", out}));
@@ -94,13 +98,10 @@ class NightlyTest {
    * longest is 614,400 (exp.dropKForcing), which a million would clear only 1.6 times, but the
    * seed is fixed. One thread finding the fault is enough, so a fault's index is the smaller of
    * its two threads': the largest is 57,344 (exp.dropKForcing), and a million inputs is 17
-   * times that (14 times the first thread's alone, 69,632). The time was the trouble: a first
-   * block of 4,096 inputs takes 0.1 to 0.2 s here, JIT warm-up, and the 20,480 inputs of
-   * expm1.dropKForcing 0.38 s at 128 bits, of the one second the test used to allow. On GitHub's
-   * x86 runner (4 cores, 128 bits) the one second drew 32,768 inputs, 16,384 a thread, about
-   * 31,000 a second, one block short of that fault (run 44893905573, job 136815350908). Now the
-   * inputs are bounded and the seconds only end a hung run. The test takes 0.4 to 2.5 s here, 1.0
-   * to 2.5 s at 128 bits.
+   * times that (14 times the first thread's alone, 69,632). The time was the trouble: on
+   * GitHub's x86 runner (4 cores, 128 bits) the one second the test used to allow drew 32,768
+   * inputs, 16,384 a thread, one block short of expm1.dropKForcing's 20,480 (run 44893905573,
+   * job 136815350908). Now the inputs are bounded and the seconds only end a hung run.
    */
   private static final String DRAWS = "1000000";
 

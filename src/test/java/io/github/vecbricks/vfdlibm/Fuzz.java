@@ -42,7 +42,7 @@ import jdk.incubator.vector.VectorSpecies;
  * <pre>
  *   java --add-modules jdk.incubator.vector -cp target/classes:target/test-classes \
  *     io.github.vecbricks.vfdlibm.Fuzz --function log --species 256 --seconds 60 \
- *     --seed 0x1234 --out target/nightly/fuzz-mismatches.txt
+ *     [--draws 1000000] --seed 0x1234 --out target/nightly/fuzz-mismatches.txt
  * </pre>
  *
  * <p>{@code --draws} bounds each thread to that many inputs (rounded up to a block), besides
