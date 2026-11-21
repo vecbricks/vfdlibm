@@ -248,7 +248,7 @@ final class Sweep {
    * high word): a function of the seed, the argument swept and the index alone, of one kind in
    * four, by the top two bits of its first mix: a value of {@code specials}, with the sign its
    * next bit gives; a double of the swept value's exponent; one within 64 binary exponents of it
-   * (an offset of -64 to -1 a little likelier than one of 1 to 64); or random bits. The
+   * (the offsets are not quite uniform: 4096 is not a multiple of 129); or random bits. The
    * significand and sign of the second and third kinds are random.
    */
   static double partner(long seed, int argument, long index, double swept, double[] specials) {

@@ -217,8 +217,10 @@ final class Nightly {
 
     PairFunction {
       if (arms.isEmpty() || edges.specials().length == 0
-          || edges.x().words().length == 0 || edges.y().words().length == 0) {
-        throw new IllegalArgumentException(id + " has no arm, no special value or no branch word");
+          || edges.x().words().length == 0 || edges.y().words().length == 0
+          || edges.x().points().length == 0 || edges.y().points().length == 0) {
+        throw new IllegalArgumentException(
+            id + " has no arm, no special value, no branch word or no branch point");
       }
     }
 
