@@ -157,6 +157,22 @@ final class Fuzz {
       false,
       coshPoints());
 
+  /**
+   * atan: s_atan.c's high-word tests (the tiny return, the four range splits at 7/16, 11/16,
+   * 19/16 and 39/16, the {@code 2^66} word and the non-finite words), the doubles at those
+   * edges, the word and the double 2 where {@code atan.splitMoved} moves the 19/16 split, and the
+   * arguments whose reduction is exactly 0 or -1, where the quotient's sign and rounding change:
+   * 0.5 (id 0), 1 (id 1), 1.5 (id 2).
+   */
+  static final Edges ATAN = new Edges(
+      new int[] {
+        Atan.HX_TINY, Atan.HX_NO_REDUCTION, Atan.HX_ID0, Atan.HX_ID1, Atan.HX_ID2, Atan.HX_BIG,
+        0x7ff00000, 0x40000000, 0
+      },
+      new int[0],
+      false,
+      new double[] {0.5, 1.0, 1.5, 2.0, 0.4375, 0.6875, 1.1875, 2.4375, 0x1p66, 0x1p-29});
+
   /** cosh's own edges, and {@code (k + 1/2) ln2} for every k up to the overflow's. */
   private static double[] coshPoints() {
     double ln2 = StrictMath.log(2.0);
@@ -209,6 +225,7 @@ final class Fuzz {
       case LOG1P -> LOG1P;
       case SINH -> SINH;
       case COSH -> COSH;
+      case ATAN -> ATAN;
     };
   }
 
