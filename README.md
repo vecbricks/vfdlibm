@@ -119,8 +119,8 @@ mvn -q clean compile org.apache.maven.plugins:maven-dependency-plugin:3.7.0:buil
 java --module-path "target/classes:$(cat cp.txt)" -m example/example.Main
 ```
 
-Each function takes a vector of any species of 128 bits or more. Ported so far: `exp`,
-`expm1`, `log`, `log10` and `log1p`. The system property
+Each function takes a vector of any species of 128 bits or more. Released in 0.1.0: `exp`,
+`expm1`, `log`, `log10` and `log1p`. On `main`, unreleased: `sinh` and `cosh`. The system property
 `vfdlibm.fault` plants a fault, for this project's tests only, and works in the shipped jar too:
 never set it, including through `JAVA_TOOL_OPTIONS`; a JVM that has it set prints a warning to
 `System.err` once. The property and the fault names are for this project's tests only: they are
