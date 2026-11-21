@@ -53,15 +53,17 @@ tables here took whichever stream's thread reported first.
 
 | function | mutants | suite | fuzz only | sweep only | search only | on no input |
 |---|---|---|---|---|---|---|
-| exp | 45 | 27 | 5 | 0 | 0 | 13 |
-| expm1 | 57 | 31 | 2 | 0 | 3 | 21 |
-| log | 45 | 30 | 4 | 0 | 0 | 11 |
-| log10 | 58 | 35 | 3 | 0 | 0 | 20 |
+| exp | 45 | 32 | 0 | 0 | 0 | 13 |
+| expm1 | 57 | 37 | 0 | 0 | 0 | 20 |
+| log | 45 | 34 | 0 | 0 | 0 | 11 |
+| log10 | 58 | 38 | 0 | 0 | 0 | 20 |
 
-"fuzz only" and "search only" count both passes. log10's second pass is smaller than the
-others' (2^28 fuzz draws, sweep stripe `0/8` and 2^29 search draws a mutant). Rows written
-before a run's settings were put on a `# run:` line above it (log's and log10's) used the
-settings in their table's header.
+The first run found the suite catching 27, 31, 30 and 35 of these, the fuzz or the search the
+next 5, 5, 4 and 3 (exp, expm1, log, log10), and nothing else the rest. Those 17 mutants each
+have an input in the last section of `hard-cases/<function>.txt` since, and the rows read `suite`:
+see "Rows that moved". log10's second pass is smaller than the others' (2^28 fuzz draws, sweep
+stripe `0/8` and 2^29 search draws a mutant). Rows written before a run's settings were put on
+a `# run:` line above it (log's and log10's) used the settings in their table's header.
 
 ## What it shows
 
@@ -71,17 +73,18 @@ settings in their table's header.
   in stripe `0/64` for every mutant, and in all 2^32 high words for the second passes of exp
   and expm1 and log, and in stripe `0/8` for log10's. Three low words per high word is not where a
   constant one ulp off shows.
-- **A coefficient one ulp off is close to invisible to inputs.** The suite sees `P1` and `P2` of exp
-  (4,480 and 7 of 9.1 million inputs for `P1+ulp` and `P2+ulp`) and nothing of `P3` to `P5`; of
-  expm1's `Q2` to `Q5` it sees nothing, and of log's `Lg3` to `Lg7` one input, for `Lg3+ulp`. The
-  fuzz finds the next coefficient after millions of draws (`P3-ulp` at draw 1,285,716 of a stream,
+- **A coefficient one ulp off is close to invisible to inputs.** The suite's inputs showed `P1` and
+  `P2` of exp (4,480 and 7 of 9.1 million inputs for `P1+ulp` and `P2+ulp`) and nothing of `P3` to
+  `P5`; of expm1's `Q2` to `Q5` nothing, and of log's `Lg3` to `Lg7` one input, for `Lg3+ulp`. The
+  fuzz found the next coefficient after millions of draws (`P3-ulp` at draw 1,285,716 of a stream,
   `P3+ulp` at 10,614,866, expm1's `Q2-ulp` at 34,914,759, log's `Lg4-ulp` at 8,306,894), and 1.8 *
   10^10 inputs find nothing for the ones after it. What holds these constants is not an input: each
   port's test pins them to the bits the C's comments give (`ExpTest.constantsAreTheSourcesBits`,
   `intWordsAreTheSources` and their like in `Expm1Test`, `LogTest` and `Log10Test`). A new port
   needs that test for every constant it names; sampling will not stand in for it.
-- **The suite's inputs miss a few mutants that an input does show.** They are the rows whose
-  `caught_by` is `fuzz` or `search`, each with its input:
+- **The suite's inputs missed 17 mutants that an input does show.** They were the rows whose
+  `caught_by` was `fuzz` or `search` in either pass, and `k<20+1`, whose `none` an input refuted,
+  each with the input that shows it, which is now a hard case:
 
   | function | mutant | found by | input |
   |---|---|---|---|
@@ -89,12 +92,13 @@ settings in their table's header.
   | exp | `invln2+ulp` | fuzz, 24,690 of 2^26 | `0x4080b08f291b07d7` |
   | exp | `invln2-ulp` | fuzz, 40,554 of 2^26 | `0xc0853d0be66558b9` |
   | exp | `P3-ulp` | fuzz, 1 of 2^26 | `0x3fd62e455f911a51` |
-  | exp | `P3+ulp` | fuzz, 6 of 2^30 | see `exp-uncaught.tsv` |
+  | exp | `P3+ulp` | fuzz, 6 of 2^30 | `0xc05af233642a11e6` |
   | expm1 | `ln2_lo+ulp` | search, 3 of 2^26 | `0x40813d11ecc9bf58` |
   | expm1 | `ln2_lo-ulp` | search, 2 of 2^26 | `0x40613becdec29a5c` |
   | expm1 | `Q2+ulp` | fuzz, 1 of 2^26 | `0x405033caf119c34c` |
   | expm1 | `Q2-ulp` | fuzz, 2 of 2^30 | `0x4012059671dffac3` |
   | expm1 | `k<20-1` | search, 1 of 2^26 | `0x402a129199ab1c18` |
+  | expm1 | `k<20+1` | read `none`; a probe, 26 of 2^26 | `0x402b2688d692d264` |
   | log | `Lg3-ulp` | fuzz, 20 of 2^26 | `0x3fe6a0dc5d06b879` |
   | log | `hx<0x00100000-1` | fuzz, 908,884 of 2^26 | `0x000ffffffffece5e` |
   | log | `Lg4+ulp` | fuzz, 6 of 2^30 | `0x3ff6a09e66436ea9` |
@@ -104,12 +108,13 @@ settings in their table's header.
   | log10 | `log.Lg4-ulp` | fuzz, 1 of 2^28 | `0x3fe6a09e65d9ba3e` |
 
   log's `hx<0x00100000-1` moves the subnormal test down a word, so the largest subnormals (high word
-  `0x000fffff`) skip the scaling; the fuzz finds it at the second draw of a stream (`fuzz_first`
-  counts from 0), and no input of the suite shows it.
-  exp's `invln2` is the one the suite should not miss: one ulp either way changes `k` near the
-  doubles `(k + 1/2) ln2`, the fuzz finds it within 250 draws, and `ExpTest` takes the neighbours of
-  three of them only (`0.5 ln2`, `1.5 ln2`, `-1021.5 ln2`). expm1's suite has the 16 neighbours of
-  every such double and catches its `invln2`.
+  `0x000fffff`) skip the scaling; the fuzz found it at the second draw of a stream (`fuzz_first`
+  counts from 0). exp's `invln2` is the one the suite should not have missed: one ulp either way
+  changes `k` near the doubles `(k + 1/2) ln2`, the fuzz found it within 250 draws, and `ExpTest`
+  takes the neighbours of three of them only (`0.5 ln2`, `1.5 ln2`, `-1021.5 ln2`), where
+  expm1's suite has the 16 neighbours of every such double and caught its `invln2`. One input per
+  sign now shows `invln2` in exp's suite; neighbours of every `(k + 1/2) ln2` would show a
+  change of two ulps too, and are not added here.
 - **Mutants found on no input** are in the `-uncaught.tsv` tables. Read with the C, and none
   of it proved here, they fall into four groups:
   - changes that cannot reach a result: `huge` and `tiny` one ulp off (they only raise flags
@@ -120,8 +125,8 @@ settings in their table's header.
     non-finite words and its `two54`, which log10's rescaled argument never meets;
   - a line that agrees with its neighbour on the inputs that move: the near reduction's last
     word taking the far form (`hx<0x3FF0A2B2-1`, which `PROOFS.md`'s L2 proves for exp's whole
-    band), exp's `k>=-1021+1`, expm1's `hx>=0x4043687A` and `hx<0x3c900000` a word either way
-    log's and log10's `hx<0x00100000+1`. Each is a fold a lemma could state;
+    band), exp's `k>=-1021+1`, expm1's `hx>=0x4043687A` and `hx<0x3c900000` a word either way,
+    and log's and log10's `hx<0x00100000+1`. Each is a fold a lemma could state;
   - `hx>=0x7ff00000+1`, which sends a NaN whose high word is `0x7ff00000` down the arithmetic.
     The transcription is Java, where `(int)` of a NaN is 0, as it is in the ports' conversions;
     in C that conversion is undefined, so the mutant says nothing about the C itself. In Java
@@ -135,17 +140,30 @@ settings in their table's header.
 ## A "none" is a sampling result, not a proof
 
 Every row that reads `none` says only that no input drawn showed the mutant, and a mutant that
-changes a few results in a million draws is missed by a pass of 4 * 10^9. `k<20+1` is the
-example in this table. Its row reads `none` after 1.8 * 10^10 inputs, and in a check made
-afterwards by hand, 26 of 2^26 uniform draws in (19.5, 20.5) ln2 differ from `StrictMath.expm1`
-under it, the first at `0x402b2688d692d264` (13.575...), a rate near 4 * 10^-7 where `k = 20`
-(`k = 20` takes 0.1% of the search's draws). That agrees with SKILLS.md ("A planted fault must
-change results, measured before it is wired"), which counts 3 changed results in 2^22 draws in
-(19.4, 20.6) ln2 for `k < 21` and none for `k < 19`; here `k<20-1` changed 8 of 2^22 draws in
-(18.4, 19.6) ln2, the lanes with `k = 19`. Of the rows that read `none`, only those the
-groups above give a reason for are argued equal, and none is proved. The rest, and `k<20+1`
-above all, are gaps in the tests until an input or a lemma settles them: `k<20+1` wants a hard
-case at `0x402b2688d692d264`, and the issue's next step is to write one.
+changes a few results in a million draws is missed by a pass of 4 * 10^9. `k<20+1` was the
+example. Its row read `none` after 1.8 * 10^10 inputs, and in a check made afterwards by hand,
+26 of 2^26 uniform draws in (19.5, 20.5) ln2 differ from `StrictMath.expm1` under it, the first
+at `0x402b2688d692d264` (13.575...), a rate near 4 * 10^-7 where `k = 20` (`k = 20` takes 0.1% of
+the search's draws). That agrees with SKILLS.md ("A planted fault must change results, measured
+before it is wired"), which counts 3 changed results in 2^22 draws in (19.4, 20.6) ln2 for
+`k < 21` and none for `k < 19`; here `k<20-1` changed 8 of 2^22 draws in (18.4, 19.6) ln2, the
+lanes with `k = 19`. That input is now a hard case. Of the rows that still read `none`, only
+those the groups above give a reason for are argued equal, and none is proved. The rest are
+gaps in the tests until an input or a lemma settles them.
+
+## Rows that moved
+
+The 17 mutants above, and `k<20+1`, have an input each in the last section of
+`hard-cases/<function>.txt` (exp 5, expm1 6, log 4, log10 3), and `MutantsTest` checks that each
+input is there, shows its mutant, and is no input the C's own transcription gets wrong. The unit
+tests give every hard case to every arm, so the suite now shows these mutants. Their first pass was
+made again for those rows only, at the sizes of the first, with a suite of 9,052,710 (exp),
+11,476,562 (expm1), 10,227,166 (log) and 10,444,621 (log10) distinct inputs; each table's header has
+a `# moved:` line naming the rows and what each read before, and also the number of hard cases the
+rows were made with; the `# hard:` and `# suite:` lines are the first run's. The `-uncaught` tables
+keep what the second pass found, with a `# moved:` line naming the mutants of theirs that have a
+witness now. All 18 read `suite`, with `suite` and `hard` counts of 1, and the fuzz's and the
+search's counts as before. The other rows are those of the first run.
 
 ## Running it
 

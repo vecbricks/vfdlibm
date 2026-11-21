@@ -398,13 +398,15 @@ class HarnessSelfTest {
 
   /**
    * Each function's hard cases load whole and distinct: the counts are the resource headers'
-   * (Lefevre and Muller's table rows, then Lefevre's list less duplicates and non-doubles), and
-   * one row of each paper table, rechecked against the paper when the files were made, is there.
+   * (Lefevre and Muller's table rows, then Lefevre's list less duplicates and non-doubles) and
+   * the mutant survey's witnesses ({@code MutantsTest.WITNESSES}, the last section of the files)
+   * and one row of each paper table, rechecked against the paper when the files were made, is
+   * there.
    */
   @Test
   void hardCasesLoadEachFunctionsFile() {
     Map<String, Integer> counts = Map.of(
-        "exp", 2278, "expm1", 7578, "log", 2816, "log10", 1883, "log1p", 7550);
+        "exp", 2283, "expm1", 7584, "log", 2820, "log10", 1886, "log1p", 7550);
     counts.forEach((function, count) -> {
       long[] bits = rawBits(Inputs.hardCases(function));
       assertEquals(count.intValue(), bits.length, function);
