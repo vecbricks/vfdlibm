@@ -43,11 +43,12 @@ import org.openjdk.jmh.annotations.Warmup;
  * from the loop may pass boxed vectors. Varka emits the sequence inline instead; to measure that,
  * add {@code -jvmArgsAppend -XX:CompileCommand=inline,io.github.vecbricks.vfdlibm.*::*}.
  *
- * <p>{@code bench/alloc-check.py} runs the vector benchmarks named {@code *256} and
- * {@code *Preferred} on {@code common} and {@code mixed} inputs and fails if any allocates, which
- * means the body boxed. The {@code *Max} rows are not checked: at {@code SPECIES_MAX} C2 does not
- * intrinsify lane access at a variable index, so a finish arm may box there on mixed data
- * (SKILLS.md); they are here to measure that.
+ * <p>{@code bench/alloc-check.py} runs the vector benchmarks named {@code *256}, {@code
+ * *Preferred} and {@code *Max} on {@code common} and {@code mixed} inputs and fails if any
+ * allocates, which means the body boxed. The {@code *Max} rows are at {@code
+ * DoubleVector.SPECIES_MAX}, where the finish arm boxed on mixed data until it wrote out its first
+ * eight lanes with constant indices (bench/results/max-finish-laptop-2026-11-20.txt, then
+ * bench/results/max-finish-alloc-free-laptop-2026-11-21.txt).
  */
 @State(Scope.Thread)
 @BenchmarkMode(Mode.AverageTime)

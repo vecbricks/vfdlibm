@@ -42,11 +42,12 @@ import org.openjdk.jmh.annotations.Warmup;
  * from the loop may pass boxed vectors. Varka emits the sequence inline instead; to measure that,
  * add {@code -jvmArgsAppend -XX:CompileCommand=inline,io.github.vecbricks.vfdlibm.*::*}.
  *
- * <p>{@code bench/alloc-check.py} runs the vector benchmarks named {@code *256} and
- * {@code *Preferred} on {@code common} and {@code mixed} inputs and fails if any allocates, which
- * means the body boxed. The {@code *Max} row, at {@code DoubleVector.SPECIES_MAX}, is not
- * checked: the per-lane finish boxes there on mixed data (SKILLS.md); it is here to measure
- * that.
+ * <p>{@code bench/alloc-check.py} runs the vector benchmarks named {@code *256}, {@code
+ * *Preferred} and {@code *Max} on {@code common} and {@code mixed} inputs and fails if any
+ * allocates, which means the body boxed. The {@code *Max} row is at {@code
+ * DoubleVector.SPECIES_MAX}, where the finish walked the set bits of the rare mask, a variable
+ * lane index that boxes there, until it wrote out its first eight lanes with constant indices
+ * (bench/results/max-finish-alloc-free-laptop-2026-11-21.txt).
  */
 @State(Scope.Thread)
 @BenchmarkMode(Mode.AverageTime)

@@ -20,7 +20,7 @@ import jdk.incubator.vector.VectorSpecies;
 /**
  * The exhaustive sweep of the high word: every one of the 2^32 high words, both signs, each with
  * three low words, 0, 0xffffffff and one drawn per high word from the seed, checked for one
- * function at one species by {@link Nightly.Checker}, every arm unmasked and masked. fdlibm
+ * function at one species by {@link Nightly.BlockCheck}, every arm unmasked and masked. fdlibm
  * decides its branches on the high word (exp's and expm1's filters, reductions and tiny tests;
  * log's subnormal, non-finite and significand tests, which log10 shares; log1p's; sinh's tiny, 1
  * and 22; cosh's tiny, 0.5 ln2 and 22; atan's tiny, 7/16, 11/16, 19/16, 39/16 and 2^66), so
@@ -36,6 +36,14 @@ import jdk.incubator.vector.VectorSpecies;
  *     io.github.vecbricks.vfdlibm.Sweep --function exp --species 256 --part 3/4096 \
  *     --seed 0x1234 --threads 4 --out target/nightly/mismatches.txt
  * </pre>
+ *
+ * <p>A function of two arguments takes {@code --argument 1} (the default) or {@code 2}: the
+ * high words swept are that argument's, each with its three low words, and each swept value gets
+ * a partner for the other argument, drawn from the seed, the argument and the input's index
+ * alone ({@link #partner}), so any pair of the pass replays from the seed. A pair
+ * is checked once in a pass, so a night that sweeps both arguments checks 3 * 2^33 pairs of the
+ * 2^128. A bug that needs two particular high words together is left to the {@link Fuzz}, which
+ * draws both arguments at their edges at once.
  *
  * <p>{@code --part i/N} checks the i-th of N equal parts of the high words (N a power of two up
  * to 2^32; 0/1, the default, is all of them), and a comma-separated list of parts checks each.
@@ -64,7 +72,8 @@ final class Sweep {
   }
 
   static int run(String[] args) {
-    Nightly.Function function;
+    Nightly.Subject function;
+    int argument = 1;
     VectorSpecies<Double> species;
     long[][] ranges;
     String part;
@@ -74,8 +83,18 @@ final class Sweep {
     try {
       Map<String, String> options =
           Nightly.options(
-              args, "function", "species", "part", "stripe", "seed", "threads", "out");
-      function = Nightly.Function.of(Nightly.require(options, "function"));
+              args, "function", "species", "part", "stripe", "argument", "seed", "threads",
+              "out");
+      function = Nightly.subject(Nightly.require(options, "function"));
+      if (function.arity() == 2) {
+        String text = options.getOrDefault("argument", "1");
+        if (!text.equals("1") && !text.equals("2")) {
+          throw new IllegalArgumentException("--argument takes 1 or 2, not '" + text + "'");
+        }
+        argument = Integer.parseInt(text);
+      } else if (options.containsKey("argument")) {
+        throw new IllegalArgumentException("--argument is for a function of two arguments");
+      }
       species = Nightly.species(options.getOrDefault("species", "preferred"));
       if (options.containsKey("stripe")) {
         if (options.containsKey("part")) {
@@ -86,6 +105,9 @@ final class Sweep {
       } else {
         part = "--part " + options.getOrDefault("part", "0/1");
         ranges = ranges(options.getOrDefault("part", "0/1"));
+      }
+      if (function.arity() == 2) {
+        part += " --argument " + argument;
       }
       seed = Nightly.parseNumber(Nightly.require(options, "seed"));
       threads = Integer.parseInt(
@@ -114,17 +136,21 @@ final class Sweep {
       words.append(" and ").append(ranges.length - 4).append(" more ranges");
     }
     String what = String.format("sweep %s at %d bits, %s: %d high words, %s",
-        function.id, species.vectorBitSize(), part, total, words);
+        function.id(), species.vectorBitSize(), part, total, words);
     System.out.println(what);
     System.out.println("seed: " + Nightly.seedText(seed));
-    System.out.println("arms: " + Nightly.armNames(function));
+    System.out.println("arms: " + function.armNames());
     System.out.println("threads: " + threads);
     Nightly.printHost(species);
-    String context = String.format("function=%s species=%s seed=%s", function.id, species,
+    String context = String.format("function=%s species=%s seed=%s", function.id(), species,
         Nightly.seedText(seed));
     String replay = String.format("Sweep --function %s --species %s %s --seed %s",
-        function.id, Nightly.speciesName(species), part, Nightly.seedText(seed));
+        function.id(), Nightly.speciesName(species), part, Nightly.seedText(seed));
 
+    final Nightly.Subject subject = function;
+    final int swept = argument;
+    final double[] specials = function instanceof Nightly.PairFunction pair
+        ? pair.edges().specials() : null;
     long blocks = firstBlock[ranges.length];
     AtomicLong next = new AtomicLong();
     AtomicLong done = new AtomicLong();
@@ -132,13 +158,14 @@ final class Sweep {
     long start = System.nanoTime();
     try (Nightly.Mismatches mismatches = new Nightly.Mismatches(
         out, what + "\nreplay: " + replay + "\njvm args: " + Nightly.jvmArgs()
-            + "\nplanted fault: " + Faults.planted(), context)) {
+            + "\nplanted fault: " + Faults.planted(), context, subject.arity())) {
       List<Thread> workers = new ArrayList<>();
       for (int t = 0; t < threads; t++) {
         Thread worker = new Thread(() -> {
           try {
-            Nightly.Checker checker = new Nightly.Checker(function, species, seed, mismatches);
+            Nightly.BlockCheck checker = subject.newChecker(species, seed, mismatches);
             double[] xs = new double[3 * BLOCK];
+            double[] ys = specials == null ? null : new double[3 * BLOCK];
             for (long b; (b = next.getAndIncrement()) < blocks && !mismatches.enough(); ) {
               // The range holding block b: the last whose first block is at most b.
               int r = Arrays.binarySearch(firstBlock, 0, ranges.length, b);
@@ -157,7 +184,22 @@ final class Sweep {
               for (int k = filled; k < len; k++) {
                 xs[k] = xs[filled - 1];
               }
-              checker.check(xs, len, 3 * first);
+              if (ys != null) {
+                // The swept values are the first or the second argument; the partners fill the
+                // other, and the padding repeats the last pair.
+                for (int k = 0; k < filled; k++) {
+                  ys[k] = partner(seed, swept, 3 * first + k, xs[k], specials);
+                }
+                for (int k = filled; k < len; k++) {
+                  ys[k] = ys[filled - 1];
+                }
+              }
+              // xs holds the swept argument's values, ys their partners.
+              if (swept == 2) {
+                checker.check(ys, xs, len, 3 * first);
+              } else {
+                checker.check(xs, ys, len, 3 * first);
+              }
               done.addAndGet(n);
             }
           } catch (Throwable e) {
@@ -200,6 +242,32 @@ final class Sweep {
       e.printStackTrace();
       return Nightly.ERROR;
     }
+  }
+
+  /**
+   * The partner of the swept value {@code swept}, the {@code index}-th input of the pass (three a
+   * high word): a function of the seed, the argument swept and the index alone, of one kind in
+   * four, by the top two bits of its first mix: a value of {@code specials}, with the sign its
+   * next bit gives; a double of the swept value's exponent; one within 64 binary exponents of it
+   * (the offsets are not quite uniform: 4096 is not a multiple of 129); or random bits. The
+   * significand and sign of the second and third kinds are random.
+   */
+  static double partner(long seed, int argument, long index, double swept, double[] specials) {
+    long r = Nightly.mix(seed + 0xa5a5a5a5a5a5a5a5L * argument + index * 0x9e3779b97f4a7c15L);
+    long bits = Nightly.mix(r);
+    long more = Nightly.mix(bits);
+    int exponent = (int) (Double.doubleToRawLongBits(swept) >>> 52 & 0x7ff);
+    int kind = (int) (r >>> 62);
+    if (kind == 0) {
+      double special = specials[(int) ((more >>> 1) % specials.length)];
+      return (bits & 1) == 0 ? special : -special;
+    }
+    if (kind == 1 || kind == 2) {
+      int e = kind == 1 ? exponent
+          : Math.max(0, Math.min(0x7ff, exponent + (int) ((more >>> 20 & 0xfff) % 129) - 64));
+      return Double.longBitsToDouble(bits & 0x800fffffffffffffL | (long) e << 52);
+    }
+    return Double.longBitsToDouble(bits);
   }
 
   /** The low word of the third input of high word {@code hi}. */

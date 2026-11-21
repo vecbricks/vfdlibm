@@ -64,8 +64,8 @@ next port re-trying a settled question.
   Left out: 128 bits (masks box at two lanes on x86, below) and 512 bits (software on AVX2; the
   preferred arm covers it where it is real). Mixed inputs were left out too until the per-lane
   finish stopped allocating (below); common data alone never runs a rare path, so it could not
-  see that path box. The `*Max` rows are left out by the regex, since the finish still boxes at
-  `SPECIES_MAX` on mixed data (below).
+  see that path box. The `*Max` rows are in, since the finish writes out its first eight lanes
+  with constant indices (below).
 - **On Arm the check runs the preferred rows, and they pass.** GitHub's Arm runners have 128-bit
   vectors (`MaxVectorSize=16 UseSVE=2` on all 332 Arm jobs of `HARDWARE.md`, "What the pool
   gives"), so the preferred species is 128 bits there and a `*256` row would run in the Java
@@ -107,16 +107,16 @@ next port re-trying a settled question.
   refused under it, which only a change to the code fixes.
 - **A refused call boxes on every pass, not only when it runs.** `exp`'s per-lane finish was a
   private method, `finishPerLane(x, result, rare)`, called at the end of the body behind
-  `rare.anyTrue()`. `PrintInlining` showed it refused with `NodeCountInliningCutoff` in the
-  final compile, under `-XX:UseAVX=2` with the body force-inlined. Its three arguments were then
-  boxed on every vector, rare or not: 256 vectors times 168 bytes (two 64-byte `DoubleVector`
-  boxes and a 40-byte mask) plus, for the 62 vectors of the mixed data that hold a rare lane,
-  160 bytes (two `toArray` copies and the returned box) sum to the allocation the run read;
-  JFR's allocation-by-site named `fromArray0Template`, `blendTemplate`, `Mask.or` and `toArray`.
-  On common data the branch never ran, C2 left it as an uncommon trap, and nothing boxed, which
-  is why the allocation check, on common data only, never saw it. Written out in the body with
-  the Vector API's own `toLong`, `lane` and `withLane`, which C2 inlines late instead of
-  refusing, the finish allocates nothing at 256 and 512 bits; at `SPECIES_MAX` it still boxes
+  `rare.anyTrue()`. `PrintInlining` showed it refused with `NodeCountInliningCutoff` in the final
+  compile, under `-XX:UseAVX=2` with the body force-inlined. Its three arguments were then boxed on
+  every vector, rare or not: 256 vectors times 168 bytes (two 64-byte `DoubleVector` boxes and a
+  40-byte mask) plus, for the 62 vectors of the mixed data that hold a rare lane, 160 bytes (two
+  `toArray` copies and the returned box) sum to the allocation the run read; JFR's
+  allocation-by-site named `fromArray0Template`, `blendTemplate`, `Mask.or` and `toArray`. On common
+  data the branch never ran, C2 left it as an uncommon trap, and nothing boxed, which is why the
+  allocation check, on common data only, never saw it. Written out in the body with the Vector API's
+  own `toLong`, `lane` and `withLane`, which C2 inlines late instead of refusing, the finish
+  allocates nothing at 256 and 512 bits, and at `SPECIES_MAX` with its first eight lanes written out
   (below). Any slow path called from a port's body belongs written out inline, as
   `Lanes.addExponent` is.
 - **Two port bodies in one loop do not fit, whatever the order.** `ExpBenchmark`'s
@@ -156,12 +156,13 @@ next port re-trying a settled question.
   rare lanes with `x.lane(i)` and `result.withLane(i, v)`, `i` from the rare mask's bits. At the
   fixed shapes C2 inlines `VectorSupport.extract` and `insert` as intrinsics; at `SPECIES_MAX` (the
   same 512 or 256 bits on the laptop) `PrintIntrinsics` prints `missing constant: ...
-  idx=CountTrailingZerosL` and both stay calls, so `finishMax` on mixed data allocates 30912 B/op at
+  idx=CountTrailingZerosL` and both stay calls, so `finishMax` on mixed data allocated 30912 B/op at
   512 bits and 36992 under `-XX:UseAVX=2`, where `finish512` and `finish256` read under 0.01
   (`bench/results/exp-finish-laptop-2026-11-02.txt`). Common data never runs that loop and does not
-  allocate. A port meant to run at `SPECIES_MAX` measures its slow path there too.
-- **Every port's finish boxes at `SPECIES_MAX`, Log's counted loop too; constant lane indices do
-  not.** With `*Max` rows in all five benchmarks, read on the laptop under `-prof gc`
+  allocate. A constant index does lower there (the next entry); a port that has to visit lanes
+  at a variable index measures `SPECIES_MAX` too.
+- **Every port's finish boxed at `SPECIES_MAX`, Log's counted loop too; constant lane indices fix
+  it.** With `*Max` rows in all five benchmarks, read on the laptop under `-prof gc`
   (`bench/results/max-finish-laptop-2026-11-20.txt`, allocation readings on a loaded machine, no
   timings): on mixed data `finishMax` allocates 30912 B/op at 512 bits for exp, expm1 and log1p and
   30432 for log and log10, and 36992 and 36672 under `-XX:UseAVX=2`; on common data it allocates
@@ -173,14 +174,15 @@ next port re-trying a settled question.
   `log10-epyc7763-2026-11-20.txt`; the other EPYC files have no `*Max` row). Log's finish is a
   counted loop over `species.length()` that tests each bit where the others walk the set bits with
   `numberOfTrailingZeros`; it boxes the same, so the loop's shape is not the cause, the lane index
-  not being a constant is. Tried and not merged: the first eight lanes written out with literal
-  indices, `if (lanes > 0 && (rareLanes & 1L) != 0) result = result.withLane(0, f(x.lane(0)));` and
-  so on, the loop kept for lanes past eight. With it every `*Max` row of every port read under 0.5
-  B/op, on mixed data and under both flag sets, and the five ports' tests passed. Owed before a port
-  takes it: the `*256` and `*Preferred` rows through `bench/alloc-check.py` on a quiet machine
-  (under load they ended under 0.4 B/op, with first iterations where C2 was late, which the check
-  counts as failures), `mvn verify` with the planted faults, and a pair on a host, since the fixed
-  shapes' finish changes too.
+  not being a constant is. Merged: the first eight lanes are written out with literal indices, `if
+  (lanes > 0 && (rareLanes & 1L) != 0) result = result.withLane(0, f(x.lane(0)));` and so on, in all
+  seven ports (sinh's and cosh's finishes had the same loop), the loop kept for lanes past eight.
+  With it every `*Max` row reads under 0.1 B/op on mixed data at 512 bits and as an AVX2 host at
+  256, 0.033 and 0.072 at most, and all 94 rows of the check pass under both flag sets on a lightly
+  loaded machine, the `*Max` rows now among them
+  (`bench/results/max-finish-alloc-free-laptop-2026-11-21.txt`). Lanes past eight, and 128 bits, are
+  not read. The fixed shapes' finish changes too, so the change goes through a pair on a host (the
+  pull request names it).
 - **At two 64-bit lanes x86 C2 lowers no mask.** Compare to mask, blend, mask cast, mask
   broadcast, logic and test are `not supported` at `vlen=2` for double and long masks, and fine
   at four lanes. So on x86 every 128-bit double port that branches through masks runs per lane
@@ -352,8 +354,8 @@ next port re-trying a settled question.
   C2 intrinsifies (`extract`, `insert`), and the only call left is `StrictMath.log` on a double.
   exp's finish used to be such a call and boxed on mixed data, and cost more there than the blend
   did on the EPYC 7763 (the old code's run is `bench/results/exp-epyc7763-2026-11-02.txt`). The same
-  in-body loop removed that at 256 and 512 bits; at `SPECIES_MAX` exp's finish still boxes on mixed
-  data (above).
+  in-body loop removed that at 256 and 512 bits; at `SPECIES_MAX` exp's finish boxed on mixed
+  data until its first eight lanes were written out (above).
 - **The laptop understated the boxed finish's cost on mixed data.** Under `UseAVX=2` on the laptop
   exp's boxed finish tied the blend on mixed data; on the EPYC 7763 it lost to the blend
   (`bench/results/exp-epyc7763-2026-11-02.txt`). Read each finish arm's `gc.alloc.rate.norm` on
@@ -453,7 +455,7 @@ next port re-trying a settled question.
   are, a loop over the set bits of `rare.toLong()` with `result.withLane(lane,
   StrictMath.log1p(x.lane(lane)))`, it reads ~0.01 B/op on mixed data at 256 and 512 bits, so
   nothing in it was refused in log1p's large body (the current runs in the same files). Its
-  `SPECIES_MAX` form boxes as exp's does: 30912 B/op on mixed data at 512 bits and 36993 under
+  `SPECIES_MAX` form boxed as exp's did: 30912 B/op on mixed data at 512 bits and 36993 under
   `-XX:UseAVX=2` (`bench/results/max-finish-laptop-2026-11-20.txt`). An earlier exploratory run had
   measured a `withLane` loop at 47,232 B/op (quoted in the same superseded runs); whether that
   loop sat in a helper taking vectors was not recorded, and it most likely measured that call's
@@ -645,6 +647,24 @@ next port re-trying a settled question.
   draws the same inputs on a slower or busier machine, which a time limit does not.
   `NightlyTest`'s planted-fault test passes it; `dev/nightly.sh` passes only `--seconds`, so to
   replay a bounded run call `Fuzz` directly (its class comment has the command).
+- **Functions of two arguments** (`Nightly.PairFunction`, test-only code like the rest: a port
+  registers its function in `PairFunction.KNOWN`; none is ported yet, and `PairHarnessTest` runs the
+  harness on a toy, `x * 0.5 + y`, with planted faults). `dev/nightly.sh` and `nightly.yml` do not
+  take `--argument` yet, so a pair function is not listed in the workflow until they do; by hand,
+  `Sweep --argument 2` sweeps the second argument. The sweep takes `--argument 1` (the default) or
+  `2`: the high words swept are that argument's, each with its three low words, and each swept value
+  gets a partner for the other argument drawn from the seed, the argument and the input's index
+  alone (`Sweep.partner`; a quarter each of special values, the swept value's exponent, an exponent
+  within 64 of it, and random bits), so a pair replays from the seed and its replay line says
+  `--argument`. A pass checks 3 * 2^32 of the 2^128 pairs, so **what it can miss**: a bug that needs
+  a high word of each argument at once, which a partner drawn as above meets with probability about
+  2^-32 for a random partner and more where the two exponents are near, and which
+  the fuzz meets because its draws put both arguments at their edges at once (`toy2-xy` in
+  `PairHarnessTest`: both sweeps pass it, the fuzz finds it). The masked form of an arm keeps the
+  first argument's bits in a lane that is not live (`Oracle.assertBinaryMasked`'s contract). A pair
+  function's mismatch file, and a hard-cases file of one, say `# arity: 2` before the first input
+  and hold `0x<x> 0x<y>` on a line: `Inputs.hardCasePairs` reads one, and `Inputs.hardCases` refuses
+  it by that line.
 - **Its cost, measured (the logs of 3 to 19 November 2026).** The first sizing was a laptop's,
   from a sample of high words, before any night had run; the nights' own logs replaced it.
   `bench/pool/pool.py cost --since 2026-11-05

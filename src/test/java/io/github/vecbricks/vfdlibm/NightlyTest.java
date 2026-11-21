@@ -91,7 +91,7 @@ class NightlyTest {
    * Inputs each fuzz thread draws in {@link #fuzzCatchesThePlantedFault}. The streams are fixed
    * by the seed, so the fuzz finds each fault at one input index, the same at the 128, 256, 512,
    * preferred and max species of the host measured; only the time to reach it varies with the
-   * machine. The test runs 30 faults (pom.xml's 31 function faults less log1p.foldShortPath).
+   * machine. The test runs 31 faults (pom.xml's 32 function faults less log1p.foldShortPath).
    * Measured on an x86 laptop, one stream per run, for the faults of the ports before cosh and
    * atan: with the test's seed 0x5eed (first thread) the index is 4,096 for 19 faults and, for
    * the others, 69,632 (exp.thresholdMoved), 57,344 (exp.dropKForcing), 20,480

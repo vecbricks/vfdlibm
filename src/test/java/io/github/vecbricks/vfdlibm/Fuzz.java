@@ -19,7 +19,7 @@ import jdk.incubator.vector.VectorSpecies;
 
 /**
  * Fuzzing for a fixed time: random inputs for one function at one species, checked by {@link
- * Nightly.Checker} like the {@link Sweep}'s, every arm unmasked and masked. The nightly workflow
+ * Nightly.BlockCheck} like the {@link Sweep}'s, every arm unmasked and masked. The nightly workflow
  * draws a fresh seed each night and logs it. Each input is one of:
  *
  * <ul>
@@ -35,6 +35,11 @@ import jdk.incubator.vector.VectorSpecies;
  *       exp's overflow and underflow limits and the {@code (k+1/2) ln2} where its {@code k} steps,
  *       moved by up to 2^44 ulps, and of either sign one time in ten.
  * </ul>
+ *
+ * <p>A function of two arguments draws pairs ({@link #drawPair}), one in each of: both arguments
+ * random bits (3 in 10); one argument drawn as above from its own {@link Edges} and the other a
+ * special value or random bits (2 in 10 for each argument); and both from their edges (3 in
+ * 10), so that a branch that needs a word of each argument is drawn at once.
  *
  * <p>The sweep takes three low words per high word; these take every other one, where the C's
  * results depend on the low word: exp's {@code k}, log's and log1p's reductions.
@@ -66,6 +71,18 @@ final class Fuzz {
 
   /** Where a function's branches are: the high words, significand splits and doubles. */
   record Edges(int[] words, int[] splits, boolean splitOnOnePlusX, double[] points) {}
+
+  /**
+   * Where the branches of a function of two arguments are: each argument's {@link Edges} and the
+   * values both arguments take specially (the sweep's partners, the fuzz's other argument).
+   */
+  record PairEdges(Edges x, Edges y, double[] specials) {}
+
+  /** The special values of a function of two arguments, either sign: the sweep draws them too. */
+  static final double[] PAIR_SPECIALS = {
+    0.0, 1.0, 2.0, 0.5, 3.0, 10.0, Double.MIN_VALUE, Double.MIN_NORMAL, Double.MAX_VALUE,
+    Double.POSITIVE_INFINITY, Double.NaN, 0x1p-1000, 0x1p1000, 0x1p31, 0x1p64
+  };
 
   /** exp: e_exp.c's high-word tests, its limits and the doubles where k steps. */
   static final Edges EXP = new Edges(
@@ -234,7 +251,7 @@ final class Fuzz {
   }
 
   static int run(String[] args) {
-    Nightly.Function function;
+    Nightly.Subject function;
     VectorSpecies<Double> species;
     long seed;
     double budget;
@@ -246,7 +263,7 @@ final class Fuzz {
       Map<String, String> options =
           Nightly.options(args, "function", "species", "seed", "seconds", "draws",
               "stop-after", "threads", "out");
-      function = Nightly.Function.of(Nightly.require(options, "function"));
+      function = Nightly.subject(Nightly.require(options, "function"));
       species = Nightly.species(options.getOrDefault("species", "preferred"));
       seed = Nightly.parseNumber(Nightly.require(options, "seed"));
       budget = Double.parseDouble(Nightly.require(options, "seconds"));
@@ -265,27 +282,29 @@ final class Fuzz {
     }
 
     String bound = draws == Long.MAX_VALUE ? "" : " or " + draws + " inputs a thread";
-    String what = String.format("fuzz %s at %d bits for %.0f s%s", function.id,
+    String what = String.format("fuzz %s at %d bits for %.0f s%s", function.id(),
         species.vectorBitSize(), budget, bound);
     System.out.println(what);
     System.out.println("seed: " + Nightly.seedText(seed));
-    System.out.println("arms: " + Nightly.armNames(function));
+    System.out.println("arms: " + function.armNames());
     System.out.println("threads: " + threads);
     Nightly.printHost(species);
-    String context = String.format("function=%s species=%s seed=%s", function.id, species,
+    String context = String.format("function=%s species=%s seed=%s", function.id(), species,
         Nightly.seedText(seed));
     String replay = String.format("Fuzz --function %s --species %s --seed %s --threads %d%s",
-        function.id, Nightly.speciesName(species), Nightly.seedText(seed), threads,
+        function.id(), Nightly.speciesName(species), Nightly.seedText(seed), threads,
         draws == Long.MAX_VALUE ? "" : " --draws " + draws);
 
-    Edges edges = edges(function);
+    final Nightly.Subject subject = function;
+    Edges edges = function instanceof Nightly.Function f ? edges(f) : null;
+    PairEdges pairEdges = function instanceof Nightly.PairFunction f ? f.edges() : null;
     long start = System.nanoTime();
     long deadline = start + (long) (budget * 1e9);
     AtomicLong done = new AtomicLong();
     AtomicReference<Throwable> failure = new AtomicReference<>();
     try (Nightly.Mismatches mismatches = new Nightly.Mismatches(
         out, what + "\nreplay: " + replay + "\njvm args: " + Nightly.jvmArgs()
-            + "\nplanted fault: " + Faults.planted(), context)) {
+            + "\nplanted fault: " + Faults.planted(), context, subject.arity())) {
       List<Thread> workers = new ArrayList<>();
       for (int t = 0; t < threads; t++) {
         long stream = Nightly.mix(seed + t);
@@ -293,16 +312,25 @@ final class Fuzz {
         Thread worker = new Thread(() -> {
           try {
             SplittableRandom random = new SplittableRandom(stream);
-            Nightly.Checker checker =
-                new Nightly.Checker(function, species, maskSeed, mismatches);
+            Nightly.BlockCheck checker = subject.newChecker(species, maskSeed, mismatches);
             double[] xs = new double[BLOCK];
+            double[] ys = pairEdges == null ? null : new double[BLOCK];
             for (long position = 0; position < draws && System.nanoTime() < deadline
                 && mismatches.count() < stopAfter && !mismatches.enough();
                 position += BLOCK) {
-              for (int i = 0; i < BLOCK; i++) {
-                xs[i] = draw(random, edges);
+              if (ys == null) {
+                for (int i = 0; i < BLOCK; i++) {
+                  xs[i] = draw(random, edges);
+                }
+              } else {
+                double[] pair = new double[2];
+                for (int i = 0; i < BLOCK; i++) {
+                  drawPair(random, pairEdges, pair);
+                  xs[i] = pair[0];
+                  ys[i] = pair[1];
+                }
               }
-              checker.check(xs, BLOCK, position);
+              checker.check(xs, ys, BLOCK, position);
               done.addAndGet(BLOCK);
             }
           } catch (Throwable e) {
@@ -373,6 +401,35 @@ final class Fuzz {
     long ulps = random.nextLong(1L << random.nextInt(45)) * (random.nextBoolean() ? 1 : -1);
     double x = Double.longBitsToDouble(Double.doubleToRawLongBits(point) + ulps);
     return random.nextInt(10) == 0 ? -x : x;
+  }
+
+  /**
+   * One pair, drawn as the class comment says, written to {@code out[0]} and {@code out[1]}.
+   */
+  static void drawPair(SplittableRandom random, PairEdges edges, double[] out) {
+    int kind = random.nextInt(10);
+    if (kind < 3) {
+      out[0] = Double.longBitsToDouble(random.nextLong());
+      out[1] = Double.longBitsToDouble(random.nextLong());
+    } else if (kind < 5) {
+      out[0] = draw(random, edges.x());
+      out[1] = otherArgument(random, edges);
+    } else if (kind < 7) {
+      out[0] = otherArgument(random, edges);
+      out[1] = draw(random, edges.y());
+    } else {
+      out[0] = draw(random, edges.x());
+      out[1] = draw(random, edges.y());
+    }
+  }
+
+  /** An argument that is not the one at a branch: a special value, or random bits. */
+  private static double otherArgument(SplittableRandom random, PairEdges edges) {
+    if (random.nextInt(3) == 0) {
+      double special = edges.specials()[random.nextInt(edges.specials().length)];
+      return random.nextBoolean() ? special : -special;
+    }
+    return Double.longBitsToDouble(random.nextLong());
   }
 
   /** A low word: 0, 1, all ones, all ones less one, or random, each as likely. */

@@ -395,9 +395,37 @@ final class Expm1 {
       // The per-lane finish is written out here, with no call into vfdlibm, as Log1p's is: a
       // vfdlibm call this late in the body is refused (NodeCountInliningCutoff) and would take
       // its vectors boxed. lane and withLane are lane extract and insert, which C2 intrinsifies
-      // at a variable lane index for the fixed shapes. rare is already and-ed with live, so an
-      // inactive lane is never rewritten.
+      // at a variable lane index for the fixed shapes only, so the first eight lanes are written
+      // out with constant indices, which it intrinsifies at SPECIES_MAX too, and the loop takes
+      // the lanes past eight. rare is already and-ed with live, so an inactive lane is never
+      // rewritten.
       long rareLanes = rare.toLong();
+      int lanes = x.length();
+      if (lanes > 0 && (rareLanes & 1L) != 0) {
+        result = result.withLane(0, StrictMath.expm1(x.lane(0)));
+      }
+      if (lanes > 1 && (rareLanes & 2L) != 0) {
+        result = result.withLane(1, StrictMath.expm1(x.lane(1)));
+      }
+      if (lanes > 2 && (rareLanes & 4L) != 0) {
+        result = result.withLane(2, StrictMath.expm1(x.lane(2)));
+      }
+      if (lanes > 3 && (rareLanes & 8L) != 0) {
+        result = result.withLane(3, StrictMath.expm1(x.lane(3)));
+      }
+      if (lanes > 4 && (rareLanes & 16L) != 0) {
+        result = result.withLane(4, StrictMath.expm1(x.lane(4)));
+      }
+      if (lanes > 5 && (rareLanes & 32L) != 0) {
+        result = result.withLane(5, StrictMath.expm1(x.lane(5)));
+      }
+      if (lanes > 6 && (rareLanes & 64L) != 0) {
+        result = result.withLane(6, StrictMath.expm1(x.lane(6)));
+      }
+      if (lanes > 7 && (rareLanes & 128L) != 0) {
+        result = result.withLane(7, StrictMath.expm1(x.lane(7)));
+      }
+      rareLanes &= ~0xffL;
       while (rareLanes != 0) {
         int lane = Long.numberOfTrailingZeros(rareLanes);
         rareLanes &= rareLanes - 1;

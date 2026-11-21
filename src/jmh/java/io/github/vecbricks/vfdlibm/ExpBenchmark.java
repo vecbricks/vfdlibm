@@ -39,11 +39,13 @@ import org.openjdk.jmh.annotations.Warmup;
  * from the loop may pass boxed vectors. Varka emits the sequence inline instead; to measure that,
  * add {@code -jvmArgsAppend -XX:CompileCommand=inline,io.github.vecbricks.vfdlibm.*::*}.
  *
- * <p>{@code bench/alloc-check.py} runs the vector benchmarks named {@code *256} and
- * {@code *Preferred} on {@code common} and {@code mixed} inputs and fails if any allocates, which
- * means the body boxed. A new arm named that way is checked with no further change. The
- * {@code *Max} rows are not checked: at {@code SPECIES_MAX} the finish arm boxes on mixed data
- * (see {@code bench/alloc-check.py}); they are here to record that.
+ * <p>{@code bench/alloc-check.py} runs the vector benchmarks named {@code *256}, {@code
+ * *Preferred} and {@code *Max} on {@code common} and {@code mixed} inputs and fails if any
+ * allocates, which means the body boxed. A new arm named that way is checked with no further
+ * change. The {@code *Max} rows are at {@code DoubleVector.SPECIES_MAX}, where the finish arm
+ * boxed on mixed data until it wrote out its first eight lanes with constant indices
+ * (bench/results/max-finish-laptop-2026-11-20.txt, then
+ * bench/results/max-finish-alloc-free-laptop-2026-11-21.txt).
  *
  * <p>The {@code finishPairBoxed} rows are an experiment for code generators. The hypothesis, read
  * from the assembly census (bench/asm) and not measured, is that exp's body is bound by its
@@ -52,7 +54,7 @@ import org.openjdk.jmh.annotations.Warmup;
  * Exp#expRare}), and runs one per-lane finish, written out in the loop as a code generator would
  * emit it, only if either vector has a rare lane. They return exactly {@link VFdlibm#exp}'s results
  * ({@code ExpTest.finishPairRowsMatchVFdlibmExp}), but they box, and {@code bench/alloc-check.py}
- * leaves them out by name, as it does the {@code *Max} rows. Two inlined vfdlibm bodies exceed C2's
+ * leaves them out by name. Two inlined vfdlibm bodies exceed C2's
  * {@code NodeCountInliningCutoff} (a develop flag, 18000 nodes, fixed in product JVMs); past it C2
  * refuses every callee larger than {@code MaxTrivialSize} (6 bytes) that is not {@code
  * @ForceInline} ({@code opto/bytecodeInfo.cpp}), and {@code CompileCommand=inline} does not lift
