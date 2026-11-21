@@ -25,14 +25,17 @@
 # It needs the classes built (mvn test-compile). NIGHTLY_OUT is where each species' log and
 # mismatch file go (default target/nightly; <mode>-<function>-<species>.log and .txt),
 # NIGHTLY_THREADS the threads per JVM (default: every processor), and NIGHTLY_JVM_ARGS extra JVM
-# options, such as -XX:UseAVX=2 or -Dvfdlibm.fault=exp.dropCorrection. Every species runs even
-# after one fails. Exit status: 0 when every lane matched, 1 when some lane differed, 2 when a
+# options, such as -XX:UseAVX=2 or -Dvfdlibm.fault=exp.dropCorrection. NIGHTLY_ARGUMENT, 1 or 2,
+# is the argument a sweep of a function of two arguments sweeps (Sweep.java, `--argument`; its
+# log and mismatch file are <mode>-<function>-arg<N>-<species>); it is left out for a function of
+# one argument. Every species runs even after one fails. Exit status: 0 when every lane matched, 1 when some lane differed, 2 when a
 # run failed to run (a usage error, or a harness failure), which outranks 1.
 set -uo pipefail
 
 usage() { sed -n '/^# The nightly correctness/,/^[^#]/p' "$0" | sed '$d'; exit 2; }
 [ $# -ge 4 ] || usage
 mode="$1" function="$2" amount="$3" seed="$4"
+function_name="$function"
 shift 4
 case "$mode" in
   sweep)
@@ -40,7 +43,11 @@ case "$mode" in
     case "$amount" in
       stripe:*) what=(--stripe "${amount#stripe:}") ;;
       *) what=(--part "$amount") ;;
-    esac ;;
+    esac
+    if [ -n "${NIGHTLY_ARGUMENT:-}" ]; then
+      what+=(--argument "$NIGHTLY_ARGUMENT")
+      function_name="$function-arg$NIGHTLY_ARGUMENT"
+    fi ;;
   fuzz) main=Fuzz; what=(--seconds "$amount") ;;
   *) usage ;;
 esac
@@ -83,7 +90,7 @@ fi
 
 status=0
 for s in "${species[@]}"; do
-  name="$mode-$function-$s"
+  name="$mode-$function_name-$s"
   echo "== $name: ${java_cmd[*]} io.github.vecbricks.vfdlibm.$main ..."
   "${java_cmd[@]}" "io.github.vecbricks.vfdlibm.$main" --function "$function" --species "$s" \
     "${what[@]}" --seed "$seed" --threads "$threads" --out "$out/$name.txt" 2>&1 \
