@@ -769,12 +769,13 @@ next port re-trying a settled question.
     `pool.py cost`. The budget is a median span of 90 minutes, so a median of the nights above
     90 breaks it and calls for one of the levers below; a single long night does not. At 13
     functions a median between 76 and 90 is inside it, and shows how far the model is off.
-  - **Seven functions, figures for seven; atan makes eight.** The table is of five; sinh and
-    cosh join it, so the nightly ran seven. At the five's average cost the model gives 167, 193
-    and 147 minutes for the sweep, the fuzz and Arm, over 5, 6 and 4 slots 33, 32 and 37, a span
-    of 45 (a lower bound, as above) for seven functions; it has not been rerun for eight. Their
-    own cost is not measured: the first nights with them are, with `pool.py fetch` and `cost`,
-    and this entry is requoted from those.
+  - **Seven functions' figures; the eighth's cost is not measured.** The table is of five; sinh
+    and cosh join it, so the nightly ran seven, and atan makes eight. At the five's average cost
+    the model gives 167, 193 and 147 minutes for the sweep, the fuzz and Arm, over 5, 6 and 4
+    slots 33, 32 and 37, a span of 45 (a lower bound, as above) for seven functions. The model
+    has not been rerun for eight, and atan's own cost is not measured, nor are sinh's and
+    cosh's: the first nights with them are, with `pool.py fetch` and `cost`, and this entry is
+    requoted from those.
   - **What gives when it does not fit,** cheapest first, with what each buys at 13 functions
     (the table's means times 2.6): `fuzz-seconds` 120 saves 224 runner-minutes a night (172 in
     the fuzz jobs, 52 in Arm's) and halves what a species is fuzzed; `nights` 2 saves 192, 124

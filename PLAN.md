@@ -67,8 +67,8 @@ five are a later, optional set; the large-argument reduction of the trigonometri
     `expm1`, `log`, `log10`, `log1p`, `sinh`, `cosh` and `atan`), loaded with
     `Inputs.hardCases("<function>")`. The inputs of Lefevre's list come out of
     `dev/testlibm-extract.py`, which rechecks each line with 400-digit arithmetic against exact
-    values it derives itself (`sinh`'s and `cosh`'s files were written by it; it also derives
-    `atan`, `asin` and `acos`, whose files come with their ports). A port that keeps fdlibm's
+    values it derives itself (`sinh`'s, `cosh`'s and `atan`'s files were written by it; it also
+    derives `asin` and `acos`, whose files come with their ports). A port that keeps fdlibm's
     operations, or departs from them only where `PROOFS.md` proves the result equal, matches
     `StrictMath` on them by construction; they sit where a dropped correction term or a
     reassociated sum, an error far below one ulp, is most likely to change the returned double.
