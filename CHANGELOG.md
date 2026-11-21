@@ -17,6 +17,13 @@ contract of every version is the same: each lane of each function equals
   signed zeros included. Lanes of magnitude 22 or more, the infinities and NaNs are finished
   per lane by `StrictMath.sinh`.
 
+### Changed
+
+- The per-lane finish of `exp`, `expm1`, `log`, `log10`, `log1p` and `sinh` writes out its first
+  eight lanes with constant indices, so that at `DoubleVector.SPECIES_MAX` (up to eight lanes) it
+  allocates nothing on data with rare lanes, where it allocated 30 to 37 KB per 1024 doubles.
+  Every lane's result is unchanged.
+
 ## [0.1.0] - 2026-11-20
 
 ### Added

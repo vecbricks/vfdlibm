@@ -71,8 +71,9 @@ vfdlibm ports fdlibm's double functions to the Java Vector API, each lane bit-id
   `-Djmh.args="ExpBenchmark.finish256 -p inputs=common"`.
 - A port's benchmark must pass the allocation check, which CI runs: `bench/alloc-check.py
   --mvn <mvn>` (add `--jvm-args="-XX:UseAVX=2 -XX:MaxVectorSize=32"` to compile as an AVX2 host).
-  It covers each vector arm at 256 bits and at the preferred species if the class is named
-  `<Function>Benchmark`, the methods `<arm>256` and `<arm>Preferred`, and the `@Param` `inputs`
+  It covers each vector arm at 256 bits, at the preferred species and at `SPECIES_MAX` if the
+  class is named `<Function>Benchmark`, the methods `<arm>256`, `<arm>Preferred` and `<arm>Max`
+  (the Arm runner's check runs `<arm>Preferred` only), and the `@Param` `inputs`
   takes `common` (no lane takes a rare path) and `mixed` (rare lanes run); see `SKILLS.md`.
   CI runs it on x86 both ways and, for the `<arm>Preferred` methods, on the Arm runner, where
   the preferred species is 128 bits.
