@@ -2,10 +2,10 @@
 
 Lessons about benchmarking, the JIT and the Vector API that every port follows. Most were learned in
 Varka (github.com/vecbricks/varka, its `sql/varka/skills/`) and are rewritten here for a vector math
-library; the last sections are what the `exp`, `log`, `log1p`, `log10`, `expm1`, `sinh` and `cosh`
-ports taught. Each entry says where its numbers come from. A new lesson goes in the section it
-belongs to, as a short entry; a negative result belongs here too, since it stops the next port
-re-trying a settled question.
+library; the last sections are what the `exp`, `log`, `log1p`, `log10`, `expm1`, `sinh`, `cosh`
+and `atan` ports taught. Each entry says where its numbers come from. A new lesson goes in the
+section it belongs to, as a short entry; a negative result belongs here too, since it stops the
+next port re-trying a settled question.
 
 ## Benchmarking with JMH
 

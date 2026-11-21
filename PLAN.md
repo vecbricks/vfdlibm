@@ -64,7 +64,7 @@ five are a later, optional set; the large-argument reduction of the trigonometri
   - published hard cases: inputs where the exact result lies very close to a rounding boundary, from
     Lefevre and Muller's worst-case tables (ARITH 15, 2001) and Lefevre's list of round-to-nearest
     hard cases, one resource per function under `src/test/resources/.../hard-cases/` (so far `exp`,
-    `expm1`, `log`, `log10`, `log1p`, `sinh` and `cosh`), loaded with
+    `expm1`, `log`, `log10`, `log1p`, `sinh`, `cosh` and `atan`), loaded with
     `Inputs.hardCases("<function>")`. The inputs of Lefevre's list come out of
     `dev/testlibm-extract.py`, which rechecks each line with 400-digit arithmetic against exact
     values it derives itself (`sinh`'s and `cosh`'s files were written by it; it also derives

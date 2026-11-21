@@ -65,16 +65,21 @@ class AtanTest {
 
   /**
    * s_atan.c in scalar Java, line by line: the five ranges with their reductions, the one
-   * polynomial and its two result forms, and, from {@code 2^66} up, {@code StrictMath.atan}
-   * itself, which is what the port finishes per lane there. It matches {@code StrictMath.atan}
-   * on every input the tests give it, so a hinge or a fault run that uses it shows the C's
-   * result, not a guess.
+   * polynomial and its two result forms, and, from {@code 2^66} up, the C's constant with
+   * {@code x}'s sign and its NaN rule ({@code x+x}), which the port does not compute but
+   * finishes per lane with {@code StrictMath.atan}. It matches {@code StrictMath.atan} on every
+   * input the tests give it, so a hinge or a fault run that uses it shows the C's result, not a
+   * guess.
    */
   static double cAtan(double x) {
     int hx = (int) (Double.doubleToRawLongBits(x) >>> 32);
     int ix = hx & 0x7fffffff;
     if (ix >= Atan.HX_BIG) {
-      return StrictMath.atan(x);
+      // Lines 97-102: x+x for a NaN, else atanhi[3]+atanlo[3] with x's sign.
+      if (ix > 0x7ff00000 || (ix == 0x7ff00000 && (int) Double.doubleToRawLongBits(x) != 0)) {
+        return x + x;
+      }
+      return hx > 0 ? Atan.ATAN_HI[3] + Atan.ATAN_LO[3] : -Atan.ATAN_HI[3] - Atan.ATAN_LO[3];
     }
     int id;
     if (ix < Atan.HX_NO_REDUCTION) {
