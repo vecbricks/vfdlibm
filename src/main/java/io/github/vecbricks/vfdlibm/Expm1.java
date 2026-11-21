@@ -77,18 +77,20 @@ import jdk.incubator.vector.VectorSpecies;
  * <p>All three are exact. {@link #expm1}, which {@code VFdlibm.expm1} calls, is the guarded arm,
  * provisionally, as for log1p, whose rare paths are as cheap in vector form. By minimums at 256
  * bits and the preferred species (and 512 bits on the Xeon), every arm is within 1.3x of the
- * others on every row of both host files, so no direction is read: on the AMD EPYC 7763 ({@code
- * bench/results/expm1-epyc7763-2026-11-20.txt}, two runs) the finish arm is lowest on every row;
- * on the Xeon Platinum 8573C ({@code bench/results/expm1-xeon8573c-2026-11-21.txt}, one run) the
- * guarded arm is lowest on mixed data at all three and at 256 bits on common data, the finish
- * arm at the preferred species and 512 bits on common data. The earlier Xeon file ({@code
+ * others on every one of those rows (the EPYC's 512-bit rows run in the Java fallback and are
+ * left out), so no direction is read: on the AMD EPYC 7763 ({@code
+ * bench/results/expm1-epyc7763-2026-11-20.txt}, two runs) the finish arm is lowest on every such
+ * row; on the Xeon Platinum 8573C ({@code bench/results/expm1-xeon8573c-2026-11-21.txt}, one
+ * run) the guarded arm is lowest on mixed data at all three and at 256 bits on common data, the
+ * finish arm at the preferred species and 512 bits on common data. The earlier Xeon file ({@code
  * expm1-xeon8573c-2026-11-04.txt}) had the guarded arm lowest on the preferred rows of both
- * kinds of data. Both files time the class before {@link #expm1Core}, which no run has timed,
- * and the class changed between their two commits by a fault constant and a local in the k
- * conversion. The choice waits for a second run of the Xeon 8573C and a first of the other
- * AVX-512 hosts ({@code HARDWARE.md}), a pair, and the rules for a tie within 1.3x and for hosts
- * that disagree (issue #30); the other two arms are kept so it can be re-measured ({@code
- * SKILLS.md}).
+ * kinds of data. The EPYC file of 20 November and the Xeon file of 21 November time the class
+ * before {@link #expm1Core}, which no run has timed, and before the finish's first eight lanes
+ * were written out with constant indices (issue #37); the class changed between their two
+ * commits by a fault constant and a local in the k conversion. The choice waits for a second run
+ * of the Xeon 8573C and a first of the other AVX-512 hosts ({@code HARDWARE.md}), a pair, and
+ * the rules for a tie within 1.3x and for hosts that disagree (issue #30); the other two arms
+ * are kept so it can be re-measured ({@code SKILLS.md}).
  *
  * <p>{@link #expm1Core} and {@link #expm1Rare} split the finish arm into its branch-free part and
  * its rare-lane mask, as {@code Exp.expCore} and {@code Exp.expRare} do, so that a port that

@@ -70,24 +70,35 @@ IEEE properties used:
 
 Each lane of a function of two arguments equals `StrictMath`'s result by
 `Double.doubleToRawLongBits`, except on a lane where both arguments are NaN and their bits differ.
-There the result must equal one of the two arguments' bits with the quiet bit set, all 64 bits,
-the sign included; which of the two is not specified. Every other lane keeps the raw-bit rule: a
-NaN made from arguments that are not both NaN, one NaN argument with a finite one, and two NaNs
-with identical bits.
+There the result must be one of two candidates, all 64 bits, and which one is not specified. The
+candidates are the two arguments' bits with the quiet bit set (`atan2`, `pow`: declared
+`OPERANDS`), or the same with the sign cleared (`hypot`: `MAGNITUDES`). Each function declares
+one on its `Nightly.PairFunction`, and there is no default. The oracle's own bits must be
+candidates too, so a function declared the wrong way fails on the first lane where the two
+declarations differ. Every other lane keeps the raw-bit rule, for all three functions: a NaN made
+from arguments that are not both NaN, one NaN argument with a finite one, and two NaNs with
+identical bits.
 
 The exception is there because `StrictMath.atan2` returns `x + y` on two NaNs (as the C of `pow`
 does, reading `reference/fdlibm-5.3`), and which operand's payload a sum of two NaNs keeps is
-fixed neither by IEEE 754 nor by the JLS. The C of `hypot` adds the absolute values, so its sign
-is cleared: the rule above does not say what that lane's sign must be, and its port settles it.
+fixed neither by IEEE 754 nor by the JLS. The C of `hypot` adds the absolute values of its
+arguments, and `StrictMath.hypot` returned a result with the sign cleared in every pair of every
+mode of the probe, so its candidates are the magnitudes.
 
-On JDK 25.0.5.1 and x86-64 the interpreter and C2 returned `y`'s payload and C1 `x`'s of
-`atan2`, for every one of 65,536 pairs a mode (issue 33), so a raw-bit comparison with
-`StrictMath` fails by the tier the oracle's call is in. `PairBits.matches` is the one comparison
-of such a lane, used by `Oracle`'s asserts and the nightly's pair check, and
-`PairNanTest` shows that it fails for a canonical NaN, a NaN of a third payload, the other sign, a
-result not quieted, and one payload bit off on a lane that is not two different NaNs. A function of
-one argument keeps the raw-bit rule on every lane: its NaN results were the same in every mode in
-the same probe.
+The probes (JDK 25.0.5.1, x86-64, 65,536 random pairs a mode, issue 33) found on two NaNs with
+different bits that `StrictMath.atan2`, `hypot` and `pow` each returned exactly one candidate and
+never anything else, and that which one changed with the mode: `-Xint`, C1 only and C2 only each
+returned one fixed argument's payload once warmed up, and default tiering moved from one to the
+other. For `hypot` that argument is not the NaN with the larger high word that `e_hypot.c`
+orders its operands by, so no port or test may assume either. A raw-bit comparison with
+`StrictMath` fails by the tier the oracle's call is in.
+
+`PairBits.matches` is the one comparison of such a lane, used by `Oracle`'s pair asserts and the
+nightly's pair check. `PairNanTest` shows that it fails for a canonical NaN, a NaN of a third
+payload, the other sign, a result not quieted, a result with the sign kept where `MAGNITUDES` is
+declared, a function declared the wrong way, one that declares nothing, and one payload bit off on
+a lane that is not two different NaNs. A function of one argument keeps the raw-bit rule on every
+lane: its NaN results were the same in every mode in the same probe.
 
 ## exp (`Exp.java`, from `e_exp.c`)
 

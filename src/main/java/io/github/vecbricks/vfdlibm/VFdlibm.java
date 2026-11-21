@@ -45,16 +45,20 @@ import jdk.incubator.vector.VectorMask;
  *       hold this reading and the 128-bit one above ({@code exp-epyc7763-2026-11-20.txt}, and
  *       the same for {@code log}, {@code log10}, {@code log1p} and {@code expm1}, in {@code
  *       bench/results/}).
- *   <li>{@code DoubleVector.SPECIES_MAX} is none of the fixed shapes. On mixed data (one input in
- *       16 replaced by one that takes its own path in the C, as each benchmark class lists), the
- *       finish of every function used to allocate 30432 to 36992 bytes per op there ({@code
- *       bench/results/max-finish-laptop-2026-11-20.txt}, and the host files of {@code exp} and
- *       {@code log10}, and the Xeon 8573C and EPYC 7763 files of 21 and 20 November 2026, which
- *       read the old code). It writes out its first eight lanes with
- *       constant indices now, and every {@code *Max} row reads under 0.1 bytes per op ({@code
+ *   <li>{@code DoubleVector.SPECIES_MAX} is none of the fixed shapes. On mixed data (one input
+ *       in 16 replaced by one that takes its own path in the C, as each benchmark class
+ *       lists), the finish of {@code exp}, {@code expm1}, {@code log}, {@code log10} and
+ *       {@code log1p} used to allocate 30432 to 36992 bytes per op there ({@code
+ *       bench/results/max-finish-laptop-2026-11-20.txt}, the Xeon 8573C files of 21 November
+ *       2026 for all five functions, the EPYC 7763 files of 20 November for {@code exp} and
+ *       {@code log10}, and {@code exp-onediv-xeon8573c-2026-11-03.txt}, which read the old
+ *       code). It writes out its first eight lanes with constant indices now, and every {@code
+ *       *Max} row of {@code exp}, {@code expm1}, {@code log}, {@code log10}, {@code log1p},
+ *       {@code sinh} and {@code cosh} reads under 0.1 bytes per op ({@code
  *       bench/results/max-finish-alloc-free-laptop-2026-11-21.txt}, a laptop file and not a
- *       headline, read at 512 bits and as an AVX2 host at 256). {@code SPECIES_MAX} at 128 bits,
- *       and with more than eight lanes, was not read.
+ *       headline, read at 512 bits and as an AVX2 host at 256). {@code SPECIES_MAX} at 128
+ *       bits, and with more than eight lanes, was not read. No file has an {@code asin} row,
+ *       and no {@code asin} timing exists.
  *   <li>Not measured: any port's speed at 512 bits against 256 on the EPYC 9V74 draws that have
  *       AVX-512 ({@code HARDWARE.md} has only a datapath reading for them, and lists {@code
  *       MaxVectorSize=64}), any port's speed on Arm, and allocation on an Arm host with vectors

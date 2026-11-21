@@ -51,9 +51,10 @@ import jdk.incubator.vector.VectorSpecies;
  *       finish walks the set bits of the rare mask ({@code toLong}), reads each lane with {@code
  *       lane} and writes it back with {@code withLane}, all in this body. C2 intrinsifies that
  *       lane access at a constant index, which the first eight lanes have (a loop takes any past
- *       eight): at 256 and 512 bits and at {@code SPECIES_MAX} of up to eight lanes the finish
- *       allocates nothing (at 128 bits on x86 the masks box anyway; {@code
- *       bench/results/max-finish-alloc-free-laptop-2026-11-21.txt}).
+ *       eight): in the laptop reading of {@code
+ *       bench/results/max-finish-alloc-free-laptop-2026-11-21.txt} (allocation only, no timing)
+ *       the finish allocates nothing at 256 bits, at 512 bits and at {@code SPECIES_MAX} of up
+ *       to eight lanes. At 128 bits on x86 the masks box anyway ({@code SKILLS.md}).
  *   <li>{@link #expBlended} computes them in every lane too and blends them, with no branch.
  * </ul>
  *
@@ -64,17 +65,18 @@ import jdk.incubator.vector.VectorSpecies;
  * Platinum 8573C ({@code bench/results/exp-xeon8573c-2026-11-21.txt}, one run, the code of
  * a1db6df) it is 1.23 to 1.37 on common data, a range with 1.3x inside it, and 1.70 to 1.84 on
  * mixed data, at 256 bits, 512 bits and the preferred species. This class has changed since both
- * runs by a fault constant and a local in the k conversion, so no run has timed it as it stands.
- * Which arm is kept waits for a second run of the Xeon 8573C and a first of the other AVX-512
- * hosts ({@code HARDWARE.md}), a pair, and the rules for a tie within 1.3x and for hosts that
- * disagree (issue #30). The second arm is kept so the choice can be re-measured, on other hosts
- * and as the JDK changes. The folds above cut the common path C2 emits from 77 instructions with
- * two divisions to 52 with one at 512 bits on AVX-512, and from 107 to 64 at 256 bits under
- * {@code -XX:UseAVX=2} ({@code bench/asm/README.md}). The folded body was timed once as a pair
- * against its base on the Xeon Platinum 8573C ({@code
+ * runs by a fault constant and a local in the k conversion and by the finish's first eight lanes
+ * written out with constant indices (issue #37), so no run has timed it as it stands. Which arm
+ * is kept waits for a second run of the Xeon 8573C and a first of the other AVX-512 hosts
+ * ({@code HARDWARE.md}), a pair, and the rules for a tie within 1.3x and for hosts that disagree
+ * (issue #30). The second arm is kept so the choice can be re-measured, on other hosts and as
+ * the JDK changes. The folds above cut the common path C2 emits from 77 instructions with two
+ * divisions to 52 with one at 512 bits on AVX-512, and from 107 to 64 at 256 bits under {@code
+ * -XX:UseAVX=2} ({@code bench/asm/README.md}). The folded body was timed once as a pair against
+ * its base on the Xeon Platinum 8573C ({@code
  * bench/results/exp-onediv-xeon8573c-2026-11-03.txt}): on common data its 256-bit, 512-bit,
- * preferred and Max rows are 1.33x to 1.48x faster by the median of five rounds, and no vector
- * row is slower.
+ * preferred and Max rows are 1.33x to 1.48x faster by the median of five rounds, and none of
+ * those rows is slower by the median or by the best iteration.
  *
  * <p>{@link #expCore} and {@link #expRare} split the finish arm into its branch-free part and its
  * rare-lane mask, for {@code ExpBenchmark}'s experiment with two vectors per loop iteration.

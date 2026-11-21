@@ -100,14 +100,14 @@ class NightlyTest {
    * atan.splitMoved, atan.hiOneUlpOff), measured the same way with one thread, no draw bound
    * and a stop at the first mismatch, are found at 4,096 by both seeds. Not measured: asin's
    * three faults and cosh's five. Over 20 seeds sinh's faults need at most 8,192 and the longest
-   * is 614,400 (exp.dropKForcing), which a million would clear only 1.6 times, but the seed is fixed. One
-   * thread finding the fault is enough, so a fault's index is the smaller of its two threads':
-   * the largest is 57,344 (exp.dropKForcing), and a million inputs is 17 times that (14 times the
-   * first thread's alone, 69,632). The time was the trouble: on GitHub's x86 runner (4 cores, 128
-   * bits) the one second the test used to allow drew 32,768 inputs, 16,384 a thread, one block
-   * short of expm1.dropKForcing's 20,480 (run 44893905573, job 136815350908). Now the inputs are
-   * bounded and the seconds only end a hung run. The test also passes {@code --stop-after 1}, so
-   * a fault found costs the inputs up to it and the bound is paid in full only by a fault the
+   * is 614,400 (exp.dropKForcing), which a million would clear only 1.6 times, but the seed is
+   * fixed. One thread finding the fault is enough, so a fault's index is the smaller of its two
+   * threads': the largest is 57,344 (exp.dropKForcing), and a million inputs is 17 times that (14
+   * times the first thread's alone, 69,632). The time was the trouble: on GitHub's x86 runner (4
+   * cores, 128 bits) the one second the test used to allow drew 32,768 inputs, 16,384 a thread, one
+   * block short of expm1.dropKForcing's 20,480 (run 44893905573, job 136815350908). Now the inputs
+   * are bounded and the seconds only end a hung run. The test also passes {@code --stop-after 1},
+   * so a fault found costs the inputs up to it and the bound is paid in full only by a fault the
    * fuzz misses, which fails.
    */
   private static final String DRAWS = "1000000";

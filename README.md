@@ -134,7 +134,8 @@ preferred species and `SPECIES_MAX` (up to eight lanes) on x86, and the preferre
 bits, on GitHub's Arm runner. The files under `bench/results/` read as allocating, and the check
 does not cover: `exp` and `log` at 128 bits on x86, and every function at 512 bits on an AVX2
 host. `SPECIES_MAX` was read on a laptop only (`max-finish-alloc-free-laptop-2026-11-21.txt`); the
-host files of `exp` and `log10` read the old finish.
+host files that have a `*Max` row (the Xeon's of 21 November for all five functions, the EPYC's of
+20 November for `exp` and `log10`, and `exp-onediv-xeon8573c-2026-11-03.txt`) read the old finish.
 The Javadoc of `VFdlibm` gives each reading with its file, and lists what is not measured: the
 speed of 512 bits against 256 on the EPYC 9V74 draws that have AVX-512, and any port's speed on
 Arm.
@@ -161,9 +162,9 @@ fdlibm's own sequence of operations, lane by lane. That is this library.
 
 - **Bit identity.** For every `double` input, each lane equals `StrictMath.f` on that input,
   compared by `Double.doubleToRawLongBits`. NaN payloads and signed zeros are included. For a
-  function of two arguments (`atan2`, `pow`), a lane where both arguments are NaN with different
-  bits equals one of the two, with the quiet bit set (which one is not specified: `StrictMath`'s
-  own choice varies).
+  function of two arguments (`atan2`, `pow`, `hypot`), a lane where both arguments are NaN with
+  different bits equals one of the two arguments' bits with the quiet bit set (for `hypot`, also
+  with the sign bit cleared); which one is not specified, since `StrictMath`'s own choice varies.
 - **fdlibm's operations, in fdlibm's order.** Only IEEE `+ - * /`, `sqrt` and bit operations. There
   is no fused multiply-add and no reassociation, so the rounding of every step is fdlibm's.
 - **Rare paths, exact too.** Lanes on a rare path (huge arguments, subnormals, special cases) are

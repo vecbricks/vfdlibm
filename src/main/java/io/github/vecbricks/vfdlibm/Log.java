@@ -65,18 +65,18 @@ import jdk.incubator.vector.VectorSpecies;
  * numbers, not headlines: under {@code UseAVX=2} at 256 bits the finish is about 1.2x ahead of
  * the blend on ordinary data and level with it, about 1.05x, when one input in 16 is rare, and
  * with AVX-512 at 512 bits on that mixed data the blend wins, by 1.36x in both runs. The host
- * files read, by minimums at 256 bits, the preferred species and, on the Xeon, 512 bits: on the
- * AMD EPYC 7763 ({@code bench/results/log-epyc7763-2026-11-20.txt}, two runs) the blend over the
- * finish is 1.21 to 1.24 on ordinary data and 1.01 to 1.03 on mixed data, and the finish
- * allocates nothing; on the Xeon Platinum 8573C ({@code
- * bench/results/log-xeon8573c-2026-11-21.txt}, one run) it is 1.24 (256 bits), 1.32 (preferred
- * species) and 1.32 (512 bits) on ordinary data, the last two a little outside 1.3x in this one
- * run, so no direction is read before a re-run, and 0.97, 0.77 and 0.77 on mixed data, where the
- * blend is lower and the last two sit at the 1.3x line. At 256 bits, the one width both hosts
- * run natively, the hosts read alike: the finish is lower on ordinary data, and on mixed data
- * the minimums are within 3% (the blend 1.02 to 1.03 times the finish on the EPYC, the finish
- * 1.03 times the blend on the Xeon). Both host files time this class as it stands, after the
- * departures of {@code PROOFS.md}'s L6 to L9. The choice waits for a second run of the Xeon
+ * files read, by minimums, the blended arm over the finish arm. At 256 bits, the one width both
+ * hosts run natively, every ratio is within 1.3x, so no direction is read: 1.22 to 1.24 on
+ * ordinary data and 1.02 to 1.03 on mixed data on the AMD EPYC 7763 ({@code
+ * bench/results/log-epyc7763-2026-11-20.txt}, two runs), 1.24 and 0.97 on the Xeon Platinum
+ * 8573C ({@code bench/results/log-xeon8573c-2026-11-21.txt}, one run). At the Xeon's preferred
+ * species and at 512 bits the blend is 1.32 and 1.32 times the finish on ordinary data, a little
+ * past 1.3x, and the finish is 1.30 and 1.29 times the blend on mixed data, on the line, in one
+ * run, so no direction is read before a re-run; the EPYC has no native counterpart of these
+ * widths, its preferred species being 256 bits. On the EPYC's 256-bit and preferred rows the
+ * finish read 0.017 B/op or less in JMH's table. Both host files time this class after the
+ * departures of {@code PROOFS.md}'s L6 to L9 and before the finish's first eight lanes were
+ * written out with constant indices (issue #37). The choice waits for a second run of the Xeon
  * 8573C and a first of the other AVX-512 hosts ({@code HARDWARE.md}), a pair ({@code
  * bench/pair.sh}), and the rules for a tie within 1.3x and for hosts that disagree (issue #30);
  * the second arm is kept so it can be re-measured, on other hosts and as the JDK changes. The

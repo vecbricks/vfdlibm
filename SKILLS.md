@@ -116,9 +116,10 @@ next port re-trying a settled question.
   data the branch never ran, C2 left it as an uncommon trap, and nothing boxed, which is why the
   allocation check, on common data only, never saw it. Written out in the body with the Vector API's
   own `toLong`, `lane` and `withLane`, which C2 inlines late instead of refusing, the finish
-  allocates nothing at 256 and 512 bits, and at `SPECIES_MAX` with its first eight lanes written out
-  (below). Any slow path called from a port's body belongs written out inline, as
-  `Lanes.addExponent` is.
+  allocates nothing at 256 and 512 bits, and at `SPECIES_MAX` with its first eight lanes written
+  out, in the laptop reading `bench/results/max-finish-alloc-free-laptop-2026-11-21.txt` (below;
+  allocation only, no timing). Any slow path called from a port's body belongs written out inline,
+  as `Lanes.addExponent` is.
 - **Two port bodies in one loop do not fit, whatever the order.** `ExpBenchmark`'s
   `finishPairBoxed256` calls `Exp.expRare` and `Exp.expCore` for two vectors per iteration. C2
   spent its budget inside the first `expCore`, after the two `expRare` calls: `Lanes.hiAbove`,
@@ -161,25 +162,26 @@ next port re-trying a settled question.
   (`bench/results/exp-finish-laptop-2026-11-02.txt`). Common data never runs that loop and does not
   allocate. A constant index does lower there (the next entry); a port that has to visit lanes
   at a variable index measures `SPECIES_MAX` too.
-- **Every port's finish boxed at `SPECIES_MAX`, Log's counted loop too; constant lane indices fix
-  it.** With `*Max` rows in all five benchmarks, read on the laptop under `-prof gc`
-  (`bench/results/max-finish-laptop-2026-11-20.txt`, allocation readings on a loaded machine, no
-  timings): on mixed data `finishMax` allocates 30912 B/op at 512 bits for exp, expm1 and log1p and
-  30432 for log and log10, and 36992 and 36672 under `-XX:UseAVX=2`; on common data it allocates
-  nothing, and neither do the blended rows (log has none) or the guarded rows of log1p and expm1, on
-  either data. The host files read it too: `finishMax` on mixed data allocates 30,912 B/op on the
-  Xeon Platinum 8573C (the five files `exp-`, `expm1-`, `log-`, `log10-` and
-  `log1p-xeon8573c-2026-11-21.txt`) for exp, expm1 and log1p and 30,432 for log and log10, and, at
-  256 bits on the EPYC 7763, 36,992 for exp and 36,672 for log10 (`exp-epyc7763-2026-11-20.txt` and
-  `log10-epyc7763-2026-11-20.txt`; the other EPYC files have no `*Max` row). Log's finish is a
-  counted loop over `species.length()` that tests each bit where the others walk the set bits with
-  `numberOfTrailingZeros`; it boxes the same, so the loop's shape is not the cause, the lane index
-  not being a constant is. Merged: the first eight lanes are written out with literal indices, `if
-  (lanes > 0 && (rareLanes & 1L) != 0) result = result.withLane(0, f(x.lane(0)));` and so on, in all
-  seven ports (sinh's and cosh's finishes had the same loop), the loop kept for lanes past eight.
-  With it every `*Max` row reads under 0.1 B/op on mixed data at 512 bits and as an AVX2 host at
-  256, 0.033 and 0.072 at most, and all 94 rows of the check pass under both flag sets on a lightly
-  loaded machine, the `*Max` rows now among them
+- **The finish of exp, expm1, log, log10 and log1p boxed at `SPECIES_MAX`, Log's counted loop too;
+  constant lane indices fix it.** With `*Max` rows in all five benchmarks, read on the laptop under
+  `-prof gc` (`bench/results/max-finish-laptop-2026-11-20.txt`, allocation readings on a loaded
+  machine, no timings): on mixed data `finishMax` allocates 30912 B/op at 512 bits for exp, expm1
+  and log1p and 30432 for log and log10, and 36992 and 36672 under `-XX:UseAVX=2`; on common data it
+  allocates nothing, and neither do the blended rows (log has none) or the guarded rows of log1p and
+  expm1, on either data. The host files of 20 and 21 November 2026 read the old finish the same way:
+  `finishMax` on mixed data allocated 30,912 B/op on the Xeon Platinum 8573C (the five files `exp-`,
+  `expm1-`, `log-`, `log10-` and `log1p-xeon8573c-2026-11-21.txt`) for exp, expm1 and log1p and
+  30,432 for log and log10, and, at 256 bits on the EPYC 7763, 36,992 for exp and 36,672 for log10
+  (`exp-epyc7763-2026-11-20.txt` and `log10-epyc7763-2026-11-20.txt`; the other EPYC files have no
+  `*Max` row). Log's finish is a counted loop over `species.length()` that tests each bit where the
+  others walk the set bits with `numberOfTrailingZeros`; it boxes the same, so the loop's shape is
+  not the cause, the lane index not being a constant is. Merged: the first eight lanes are written
+  out with literal indices, `if (lanes > 0 && (rareLanes & 1L) != 0) result = result.withLane(0,
+  f(x.lane(0)));` and so on, in the seven ports that had one (sinh's and cosh's finishes had the
+  same loop; asin, which joined after, was written in this shape), the loop kept for lanes past
+  eight. With it every `*Max` row reads under 0.1 B/op on mixed data at 512 bits and as an AVX2 host
+  at 256, 0.033 and 0.072 at most, and all 94 rows of the check pass under both flag sets on a
+  lightly loaded machine, the `*Max` rows now among them
   (`bench/results/max-finish-alloc-free-laptop-2026-11-21.txt`). Lanes past eight, and 128 bits, are
   not read. The fixed shapes' finish changes too, so the change goes through a pair on a host (the
   pull request names it).
@@ -321,12 +323,12 @@ next port re-trying a settled question.
   2.21 to 2.62 on the Xeon, and the finish arm 1.55 to 1.60 and 1.58 to 1.99, in the same files;
   they give no cause for the Xeon's larger slowing, and
   `bench/results/exp-kinds-xeon8573c-2026-11-21.txt` times each kind of rare input apart. Both files
-  time `exp` as of a5683c3 and a1db6df, and `Exp.java` has changed since by a fault constant and a
-  local, so no run has timed today's body. Which arm `VFdlibm.exp` keeps is not decided here: it
-  waits for a second run of the Xeon 8573C and a first of the other AVX-512 hosts, a pair and the
-  rules for a tie within 1.3x and for hosts that disagree (issue #30). Each port measures both on
-  common and mixed data, decides per branch, and records the decision in its pull request (`PLAN.md`
-  section 5).
+  time `exp` as of a5683c3 and a1db6df, and `Exp.java` has changed since by a fault constant, a
+  local and the finish's first eight lanes written out with constant indices (issue #37), so no run
+  has timed today's body. Which arm `VFdlibm.exp` keeps is not decided here: it waits for a second
+  run of the Xeon 8573C and a first of the other AVX-512 hosts, a pair and the rules for a tie
+  within 1.3x and for hosts that disagree (issue #30). Each port measures both on common and mixed
+  data, decides per branch, and records the decision in its pull request (`PLAN.md` section 5).
 - **A blended alternative costs its whole form in every lane.** exp computed the C's near form and
   its `k == 0` form for every lane and blended them. Proving that the far form and the general tail
   already give those lanes' results (`PROOFS.md`, L1 and L2) left one form. With native AVX-512 at
@@ -337,7 +339,8 @@ next port re-trying a settled question.
   before timing it. Timed as a pair against its base on the Xeon Platinum 8573C
   (`bench/results/exp-onediv-xeon8573c-2026-11-03.txt`, five rounds a side), the folded body is
   1.33x to 1.48x faster by the median on common data at 256 bits, 512 bits, the preferred species
-  and `SPECIES_MAX`, and 1.18x to 1.31x on mixed data, and no vector row is slower.
+  and `SPECIES_MAX`, and 1.18x to 1.31x on mixed data, and none of those rows is slower by the
+  median or by the best iteration.
 - **Laptop first, then the EPYC.** The `D2L` boxing never showed under the laptop's default
   flags, where AVX512DQ is present; it showed only under `-XX:UseAVX=2`. Run a new port's
   benchmark under both before calling it done.
@@ -380,7 +383,7 @@ next port re-trying a settled question.
   host files read the same shape by minimums. On the EPYC 7763
   (`bench/results/log-epyc7763-2026-11-20.txt`, two runs) the blend is 1.21 to 1.24 times the finish
   on common data and 1.01 to 1.03 on mixed data, at 256 bits and the preferred species, and the
-  finish allocates nothing. On the Xeon Platinum 8573C
+  finish reads 0.017 B/op or less on its 256-bit and preferred rows. On the Xeon Platinum 8573C
   (`bench/results/log-xeon8573c-2026-11-21.txt`, one run) blended over finish is 1.24 (256 bits),
   1.32 (preferred species) and 1.32 (512 bits) on common data, the last two just outside 1.3x with
   the finish lower, and 0.97, 0.77 and 0.77 on mixed data, where the blend is lower and the last two
@@ -390,11 +393,11 @@ next port re-trying a settled question.
   no sign is read). On the Xeon the blend is lower on mixed data at all three widths, by more only
   at the two widths with no native EPYC counterpart (its preferred species is 256 bits, and its
   512-bit rows run in the Java fallback), so the files show no disagreement between the hosts at
-  equal width. Both files time the `log` of today (`Log.java` has not changed since either run;
-  `LogBenchmark` gained its `finishMax` row after the EPYC run, which is why that file has none).
-  Which arm `VFdlibm.log` keeps is not decided here: it waits for a second Xeon run, a pair and the
-  rules for a tie within 1.3x and for hosts that disagree (issue #30). Measure the finish only once
-  it allocates nothing.
+  equal width. Both files time the `log` of a5683c3 and a1db6df, before the finish's first eight
+  lanes written out with constant indices (issue #37); `LogBenchmark` gained its `finishMax` row
+  after the EPYC run, which is why that file has none. Which arm `VFdlibm.log` keeps is not decided
+  here: it waits for a second Xeon run, a pair and the rules for a tie within 1.3x and for hosts
+  that disagree (issue #30). Measure the finish only once it allocates nothing.
 
 - **Int words can live in long lanes, with an exact dk.** log first kept its words in int lanes
   for the `I2D`; moving them to the long lanes of the bits drops `L2I`, `I2L`, `I2D` and the
@@ -455,10 +458,11 @@ next port re-trying a settled question.
   (`bench/results/log1p-xeon8573c-2026-11-03.txt`, one run, at another commit and on a draw whose
   datapath read higher, `HARDWARE.md`) had guarded lowest on every row. The EPYC file times `Log1p`
   as of a5683c3, before a fault constant and a mask local were added; the Xeon file of 21 November
-  times `Log1p` as it stands. `VFdlibm.log1p` uses the guarded arm provisionally: the decision waits
-  for a second run of the Xeon 8573C and a first of the other AVX-512 hosts, a pair and the rules
-  for a tie within 1.3x and for hosts that disagree (issue #30). A port whose rare paths are cheap
-  in vector form should measure this shape beside the other two.
+  times it as of a1db6df; neither times it after the finish's first eight lanes written out with
+  constant indices (issue #37). `VFdlibm.log1p` uses the guarded arm provisionally: the decision
+  waits for a second run of the Xeon 8573C and a first of the other AVX-512 hosts, a pair and the
+  rules for a tie within 1.3x and for hosts that disagree (issue #30). A port whose rare paths are
+  cheap in vector form should measure this shape beside the other two.
 - **The in-body finish allocates nothing in log1p too.** log1p's finish was first a call,
   `finishPerLane(x, result, rare)`, and boxed: 52,928 B/op on mixed data at 256 bits under
   `UseAVX=2`, 2.0x slower than the guarded arm there (the superseded runs kept at the end of
@@ -466,7 +470,7 @@ next port re-trying a settled question.
   are, a loop over the set bits of `rare.toLong()` with `result.withLane(lane,
   StrictMath.log1p(x.lane(lane)))`, it reads ~0.01 B/op on mixed data at 256 and 512 bits, so
   nothing in it was refused in log1p's large body (the current runs in the same files). Its
-  `SPECIES_MAX` form boxed as exp's did: 30912 B/op on mixed data at 512 bits and 36993 under
+  `SPECIES_MAX` form boxed as exp's did: 30912 B/op on mixed data at 512 bits and 36992 under
   `-XX:UseAVX=2` (`bench/results/max-finish-laptop-2026-11-20.txt`). An earlier exploratory run had
   measured a `withLane` loop at 47,232 B/op (quoted in the same superseded runs); whether that
   loop sat in a helper taking vectors was not recorded, and it most likely measured that call's
@@ -534,9 +538,10 @@ next port re-trying a settled question.
   0.98 on the Xeon: the hosts differ in size, the EPYC reading the finish lower by more than 5% and
   the Xeon level (within 5%), both inside 1.3x. At the Xeon's preferred species and 512 bits, which
   have no native EPYC counterpart, blended over finish is 0.94 and 0.92. Both files time `Log10` as
-  it stands (its one change since is Javadoc). `VFdlibm.log10` calls the finish arm provisionally:
-  the decision waits for a second run of the Xeon 8573C and a first of the other AVX-512 hosts, a
-  pair and the rules for a tie within 1.3x and for hosts that disagree (issue #30).
+  of a5683c3 and a1db6df, before the finish's first eight lanes written out with constant indices
+  (issue #37). `VFdlibm.log10` calls the finish arm provisionally: the decision waits for a second
+  run of the Xeon 8573C and a first of the other AVX-512 hosts, a pair and the rules for a tie
+  within 1.3x and for hosts that disagree (issue #30).
 
 ## What the expm1 port taught
 
@@ -594,10 +599,11 @@ next port re-trying a settled question.
   lowest there on common data. `VFdlibm.expm1` keeps the guarded arm provisionally: the decision
   waits for a second run of the Xeon 8573C and a first of the other AVX-512 hosts, a pair and the
   rules for a tie within 1.3x and for hosts that disagree (issue #30). Both files time `Expm1`
-  before its core entry (below), which no run has timed, and `Expm1.java` changed between their two
-  commits too (a fault constant and a local in the k conversion, as for `Exp`), so the cross-host
-  comparison rests on two code versions. The EPYC file's 512-bit rows run in the Java fallback and
-  measure no expm1.
+  before its core entry (below), which no run has timed, and before the finish's first eight lanes
+  written out with constant indices (issue #37), and `Expm1.java` changed between their two commits
+  too (a fault constant and a local in the k conversion, as for `Exp`), so the cross-host comparison
+  rests on two code versions. The EPYC file's 512-bit rows run in the Java fallback and measure no
+  expm1.
 - **Lefevre's direction bit is the 54th bit of the exact |result|.** testlibm-data's last field
   agreed with that for all 7578 `em1` lines (3836 ones, 3742 zeros), not with "the exact
   result is above the rounded one", which splits about evenly.
@@ -680,16 +686,23 @@ next port re-trying a settled question.
   function's mismatch file, and a hard-cases file of one, say `# arity: 2` before the first input
   and hold `0x<x> 0x<y>` on a line: `Inputs.hardCasePairs` reads one, and `Inputs.hardCases` refuses
   it by that line.
-- **One comparator for a function of two arguments** (`PairBits.matches(x, y, want, got)`, test
-  code). Every comparison of a pair function's lane goes through it: `Oracle.assertPair` and the
-  live lanes of `assertPairMasked` (a lane that is not live keeps `x`'s raw bits), and the
+- **One comparator for a function of two arguments** (`PairBits.matches(candidates, x, y, want,
+  got)`, test code). Every comparison of a pair function's lane goes through it: `Oracle.assertPair`
+  and the live lanes of `assertPairMasked` (a lane that is not live keeps `x`'s raw bits), and the
   nightly's `PairChecker`, so its mismatch file and the replay of that file use it too. A new
-  comparison of such a function written with `doubleToRawLongBits` is a defect. The `jar-check.sh`
-  consumer cannot use it (the jar holds no test classes): its `same` compares one argument's
-  functions, and when `atan2` arrives its two-argument form takes a copy of the rule written in the
-  consumer, with a lane of two NaNs of different bits in its inputs. `PairNanTest` is the proof it
-  can fail: toys with one change fail it, and a comparator changed to accept any NaN, or none, fails
-  `PairNanTest` too (each tried by hand before the last case was added).
+  comparison of such a function written with `doubleToRawLongBits` is a defect. A function declares
+  its `PairBits.Candidates` on its `PairFunction` and passes them to the asserts, and there is no
+  default: `OPERANDS` for `atan2` and `pow`, `MAGNITUDES` for `hypot`. A mismatch row of a lane of
+  two NaNs says "one of" its two candidates and the oracle's own bits. Which candidate wins is not
+  specified and varies with the tier, for `hypot` too, where it is not the NaN of the larger high
+  word. `pow(x, +-0)` is 1 whatever `x` is, and nothing else returns before the NaN case: `pow(1.0,
+  NaN)` is NaN. The `jar-check.sh` consumer cannot use `PairBits` (the jar holds no test classes):
+  its `same` compares one argument's functions, and when `atan2` arrives its two-argument form takes
+  a copy of the rule written in the consumer, with a lane of two NaNs of different bits in its
+  inputs. `PairNanTest` is the proof it can fail: toys with one change fail it, as do a function
+  declared the wrong way and one that declares nothing, and a comparator changed to take the
+  oracle's bits unchecked, or to keep the sign under `MAGNITUDES`, fails `PairNanTest` (tried by
+  hand on this version).
 - **What a pass over a function of two arguments costs** (laptop, 21 November 2026,
   `bench/results/pair-sweep-laptop-2026-11-21.txt`; no pair function is ported, so this is two
   stand-ins run through `PairCostProbe`, not a port). A stripe of 2^24 high words at 256 bits took

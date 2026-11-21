@@ -110,8 +110,8 @@ class HarnessSelfTest {
   void oraclePassesCorrectBinaryFunction(VectorWidth width) {
     Inputs.Pairs p = Inputs.cross(
         Inputs.specials(), Inputs.concat(Inputs.specials(), Inputs.sampled(2L, 16)));
-    Oracle.assertPair(
-        "pow", width.species(), HarnessSelfTest::pow, StrictMath::pow, p.x(), p.y());
+    Oracle.assertPair("pow", width.species(), PairBits.Candidates.OPERANDS,
+        HarnessSelfTest::pow, StrictMath::pow, p.x(), p.y());
   }
 
   // ---------------------------------------------------------------------------------------------
@@ -184,7 +184,7 @@ class HarnessSelfTest {
     Oracle.assertUnary("exp", species, HarnessSelfTest::exp, StrictMath::exp,
         new double[] {0.0, 1.0});
     binaryInputs(species, (x, y) -> Oracle.assertPair(
-        "pow", species, HarnessSelfTest::pow, StrictMath::pow, x, y));
+        "pow", species, PairBits.Candidates.OPERANDS, HarnessSelfTest::pow, StrictMath::pow, x, y));
   }
 
   private static void binaryInputs(
@@ -204,8 +204,8 @@ class HarnessSelfTest {
         faultLane = lane;
         AssertionFailedError e = PlantedFaultTest.assertCaught(
             ONE_ULP,
-            () -> Oracle.assertPair(
-                "pow", species, HarnessSelfTest::pow, StrictMath::pow, xs, ys));
+            () -> Oracle.assertPair("pow", species, PairBits.Candidates.OPERANDS,
+                HarnessSelfTest::pow, StrictMath::pow, xs, ys));
         assertReports(e, lane, 2, xs.length);
       }
       faultLane = 0;
@@ -304,8 +304,8 @@ class HarnessSelfTest {
     Oracle.assertUnaryMasked(
         "exp", species, HarnessSelfTest::maskedExp, StrictMath::exp, maskedInputs(), 11L);
     Inputs.Pairs p = Inputs.cross(Inputs.specials(), Inputs.sampled(4L, 16));
-    Oracle.assertPairMasked(
-        "pow", species, HarnessSelfTest::maskedPow, StrictMath::pow, p.x(), p.y(), 12L);
+    Oracle.assertPairMasked("pow", species, PairBits.Candidates.OPERANDS,
+        HarnessSelfTest::maskedPow, StrictMath::pow, p.x(), p.y(), 12L);
   }
 
   @ParameterizedTest
@@ -341,8 +341,8 @@ class HarnessSelfTest {
     Arrays.fill(ys, 3.0);
     assertThrows(
         AssertionFailedError.class,
-        () -> Oracle.assertPairMasked(
-            "pow", species, (x, y, live) -> pow(x, y), StrictMath::pow, xs, ys, 15L));
+        () -> Oracle.assertPairMasked("pow", species, PairBits.Candidates.OPERANDS,
+            (x, y, live) -> pow(x, y), StrictMath::pow, xs, ys, 15L));
   }
 
   // ---------------------------------------------------------------------------------------------
