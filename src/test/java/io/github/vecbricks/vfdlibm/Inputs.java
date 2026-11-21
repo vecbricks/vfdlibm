@@ -14,7 +14,9 @@ import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.List;
 import java.util.SplittableRandom;
 
 /**
@@ -161,6 +163,12 @@ final class Inputs {
         new BufferedReader(new InputStreamReader(in, StandardCharsets.US_ASCII))) {
       double[] xs = reader.lines()
           .map(String::strip)
+          .peek(line -> {
+            if (line.equals(PAIR_HEADER)) {
+              throw new IllegalArgumentException(
+                  resource + " holds pairs: read it with hardCasePairs");
+            }
+          })
           .filter(line -> !line.isEmpty() && !line.startsWith("#"))
           .mapToDouble(line -> Double.longBitsToDouble(parseBits(line)))
           .toArray();
@@ -171,6 +179,68 @@ final class Inputs {
     } catch (IOException e) {
       throw new UncheckedIOException(resource, e);
     }
+  }
+
+  /**
+   * The line that says a hard-cases file, or the mismatch file of a function of two arguments,
+   * holds a pair on each line of data, {@code 0x<x> 0x<y>}, and not one word.
+   */
+  static final String PAIR_HEADER = "# arity: 2";
+
+  /**
+   * The hard cases of a function of two arguments, from {@code hard-cases/<function>.txt}: the
+   * file says {@link #PAIR_HEADER} before its first input, and each input is the raw bits of
+   * {@code x} and of {@code y}, as {@code 0x} and sixteen hex digits each, one pair a line.
+   */
+  static Pairs hardCasePairs(String function) {
+    String resource = "hard-cases/" + function + ".txt";
+    InputStream in = Inputs.class.getResourceAsStream(resource);
+    if (in == null) {
+      throw new IllegalArgumentException("no hard cases for " + function + ": " + resource);
+    }
+    try (BufferedReader reader =
+        new BufferedReader(new InputStreamReader(in, StandardCharsets.US_ASCII))) {
+      return readPairs(reader.lines().toList(), resource);
+    } catch (IOException e) {
+      throw new UncheckedIOException(resource, e);
+    }
+  }
+
+  /**
+   * The pairs of a file's {@code lines}: a mismatch file of a pair function reads as a hard-cases
+   * file does. {@code name} names the file in an error.
+   */
+  static Pairs readPairs(List<String> lines, String name) {
+    boolean paired = false;
+    List<double[]> pairs = new ArrayList<>();
+    for (String raw : lines) {
+      String line = raw.strip();
+      if (line.equals(PAIR_HEADER)) {
+        paired = true;
+      } else if (!line.isEmpty() && !line.startsWith("#")) {
+        if (!paired) {
+          throw new IllegalArgumentException(
+              name + " has no '" + PAIR_HEADER + "' line before its first input: " + line);
+        }
+        String[] words = line.split("\\s+");
+        if (words.length != 2) {
+          throw new IllegalArgumentException(name + ": not two words: " + line);
+        }
+        pairs.add(new double[] {
+          Double.longBitsToDouble(parseBits(words[0])), Double.longBitsToDouble(parseBits(words[1]))
+        });
+      }
+    }
+    if (pairs.isEmpty()) {
+      throw new IllegalStateException(name + " holds no inputs");
+    }
+    double[] x = new double[pairs.size()];
+    double[] y = new double[x.length];
+    for (int i = 0; i < x.length; i++) {
+      x[i] = pairs.get(i)[0];
+      y[i] = pairs.get(i)[1];
+    }
+    return new Pairs(x, y);
   }
 
   /** {@code 0x} and sixteen hex digits, the raw bits of a double. */

@@ -20,8 +20,11 @@ import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.BiFunction;
+import java.util.function.BinaryOperator;
+import java.util.function.DoubleBinaryOperator;
 import java.util.function.DoubleUnaryOperator;
 import java.util.function.UnaryOperator;
 import jdk.incubator.vector.DoubleVector;
@@ -30,11 +33,12 @@ import jdk.incubator.vector.VectorShape;
 import jdk.incubator.vector.VectorSpecies;
 
 /**
- * What the nightly correctness runs, {@link Sweep} and {@link Fuzz}, share: the functions and
- * every arm of each, the species, the check of a block of inputs against {@code StrictMath} by
- * raw bits, and the record of mismatches. These are {@code main} programs, not tests, so {@code
- * mvn verify} does not run them; {@code NightlyTest} runs each on a few inputs to keep them
- * working, and SKILLS.md ("The nightly sweep and fuzz") says how to run a slice by hand.
+ * What the nightly correctness runs, {@link Sweep} and {@link Fuzz}, share: the functions (of one
+ * argument, or of two: {@link PairFunction}) and every arm of each, the species, the check of a
+ * block of inputs against {@code StrictMath} by raw bits, and the record of mismatches. These are
+ * {@code main} programs, not tests, so {@code mvn verify} does not run them; {@code NightlyTest}
+ * runs each on a few inputs to keep them working, and SKILLS.md ("The nightly sweep and fuzz")
+ * says how to run a slice by hand.
  *
  * <p>A block is checked as follows: {@code StrictMath} once per input, then for each arm the whole
  * block unmasked, every lane against the oracle, and the whole block masked, each vector under one
@@ -83,6 +87,31 @@ final class Nightly {
     System.out.println(names.append(" max"));
   }
 
+  /**
+   * A function the nightly checks: what {@link Sweep} and {@link Fuzz} need of it, whether it
+   * takes one argument ({@link Function}) or two ({@link PairFunction}).
+   */
+  interface Subject {
+    String id();
+
+    /** The number of arguments, 1 or 2. */
+    int arity();
+
+    /** The arms by name, for the log. */
+    List<String> armNames();
+
+    /** A checker of blocks for one thread at one species. */
+    BlockCheck newChecker(VectorSpecies<Double> species, long maskSeed, Mismatches sink);
+  }
+
+  /**
+   * Checks a block of {@code n} inputs, {@code n} a multiple of the lane count: {@code xs}, and
+   * for a function of two arguments the second argument in {@code ys}, which is null for one.
+   */
+  interface BlockCheck {
+    void check(double[] xs, double[] ys, int n, long position);
+  }
+
   /** A vector form of a function: its name, the all-lanes form and the masked form. */
   record Arm(
       String name,
@@ -90,7 +119,7 @@ final class Nightly {
       BiFunction<DoubleVector, VectorMask<Double>, DoubleVector> masked) {}
 
   /** A function with its oracle and every arm, {@code VFdlibm}'s first. */
-  enum Function {
+  enum Function implements Subject {
     EXP("exp", StrictMath::exp, List.of(
         new Arm("VFdlibm.exp", VFdlibm::exp, VFdlibm::exp),
         new Arm("Exp.expBlended", x -> Exp.expBlended(x, null), Exp::expBlended),
@@ -148,6 +177,92 @@ final class Nightly {
       throw new IllegalArgumentException(
           "unknown function '" + id + "'; known: exp, expm1, log, log10, log1p, sinh, cosh");
     }
+
+    @Override
+    public String id() {
+      return id;
+    }
+
+    @Override
+    public int arity() {
+      return 1;
+    }
+
+    @Override
+    public List<String> armNames() {
+      return Nightly.armNames(this);
+    }
+
+    @Override
+    public BlockCheck newChecker(
+        VectorSpecies<Double> species, long maskSeed, Mismatches sink) {
+      return new Checker(this, species, maskSeed, sink);
+    }
+  }
+
+  /**
+   * A vector form of a function of two arguments. {@code masked} is the contract of PLAN.md
+   * section 5: a lane that is not live keeps the first argument's bits.
+   */
+  record Arm2(String name, BinaryOperator<DoubleVector> all, Oracle.MaskedBinary masked) {}
+
+  /**
+   * A function of two arguments: its oracle, every arm and where its branches are (for the
+   * {@link Fuzz}). No ported function is one yet, so {@link #KNOWN} is empty until a test or a
+   * port registers one; a pair function that is not listed in nightly.yml is never run there.
+   */
+  record PairFunction(
+      String id, DoubleBinaryOperator oracle, List<Arm2> arms, Fuzz.PairEdges edges)
+      implements Subject {
+
+    /** The functions of two arguments by name, in the order they are listed. */
+    static final List<PairFunction> KNOWN = new CopyOnWriteArrayList<>();
+
+    @Override
+    public int arity() {
+      return 2;
+    }
+
+    @Override
+    public List<String> armNames() {
+      List<String> names = new ArrayList<>();
+      for (Arm2 arm : arms) {
+        names.add(arm.name() + (arm.masked() == null ? " (unmasked only)" : ""));
+      }
+      return names;
+    }
+
+    @Override
+    public BlockCheck newChecker(
+        VectorSpecies<Double> species, long maskSeed, Mismatches sink) {
+      return new PairChecker(this, species, maskSeed, sink);
+    }
+  }
+
+  /**
+   * The function named {@code id}, of one argument or of two. The message of an unknown name is
+   * the one {@link Function#of} gives while no function of two arguments is registered.
+   */
+  static Subject subject(String id) {
+    for (Function f : Function.values()) {
+      if (f.id.equals(id)) {
+        return f;
+      }
+    }
+    for (PairFunction f : PairFunction.KNOWN) {
+      if (f.id().equals(id)) {
+        return f;
+      }
+    }
+    List<String> known = new ArrayList<>();
+    for (Function f : Function.values()) {
+      known.add(f.id);
+    }
+    for (PairFunction f : PairFunction.KNOWN) {
+      known.add(f.id());
+    }
+    throw new IllegalArgumentException(
+        "unknown function '" + id + "'; known: " + String.join(", ", known));
   }
 
   /** {@link Exp#expCore}, with the lanes {@link Exp#expRare} sets finished by StrictMath. */
@@ -310,6 +425,11 @@ final class Nightly {
    * fill the disk. Each written mismatch is flushed at once, so a JVM killed by a timeout or a
    * cancel leaves every mismatch it wrote, though no {@code # total mismatches} line.
    *
+   * <p>For a function of two arguments the file is a pair hard-cases file: its first line is
+   * {@code # arity: 2} and each input is two words, {@code 0x<x> 0x<y>}, on a line of its own;
+   * {@code Inputs.hardCasePairs} reads it, and a reader of one word a line refuses it by that
+   * header.
+   *
    * <p>A replay finds the same mismatches but need not write the same file: the threads reach
    * them in no fixed order, so which ones are printed and which pass {@link #KEPT_PER_KIND} vary
    * from run to run, and so does the total of a run stopped at {@link #ENOUGH}. A run that is
@@ -329,6 +449,7 @@ final class Nightly {
 
     private final PrintWriter out;
     private final String context;
+    private final int arity;
     private final AtomicLong count = new AtomicLong();
     private final Map<String, Long> perKind = new LinkedHashMap<>();
     private long printed;
@@ -338,6 +459,15 @@ final class Nightly {
      * {@code context} goes on every mismatch, e.g. {@code "function=exp species=... seed=..."}.
      */
     Mismatches(Path file, String header, String context) {
+      this(file, header, context, 1);
+    }
+
+    /** As the constructor above, for a function of {@code arity} arguments, 1 or 2. */
+    Mismatches(Path file, String header, String context, int arity) {
+      if (arity != 1 && arity != 2) {
+        throw new IllegalArgumentException("arity is 1 or 2, not " + arity);
+      }
+      this.arity = arity;
       try {
         if (file.getParent() != null) {
           Files.createDirectories(file.getParent());
@@ -347,6 +477,9 @@ final class Nightly {
         throw new UncheckedIOException(file.toString(), e);
       }
       this.context = context;
+      if (arity == 2) {
+        out.println(Inputs.PAIR_HEADER);
+      }
       for (String line : header.split("\n")) {
         out.println("# " + line);
       }
@@ -355,23 +488,47 @@ final class Nightly {
 
     /** Records one lane that differed. {@code mask} is the vector's mask bits, or -1 unmasked. */
     synchronized void add(String arm, long mask, int lane, long x, long want, long got) {
+      requireArity(1);
+      add(arm, mask, lane, x, 0L, want, got, false);
+    }
+
+    /** As {@link #add(String, long, int, long, long, long)}, for the pair {@code (x, y)}. */
+    synchronized void add(
+        String arm, long mask, int lane, long x, long y, long want, long got) {
+      requireArity(2);
+      add(arm, mask, lane, x, y, want, got, true);
+    }
+
+    private void requireArity(int given) {
+      if (arity != given) {
+        throw new IllegalStateException(
+            "a mismatch of " + given + " arguments in a file of " + arity);
+      }
+    }
+
+    private void add(String arm, long mask, int lane, long x, long y, long want, long got,
+        boolean pair) {
       count.incrementAndGet();
       String kind = arm + (mask < 0 ? " unmasked" : " masked");
       long seen = perKind.merge(kind, 1L, Long::sum);
       if (printed >= PRINTED && seen > KEPT_PER_KIND) {
         return;
       }
+      // Formatted only for a mismatch that is printed or written.
+      String inputs = pair ? String.format("x=0x%016x y=0x%016x", x, y)
+          : String.format("x=0x%016x", x);
+      String data = pair ? String.format("0x%016x 0x%016x", x, y) : String.format("0x%016x", x);
       String line = String.format(
-          "MISMATCH %s arm=%s masked=%s%s lane=%d x=0x%016x expected=0x%016x actual=0x%016x",
-          context, arm, mask >= 0, mask >= 0 ? String.format(" mask=0x%x", mask) : "", lane, x,
-          want, got);
+          "MISMATCH %s arm=%s masked=%s%s lane=%d %s expected=0x%016x actual=0x%016x",
+          context, arm, mask >= 0, mask >= 0 ? String.format(" mask=0x%x", mask) : "", lane,
+          inputs, want, got);
       if (printed < PRINTED) {
         printed++;
         System.out.println(line);
       }
       if (seen <= KEPT_PER_KIND) {
         out.println("# " + line);
-        out.println(String.format("0x%016x", x));
+        out.println(data);
         if (seen == KEPT_PER_KIND) {
           out.println("# " + kind + ": later mismatches are counted, not written");
         }
@@ -408,7 +565,7 @@ final class Nightly {
    * Checks blocks of inputs for one function at one species. One per thread: it owns its
    * buffers, and only {@link Mismatches#add} is shared.
    */
-  static final class Checker {
+  static final class Checker implements BlockCheck {
 
     private final Function function;
     private final VectorSpecies<Double> species;
@@ -426,6 +583,14 @@ final class Nightly {
       this.mismatches = sink;
       this.lanes = species.length();
       this.laneMask = lanes == 64 ? -1L : (1L << lanes) - 1;
+    }
+
+    @Override
+    public void check(double[] xs, double[] ys, int n, long position) {
+      if (ys != null) {
+        throw new IllegalArgumentException(function.id + " takes one argument");
+      }
+      check(xs, n, position);
     }
 
     /**
@@ -476,6 +641,87 @@ final class Nightly {
         }
       }
     }
+  }
+
+  /**
+   * Checks blocks of pairs for one function of two arguments at one species, as {@link Checker}
+   * does: every arm unmasked and masked, a lane that is not live held to the first argument's
+   * bits. One per thread.
+   */
+  static final class PairChecker implements BlockCheck {
+
+    private final PairFunction function;
+    private final VectorSpecies<Double> species;
+    private final long maskSeed;
+    private final Mismatches mismatches;
+    private final int lanes;
+    private final long laneMask;
+    private double[] got = new double[0];
+    private long[] want = new long[0];
+
+    PairChecker(
+        PairFunction function, VectorSpecies<Double> species, long maskSeed, Mismatches sink) {
+      this.function = function;
+      this.species = species;
+      this.maskSeed = maskSeed;
+      this.mismatches = sink;
+      this.lanes = species.length();
+      this.laneMask = lanes == 64 ? -1L : (1L << lanes) - 1;
+    }
+
+    @Override
+    public void check(double[] xs, double[] ys, int n, long position) {
+      if (ys == null || ys.length < n) {
+        throw new IllegalArgumentException(function.id() + " takes two arguments of " + n);
+      }
+      if (n % lanes != 0) {
+        throw new IllegalArgumentException(n + " inputs do not fill " + lanes + "-lane vectors");
+      }
+      if (got.length < n) {
+        got = new double[n];
+        want = new long[n];
+      }
+      DoubleBinaryOperator oracle = function.oracle();
+      for (int i = 0; i < n; i++) {
+        want[i] = Double.doubleToRawLongBits(oracle.applyAsDouble(xs[i], ys[i]));
+      }
+      for (Arm2 arm : function.arms()) {
+        for (int i = 0; i < n; i += lanes) {
+          arm.all().apply(DoubleVector.fromArray(species, xs, i),
+              DoubleVector.fromArray(species, ys, i)).intoArray(got, i);
+        }
+        for (int i = 0; i < n; i++) {
+          long bits = Double.doubleToRawLongBits(got[i]);
+          if (bits != want[i]) {
+            mismatches.add(arm.name(), -1, i % lanes, Double.doubleToRawLongBits(xs[i]),
+                Double.doubleToRawLongBits(ys[i]), want[i], bits);
+          }
+        }
+        if (arm.masked() == null) {
+          continue;
+        }
+        for (int i = 0; i < n; i += lanes) {
+          long live = mix(maskSeed + position + i) & laneMask;
+          VectorMask<Double> mask = VectorMask.fromLong(species, live);
+          arm.masked().apply(DoubleVector.fromArray(species, xs, i),
+              DoubleVector.fromArray(species, ys, i), mask).intoArray(got, i);
+          for (int lane = 0; lane < lanes; lane++) {
+            long x = Double.doubleToRawLongBits(xs[i + lane]);
+            long expected = (live >>> lane & 1) != 0 ? want[i + lane] : x;
+            long bits = Double.doubleToRawLongBits(got[i + lane]);
+            if (bits != expected) {
+              mismatches.add(arm.name(), live, lane, x, Double.doubleToRawLongBits(ys[i + lane]),
+                  expected, bits);
+            }
+          }
+        }
+      }
+    }
+  }
+
+  /** The arms of {@code subject}, by name, for the log. */
+  static List<String> armNames(Subject subject) {
+    return subject.armNames();
   }
 
   /** The arms of {@code function}, by name, for the log. */
