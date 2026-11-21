@@ -63,7 +63,6 @@ from decimal import Decimal, getcontext, localcontext
 
 getcontext().prec = 400
 TAGS = {"sh": "sinh", "ch": "cosh", "em1": "expm1", "atn": "atan", "asn": "asin", "acs": "acos"}
-FUNCTIONS = tuple(TAGS.values())
 EPSILON = Decimal(10) ** -395
 _PI = []
 
