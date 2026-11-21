@@ -127,24 +127,13 @@ and the fault names are for this project's tests only: they are not part of the 
 the compatibility promise, and any release, a patch included, may rename or remove them. With the
 property unset, the results are unchanged, and each lane still equals `StrictMath`'s.
 
-**Which species to pass.** Every species of 128 bits or more gives the same bits. The files under
-`bench/results/` read what the body allocates at each, in bytes per op, an op being one pass over
-1024 doubles. `exp`, `log` and `log10` call the finish arm, and `expm1` and `log1p` the guarded
-arm; the figures below are for the arm each calls. The allocation check (`bench/alloc-check.py`,
-run by CI) covers, on x86, 256 bits and the preferred species, and on Arm the preferred
-species, 128 bits, where it passed (`bench/results/alloc-arm-2026-11-20.txt`, an allocation
-reading and no timing). On an EPYC
-7763, an AVX2 host (the files of 20 November 2026 in `bench/results/`), `exp` and `log` allocate
-0.5 to 0.6 million bytes per op at 128 bits, `exp` the same on a Xeon 8573C (at the head of the
-pair in `bench/results/exp-onediv-xeon8573c-2026-11-03.txt`), and each of the five functions
-0.9 to 1.8 million at 512 bits, the Java fallback there; `log10`, `log1p` and `expm1` have no
-128-bit row. At `SPECIES_MAX`, on mixed data, `exp`, `log` and `log10` allocate 30432 to 36992
-bytes per op, and `expm1` and `log1p` less than 0.5
-(`bench/results/max-finish-laptop-2026-11-20.txt`, a laptop file and not a headline, read at 512
-and 256 bits, not at 128). So the readings favour 256 bits and the preferred species over 128
-bits on x86 and 512 bits on an AVX2 host. Not measured: any port's speed at 512 bits against 256
-on the EPYC 9V74 draws that have AVX-512 (`HARDWARE.md` has only a datapath reading for them),
-and any port's speed on Arm. A fuller list is in the Javadoc of `VFdlibm`.
+**Which species to pass.** Every species of 128 bits or more gives the same bits; what the body
+allocates differs. The allocation check (`bench/alloc-check.py`, run by CI) covers 256 bits and
+the preferred species on x86, and the preferred species, 128 bits, on Arm. The files under
+`bench/results/` read as allocating, and the check does not cover: 128 bits on x86, 512 bits on
+an AVX2 host, and `SPECIES_MAX` for `exp`, `log` and `log10` on data with rare lanes. The
+Javadoc of `VFdlibm` gives each reading with its file, and lists what is not measured: the speed
+of 512 bits against 256 on the EPYC 9V74 draws that have AVX-512, and any port's speed on Arm.
 
 ## Supported JDKs
 
