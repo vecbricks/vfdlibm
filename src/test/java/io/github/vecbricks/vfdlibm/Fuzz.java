@@ -161,8 +161,8 @@ final class Fuzz {
    * atan: s_atan.c's high-word tests (the tiny return, the four range splits at 7/16, 11/16,
    * 19/16 and 39/16, the {@code 2^66} word and the non-finite words), the doubles at those
    * edges, the word and the double 2 where {@code atan.splitMoved} moves the 19/16 split, and the
-   * arguments whose reduction is exactly 0 or -1, where the quotient's sign and rounding change:
-   * 0.5 (id 0), 1 (id 1), 1.5 (id 2).
+   * arguments whose reduction is exactly 0, where the quotient's sign and rounding change: 0.5
+   * (id 0), 1 (id 1), 1.5 (id 2).
    */
   static final Edges ATAN = new Edges(
       new int[] {

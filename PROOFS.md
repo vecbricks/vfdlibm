@@ -1064,12 +1064,12 @@ not the C's:
 **What it rests on.** (R4) for `+ - * /`, and nothing of exp's or expm1's: the port calls no
 other port body.
 
-**Checks.** `constantsAreTheSourcesBits` checks that the six words and the coefficients are the
-C's. `AtanTest` compares `VFdlibm.atan` with `StrictMath.atan` at every width and
-`SPECIES_MAX`, unmasked and masked, at the six words and their neighbours, on sampled bit
-patterns, dense draws, the published hard cases and their negations, and with every subset of a
-vector's lanes rare; `scalarTranscriptionIsStrictMath` checks that `cAtan`, s_atan.c in scalar
-Java, is `StrictMath.atan`. The planted faults are `atan.dropLo` (`atanlo` dropped),
+**Checks.** `constantsAreTheSourcesBits` checks that the six words, `one`, `atanhi`, `atanlo` and
+`aT` are the C's. `AtanTest` compares `VFdlibm.atan` with `StrictMath.atan` at every width and
+`SPECIES_MAX`, unmasked and masked, at those words (and `0x7ff00000`) and their neighbours, on
+sampled bit patterns, dense draws, the published hard cases and their negations, and with every
+subset of a vector's lanes rare; `scalarTranscriptionIsStrictMath` checks that `cAtan`, s_atan.c
+in scalar Java, is `StrictMath.atan`. The planted faults are `atan.dropLo` (`atanlo` dropped),
 `atan.splitMoved` (the `19/16` word moved to 2, which moves a compare) and `atan.hiOneUlpOff`
 (`atanhi[1]` one ulp up). No fault reaches the compares at `0x3fdc0000`, `0x3fe60000`,
 `0x40038000`, `0x3e200000` or `0x44100000`, and a compare moved without changing a result is

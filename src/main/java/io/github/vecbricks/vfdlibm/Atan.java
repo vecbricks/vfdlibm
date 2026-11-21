@@ -37,7 +37,8 @@ import jdk.incubator.vector.VectorSpecies;
  * reduced value serves every range. The result is {@code x - x*(s1+s2)} without a reduction, and
  * {@code atanhi[id] - ((x*(s1+s2) - atanlo[id]) - x)} with one, negated for a negative argument.
  * Every operation is the C's, in the C's order, with no fused multiply-add and no reassociation,
- * so no lemma of its own is needed; {@code PROOFS.md}'s atan section says what it rests on.
+ * so no lemma of its own is needed beyond L13's blend argument ({@code PROOFS.md}'s section
+ * "Blends"); the atan section says what it rests on.
  *
  * <p>The four reductions share one division. A lane takes exactly one of the C's branches, picked
  * by the C's own compare of {@code ix}; its numerator and its denominator are that branch's
@@ -132,6 +133,8 @@ final class Atan {
     // Lines 112-121: the four reductions through one division. Each lane's numerator and
     // denominator are its own range's, blended from the last range down to the first: id = 3
     // (-1.0/x), then 2, 1 and 0 override it in their lanes.
+    // L13 (PROOFS.md, "Blends"): H1 the compares above, nested as the C's if chain is; H2 the
+    // operands of each range, then one division; H3 and H4 as in Sinh.
     DoubleVector one = DoubleVector.broadcast(species, ONE);
     DoubleVector numerator = DoubleVector.broadcast(species, -1.0);
     DoubleVector denominator = ax;
