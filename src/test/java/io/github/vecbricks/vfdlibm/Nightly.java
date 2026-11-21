@@ -122,7 +122,7 @@ final class Nightly {
     SINH("sinh", StrictMath::sinh, List.of(
         new Arm("VFdlibm.sinh", VFdlibm::sinh, VFdlibm::sinh))),
     COSH("cosh", StrictMath::cosh, List.of(
-        // VFdlibm.cosh runs the default arm, provisionally the slice arm, and Cosh.coshFinish is
+        // VFdlibm.cosh runs the slice arm, provisionally, and Cosh.coshFinish is
         // the other: if the default arm changes, this list must change with it, so that each arm
         // runs once and none twice.
         new Arm("VFdlibm.cosh", VFdlibm::cosh, VFdlibm::cosh),

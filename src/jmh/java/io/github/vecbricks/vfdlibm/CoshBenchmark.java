@@ -27,7 +27,7 @@ import org.openjdk.jmh.annotations.Warmup;
 /**
  * cosh over an array of 1024 doubles: the scalar {@code StrictMath.cosh} loop and {@code
  * Cosh}'s two arms, {@link Cosh#coshSlice} (the small range, {@code |x| < 0.5*ln2}, computed in
- * the vector, what {@link VFdlibm#cosh} runs) and {@link Cosh#coshFinish} (the small range
+ * the vector, what {@code VFdlibm.cosh} runs) and {@link Cosh#coshFinish} (the small range
  * finished per lane), each vector form at 256 and 512 bits and at the host's preferred species,
  * and at {@code SPECIES_MAX}. 128 bits is left out: on x86 C2 lowers no mask at two 64-bit lanes,
  * so every 128-bit arm boxes (SKILLS.md). On a host without 512-bit vectors the 512-bit

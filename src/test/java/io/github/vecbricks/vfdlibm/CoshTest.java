@@ -26,8 +26,8 @@ import org.junit.jupiter.params.provider.EnumSource;
 
 /**
  * cosh against {@code StrictMath.cosh}, by raw bits, at every width and at {@code SPECIES_MAX}:
- * {@link VFdlibm#cosh} (the default arm), {@link Cosh#coshSlice} and {@link Cosh#coshFinish},
- * unmasked and masked, on e_cosh.c's high-word tests, the special values, sampled bit patterns
+ * {@link VFdlibm#cosh}, {@link Cosh#coshSlice} and {@link Cosh#coshFinish}, unmasked and
+ * masked, on e_cosh.c's high-word tests, the special values, sampled bit patterns
  * over the whole domain, dense draws over each range the C treats differently, both signs, every
  * subset of a vector's lanes rare, and the published hard-to-round cases with their negations.
  */
@@ -46,7 +46,7 @@ class CoshTest {
     arms.put(
         "VFdlibm.cosh", (x, live) -> live == null ? VFdlibm.cosh(x) : VFdlibm.cosh(x, live));
     // Cosh.coshSlice is listed though VFdlibm.cosh runs it today, so that it stays tested if the
-    // default changes; Nightly lists VFdlibm.cosh and Cosh.coshFinish only, and changes with it.
+    // default changes (Nightly's list names the default too, see Cosh's Javadoc).
     arms.put("Cosh.coshSlice", Cosh::coshSlice);
     arms.put("Cosh.coshFinish", Cosh::coshFinish);
     return arms;

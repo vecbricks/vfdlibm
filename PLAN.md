@@ -39,8 +39,8 @@ row order decides which comes first. `exp` is the first port and is done (`VFdli
 own logarithm and exponential and calls only `sqrt`, `fabs` and `scalbn`. `sinh` is done
 (`VFdlibm.sinh`, from `e_sinh.c`, computing through `expm1`'s common path below 22 and finishing
 the rest per lane), and so is `cosh` (`VFdlibm.cosh`, from `e_cosh.c`, through `exp`'s common path
-and expm1's `k == 0` lines, with two arms for its small range, the default provisional until a
-benchmark host times them). `log`, `log10` and
+and expm1's `k == 0` lines, with two arms for its small range: `VFdlibm.cosh` runs the slice arm,
+provisionally, until a benchmark host times them). `log`, `log10` and
 `log1p` are done too (`VFdlibm.log`, from `e_log.c`, `VFdlibm.log10`, from `e_log10.c`, which
 computes through log's common path, and `VFdlibm.log1p`, from `s_log1p.c`), and so is `expm1`
 (`VFdlibm.expm1`, from `s_expm1.c`, whose reduction is exp's).
