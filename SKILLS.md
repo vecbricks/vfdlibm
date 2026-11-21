@@ -691,6 +691,14 @@ next port re-trying a settled question.
   `(+-t * 2^j, +-2^j)` for `j` in 0, 1, -5 (so `|y/x| = t` exactly), which are inputs of atan's
   core through `atan2`'s own code and not hard cases of its quadrants; `HardCasePairsTest` checks
   the file's shape.
+  A branch on the two arguments' high words relative to each other (`e_atan2.c`'s `k = (iy - ix)
+  >> 20`, which the edges of each argument cannot reach) is listed in `Fuzz.PairEdges.wordGaps`,
+  the first argument's absolute high word less the second's at the values the C tests (for an
+  `atan2` port: `61 * 2^20` and `-60 * 2^20`, and the word below each, which no function lists
+  yet); one pair in ten is then drawn
+  at one of them, and a function that lists none draws as before. `FuzzWordGapsTest` shows a
+  fault at exactly one gap found by the fuzz at every width and not found when the gaps are not
+  listed.
 - **One comparator for a function of two arguments** (`PairBits.matches(candidates, x, y, want,
   got)`, test code). Every comparison of a pair function's lane goes through it: `Oracle.assertPair`
   and the live lanes of `assertPairMasked` (a lane that is not live keeps `x`'s raw bits), and the
