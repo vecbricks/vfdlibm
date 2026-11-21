@@ -50,8 +50,9 @@ import jdk.incubator.vector.VectorSpecies;
  * path, and the arm finishes them per lane with {@code StrictMath.sinh}. Their exp is not
  * computed in the vector: {@code Exp.expCore} beside {@code Expm1}'s body would be two port
  * bodies in one graph, which C2 refuses to inline ({@code SKILLS.md}). A vector holds one such
- * lane only when its input is 22 or more in magnitude, which no ordinary input of Varka's or
- * Spark's tests reaches (issue #32).
+ * lane only when its input is 22 or more in magnitude, an infinity or a NaN. The inputs of
+ * Varka's baseline benchmark and of Spark's unit tests never reach 22 (the survey on issue #32);
+ * Varka's bit-identity draws do, and are finished per lane as any other input.
  *
  * <p>The sign. {@code h} is {@code 0.5} with {@code x}'s sign bit, as in exp's L5, so {@code
  * -0.0} and every negative lane get {@code -0.5}; the lanes below {@code 2^-28} return {@code x}
