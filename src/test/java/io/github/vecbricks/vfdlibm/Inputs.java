@@ -161,14 +161,11 @@ final class Inputs {
     }
     try (BufferedReader reader =
         new BufferedReader(new InputStreamReader(in, StandardCharsets.US_ASCII))) {
-      double[] xs = reader.lines()
-          .map(String::strip)
-          .peek(line -> {
-            if (line.equals(PAIR_HEADER)) {
-              throw new IllegalArgumentException(
-                  resource + " holds pairs: read it with hardCasePairs");
-            }
-          })
+      List<String> lines = reader.lines().map(String::strip).toList();
+      if (lines.contains(PAIR_HEADER)) {
+        throw new IllegalArgumentException(resource + " holds pairs: read it with hardCasePairs");
+      }
+      double[] xs = lines.stream()
           .filter(line -> !line.isEmpty() && !line.startsWith("#"))
           .mapToDouble(line -> Double.longBitsToDouble(parseBits(line)))
           .toArray();
@@ -216,6 +213,10 @@ final class Inputs {
     for (String raw : lines) {
       String line = raw.strip();
       if (line.equals(PAIR_HEADER)) {
+        if (paired || !pairs.isEmpty()) {
+          throw new IllegalArgumentException(name + ": '" + PAIR_HEADER + "' is not the first of "
+              + "its inputs, or is repeated");
+        }
         paired = true;
       } else if (!line.isEmpty() && !line.startsWith("#")) {
         if (!paired) {

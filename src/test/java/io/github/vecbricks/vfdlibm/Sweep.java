@@ -253,15 +253,16 @@ final class Sweep {
   static double partner(long seed, int argument, long index, double swept, double[] specials) {
     long r = Nightly.mix(seed + 0xa5a5a5a5a5a5a5a5L * argument + index * 0x9e3779b97f4a7c15L);
     long bits = Nightly.mix(r);
+    long more = Nightly.mix(bits);
     int exponent = (int) (Double.doubleToRawLongBits(swept) >>> 52 & 0x7ff);
     int kind = (int) (r >>> 62);
     if (kind == 0) {
-      double special = specials[(int) ((bits >>> 1) % specials.length)];
+      double special = specials[(int) ((more >>> 1) % specials.length)];
       return (bits & 1) == 0 ? special : -special;
     }
     if (kind == 1 || kind == 2) {
       int e = kind == 1 ? exponent
-          : Math.max(0, Math.min(0x7ff, exponent + (int) ((bits >>> 20 & 0xfff) % 129) - 64));
+          : Math.max(0, Math.min(0x7ff, exponent + (int) ((more >>> 20 & 0xfff) % 129) - 64));
       return Double.longBitsToDouble(bits & 0x800fffffffffffffL | (long) e << 52);
     }
     return Double.longBitsToDouble(bits);

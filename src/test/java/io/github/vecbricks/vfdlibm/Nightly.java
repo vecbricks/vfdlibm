@@ -215,7 +215,11 @@ final class Nightly {
       String id, DoubleBinaryOperator oracle, List<Arm2> arms, Fuzz.PairEdges edges)
       implements Subject {
 
-    /** The functions of two arguments by name, in the order they are listed. */
+    /**
+     * The functions of two arguments by name, in the order they are listed. A port adds its
+     * function to this initializer, as it adds a constant to {@link Function}; a test adds a
+     * stand-in and removes it again.
+     */
     static final List<PairFunction> KNOWN = new CopyOnWriteArrayList<>();
 
     @Override
@@ -671,7 +675,7 @@ final class Nightly {
 
     @Override
     public void check(double[] xs, double[] ys, int n, long position) {
-      if (ys == null || ys.length < n) {
+      if (xs.length < n || ys == null || ys.length < n) {
         throw new IllegalArgumentException(function.id() + " takes two arguments of " + n);
       }
       if (n % lanes != 0) {
