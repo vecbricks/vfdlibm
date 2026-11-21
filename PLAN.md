@@ -64,11 +64,12 @@ five are a later, optional set; the large-argument reduction of the trigonometri
     hard cases, one resource per function under `src/test/resources/.../hard-cases/` (so far `exp`,
     `expm1`, `log`, `log10`, `log1p`, `sinh` and `cosh`), loaded with
     `Inputs.hardCases("<function>")`. The inputs of Lefevre's list come out of
-    `dev/testlibm-extract.py`, which rechecks each line with 400-digit arithmetic (`sinh`'s and
-    `cosh`'s files were written by it). A port that keeps fdlibm's operations, or departs from them
-    only where `PROOFS.md` proves the result equal, matches `StrictMath` on them by construction;
-    they sit where a dropped correction term or a reassociated sum, an error far below one ulp, is
-    most likely to change the returned double.
+    `dev/testlibm-extract.py`, which rechecks each line with 400-digit arithmetic against exact
+    values it derives itself (`sinh`'s and `cosh`'s files were written by it; it also derives
+    `atan`, `asin` and `acos`, whose files come with their ports). A port that keeps fdlibm's
+    operations, or departs from them only where `PROOFS.md` proves the result equal, matches
+    `StrictMath` on them by construction; they sit where a dropped correction term or a
+    reassociated sum, an error far below one ulp, is most likely to change the returned double.
 - **Every check proves it can fail:** a flag plants a known fault (a dropped correction term, a
   constant off by one ulp, a branch threshold moved), and the suite must catch it. The flag is
   the system property `vfdlibm.fault`, read once into a `static final` in the main sources'
