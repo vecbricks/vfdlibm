@@ -155,7 +155,7 @@ five are a later, optional set; the large-argument reduction of the trigonometri
   with a third arm that blends the rare paths only when a vector holds a rare lane; `Expm1Benchmark`
   has the same three arms for `expm1`, `SinhBenchmark` one for `sinh`, `CoshBenchmark` two for
   `cosh` and `AsinBenchmark` one for `asin`. Each of the eight has rows at `SPECIES_MAX`
-  (`*Max`), which the allocation check covers: the first seven ports' finish boxed there on mixed
+  (`*Max`), which the allocation check covers: every earlier port's finish boxed there on mixed
   data until its first eight lanes were written out
   (`bench/results/max-finish-laptop-2026-11-20.txt`, then
   `bench/results/max-finish-alloc-free-laptop-2026-11-21.txt`; neither has an asin row, whose

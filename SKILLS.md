@@ -905,9 +905,10 @@ next port re-trying a settled question.
 
 - **The first port over `sqrt`.** The body calls `VectorOperators.SQRT` on `t`; `SqrtTest`
   checks the operator's raw bits against `StrictMath.sqrt` (PROOFS.md, (R4)), and
-  `bench/alloc-check.py` passed on `AsinBenchmark`'s rows (`finish256`, `finishPreferred`, common
-  and mixed data) and on `SqrtBenchmark`'s, at this laptop's flags and as an AVX2 host
-  (`-XX:UseAVX=2 -XX:MaxVectorSize=32`); CI runs it. The readings are not committed as results
+  `bench/alloc-check.py` passed on `AsinBenchmark`'s rows (`finish256`, `finishPreferred` and
+  `finishMax`, common and mixed data) and on `SqrtBenchmark`'s (`sqrtMax` has no row: the class
+  has no `SPECIES_MAX` arm), at this laptop's flags and as an AVX2 host (`-XX:UseAVX=2
+  -XX:MaxVectorSize=32`); CI runs it. The readings are not committed as results
   files, so no figure of them is quoted. That says nothing of 128 bits or of the masked form's
   lowering; no timing is committed either, so the port claims no speed.
 - **One arm, no tie to break.** The three ranges below 1 share `t`'s polynomials and the one
