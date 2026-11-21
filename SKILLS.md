@@ -787,8 +787,9 @@ next port re-trying a settled question.
     (its changelog of 7 August 2025), cost no money, and a night's runner-hours are not the
     limit. The limits are the 20 jobs the free plan runs at once, shared by the night, CI and
     the benchmark dispatches, and the night's wall time. So the budget is two numbers: **at
-    most 16 jobs of the night at once (the matrices' `max-parallel` 15, and the proofs), and a
-    median span of at most 90 minutes**. It replaces the earlier target of 2 to 3
+    most 20 jobs of the night at once (the matrices' `max-parallel` 19, and the proofs), and a
+    median span of at most 90 minutes**. (Until 21 November 2026 the first number was 16, with
+    the matrices' 15.) It replaces the earlier target of 2 to 3
     runner-hours a night, which the five functions overran at 6 and which would not have been
     kept at 13.
   - **How the span follows the schedule.** A kind of job (sweep, fuzz, Arm) runs on its
@@ -798,19 +799,21 @@ next port re-trying a settled question.
     runner-minutes, 15.7 hours; 13 times 72 is 936), the old slots 8, 3 and 4 give 120 minutes
     of fuzz and a span of 128. Slots 5, 6 and 4, the best split of 15 by this model, give 62,
     60 and 68, a span of 76 (and 34 for five functions, from 24, 23 and 26). So the defaults
-    keep `fuzz-seconds` 240, `nights` 1, `shards` 2 and `arm-shards` 4, and `max-parallel` is
-    5 for the sweep, 6 for the fuzz and 4 for Arm.
-  - **How firm that is: not very.** The 13-function fit is unverified, and no night has run on
-    the new slots. The model divides a kind's minutes by its slots and counts no whole waves
-    of jobs, so 76 is a lower bound; the sweep's 62, plus its longest job, 19.8, plus the 8
-    minutes, gives 90 as an estimate of the worst case, which is the budget itself: with no
+    keep `fuzz-seconds` 240, `nights` 1, `shards` 2 and `arm-shards` 4, and `max-parallel` was
+    5 for the sweep, 6 for the fuzz and 4 for Arm until 21 November 2026 (the entry on slots 6,
+    8 and 5 below).
+  - **How firm that is: not very.** (This entry and the next are the state of 20 November 2026,
+    on slots 5, 6 and 4; the slots are now 6, 8 and 5, below.) The 13-function fit is
+    unverified, and no night had run on the 5, 6 and 4 slots then. The model divides a kind's
+    minutes by its slots and counts no whole waves of jobs, so 76 is a lower bound; the sweep's
+    62, plus its longest job, 19.8, plus the 8 minutes, gives 90 as an estimate of the worst case, which is the budget itself: with no
     margin. (It adds a median to a longest job, so it is neither a median nor a maximum.) The 8
     minutes are one fit (54 against 46). Each further average function adds about 5 minutes
     (Arm's 273 over 13 functions and 4 slots). For the five functions the table measured the
     prediction was 34 minutes, Arm's 105 over 4 slots (26) plus the 8; the sweep's 119 over 5
     slots (24) and the fuzz's 138 over 6 (23) are below it. The sweep's slots go from 8 to 5, and
     its 10 jobs of about 11 minutes run in two waves on either, so for five functions that move
-    costs nothing. It pays for the fuzz's 6 and Arm's 4 slots under the cap of 15 matrix jobs,
+    costs nothing. It pays for the fuzz's 6 and Arm's 4 slots under the then cap of 15 matrix jobs,
     and at 13 functions the sweep's 26 jobs take 6 waves on 5 slots where 8 would take 4. The
     first nights on the new slots check both: fetch them with `pool.py fetch` and read the span from
     `pool.py cost`. The budget is a median span of 90 minutes, so a median of the nights above
@@ -823,6 +826,21 @@ next port re-trying a settled question.
     has not been rerun for eight, and atan's own cost is not measured, nor are sinh's and
     cosh's: the first nights with them are, with `pool.py fetch` and `cost`, and this entry is
     requoted from those.
+  - **Slots 6, 8 and 5, and the 20 jobs (21 November 2026).** The matrices' `max-parallel` is 6
+    for the sweep, 8 for the fuzz and 5 for Arm: 19, and the proofs job makes 20, all of the free
+    plan's jobs while the matrices are full. The plan job runs before them and the fault-caught
+    and alert jobs after, so nothing else of the night overlaps. Other jobs (a CI run on a pull
+    request, a benchmark dispatch) share the same 20 and queue ahead of or behind the night's.
+    The split uses eight functions at the five's average cost, 191, 220 and 174 minutes for the
+    sweep, the fuzz and Arm in 16, 16 and 32 jobs, which is an extrapolation: sinh, cosh and atan
+    are not measured. Over 19 slots the best split by whole waves of jobs is 6, 8 and 5, at 36,
+    27 and 38 minutes, where 5, 6 and 4 give 48, 41 and 43; by minutes over slots, with no
+    waves, 6, 8 and 5 give 32, 27 and 35 where 5, 6 and 4 give 38, 37 and 43 (6, 7 and 6 would
+    give 32, 31 and 29, but 41 minutes by waves). As a prediction only, scaling the 90 minutes
+    that the same extrapolation gives for eight functions on 5, 6 and 4 by the slowest kind's
+    ratio (38 to 48 by waves, 35 to 43 by minutes) gives about 72. The anchor night (run
+    44891868803, five functions) peaked at 11 jobs at once on 5, 6 and 4 slots, so the slots
+    are not the only limit. The first night on these slots is the first measurement.
   - **What gives when it does not fit,** cheapest first, with what each buys at 13 functions
     (the table's means times 2.6): `fuzz-seconds` 120 saves 224 runner-minutes a night (172 in
     the fuzz jobs, 52 in Arm's) and halves what a species is fuzzed; `nights` 2 saves 192, 124
