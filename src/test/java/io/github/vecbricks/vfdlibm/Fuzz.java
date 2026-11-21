@@ -186,6 +186,17 @@ final class Fuzz {
       false,
       new double[] {0x1p-27, 0.5, 0.975, 1.0, Math.nextDown(1.0), Math.sqrt(0.5), 0.9});
 
+  /**
+   * acos: e_acos.c's high-word tests (the constant return at {@code 0x3c600000}, the split at
+   * 0.5 and the per-lane finish from 1) and the doubles at them, both signs, which the sign of
+   * {@code hx} sends to the two forms above 0.5; the non-finite words as well.
+   */
+  static final Edges ACOS = new Edges(
+      new int[] {Acos.HX_TINY, Acos.HX_HALF, Acos.HX_ONE, 0x7ff00000, 0},
+      new int[0],
+      false,
+      new double[] {0x1p-57, 0.5, -0.5, 1.0, -1.0, Math.nextDown(1.0), Math.nextUp(-1.0)});
+
   /** cosh's own edges, and {@code (k + 1/2) ln2} for every k up to the overflow's. */
   private static double[] coshPoints() {
     double ln2 = StrictMath.log(2.0);
@@ -239,6 +250,7 @@ final class Fuzz {
       case SINH -> SINH;
       case COSH -> COSH;
       case ASIN -> ASIN;
+      case ACOS -> ACOS;
     };
   }
 
