@@ -484,7 +484,7 @@ a settled question.
   `expm1.dropKForcing` removes (six `Expm1Test` cases fail with it in a run of
   `-Dtest=Expm1Test`, which CI does not make: 13 of the 20935 inputs of `thresholds()` differ and
   822 of the 28698 of `foldBoundaries()`; CI requires every arm to fail at each width on
-  `faultRunInputs()`).
+  `faultRunInputs()`; exp's twin is `exp.dropKForcing`, `PROOFS.md`, L1).
   The forcing still needs its own witness: the C reduced with the formula's `k` first differs
   from `StrictMath.expm1` at `0x3fd62e42_ffffffec`, and for negative x at
   `0xbfd62e42_fffffff3`, not at the word's top double, so a test of the top alone would pass

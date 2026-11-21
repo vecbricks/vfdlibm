@@ -115,6 +115,7 @@ final class Exp {
   static final String DROP_CORRECTION = "exp.dropCorrection";
   static final String CONSTANT_OFF_BY_ONE_ULP = "exp.constantOffByOneUlp";
   static final String THRESHOLD_MOVED = "exp.thresholdMoved";
+  static final String DROP_K_FORCING = "exp.dropKForcing";
   /** ln2HI[0] one ulp up, for {@link #CONSTANT_OFF_BY_ONE_ULP}. */
   private static final double LN2HI_0_UP = Double.longBitsToDouble(0x3fe62e42_fee00001L);
   // Read once into constants, so the body holds no call and an unplanted fault folds away.
@@ -123,6 +124,13 @@ final class Exp {
       Faults.is(CONSTANT_OFF_BY_ONE_ULP) ? LN2HI_0_UP : LN2HI_0;
   private static final int K_MIN_USED =
       Faults.is(THRESHOLD_MOVED) ? K_MIN_NORMAL - 1 : K_MIN_NORMAL;
+  /**
+   * Drops the forcing of {@code k = 0} on the lanes line 128's test leaves unreduced, for {@link
+   * #DROP_K_FORCING}: every lane takes the formula's {@code k}, which is {@code +-1} on the part
+   * of word {@code 0x3fd62e42} above {@code 0.5 ln2}, where the C keeps {@code k = 0} (PROOFS.md,
+   * L1, H1).
+   */
+  private static final boolean DROPPING_K_FORCING = Faults.is(DROP_K_FORCING);
 
   /** The raw bits of 0.5, halF[0]; halF[1] is the same with the sign bit set. */
   static final long HALF_BITS = 0x3fe00000_00000000L;
@@ -174,7 +182,9 @@ final class Exp {
     VectorMask<Double> reduced = Lanes.hiAbove(absBits, HX_HALF_LN2).cast(species);
     VectorSpecies<Integer> intSpecies = Lanes.intSpecies(species);
     DoubleVector halF = Lanes.fromBits(bits.and(Long.MIN_VALUE).or(HALF_BITS));
-    DoubleVector kArg = DoubleVector.zero(species).blend(x.mul(INVLN2).add(halF), reduced);
+    DoubleVector kFormula = x.mul(INVLN2).add(halF);
+    DoubleVector kArg =
+        DROPPING_K_FORCING ? kFormula : DoubleVector.zero(species).blend(kFormula, reduced);
     IntVector kInt = (IntVector) kArg.convertShape(VectorOperators.D2I, intSpecies, 0);
     LongVector k = (LongVector) kInt.convertShape(VectorOperators.I2L, bits.species(), 0);
     return filter.or(k.compare(VectorOperators.LT, K_MIN_USED).cast(species));
@@ -217,7 +227,9 @@ final class Exp {
     // a NaN gives 0 and a huge |x| saturates, but those are filter lanes, whose k is never used.
     // I2D is exact, so t = k as in the C. The int vector has the same lane count at half the
     // bits, so each conversion is part 0.
-    DoubleVector kArg = DoubleVector.zero(species).blend(x.mul(INVLN2).add(halF), reduced);
+    DoubleVector kFormula = x.mul(INVLN2).add(halF);
+    DoubleVector kArg =
+        DROPPING_K_FORCING ? kFormula : DoubleVector.zero(species).blend(kFormula, reduced);
     IntVector kInt = (IntVector) kArg.convertShape(VectorOperators.D2I, intSpecies, 0);
     DoubleVector t = (DoubleVector) kInt.convertShape(VectorOperators.I2D, species, 0);
     LongVector k = (LongVector) kInt.convertShape(VectorOperators.I2L, bits.species(), 0);
