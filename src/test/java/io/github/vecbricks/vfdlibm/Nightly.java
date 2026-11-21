@@ -121,6 +121,8 @@ final class Nightly {
         new Arm("Log1p.log1pFinish", x -> Log1p.log1pFinish(x, null), Log1p::log1pFinish))),
     SINH("sinh", StrictMath::sinh, List.of(
         new Arm("VFdlibm.sinh", VFdlibm::sinh, VFdlibm::sinh))),
+    ATAN("atan", StrictMath::atan, List.of(
+        new Arm("VFdlibm.atan", VFdlibm::atan, VFdlibm::atan))),
     COSH("cosh", StrictMath::cosh, List.of(
         // The two arms by name, so that both are swept whichever one VFdlibm.cosh calls and none
         // runs twice. VFdlibm.cosh is a thin call to the default arm; CoshTest runs it at every
@@ -146,7 +148,7 @@ final class Nightly {
         }
       }
       throw new IllegalArgumentException(
-          "unknown function '" + id + "'; known: exp, expm1, log, log10, log1p, sinh, cosh");
+          "unknown function '" + id + "'; known: exp, expm1, log, log10, log1p, sinh, cosh, atan");
     }
   }
 

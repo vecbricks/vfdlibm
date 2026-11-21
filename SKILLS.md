@@ -725,11 +725,12 @@ re-trying a settled question.
     `pool.py cost`. The budget is a median span of 90 minutes, so a median of the nights above
     90 breaks it and calls for one of the levers below; a single long night does not. At 13
     functions a median between 76 and 90 is inside it, and shows how far the model is off.
-  - **Seven functions now.** The table is of five; sinh and cosh join it, so the nightly runs
-    seven. At the five's average cost the model gives 167, 193 and 147 minutes for the sweep, the
-    fuzz and Arm, over 5, 6 and 4 slots 33, 32 and 37, a span of 45 (a lower bound, as above).
-    Their own cost is not measured: the first nights with them are, with `pool.py fetch` and
-    `cost`, and this entry is requoted from those.
+  - **Eight functions now.** The table is of five; sinh and cosh join it, so the nightly ran
+    seven, and atan makes eight. At the five's average cost the model gives 167, 193 and 147
+    minutes for the sweep, the fuzz and Arm, over 5, 6 and 4 slots 33, 32 and 37, a span of 45
+    (a lower bound, as above) for seven functions; it has not been rerun for eight. Their own
+    cost is not measured: the first nights with them are, with `pool.py fetch` and `cost`, and
+    this entry is requoted from those.
   - **What gives when it does not fit,** cheapest first, with what each buys at 13 functions
     (the table's means times 2.6): `fuzz-seconds` 120 saves 224 runner-minutes a night (172 in
     the fuzz jobs, 52 in Arm's) and halves what a species is fuzzed; `nights` 2 saves 192, 124
@@ -851,6 +852,24 @@ re-trying a settled question.
 - **Lefevre's list has 2026 `ch` lines,** positive inputs only, rechecked and written by
   `dev/testlibm-extract.py` as sinh's were, each with 46 or more bits after the round bit
   pointing at the midpoint.
+
+## What the atan port taught
+
+- **Blend the operands of the division, not its results.** atan's four reductions each divide
+  once, with their own numerator and denominator, and every lane takes one of them. The port
+  blends the operands by range and divides once, so each lane divides the C's operands; the other
+  ranges' operands are computed and the quotient of the lanes below 7/16, which the C does not
+  divide, is dropped. The argument is cosh's, with the blend before the division.
+- **One finish arm.** The rare lanes (`|x| >= 2^66`, the infinities and the NaNs) have results
+  that are a constant or `x+x`, so a guarded arm that blends them is possible; none is built,
+  because the tie-break rule of #30 sends a tie to the finish arm and no timing says otherwise.
+- **Sizes of its faults, on 2^22 draws.** `atan.dropLo`: 855028 changed of `(-5, 5)`, none below
+  7/16. `atan.splitMoved` (19/16 moved to 2): 431802 changed of `[19/16, 2)` and none elsewhere.
+  `atan.hiOneUlpOff` (`atanhi[1]` one ulp up): 3972483 changed of `[11/16, 19/16)` and none
+  elsewhere. The unplanted port changed none in any of the ranges.
+- **Lefevre's list has 1735 `atn` lines,** positive inputs only, distinct, each with 45 or more
+  bits after the round bit pointing at the midpoint, rechecked and written by
+  `dev/testlibm-extract.py`, which derives atan's exact value itself.
 
 ## What the mutant survey taught
 
