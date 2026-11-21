@@ -21,10 +21,10 @@ import jdk.incubator.vector.VectorOperators;
  *   <li>{@code toy2}, {@code x * 0.5 + y}: an oracle and a vector form that cost almost nothing,
  *       so a pass over it is the harness's own cost (partners, arrays, the check of a block, the
  *       masks) and a lower bound for any function;
- *   <li>{@code atan2-scratch}: the oracle is {@code StrictMath.atan2} and the one arm calls it
- *       lane by lane, so a pass over it is the harness plus two calls of the C's own function a
- *       pair, the cost of an arm that finishes every lane per lane. It is no port and says
- *       nothing about one; it bounds the arm's cost from above.
+ *   <li>{@code atan2-scratch}: the oracle is {@code StrictMath.atan2} and the one arm calls it lane
+ *       by lane, so a pass over it is the harness plus three calls of it a pair (the oracle, the arm
+ *       unmasked, the arm masked), the cost of an arm that finishes every lane per lane. It is no
+ *       port and says nothing about one; it bounds the arm's cost from above.
  * </ul>
  *
  * <pre>

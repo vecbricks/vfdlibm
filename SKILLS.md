@@ -676,8 +676,9 @@ re-trying a settled question.
   16 runner-minutes on an AVX2 draw and 23 on an AVX-512 one, and the second argument's pass costs
   what the first does: both passes in one night are twice that, one alternating pass is once. The
   file has the method, the three runs of each row and its limits; the nightly's own logs replace
-  it once a pair function runs. It also records that `StrictMath.atan2` is not one bit pattern on
-  a pair of NaNs between two call sites, so a pair function's oracle may need a canonical NaN.
+  it once a pair function runs. It also records that, on two NaNs, the oracle's `StrictMath.atan2`
+  and a loop of calls to it differed in the payload in 12 of 12 runs (cause not read), so a pair
+  function's check may need a canonical NaN.
 - **Checking that the unary nightly is unchanged** (`dev/unary-output-check.sh`, run by a person
   after a change to `Sweep`, `Fuzz`, `Nightly` or `Inputs`, not by CI). `check <base-ref>` builds
   the base in a worktree, runs every unary function's sweep and fuzz on fixed slices with one

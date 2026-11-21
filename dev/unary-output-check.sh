@@ -48,6 +48,7 @@ capture() {
   local out="$1" classes="$2" f s pf
   mkdir -p "$out"
   local run=(java --add-modules jdk.incubator.vector)
+  [ -n "$(functions "$classes")" ] || { echo "no function found in $classes" >&2; exit 2; }
   for f in $(functions "$classes"); do
     for s in $SPECIES; do
       "${run[@]}" -cp "$classes" io.github.vecbricks.vfdlibm.Sweep --function "$f" --species "$s" \
@@ -67,7 +68,7 @@ capture() {
       --function "$f" --species 256 --seed 0x5eed --seconds 600 --draws 32768 --threads 1 \
       --out "$out/ffuzz-$pf.txt" 2>&1 | norm > "$out/ffuzz-$pf.log"
   done
-  {
+  { # two usage errors: no --seed for Sweep, and an unknown option (a misspelt --function) for Fuzz
     "${run[@]}" -cp "$classes" io.github.vecbricks.vfdlibm.Sweep --function exp 2>&1
     "${run[@]}" -cp "$classes" io.github.vecbricks.vfdlibm.Fuzz --fucntion exp 2>&1
   } | grep -v incubator > "$out/errors.log"
@@ -93,7 +94,7 @@ compare() {
     [ -e "$a/$(basename "$f")" ] || { echo "only in $b: $(basename "$f")"; only=$((only + 1)); }
   done
   echo "$same files the same, $differ differ, $only in one capture only"
-  [ "$differ" -eq 0 ]
+  [ "$differ" -eq 0 ] && [ "$only" -eq 0 ]
 }
 
 self_test() {
@@ -126,13 +127,13 @@ self_test() {
 
 case "${1:-}" in
   capture)
-    [ $# -eq 2 ] || { sed -n '9,19p' "$0"; exit 2; }
+    [ $# -eq 2 ] || { sed -n '10,17p' "$0"; exit 2; }
     capture "$2" "$root/target/classes:$root/target/test-classes" ;;
   compare)
-    [ $# -eq 3 ] || { sed -n '9,19p' "$0"; exit 2; }
+    [ $# -eq 3 ] || { sed -n '10,17p' "$0"; exit 2; }
     compare "$2" "$3" ;;
   check)
-    [ $# -eq 2 ] || { sed -n '9,19p' "$0"; exit 2; }
+    [ $# -eq 2 ] || { sed -n '10,17p' "$0"; exit 2; }
     work="$(mktemp -d)"
     trap 'git -C "$root" worktree remove --force "$work/base" 2>/dev/null; rm -rf "$work"' EXIT
     git -C "$root" worktree add --detach "$work/base" "$2" > /dev/null || exit 2
@@ -141,5 +142,5 @@ case "${1:-}" in
     capture "$work/this-out" "$root/target/classes:$root/target/test-classes" || exit 2
     compare "$work/base-out" "$work/this-out" ;;
   --self-test) self_test ;;
-  *) sed -n '9,19p' "$0"; exit 2 ;;
+  *) sed -n '10,17p' "$0"; exit 2 ;;
 esac

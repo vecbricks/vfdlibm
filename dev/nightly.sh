@@ -28,8 +28,9 @@
 # options, such as -XX:UseAVX=2 or -Dvfdlibm.fault=exp.dropCorrection. NIGHTLY_ARGUMENT, 1 or 2,
 # is the argument a sweep of a function of two arguments sweeps (Sweep.java, `--argument`; its
 # log and mismatch file are <mode>-<function>-arg<N>-<species>); it is left out for a function of
-# one argument. Every species runs even after one fails. Exit status: 0 when every lane matched, 1 when some lane differed, 2 when a
-# run failed to run (a usage error, or a harness failure), which outranks 1.
+# one argument. Every species runs even after one fails. Exit status: 0 when every lane matched,
+# 1 when some lane differed, 2 when a run failed to run (a usage error, or a harness failure),
+# which outranks 1.
 set -uo pipefail
 
 usage() { sed -n '/^# The nightly correctness/,/^[^#]/p' "$0" | sed '$d'; exit 2; }

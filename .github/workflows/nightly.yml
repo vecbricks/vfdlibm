@@ -328,8 +328,11 @@ jobs:
           replay="seed=$SEED nights=$NIGHTS shards=$SHARDS arm-shards=$ARM_SHARDS"
           replay="$replay night=$NIGHT slice-nights=$SLICE_NIGHTS slice-night=$SLICE_NIGHT"
           replay="$replay fuzz-seconds=$FUZZ_SECONDS"
+          # a replay names the argument "alternate" picked tonight, not the rule
+          replay_passes="$PAIR_PASSES"
+          if [ "$PAIR_PASSES" = alternate ]; then replay_passes="$pair_arguments"; fi
           for f in $functions; do
-            case " $pairs " in *" $f "*) replay="$replay pair-passes=$PAIR_PASSES"; break ;; esac
+            case " $pairs " in *" $f "*) replay="$replay pair-passes=$replay_passes"; break ;; esac
           done
           if [ "$functions" != "$all" ]; then replay="$replay functions=${functions// /,}"; fi
           if [ -n "$FAULT" ]; then replay="$replay fault=$FAULT"; fi
