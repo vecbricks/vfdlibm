@@ -129,9 +129,10 @@ property unset, the results are unchanged, and each lane still equals `StrictMat
 
 **Which species to pass.** Every species of 128 bits or more gives the same bits; what the body
 allocates differs. The allocation check (`bench/alloc-check.py`, run by CI) covers 256 bits and
-the preferred species on x86, and the preferred species, 128 bits, on Arm. The files under
-`bench/results/` read as allocating, and the check does not cover: 128 bits on x86, 512 bits on
-an AVX2 host, and `SPECIES_MAX` for `exp`, `log` and `log10` on data with rare lanes. The
+the preferred species on x86, and the preferred species, 128 bits, on GitHub's Arm runner. The
+files under `bench/results/` read as allocating, and the check does not cover: `exp` and `log`
+at 128 bits on x86, every function at 512 bits on an AVX2 host, and `SPECIES_MAX` for `exp`,
+`log` and `log10` on mixed data (a laptop file, and host files for `exp` and `log10`). The
 Javadoc of `VFdlibm` gives each reading with its file, and lists what is not measured: the speed
 of 512 bits against 256 on the EPYC 9V74 draws that have AVX-512, and any port's speed on Arm.
 
