@@ -66,8 +66,11 @@ final class PairBits {
 
   /** What a report says was expected of the lane: the oracle's bits, or the rule on a NaN pair. */
   static String expected(double x, double y, double want) {
-    if (bothNaNWithDifferentBits(Double.doubleToRawLongBits(x), Double.doubleToRawLongBits(y))) {
-      return "either argument's bits, quieted";
+    long xb = Double.doubleToRawLongBits(x);
+    long yb = Double.doubleToRawLongBits(y);
+    if (bothNaNWithDifferentBits(xb, yb)) {
+      return String.format("0x%016x or 0x%016x (an argument's bits, quieted; the oracle's are %s)",
+          xb | QUIET, yb | QUIET, Oracle.hex(want));
     }
     return Oracle.hex(want);
   }

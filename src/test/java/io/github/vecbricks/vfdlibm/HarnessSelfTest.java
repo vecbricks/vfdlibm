@@ -304,7 +304,7 @@ class HarnessSelfTest {
     Oracle.assertUnaryMasked(
         "exp", species, HarnessSelfTest::maskedExp, StrictMath::exp, maskedInputs(), 11L);
     Inputs.Pairs p = Inputs.cross(Inputs.specials(), Inputs.sampled(4L, 16));
-    Oracle.assertBinaryMasked(
+    Oracle.assertPairMasked(
         "pow", species, HarnessSelfTest::maskedPow, StrictMath::pow, p.x(), p.y(), 12L);
   }
 
@@ -341,7 +341,7 @@ class HarnessSelfTest {
     Arrays.fill(ys, 3.0);
     assertThrows(
         AssertionFailedError.class,
-        () -> Oracle.assertBinaryMasked(
+        () -> Oracle.assertPairMasked(
             "pow", species, (x, y, live) -> pow(x, y), StrictMath::pow, xs, ys, 15L));
   }
 

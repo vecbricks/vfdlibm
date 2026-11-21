@@ -19,6 +19,7 @@ import java.nio.file.Path;
 import java.util.Arrays;
 import java.util.List;
 import java.util.function.BinaryOperator;
+import java.util.function.DoubleBinaryOperator;
 import jdk.incubator.vector.DoubleVector;
 import jdk.incubator.vector.VectorSpecies;
 import org.junit.jupiter.api.Test;
@@ -163,9 +164,9 @@ class PairNanTest {
     for (Toy toy : Toy.values()) {
       BinaryOperator<DoubleVector> all = (x, y) -> apply(toy, x, y);
       Oracle.MaskedBinary masked = (x, y, live) -> x.blend(apply(toy, x, y), live);
-      Runnable plain = () -> Oracle.assertBinary(
+      Runnable plain = () -> Oracle.assertPair(
           toy.name(), species, all, PairHarnessTest::scalar, column(0), column(1));
-      Runnable maskedCheck = () -> Oracle.assertBinaryMasked(
+      Runnable maskedCheck = () -> Oracle.assertPairMasked(
           toy.name(), species, masked, PairHarnessTest::scalar, column(0), column(1), 7);
       for (Runnable check : List.of(plain, maskedCheck)) {
         if (toy.caught) {
@@ -175,6 +176,27 @@ class PairNanTest {
         }
       }
     }
+  }
+
+  @ParameterizedTest
+  @EnumSource(VectorWidth.class)
+  void theRawAssertKeepsEveryLaneRawAndOnlyThePairAssertRelaxesTwoNaNs(VectorWidth width) {
+    VectorSpecies<Double> species = width.species();
+    BinaryOperator<DoubleVector> first = (x, y) -> apply(Toy.FIRST, x, y);
+    // the oracle's bits on two different NaNs are those of the sum, which FIRST changes on a lane
+    // where the sum keeps the second argument; the canonical NaN is neither
+    BinaryOperator<DoubleVector> canonical = (x, y) -> apply(Toy.CANONICAL_NAN, x, y);
+    Oracle.assertPair("first", species, first, PairHarnessTest::scalar, column(0), column(1));
+    assertThrows(AssertionFailedError.class, () -> Oracle.assertBinary(
+        "canonical", species, canonical, PairHarnessTest::scalar, column(0), column(1)));
+    double[] xs = {Double.longBitsToDouble(A), Double.longBitsToDouble(A)};
+    double[] ys = {Double.longBitsToDouble(B), Double.longBitsToDouble(B)};
+    // a function that returns B's bits quieted where the oracle returns A's: raw says no
+    BinaryOperator<DoubleVector> second = (x, y) -> apply(Toy.SECOND, x, y);
+    DoubleBinaryOperator wantsFirst = (x, y) -> Double.longBitsToDouble(bits(x) | QUIET);
+    assertThrows(AssertionFailedError.class,
+        () -> Oracle.assertBinary("second", species, second, wantsFirst, xs, ys));
+    Oracle.assertPair("second", species, second, wantsFirst, xs, ys);
   }
 
   @ParameterizedTest
@@ -191,7 +213,7 @@ class PairNanTest {
       }
       return DoubleVector.fromArray(species, r, 0);
     };
-    assertThrows(AssertionFailedError.class, () -> Oracle.assertBinaryMasked(
+    assertThrows(AssertionFailedError.class, () -> Oracle.assertPairMasked(
         "quietsX", species, quietsX, PairHarnessTest::scalar, column(0), column(1), 7));
   }
 

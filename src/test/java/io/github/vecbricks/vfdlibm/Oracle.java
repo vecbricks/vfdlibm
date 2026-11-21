@@ -24,9 +24,9 @@ import jdk.incubator.vector.VectorSpecies;
 /**
  * The oracle every function is tested against: {@code StrictMath} on the same JVM, compared lane
  * by lane by {@link Double#doubleToRawLongBits}, so a different NaN payload or a zero of the other
- * sign is a failure just as a one-ulp difference is. A function of two arguments is compared by
- * {@link PairBits#matches}, which keeps that rule except on a lane where both arguments are NaN
- * with different bits.
+ * sign is a failure just as a one-ulp difference is. A function of two arguments is checked by
+ * {@link #assertPair} and {@link #assertPairMasked}, which compare by {@link PairBits#matches}:
+ * that rule except on a lane where both arguments are NaN with different bits.
  *
  * <p>A check feeds an array of inputs through the vector function one species-length vector at a
  * time and compares every lane that holds an input. It runs all inputs before failing and reports
@@ -83,7 +83,24 @@ final class Oracle {
     report(first, differing, xs.length);
   }
 
-  /** Checks a two-argument vector function, such as atan2, pow or hypot, against its oracle. */
+  /**
+   * Checks a function of two arguments, such as atan2 or pow, against its oracle: by
+   * {@link PairBits#matches}, which is raw bits except on a lane of two NaNs with different bits.
+   */
+  static void assertPair(
+      String name,
+      VectorSpecies<Double> species,
+      BinaryOperator<DoubleVector> function,
+      DoubleBinaryOperator oracle,
+      double[] xs,
+      double[] ys) {
+    assertTwoInputs(name, species, function, oracle, xs, ys, true);
+  }
+
+  /**
+   * Checks a vector function of two inputs against an oracle by raw bits on every lane, for the
+   * shape checks of a lemma, which are no function of two arguments of the library's.
+   */
   static void assertBinary(
       String name,
       VectorSpecies<Double> species,
@@ -91,6 +108,17 @@ final class Oracle {
       DoubleBinaryOperator oracle,
       double[] xs,
       double[] ys) {
+    assertTwoInputs(name, species, function, oracle, xs, ys, false);
+  }
+
+  private static void assertTwoInputs(
+      String name,
+      VectorSpecies<Double> species,
+      BinaryOperator<DoubleVector> function,
+      DoubleBinaryOperator oracle,
+      double[] xs,
+      double[] ys,
+      boolean pair) {
     assertNonEmpty(xs);
     assertEquals(xs.length, ys.length, "x and y inputs differ in length");
     int lanes = species.length();
@@ -106,13 +134,16 @@ final class Oracle {
       assertEquals(lanes, got.length, name + " returned a vector of another length");
       for (int lane = 0; lane < lanes && base + lane < xs.length; lane++) {
         double want = oracle.applyAsDouble(x[lane], y[lane]);
-        if (!PairBits.matches(x[lane], y[lane], want, got[lane])) {
+        boolean ok = pair
+            ? PairBits.matches(x[lane], y[lane], want, got[lane])
+            : Double.doubleToRawLongBits(want) == Double.doubleToRawLongBits(got[lane]);
+        if (!ok) {
           differing++;
           if (first == null) {
             first = String.format(
                 "%s at %s lane %d (input %d): x = %s, y = %s: expected %s, got %s",
                 name, species, lane, base + lane, hex(x[lane]), hex(y[lane]),
-                PairBits.expected(x[lane], y[lane], want), hex(got[lane]));
+                pair ? PairBits.expected(x[lane], y[lane], want) : hex(want), hex(got[lane]));
           }
         }
       }
@@ -146,10 +177,11 @@ final class Oracle {
   }
 
   /**
-   * Checks a two-argument masked form: active lanes against the oracle, inactive lanes against
-   * the first argument {@code x}, by raw bits, under the masks the class comment lists.
+   * Checks a masked form of a function of two arguments: active lanes against the oracle by
+   * {@link PairBits#matches}, inactive lanes against the first argument {@code x} by raw bits,
+   * under the masks the class comment lists.
    */
-  static void assertBinaryMasked(
+  static void assertPairMasked(
       String name,
       VectorSpecies<Double> species,
       MaskedBinary function,
