@@ -299,10 +299,12 @@ class PairHarnessTest {
     // The message of an unknown function lists the pair functions too.
     IllegalArgumentException e =
         assertThrows(IllegalArgumentException.class, () -> Nightly.subject("nope"));
-    assertTrue(e.getMessage().startsWith(
-        "unknown function 'nope'; known: exp, expm1, log, log10, log1p, sinh, cosh"),
-        e.getMessage());
-    assertTrue(e.getMessage().contains(", toy2"), e.getMessage());
+    // Whatever the unary functions are: the message lists each of them, and the pair functions.
+    assertTrue(e.getMessage().startsWith("unknown function 'nope'; known: "), e.getMessage());
+    for (Nightly.Function f : Nightly.Function.values()) {
+      assertTrue(e.getMessage().contains(f.id()), f.id() + " in " + e.getMessage());
+    }
+    assertTrue(e.getMessage().contains("toy2"), e.getMessage());
   }
 
   /** The partner is a function of the seed, the argument and the index alone, in four kinds. */
