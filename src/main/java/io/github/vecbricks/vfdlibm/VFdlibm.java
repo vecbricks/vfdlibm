@@ -17,9 +17,9 @@ import jdk.incubator.vector.VectorMask;
  * {@link StrictMath} method of the same name, NaN payloads and signed zeros included.
  *
  * <p>Every method works on a vector of any species of 128 bits or more (exp, expm1, log, log10,
- * log1p and sinh hold fdlibm's {@code int} words in int lanes of half the vector's size). Each
- * comes in two forms: one computes every lane, and a masked form computes only the lanes set in
- * {@code live} and returns every other lane of its argument untouched, raw bits and all. An
+ * log1p, sinh and cosh hold fdlibm's {@code int} words in int lanes of half the vector's size).
+ * Each comes in two forms: one computes every lane, and a masked form computes only the lanes set
+ * in {@code live} and returns every other lane of its argument untouched, raw bits and all. An
  * inactive lane never sends the vector down a slow path.
  *
  * <p>Which species to pass. Every species of 128 bits or more gives the same bits. The files
@@ -35,11 +35,11 @@ import jdk.incubator.vector.VectorMask;
  *       GitHub's Arm runner, whose vectors are 128 bits, the preferred species, where all 24 rows
  *       passed ({@code bench/results/alloc-arm-2026-11-20.txt}, an allocation reading and no
  *       timing).
- *   <li>On the EPYC 7763, an AVX2 host, at 128 bits {@code exp} and {@code log} allocate 0.5 to
- *       0.6 million bytes per op (the files of 20 November 2026 named below), and {@code exp}
- *       the same on a Xeon 8573C, at the head of the pair in {@code
- *       bench/results/exp-onediv-xeon8573c-2026-11-03.txt}. {@code log10}, {@code log1p} and
- *       {@code expm1} have no 128-bit row.
+ *   <li>At 128 bits {@code exp} and {@code log} allocate 0.5 to 0.6 million bytes per op on
+ *       x86, the finish arm that {@code VFdlibm} calls: on the EPYC 7763, an AVX2 host, in the
+ *       files of 20 November 2026 named below, and on the Xeon Platinum 8573C in {@code
+ *       bench/results/exp-xeon8573c-2026-11-21.txt} and {@code log-xeon8573c-2026-11-21.txt}.
+ *       {@code log10}, {@code log1p} and {@code expm1} have no 128-bit row.
  *   <li>On the EPYC 7763 at 512 bits, which is the Vector API's Java fallback there, each of the
  *       five functions allocates 0.9 to 1.8 million bytes per op. The files of 20 November 2026
  *       hold this reading and the 128-bit one above ({@code exp-epyc7763-2026-11-20.txt}, and
@@ -49,7 +49,8 @@ import jdk.incubator.vector.VectorMask;
  *       16 replaced by one that takes its own path in the C, as each benchmark class lists), the
  *       finish of every function used to allocate 30432 to 36992 bytes per op there ({@code
  *       bench/results/max-finish-laptop-2026-11-20.txt}, and the host files of {@code exp} and
- *       {@code log10}, which read the old code). It writes out its first eight lanes with
+ *       {@code log10}, and the Xeon 8573C and EPYC 7763 files of 21 and 20 November 2026, which
+ *       read the old code). It writes out its first eight lanes with
  *       constant indices now, and every {@code *Max} row reads under 0.1 bytes per op ({@code
  *       bench/results/max-finish-alloc-free-laptop-2026-11-21.txt}, a laptop file and not a
  *       headline, read at 512 bits and as an AVX2 host at 256). {@code SPECIES_MAX} at 128 bits,
@@ -207,5 +208,27 @@ public final class VFdlibm {
    */
   public static DoubleVector sinh(DoubleVector x, VectorMask<Double> live) {
     return Sinh.sinh(x, Objects.requireNonNull(live, "live"));
+  }
+
+  /**
+   * {@code StrictMath.cosh} in every lane. Ported from fdlibm 5.3's {@code e_cosh.c}.
+   *
+   * @param x the arguments
+   * @return the hyperbolic cosine of each lane of {@code x}
+   */
+  public static DoubleVector cosh(DoubleVector x) {
+    return Cosh.cosh(x, null);
+  }
+
+  /**
+   * {@code StrictMath.cosh} in the lanes set in {@code live}; every other lane is {@code x}'s,
+   * untouched.
+   *
+   * @param x the arguments
+   * @param live the lanes to compute, of {@code x}'s species
+   * @return the hyperbolic cosine of each live lane of {@code x}, and {@code x} in the others
+   */
+  public static DoubleVector cosh(DoubleVector x, VectorMask<Double> live) {
+    return Cosh.cosh(x, Objects.requireNonNull(live, "live"));
   }
 }

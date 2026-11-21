@@ -70,11 +70,19 @@ import jdk.incubator.vector.VectorSpecies;
  * index it does not (SKILLS.md). {@link #log1p}, which {@code VFdlibm.log1p} calls, is
  * the guarded arm, provisionally. On the laptop ({@code
  * bench/results/log1p-laptop-avx2-2026-11-02.txt}, under {@code -XX:UseAVX=2} as C2 compiles for
- * the AVX2 hosts that are the target, and {@code log1p-laptop-2026-11-02.txt}, AVX-512; laptop
- * numbers, not headlines) the three arms are within 1.3x of each other at both widths and on
- * both mixes, and no direction is read from them. The runs on the benchmark hosts decide, each for
- * its own instruction set, the AVX-512 hosts first ({@code HARDWARE.md}). The other two are
- * kept so the choice can be re-measured, on other hosts and as the JDK changes.
+ * the AVX2 hosts, and {@code log1p-laptop-2026-11-02.txt}, AVX-512; laptop numbers, not
+ * headlines) the three arms are within 1.3x of each other at both widths and on both mixes. The
+ * host files read the same, by minimums at 256 bits, the preferred species and, on the Xeon, 512
+ * bits: on the AMD EPYC 7763 ({@code bench/results/log1p-epyc7763-2026-11-20.txt}, two runs, the
+ * code of a5683c3) and on the Xeon Platinum 8573C ({@code
+ * bench/results/log1p-xeon8573c-2026-11-21.txt}, one run, the code as it stands; the class
+ * changed between their two commits by a fault constant and a local in the blend) every arm is
+ * within 1.3x of the others on every row, so no direction is read, and the lowest minimum moves
+ * between the finish and the guarded arm from row to row. The Xeon file of 3 November ({@code
+ * log1p-xeon8573c-2026-11-03.txt}) had the guarded arm lowest on every row. The choice waits for
+ * a second run of the Xeon 8573C and a first of the other AVX-512 hosts ({@code HARDWARE.md}), a
+ * pair, and the rules for a tie within 1.3x and for hosts that disagree (issue #30). The other
+ * two are kept so the choice can be re-measured, on other hosts and as the JDK changes.
  */
 final class Log1p {
 
