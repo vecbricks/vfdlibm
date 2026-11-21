@@ -78,8 +78,9 @@ import jdk.incubator.vector.VectorSpecies;
  * code of a5683c3) and on the Xeon Platinum 8573C ({@code
  * bench/results/log1p-xeon8573c-2026-11-21.txt}, one run, the code of a1db6df; the class changed
  * between their two commits by a fault constant, a local in the blend and a branch on the
- * constant that folds away with no fault planted, and since both by the finish's first eight
- * lanes written out with constant indices (issue #37)) every arm is within 1.3x of the others on
+ * constant, which is expected to fold away with no fault planted (no pair has shown it), and
+ * since both by the finish's first eight lanes written out with constant indices (issue #37))
+ * every arm is within 1.3x of the others on
  * every one of those rows (the EPYC's 512-bit rows run in the Java fallback and are left out),
  * so no direction is read, and the lowest minimum moves between the finish and the guarded arm
  * from row to row. The Xeon file of 3 November ({@code log1p-xeon8573c-2026-11-03.txt}) had the

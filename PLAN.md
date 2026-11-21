@@ -119,14 +119,22 @@ five are a later, optional set; the large-argument reduction of the trigonometri
   For `exp` the per-lane finish allocates nothing at 256 bits, 512 bits and `SPECIES_MAX` of up to
   eight lanes in the laptop reading `bench/results/max-finish-alloc-free-laptop-2026-11-21.txt`
   (allocation only, no timing; it boxed at `SPECIES_MAX` before its first eight lanes were written
-  out with constant indices, `bench/results/max-finish-laptop-2026-11-20.txt`), and the host files
-  read the two arms by minimums: on the EPYC 7763 (`bench/results/exp-epyc7763-2026-11-20.txt`, two
-  runs) the finish is 1.99 to 2.13 times faster than the blend on common data and 1.50 to 1.57 on
-  mixed data, at 256 bits and the preferred species; on the Xeon Platinum 8573C
+  out with constant indices, `bench/results/max-finish-laptop-2026-11-20.txt`). That change is not
+  free in time: the pair on the EPYC 7763 (`bench/results/exp-log10-pair-epyc7763-2026-11-21.txt`
+  and its re-run `exp-log10-pair-rerun-epyc7763-2026-11-21.txt`) reads exp's two mixed finish rows
+  7.4% to 9.3% slower by median and 8.3% to 8.9% by best (under its 10% threshold), log10's
+  2.6% to 4.0% by median and 3.7% to 4.1% by best, and the `*Max` rows on mixed data faster, since
+  they no longer box; the cause of the slowdown is not known, and only one AVX2 host was paired,
+  with no AVX-512 host or other port.
+  The host files read the two arms by minimums: on the EPYC 7763
+  (`bench/results/exp-epyc7763-2026-11-20.txt`, two runs) the finish is 1.99 to 2.13 times faster
+  than the blend on common data and 1.50 to 1.57 on mixed data, at 256 bits and the preferred
+  species; on the Xeon Platinum 8573C
   (`bench/results/exp-xeon8573c-2026-11-21.txt`, one run) 1.23 to 1.37 on common data, a ratio that
   straddles 1.3x, and 1.70 to 1.84 on mixed data, at 256 bits, 512 bits and the preferred species.
   The code has changed since both runs (a fault constant and a local in the k conversion, and the
-  finish's first eight lanes written out with constant indices), so no run has timed today's `exp`.
+  finish's first eight lanes written out with constant indices), so no run has timed today's `exp`
+  but for the rows of that pair.
   Which arm each function keeps stays provisional until the 8573C has a second run, the other
   AVX-512 hosts a first, and a pair exists, and the rules for a tie within 1.3x and for hosts that
   disagree are set (issue #30); meanwhile `VFdlibm` calls the finish arm of `exp`, `log` and `log10`

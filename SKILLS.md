@@ -183,8 +183,19 @@ stops the next port re-trying a settled question.
   at 256, 0.033 and 0.072 at most, and all 94 rows of the check pass under both flag sets on a
   lightly loaded machine, the `*Max` rows now among them
   (`bench/results/max-finish-alloc-free-laptop-2026-11-21.txt`). Lanes past eight, and 128 bits, are
-  not read. The fixed shapes' finish changes too, so the change goes through a pair on a host (the
-  pull request names it).
+  not read. The fixed shapes' finish changes too, and the change is not free there. The pair on the
+  EPYC 7763 (`bench/results/exp-log10-pair-epyc7763-2026-11-21.txt` and its re-run
+  `exp-log10-pair-rerun-epyc7763-2026-11-21.txt`, base `f2907e5`, head `1cec059` in the first run
+  and `5a452fa` in the re-run, one AVX2 host, `MaxVectorSize=32`) reads exp's two mixed finish
+  rows (`finish256`, `finishPreferred`) 7.4% to 9.3% slower by median and 8.3% to 8.9% slower by
+  best in both runs, log10's 2.6% to 4.0% slower by median and 3.7% to 4.1% by best, and the
+  `*Max` rows on mixed data faster, since they no longer box. Those slowdowns are under the
+  pair's 10% threshold, whose verdict counts none of them, and its scalar control row moves 3% to
+  6% by median between the sides, so the bests (8.3% to 8.9% for exp) are the steadier figure.
+  The cause is not known: the re-run's file names the eight tests that replace a bit walk and
+  code placement, and decides neither. Only exp and log10 were paired, on that one host: no
+  AVX-512 host and no other port
+  (`expm1`, `log`, `log1p`, `sinh`, `cosh`) has a pair, so the other ports' cost is unread.
 - **At two 64-bit lanes x86 C2 lowers no mask.** Compare to mask, blend, mask cast, mask
   broadcast, logic and test are `not supported` at `vlen=2` for double and long masks, and fine
   at four lanes. So on x86 every 128-bit double port that branches through masks runs per lane
@@ -325,7 +336,8 @@ stops the next port re-trying a settled question.
   `bench/results/exp-kinds-xeon8573c-2026-11-21.txt` times each kind of rare input apart. Both files
   time `exp` as of a5683c3 and a1db6df, and `Exp.java` has changed since by a fault constant, a
   local and the finish's first eight lanes written out with constant indices (issue #37), so no run
-  has timed today's body. Which arm `VFdlibm.exp` keeps is not decided here: it waits for a second
+  has timed today's body as a whole: the pair above times rows of it after that change, on one
+  host. Which arm `VFdlibm.exp` keeps is not decided here: it waits for a second
   run of the Xeon 8573C and a first of the other AVX-512 hosts, a pair and the rules for a tie
   within 1.3x and for hosts that disagree (issue #30). Each port measures both on common and mixed
   data, decides per branch, and records the decision in its pull request (`PLAN.md` section 5).
@@ -539,8 +551,10 @@ stops the next port re-trying a settled question.
   the Xeon level (within 5%), both inside 1.3x. At the Xeon's preferred species and 512 bits, which
   have no native EPYC counterpart, blended over finish is 0.94 and 0.92. Both files time `Log10` as
   of a5683c3 and a1db6df, before the finish's first eight lanes written out with constant indices
-  (issue #37). `VFdlibm.log10` calls the finish arm provisionally: the decision waits for a second
-  run of the Xeon 8573C and a first of the other AVX-512 hosts, a pair and the rules for a tie
+  (issue #37); the pair of that change (the exp entry above) reads log10's mixed finish rows 2.6%
+  to 4.0% slower by median and 3.7% to 4.1% by best on the EPYC 7763, the cause not known.
+  `VFdlibm.log10` calls the finish arm provisionally: the decision waits for a second run of the
+  Xeon 8573C and a first of the other AVX-512 hosts, a pair and the rules for a tie
   within 1.3x and for hosts that disagree (issue #30).
 
 ## What the expm1 port taught
@@ -587,7 +601,8 @@ stops the next port re-trying a settled question.
   species and, on the Xeon, 512 bits. On the EPYC 7763
   (`bench/results/expm1-epyc7763-2026-11-20.txt`, two runs) the finish arm is lowest on every row:
   blended over finish is 1.17 to 1.18 on common data and 1.18 to 1.20 on mixed data, guarded over
-  finish 1.13 to 1.15 and 1.07 to 1.08. On the Xeon Platinum 8573C
+  finish 1.13 to 1.15 and 1.07 to 1.08 (the EPYC's run of 21 November, below, reads the first of
+  those 1.02). On the Xeon Platinum 8573C
   (`bench/results/expm1-xeon8573c-2026-11-21.txt`, one run) blended over finish is 1.04 to 1.16 on
   common data and 0.90 to 0.94 on mixed data, guarded over finish 0.97 to 1.05 and 0.85 to 0.87: on
   common data guarded is lowest at 256 bits and finish at the preferred species and 512 bits, on
@@ -599,10 +614,16 @@ stops the next port re-trying a settled question.
   lowest there on common data. `VFdlibm.expm1` keeps the guarded arm provisionally: the decision
   waits for a second run of the Xeon 8573C and a first of the other AVX-512 hosts, a pair and the
   rules for a tie within 1.3x and for hosts that disagree (issue #30). Both files time `Expm1`
-  before its core entry (below), which no run has timed, and before the finish's first eight lanes
-  written out with constant indices (issue #37), and `Expm1.java` changed between their two commits
-  too (a fault constant and a local in the k conversion, as for `Exp`), so the cross-host comparison
-  rests on two code versions. The EPYC file's 512-bit rows run in the Java fallback and measure no
+  before its core entry (below) and before the finish's first eight lanes written out with
+  constant indices (issue #37), and `Expm1.java` changed between their two commits too (a fault
+  constant and a local in the k conversion, as for `Exp`), so the cross-host comparison rests on
+  two code versions, and the EPYC file below on a third. The EPYC 7763's run of 21 November at 9b9cc7b
+  (`bench/results/expm1-epyc7763-2026-11-21.txt`, one run) is the only one with core rows
+  (`expm1Core`, no arm of `VFdlibm`); it still times the finish before the eight lanes, and reads
+  blended over finish 1.19, guarded over finish 1.02 on common data and 1.07 to 1.08 on mixed
+  data, all within 1.3x, so no direction either. Its guarded arm reads about 12% lower on common
+  data than in the 20 November runs, which no pair or re-run backs and the file does not
+  attribute to the code. The EPYC files' 512-bit rows run in the Java fallback and measure no
   expm1.
 - **Lefevre's direction bit is the 54th bit of the exact |result|.** testlibm-data's last field
   agreed with that for all 7578 `em1` lines (3836 ones, 3742 zeros), not with "the exact
