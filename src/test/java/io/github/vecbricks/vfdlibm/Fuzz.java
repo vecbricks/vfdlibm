@@ -51,8 +51,8 @@ import jdk.incubator.vector.VectorSpecies;
  * a run that it ends first has drawn fewer inputs than {@code --draws}.
  *
  * <p>Each thread draws from its own stream, {@code seed} mixed with the thread's number, so a run
- * is the same inputs in the same order per thread; how far each thread gets depends on the time.
- * A mismatch is reported with its input's bits, which replay it with no seed at all. The exit
+ * is the same inputs in the same order per thread; how far each thread gets depends on the time,
+ * unless {@code --draws} ends the run first. A mismatch is reported with its input's bits, which replay it with no seed at all. The exit
  * status is as {@link Sweep}'s.
  */
 final class Fuzz {

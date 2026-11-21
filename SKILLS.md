@@ -558,9 +558,7 @@ re-trying a settled question.
   256` sweeps the 2^20 high words of `[1, 2)` at 256 bits (a second or two);
   `dev/nightly.sh sweep log stripe:255/256 0x5eed` sweeps a stripe of 2^24 high words at
   every width the host has (`NIGHTLY_EXCEPT=128` leaves one out, as the nightly does);
-  `dev/nightly.sh fuzz log1p 30 0x5eed` fuzzes for 30 seconds a species (`Fuzz --draws N`
-  bounds each thread to N inputs as well, which a test uses, since a time limit draws fewer
-  inputs on a slower or busier machine). A width the host lacks
+  `dev/nightly.sh fuzz log1p 30 0x5eed` fuzzes for 30 seconds a species. A width the host lacks
   is named in the output (`512: not on this host`). `NIGHTLY_JVM_ARGS` passes JVM options,
   `-XX:UseAVX=2 -XX:MaxVectorSize=32` or a planted fault:
   `NIGHTLY_JVM_ARGS=-Dvfdlibm.fault=exp.dropCorrection dev/nightly.sh sweep exp 1023/4096 0x5eed
@@ -576,6 +574,10 @@ re-trying a settled question.
   per arm and mask form are written, and a stopped run's total, vary. On the laptop, take the
   heavy lock and pin to one core type, for example
   `flock ~/proj/.varka-locks/heavy.lock taskset -c 0,1,12,13 dev/nightly.sh ...`.
+- **`Fuzz --draws N`.** It bounds each thread to N inputs besides `--seconds`, so that a run
+  draws the same inputs on a slower or busier machine, which a time limit does not.
+  `NightlyTest`'s planted-fault test passes it; `dev/nightly.sh` passes only `--seconds`, so to
+  replay a bounded run call `Fuzz` directly (its class comment has the command).
 - **Its cost, measured (the logs of 3 to 19 November 2026).** The first sizing was a laptop's,
   from a sample of high words, before any night had run; the nights' own logs replaced it.
   `bench/pool/pool.py cost --since 2026-11-05
