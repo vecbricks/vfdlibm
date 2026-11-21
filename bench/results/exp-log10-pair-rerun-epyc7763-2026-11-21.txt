@@ -1,0 +1,849 @@
+# The re-run of the exp and log10 pair of the eight-lane finish, on the EPYC 7763, 21 November 2026
+#
+# What this is. The pair of exp-log10-pair-epyc7763-2026-11-21.txt run again, as a file of its own
+# (CLAUDE.md: a pair's re-run is a file of its own), because that run read the finish at the fixed
+# shapes on mixed data slower in the head by 7 to 9% on exp, under the pair's 10% threshold, and a
+# ratio under about 1.3x is re-run before it is written down. Dispatched with bench/dispatch-
+# bench.sh --host epyc7763 --attempts 18 --base f2907e5, run 44947864585, on its third draw: runs
+# 44937083014 and 44942504231 missed the CPU check and were retried an hour later; the check was
+# not relaxed. The base is f2907e5, main before pull request 100. The head is 5a452fa, pull
+# request 100's squash on main, a real commit this time; the first run's head, 1cec059, was a
+# commit of the branch before it merged main and gave cosh the same finish. A branch pointing at
+# 5a452fa was the handle the dispatch needed, and is deleted.
+#
+# What it covers. Only the rows (Exp|Log10)Benchmark.finish256, finishPreferred and finishMax, on
+# common and mixed inputs, and scalarStrictMath as the machine's own spread: 16 rows, not the first
+# run's 44. Not expm1, log, log1p, sinh or cosh. One EPYC 7763 runner (AVX2, MaxVectorSize=32).
+#
+# How it ended. bench/pair.sh's verdict (below): 16 rows, 0 slower and 2 faster by 10% or more by
+# both the median and the best of its 5 rounds, the same two rows as the first run, the *Max
+# rows on mixed data (+124.7% and +120.7% by median).
+#
+# The four mixed finish rows, by median and best (negative: the head is slower), first run, then
+# this run:
+# - ExpBenchmark.finish256:        -7.4% and -8.5%, then -9.3% and -8.9%.
+# - ExpBenchmark.finishPreferred:  -7.8% and -8.3%, then -7.8% and -8.7%. The preferred species is
+#   256 bits on this host, so this row and the one above run the same code.
+# - Log10Benchmark.finish256:      -4.0% and -4.0%, then -2.8% and -3.7%.
+# - Log10Benchmark.finishPreferred: -2.6% and -3.9%, then -3.8% and -4.1%.
+# In each run the 5 rounds of the two exp rows do not overlap: the base's ns/op ranges are 4275.1
+# to 4318.0 (finish256) and 4209.5 to 4316.0 (finishPreferred) in the first run and 4254.7 to
+# 4302.3 and 4221.9 to 4309.0 in this one, against the head's 4626.5 to 4682.1 and 4612.5 to
+# 4684.1, then 4624.2 to 4748.7 and 4608.0 to 4716.2. Log10's rounds do not overlap either (this
+# run: 7226.7 to 7329.2 against 7494.6 to 7595.9 for finish256, 7206.9 to 7350.7 against 7509.4 to
+# 7615.7 for finishPreferred).
+#
+# Whether the 7 to 8% is there again. Yes, for exp: its two mixed finish rows read 7.8% to 9.3%
+# slower by median and 8.3% to 8.9% slower by best in both runs, with no overlap of the rounds, on
+# the one host. The finish256 row is nearer the pair's 10% threshold in this run than in the first
+# (-9.3% by median), and the verdict still counts none of them. For log10 the rows read 2.6% to
+# 4.1% slower in both runs. On common data (the finish rows never run the rare lanes there) the
+# same rows read -1.5% to -0.1% by median in this run, so the cost shows only where rare lanes run.
+#
+# The machine's own spread. ExpBenchmark.scalarStrictMath, whose code the change does not touch,
+# reads -5.5% by median and -0.1% by best (common) and -3.2% and -0.1% (mixed) in this run, and
+# -5.7% and -0.2%, -3.4% and -0.2% in the first; its rounds do not overlap either (11133.9 to
+# 11298.9 against 11437.1 to 12197.7 on common data, this run). So medians on this host can move
+# by several percent between sides with no change to the code, and the bests, which move by 0.1%
+# to 0.2% on that row, are the steadier figure; the finish rows differ by 8.7% to 8.9% by best.
+# Two runs on one host are the whole of the evidence: this file does not say why the head is slower
+# there (the eight tests where a bit walk was, or code placement), and it does not extend the
+# reading to the other ports or to an AVX-512 host.
+#
+# The base, f2907e5: minimum, average and maximum of its 50 measured iterations.
+# Row                              inputs          min          avg          max   (ns/op)
+# ExpBenchmark.finish256           common       2605.4       2700.2       2765.4
+# ExpBenchmark.finish256           mixed        4203.2       4276.3       4336.0
+# ExpBenchmark.finishMax           common       2609.2       2672.0       2773.1
+# ExpBenchmark.finishMax           mixed       10417.7      10513.4      10620.9
+# ExpBenchmark.finishPreferred     common       2607.0       2669.0       2757.3
+# ExpBenchmark.finishPreferred     mixed        4193.8       4265.7       4348.7
+# ExpBenchmark.scalarStrictMath    common      11094.2      11200.0      11606.3
+# ExpBenchmark.scalarStrictMath    mixed       11736.8      11825.1      11963.3
+# Log10Benchmark.finish256         common       6042.0       6264.0       6356.6
+# Log10Benchmark.finish256         mixed        7115.2       7290.7       7487.4
+# Log10Benchmark.finishMax         common       6080.9       6196.0       6341.6
+# Log10Benchmark.finishMax         mixed       16391.0      16571.4      16696.8
+# Log10Benchmark.finishPreferred   common       6048.3       6109.2       6326.9
+# Log10Benchmark.finishPreferred   mixed        7102.6       7266.0       7407.2
+# Log10Benchmark.scalarStrictMath  common      13942.6      14043.4      14312.5
+# Log10Benchmark.scalarStrictMath  mixed       14115.9      14230.7      14739.9
+#
+# The head, 5a452fa: minimum, average and maximum of its 50 measured iterations.
+# Row                              inputs          min          avg          max   (ns/op)
+# ExpBenchmark.finish256           common       2694.4       2734.1       2761.5
+# ExpBenchmark.finish256           mixed        4614.0       4691.9       4793.1
+# ExpBenchmark.finishMax           common       2601.6       2713.1       2755.5
+# ExpBenchmark.finishMax           mixed        4597.9       4665.3       5168.4
+# ExpBenchmark.finishPreferred     common       2611.0       2718.1       2759.5
+# ExpBenchmark.finishPreferred     mixed        4593.9       4651.4       4769.6
+# ExpBenchmark.scalarStrictMath    common      11109.9      11822.7      12689.7
+# ExpBenchmark.scalarStrictMath    mixed       11753.1      12138.8      12398.2
+# Log10Benchmark.finish256         common       6081.3       6262.5       6330.9
+# Log10Benchmark.finish256         mixed        7391.7       7527.0       7641.5
+# Log10Benchmark.finishMax         common       6076.7       6215.4       6372.7
+# Log10Benchmark.finishMax         mixed        7375.2       7494.0       7649.0
+# Log10Benchmark.finishPreferred   common       6050.5       6156.2       6367.9
+# Log10Benchmark.finishPreferred   mixed        7405.8       7554.5       7652.3
+# Log10Benchmark.scalarStrictMath  common      13950.1      14193.0      14698.6
+# Log10Benchmark.scalarStrictMath  mixed       14107.4      14293.4      14887.7
+#
+# bench/pair.sh's results file follows.
+#
+# Pair: (Exp|Log10)Benchmark\.(finish(256|Preferred|Max)|scalarStrictMath)$, base against head, 2026-11-21 22:12 UTC
+#
+# Host:        epyc7763
+# Base:        f2907e57f02766e5583939df65b68a877b059741 ([VFDLIBM] Fetch Maven artifacts from Google's mirror of Central )
+# Head:        5a452fa7b227d4a373ff90bb93f08d36dcf42b4f ([VFDLIBM-37] Make the SPECIES_MAX finish allocation-free (#100))
+# Run:         https://github.com/vecbricks/vfdlibm/actions/runs/44947864585
+# JDK:         OpenJDK 64-Bit Server VM Zulu25.38+201-CA (build 25.0.5.1+2-LTS, mixed mode, sharing)
+# CPU:         AMD EPYC 7763 64-Core Processor
+# AVX-512:     avx512f=no avx512dq=no
+# CPU flags:   avx avx2
+# Vector:      MaxVectorSize=32 UseAVX=2
+# Datapath:    46.2 / 92.4 / 92.4 lane-ops/ns at 128 / 256 / 512 bits; 256:128 = 2.00 (control), 512:256 = 1.00
+#              (bench/datapath.sh, at the machine's own JVM flags)
+# Kernel:      7.0.0-1020-azure
+# Load:        0.73 0.24 0.09 at start, 1.14 1.22 1.20 at end (4 cores)
+# JMH:         -f 2 -wi 3 -w 2s -i 5 -r 2s -prof gc
+#              -jvmArgsAppend "-XX:CompileCommand=inline,io.github.vecbricks.vfdlibm.*::*"
+# Pair:        5 of at most 5 rounds, base first in odd rounds (3 base first, 2 head first);
+#              threshold 10%, early stop within 3% after three rounds
+# Command:     bench/pair.sh --base 'f2907e57f02766e5583939df65b68a877b059741' --rounds 5 --threshold 10 --within 3 --jmh '-f 2 -wi 3 -w 2s -i 5 -r 2s -prof gc' --host 'epyc7763' '(Exp|Log10)Benchmark\.(finish(256|Preferred|Max)|scalarStrictMath)$'
+#
+# Comparison (bench/pair.py): + is faster, - slower; median of the rounds' scores and
+# best measured iteration of any round, head against base.
+#
+ median    best      base med      head med  unit    head B/op  row
+  -9.3%   -8.9%        4269.3        4709.2  ns/op       0.016  ExpBenchmark.finish256 inputs=mixed [avgt]
+  -7.8%   -8.7%        4269.2        4630.1  ns/op       0.016  ExpBenchmark.finishPreferred inputs=mixed [avgt]
+  -5.5%   -0.1%       11212.3       11864.1  ns/op       0.042  ExpBenchmark.scalarStrictMath inputs=common [avgt]
+  -3.8%   -4.1%        7242.0        7530.3  ns/op       0.026  Log10Benchmark.finishPreferred inputs=mixed [avgt]
+  -3.2%   -0.1%       11813.8       12200.5  ns/op       0.043  ExpBenchmark.scalarStrictMath inputs=mixed [avgt]
+  -2.8%   -3.7%        7297.8        7506.5  ns/op       0.026  Log10Benchmark.finish256 inputs=mixed [avgt]
+  -1.9%   -0.1%       14025.1       14289.7  ns/op       0.050  Log10Benchmark.scalarStrictMath inputs=common [avgt]
+  -1.5%   -0.0%        6091.7        6186.2  ns/op       0.022  Log10Benchmark.finishPreferred inputs=common [avgt]
+  -1.5%   +0.3%        2674.9        2716.3  ns/op       0.009  ExpBenchmark.finishMax inputs=common [avgt]
+  -1.3%   -3.3%        2691.1        2727.6  ns/op       0.010  ExpBenchmark.finish256 inputs=common [avgt]
+  -1.3%   -0.2%        2682.5        2718.5  ns/op       0.010  ExpBenchmark.finishPreferred inputs=common [avgt]
+  -0.2%   +0.1%        6206.0        6216.9  ns/op       0.022  Log10Benchmark.finishMax inputs=common [avgt]
+  -0.1%   -0.6%        6274.9        6284.3  ns/op       0.022  Log10Benchmark.finish256 inputs=common [avgt]
+  -0.1%   +0.1%       14193.1       14208.5  ns/op       0.050  Log10Benchmark.scalarStrictMath inputs=mixed [avgt]
++120.7% +122.2%       16577.3        7512.0  ns/op       0.026  Log10Benchmark.finishMax inputs=mixed [avgt]  <-- faster
++124.7% +126.6%       10510.5        4677.7  ns/op       0.016  ExpBenchmark.finishMax inputs=mixed [avgt]  <-- faster
+
+16 rows, 0 slower and 2 faster by 10% or more by both the median and the best, of 5 base and 5 head rounds; the widest change either way is 124.7% by median and 126.6% by best
+
+# Load at the start of each side:
+#   round 1 base: load 1.37 0.42 0.15 at start
+#   round 1 head: load 1.39 1.16 0.66 at start
+#   round 2 head: load 1.10 1.18 0.91 at start
+#   round 2 base: load 1.18 1.20 1.04 at start
+#   round 3 base: load 1.29 1.23 1.11 at start
+#   round 3 head: load 1.10 1.18 1.13 at start
+#   round 4 head: load 1.17 1.23 1.18 at start
+#   round 4 base: load 1.14 1.22 1.19 at start
+#   round 5 base: load 1.28 1.25 1.20 at start
+#   round 5 head: load 1.11 1.21 1.18 at start
+#
+# Each round's JMH summary table follows; the out directory has the JSON and full logs.
+
+# round 1, base
+Benchmark                                           (inputs)  Mode  Cnt      Score     Error   Units
+ExpBenchmark.finish256                                common  avgt   10   2656.298 +/-  76.395   ns/op
+ExpBenchmark.finish256:gc.alloc.rate                  common  avgt   10      0.003 +/-   0.001  MB/sec
+ExpBenchmark.finish256:gc.alloc.rate.norm             common  avgt   10      0.009 +/-   0.001    B/op
+ExpBenchmark.finish256:gc.count                       common  avgt   10        ~ 0            counts
+ExpBenchmark.finish256                                 mixed  avgt   10   4293.588 +/-  26.639   ns/op
+ExpBenchmark.finish256:gc.alloc.rate                   mixed  avgt   10      0.003 +/-   0.001  MB/sec
+ExpBenchmark.finish256:gc.alloc.rate.norm              mixed  avgt   10      0.015 +/-   0.001    B/op
+ExpBenchmark.finish256:gc.count                        mixed  avgt   10        ~ 0            counts
+ExpBenchmark.finishMax                                common  avgt   10   2674.903 +/-  95.913   ns/op
+ExpBenchmark.finishMax:gc.alloc.rate                  common  avgt   10      0.003 +/-   0.001  MB/sec
+ExpBenchmark.finishMax:gc.alloc.rate.norm             common  avgt   10      0.009 +/-   0.001    B/op
+ExpBenchmark.finishMax:gc.count                       common  avgt   10        ~ 0            counts
+ExpBenchmark.finishMax                                 mixed  avgt   10  10503.696 +/-  41.397   ns/op
+ExpBenchmark.finishMax:gc.alloc.rate                   mixed  avgt   10   3357.638 +/-  13.275  MB/sec
+ExpBenchmark.finishMax:gc.alloc.rate.norm              mixed  avgt   10  36992.037 +/-   0.001    B/op
+ExpBenchmark.finishMax:gc.count                        mixed  avgt   10    171.000            counts
+ExpBenchmark.finishMax:gc.time                         mixed  avgt   10    139.000                ms
+ExpBenchmark.finishPreferred                          common  avgt   10   2682.455 +/- 109.203   ns/op
+ExpBenchmark.finishPreferred:gc.alloc.rate            common  avgt   10      0.003 +/-   0.001  MB/sec
+ExpBenchmark.finishPreferred:gc.alloc.rate.norm       common  avgt   10      0.009 +/-   0.001    B/op
+ExpBenchmark.finishPreferred:gc.count                 common  avgt   10        ~ 0            counts
+ExpBenchmark.finishPreferred                           mixed  avgt   10   4221.946 +/-  31.474   ns/op
+ExpBenchmark.finishPreferred:gc.alloc.rate             mixed  avgt   10      0.003 +/-   0.001  MB/sec
+ExpBenchmark.finishPreferred:gc.alloc.rate.norm        mixed  avgt   10      0.015 +/-   0.001    B/op
+ExpBenchmark.finishPreferred:gc.count                  mixed  avgt   10        ~ 0            counts
+ExpBenchmark.scalarStrictMath                         common  avgt   10  11133.914 +/-  75.880   ns/op
+ExpBenchmark.scalarStrictMath:gc.alloc.rate           common  avgt   10      0.003 +/-   0.001  MB/sec
+ExpBenchmark.scalarStrictMath:gc.alloc.rate.norm      common  avgt   10      0.039 +/-   0.001    B/op
+ExpBenchmark.scalarStrictMath:gc.count                common  avgt   10        ~ 0            counts
+ExpBenchmark.scalarStrictMath                          mixed  avgt   10  11787.613 +/-  50.183   ns/op
+ExpBenchmark.scalarStrictMath:gc.alloc.rate            mixed  avgt   10      0.003 +/-   0.001  MB/sec
+ExpBenchmark.scalarStrictMath:gc.alloc.rate.norm       mixed  avgt   10      0.041 +/-   0.001    B/op
+ExpBenchmark.scalarStrictMath:gc.count                 mixed  avgt   10        ~ 0            counts
+Log10Benchmark.finish256                              common  avgt   10   6301.970 +/-  51.105   ns/op
+Log10Benchmark.finish256:gc.alloc.rate                common  avgt   10      0.003 +/-   0.001  MB/sec
+Log10Benchmark.finish256:gc.alloc.rate.norm           common  avgt   10      0.022 +/-   0.001    B/op
+Log10Benchmark.finish256:gc.count                     common  avgt   10        ~ 0            counts
+Log10Benchmark.finish256                               mixed  avgt   10   7312.778 +/-  35.273   ns/op
+Log10Benchmark.finish256:gc.alloc.rate                 mixed  avgt   10      0.003 +/-   0.001  MB/sec
+Log10Benchmark.finish256:gc.alloc.rate.norm            mixed  avgt   10      0.026 +/-   0.001    B/op
+Log10Benchmark.finish256:gc.count                      mixed  avgt   10        ~ 0            counts
+Log10Benchmark.finishMax                              common  avgt   10   6089.656 +/-   6.572   ns/op
+Log10Benchmark.finishMax:gc.alloc.rate                common  avgt   10      0.003 +/-   0.001  MB/sec
+Log10Benchmark.finishMax:gc.alloc.rate.norm           common  avgt   10      0.021 +/-   0.001    B/op
+Log10Benchmark.finishMax:gc.count                     common  avgt   10        ~ 0            counts
+Log10Benchmark.finishMax                               mixed  avgt   10  16558.605 +/-  85.183   ns/op
+Log10Benchmark.finishMax:gc.alloc.rate                 mixed  avgt   10   2111.599 +/-  11.040  MB/sec
+Log10Benchmark.finishMax:gc.alloc.rate.norm            mixed  avgt   10  36672.058 +/-   0.001    B/op
+Log10Benchmark.finishMax:gc.count                      mixed  avgt   10    127.000            counts
+Log10Benchmark.finishMax:gc.time                       mixed  avgt   10     95.000                ms
+Log10Benchmark.finishPreferred                        common  avgt   10   6186.482 +/- 214.399   ns/op
+Log10Benchmark.finishPreferred:gc.alloc.rate          common  avgt   10      0.003 +/-   0.001  MB/sec
+Log10Benchmark.finishPreferred:gc.alloc.rate.norm     common  avgt   10      0.022 +/-   0.001    B/op
+Log10Benchmark.finishPreferred:gc.count               common  avgt   10        ~ 0            counts
+Log10Benchmark.finishPreferred                         mixed  avgt   10   7310.044 +/-  95.777   ns/op
+Log10Benchmark.finishPreferred:gc.alloc.rate           mixed  avgt   10      0.003 +/-   0.001  MB/sec
+Log10Benchmark.finishPreferred:gc.alloc.rate.norm      mixed  avgt   10      0.026 +/-   0.001    B/op
+Log10Benchmark.finishPreferred:gc.count                mixed  avgt   10        ~ 0            counts
+Log10Benchmark.scalarStrictMath                       common  avgt   10  13977.180 +/-  40.821   ns/op
+Log10Benchmark.scalarStrictMath:gc.alloc.rate         common  avgt   10      0.003 +/-   0.001  MB/sec
+Log10Benchmark.scalarStrictMath:gc.alloc.rate.norm    common  avgt   10      0.049 +/-   0.001    B/op
+Log10Benchmark.scalarStrictMath:gc.count              common  avgt   10        ~ 0            counts
+Log10Benchmark.scalarStrictMath                        mixed  avgt   10  14250.210 +/- 131.131   ns/op
+Log10Benchmark.scalarStrictMath:gc.alloc.rate          mixed  avgt   10      0.003 +/-   0.001  MB/sec
+Log10Benchmark.scalarStrictMath:gc.alloc.rate.norm     mixed  avgt   10      0.050 +/-   0.001    B/op
+Log10Benchmark.scalarStrictMath:gc.count               mixed  avgt   10        ~ 0            counts
+
+Benchmark result is saved to /home/runner/work/vfdlibm/vfdlibm/pair/base-1.json
+
+# round 1, head
+Benchmark                                           (inputs)  Mode  Cnt      Score     Error   Units
+ExpBenchmark.finish256                                common  avgt   10   2725.541 +/-  43.753   ns/op
+ExpBenchmark.finish256:gc.alloc.rate                  common  avgt   10      0.003 +/-   0.001  MB/sec
+ExpBenchmark.finish256:gc.alloc.rate.norm             common  avgt   10      0.010 +/-   0.001    B/op
+ExpBenchmark.finish256:gc.count                       common  avgt   10        ~ 0            counts
+ExpBenchmark.finish256                                 mixed  avgt   10   4624.195 +/-  20.259   ns/op
+ExpBenchmark.finish256:gc.alloc.rate                   mixed  avgt   10      0.003 +/-   0.001  MB/sec
+ExpBenchmark.finish256:gc.alloc.rate.norm              mixed  avgt   10      0.016 +/-   0.001    B/op
+ExpBenchmark.finish256:gc.count                        mixed  avgt   10        ~ 0            counts
+ExpBenchmark.finishMax                                common  avgt   10   2749.507 +/-   5.225   ns/op
+ExpBenchmark.finishMax:gc.alloc.rate                  common  avgt   10      0.003 +/-   0.001  MB/sec
+ExpBenchmark.finishMax:gc.alloc.rate.norm             common  avgt   10      0.010 +/-   0.001    B/op
+ExpBenchmark.finishMax:gc.count                       common  avgt   10        ~ 0            counts
+ExpBenchmark.finishMax                                 mixed  avgt   10   4615.258 +/-  27.852   ns/op
+ExpBenchmark.finishMax:gc.alloc.rate                   mixed  avgt   10      0.003 +/-   0.001  MB/sec
+ExpBenchmark.finishMax:gc.alloc.rate.norm              mixed  avgt   10      0.016 +/-   0.001    B/op
+ExpBenchmark.finishMax:gc.count                        mixed  avgt   10        ~ 0            counts
+ExpBenchmark.finishPreferred                          common  avgt   10   2672.022 +/-  94.039   ns/op
+ExpBenchmark.finishPreferred:gc.alloc.rate            common  avgt   10      0.003 +/-   0.001  MB/sec
+ExpBenchmark.finishPreferred:gc.alloc.rate.norm       common  avgt   10      0.009 +/-   0.001    B/op
+ExpBenchmark.finishPreferred:gc.count                 common  avgt   10        ~ 0            counts
+ExpBenchmark.finishPreferred                           mixed  avgt   10   4630.110 +/-  35.238   ns/op
+ExpBenchmark.finishPreferred:gc.alloc.rate             mixed  avgt   10      0.003 +/-   0.001  MB/sec
+ExpBenchmark.finishPreferred:gc.alloc.rate.norm        mixed  avgt   10      0.016 +/-   0.001    B/op
+ExpBenchmark.finishPreferred:gc.count                  mixed  avgt   10        ~ 0            counts
+ExpBenchmark.scalarStrictMath                         common  avgt   10  11437.074 +/- 484.739   ns/op
+ExpBenchmark.scalarStrictMath:gc.alloc.rate           common  avgt   10      0.003 +/-   0.001  MB/sec
+ExpBenchmark.scalarStrictMath:gc.alloc.rate.norm      common  avgt   10      0.040 +/-   0.002    B/op
+ExpBenchmark.scalarStrictMath:gc.count                common  avgt   10        ~ 0            counts
+ExpBenchmark.scalarStrictMath                          mixed  avgt   10  12213.302 +/-  47.559   ns/op
+ExpBenchmark.scalarStrictMath:gc.alloc.rate            mixed  avgt   10      0.003 +/-   0.001  MB/sec
+ExpBenchmark.scalarStrictMath:gc.alloc.rate.norm       mixed  avgt   10      0.043 +/-   0.001    B/op
+ExpBenchmark.scalarStrictMath:gc.count                 mixed  avgt   10        ~ 0            counts
+Log10Benchmark.finish256                              common  avgt   10   6099.479 +/-  31.888   ns/op
+Log10Benchmark.finish256:gc.alloc.rate                common  avgt   10      0.003 +/-   0.001  MB/sec
+Log10Benchmark.finish256:gc.alloc.rate.norm           common  avgt   10      0.021 +/-   0.001    B/op
+Log10Benchmark.finish256:gc.count                     common  avgt   10        ~ 0            counts
+Log10Benchmark.finish256                               mixed  avgt   10   7506.461 +/- 159.746   ns/op
+Log10Benchmark.finish256:gc.alloc.rate                 mixed  avgt   10      0.003 +/-   0.001  MB/sec
+Log10Benchmark.finish256:gc.alloc.rate.norm            mixed  avgt   10      0.026 +/-   0.001    B/op
+Log10Benchmark.finish256:gc.count                      mixed  avgt   10        ~ 0            counts
+Log10Benchmark.finishMax                              common  avgt   10   6092.110 +/-   8.515   ns/op
+Log10Benchmark.finishMax:gc.alloc.rate                common  avgt   10      0.003 +/-   0.001  MB/sec
+Log10Benchmark.finishMax:gc.alloc.rate.norm           common  avgt   10      0.021 +/-   0.001    B/op
+Log10Benchmark.finishMax:gc.count                     common  avgt   10        ~ 0            counts
+Log10Benchmark.finishMax                               mixed  avgt   10   7426.403 +/-  42.660   ns/op
+Log10Benchmark.finishMax:gc.alloc.rate                 mixed  avgt   10      0.003 +/-   0.001  MB/sec
+Log10Benchmark.finishMax:gc.alloc.rate.norm            mixed  avgt   10      0.026 +/-   0.001    B/op
+Log10Benchmark.finishMax:gc.count                      mixed  avgt   10        ~ 0            counts
+Log10Benchmark.finishPreferred                        common  avgt   10   6186.247 +/- 150.746   ns/op
+Log10Benchmark.finishPreferred:gc.alloc.rate          common  avgt   10      0.003 +/-   0.001  MB/sec
+Log10Benchmark.finishPreferred:gc.alloc.rate.norm     common  avgt   10      0.022 +/-   0.001    B/op
+Log10Benchmark.finishPreferred:gc.count               common  avgt   10        ~ 0            counts
+Log10Benchmark.finishPreferred                         mixed  avgt   10   7615.685 +/-  30.998   ns/op
+Log10Benchmark.finishPreferred:gc.alloc.rate           mixed  avgt   10      0.003 +/-   0.001  MB/sec
+Log10Benchmark.finishPreferred:gc.alloc.rate.norm      mixed  avgt   10      0.027 +/-   0.001    B/op
+Log10Benchmark.finishPreferred:gc.count                mixed  avgt   10        ~ 0            counts
+Log10Benchmark.scalarStrictMath                       common  avgt   10  14038.123 +/- 213.355   ns/op
+Log10Benchmark.scalarStrictMath:gc.alloc.rate         common  avgt   10      0.003 +/-   0.001  MB/sec
+Log10Benchmark.scalarStrictMath:gc.alloc.rate.norm    common  avgt   10      0.049 +/-   0.001    B/op
+Log10Benchmark.scalarStrictMath:gc.count              common  avgt   10        ~ 0            counts
+Log10Benchmark.scalarStrictMath                        mixed  avgt   10  14130.107 +/-  29.848   ns/op
+Log10Benchmark.scalarStrictMath:gc.alloc.rate          mixed  avgt   10      0.003 +/-   0.001  MB/sec
+Log10Benchmark.scalarStrictMath:gc.alloc.rate.norm     mixed  avgt   10      0.049 +/-   0.001    B/op
+Log10Benchmark.scalarStrictMath:gc.count               mixed  avgt   10        ~ 0            counts
+
+Benchmark result is saved to /home/runner/work/vfdlibm/vfdlibm/pair/head-1.json
+
+# round 2, base
+Benchmark                                           (inputs)  Mode  Cnt      Score     Error   Units
+ExpBenchmark.finish256                                common  avgt   10   2750.117 +/-   7.487   ns/op
+ExpBenchmark.finish256:gc.alloc.rate                  common  avgt   10      0.003 +/-   0.001  MB/sec
+ExpBenchmark.finish256:gc.alloc.rate.norm             common  avgt   10      0.010 +/-   0.001    B/op
+ExpBenchmark.finish256:gc.count                       common  avgt   10        ~ 0            counts
+ExpBenchmark.finish256                                 mixed  avgt   10   4254.722 +/-  73.705   ns/op
+ExpBenchmark.finish256:gc.alloc.rate                   mixed  avgt   10      0.003 +/-   0.001  MB/sec
+ExpBenchmark.finish256:gc.alloc.rate.norm              mixed  avgt   10      0.015 +/-   0.001    B/op
+ExpBenchmark.finish256:gc.count                        mixed  avgt   10        ~ 0            counts
+ExpBenchmark.finishMax                                common  avgt   10   2686.731 +/- 110.252   ns/op
+ExpBenchmark.finishMax:gc.alloc.rate                  common  avgt   10      0.003 +/-   0.001  MB/sec
+ExpBenchmark.finishMax:gc.alloc.rate.norm             common  avgt   10      0.009 +/-   0.001    B/op
+ExpBenchmark.finishMax:gc.count                       common  avgt   10        ~ 0            counts
+ExpBenchmark.finishMax                                 mixed  avgt   10  10534.522 +/-  69.362   ns/op
+ExpBenchmark.finishMax:gc.alloc.rate                   mixed  avgt   10   3347.658 +/-  22.128  MB/sec
+ExpBenchmark.finishMax:gc.alloc.rate.norm              mixed  avgt   10  36992.037 +/-   0.001    B/op
+ExpBenchmark.finishMax:gc.count                        mixed  avgt   10    168.000            counts
+ExpBenchmark.finishMax:gc.time                         mixed  avgt   10    147.000                ms
+ExpBenchmark.finishPreferred                          common  avgt   10   2613.105 +/-   4.326   ns/op
+ExpBenchmark.finishPreferred:gc.alloc.rate            common  avgt   10      0.003 +/-   0.001  MB/sec
+ExpBenchmark.finishPreferred:gc.alloc.rate.norm       common  avgt   10      0.009 +/-   0.001    B/op
+ExpBenchmark.finishPreferred:gc.count                 common  avgt   10        ~ 0            counts
+ExpBenchmark.finishPreferred                           mixed  avgt   10   4279.719 +/-  21.640   ns/op
+ExpBenchmark.finishPreferred:gc.alloc.rate             mixed  avgt   10      0.003 +/-   0.001  MB/sec
+ExpBenchmark.finishPreferred:gc.alloc.rate.norm        mixed  avgt   10      0.015 +/-   0.001    B/op
+ExpBenchmark.finishPreferred:gc.count                  mixed  avgt   10        ~ 0            counts
+ExpBenchmark.scalarStrictMath                         common  avgt   10  11216.631 +/- 120.238   ns/op
+ExpBenchmark.scalarStrictMath:gc.alloc.rate           common  avgt   10      0.003 +/-   0.001  MB/sec
+ExpBenchmark.scalarStrictMath:gc.alloc.rate.norm      common  avgt   10      0.039 +/-   0.001    B/op
+ExpBenchmark.scalarStrictMath:gc.count                common  avgt   10        ~ 0            counts
+ExpBenchmark.scalarStrictMath                          mixed  avgt   10  11813.773 +/-  38.922   ns/op
+ExpBenchmark.scalarStrictMath:gc.alloc.rate            mixed  avgt   10      0.003 +/-   0.001  MB/sec
+ExpBenchmark.scalarStrictMath:gc.alloc.rate.norm       mixed  avgt   10      0.041 +/-   0.001    B/op
+ExpBenchmark.scalarStrictMath:gc.count                 mixed  avgt   10        ~ 0            counts
+Log10Benchmark.finish256                              common  avgt   10   6186.696 +/- 221.705   ns/op
+Log10Benchmark.finish256:gc.alloc.rate                common  avgt   10      0.003 +/-   0.001  MB/sec
+Log10Benchmark.finish256:gc.alloc.rate.norm           common  avgt   10      0.022 +/-   0.001    B/op
+Log10Benchmark.finish256:gc.count                     common  avgt   10        ~ 0            counts
+Log10Benchmark.finish256                               mixed  avgt   10   7297.755 +/-   6.085   ns/op
+Log10Benchmark.finish256:gc.alloc.rate                 mixed  avgt   10      0.003 +/-   0.001  MB/sec
+Log10Benchmark.finish256:gc.alloc.rate.norm            mixed  avgt   10      0.026 +/-   0.001    B/op
+Log10Benchmark.finish256:gc.count                      mixed  avgt   10        ~ 0            counts
+Log10Benchmark.finishMax                              common  avgt   10   6216.728 +/- 191.270   ns/op
+Log10Benchmark.finishMax:gc.alloc.rate                common  avgt   10      0.003 +/-   0.001  MB/sec
+Log10Benchmark.finishMax:gc.alloc.rate.norm           common  avgt   10      0.022 +/-   0.001    B/op
+Log10Benchmark.finishMax:gc.count                     common  avgt   10        ~ 0            counts
+Log10Benchmark.finishMax                               mixed  avgt   10  16604.623 +/-  92.608   ns/op
+Log10Benchmark.finishMax:gc.alloc.rate                 mixed  avgt   10   2105.671 +/-  11.684  MB/sec
+Log10Benchmark.finishMax:gc.alloc.rate.norm            mixed  avgt   10  36672.058 +/-   0.001    B/op
+Log10Benchmark.finishMax:gc.count                      mixed  avgt   10    119.000            counts
+Log10Benchmark.finishMax:gc.time                       mixed  avgt   10     99.000                ms
+Log10Benchmark.finishPreferred                        common  avgt   10   6087.510 +/-  10.585   ns/op
+Log10Benchmark.finishPreferred:gc.alloc.rate          common  avgt   10      0.003 +/-   0.001  MB/sec
+Log10Benchmark.finishPreferred:gc.alloc.rate.norm     common  avgt   10      0.021 +/-   0.001    B/op
+Log10Benchmark.finishPreferred:gc.count               common  avgt   10        ~ 0            counts
+Log10Benchmark.finishPreferred                         mixed  avgt   10   7242.030 +/- 203.221   ns/op
+Log10Benchmark.finishPreferred:gc.alloc.rate           mixed  avgt   10      0.003 +/-   0.001  MB/sec
+Log10Benchmark.finishPreferred:gc.alloc.rate.norm      mixed  avgt   10      0.025 +/-   0.001    B/op
+Log10Benchmark.finishPreferred:gc.count                mixed  avgt   10        ~ 0            counts
+Log10Benchmark.scalarStrictMath                       common  avgt   10  14059.332 +/-  71.095   ns/op
+Log10Benchmark.scalarStrictMath:gc.alloc.rate         common  avgt   10      0.003 +/-   0.001  MB/sec
+Log10Benchmark.scalarStrictMath:gc.alloc.rate.norm    common  avgt   10      0.049 +/-   0.001    B/op
+Log10Benchmark.scalarStrictMath:gc.count              common  avgt   10        ~ 0            counts
+Log10Benchmark.scalarStrictMath                        mixed  avgt   10  14413.770 +/- 437.002   ns/op
+Log10Benchmark.scalarStrictMath:gc.alloc.rate          mixed  avgt   10      0.003 +/-   0.001  MB/sec
+Log10Benchmark.scalarStrictMath:gc.alloc.rate.norm     mixed  avgt   10      0.050 +/-   0.002    B/op
+Log10Benchmark.scalarStrictMath:gc.count               mixed  avgt   10        ~ 0            counts
+
+Benchmark result is saved to /home/runner/work/vfdlibm/vfdlibm/pair/base-2.json
+
+# round 2, head
+Benchmark                                           (inputs)  Mode  Cnt      Score     Error   Units
+ExpBenchmark.finish256                                common  avgt   10   2753.213 +/-   6.331   ns/op
+ExpBenchmark.finish256:gc.alloc.rate                  common  avgt   10      0.003 +/-   0.001  MB/sec
+ExpBenchmark.finish256:gc.alloc.rate.norm             common  avgt   10      0.010 +/-   0.001    B/op
+ExpBenchmark.finish256:gc.count                       common  avgt   10        ~ 0            counts
+ExpBenchmark.finish256                                 mixed  avgt   10   4709.202 +/-  82.210   ns/op
+ExpBenchmark.finish256:gc.alloc.rate                   mixed  avgt   10      0.003 +/-   0.001  MB/sec
+ExpBenchmark.finish256:gc.alloc.rate.norm              mixed  avgt   10      0.016 +/-   0.001    B/op
+ExpBenchmark.finish256:gc.count                        mixed  avgt   10        ~ 0            counts
+ExpBenchmark.finishMax                                common  avgt   10   2676.118 +/- 116.417   ns/op
+ExpBenchmark.finishMax:gc.alloc.rate                  common  avgt   10      0.003 +/-   0.001  MB/sec
+ExpBenchmark.finishMax:gc.alloc.rate.norm             common  avgt   10      0.009 +/-   0.001    B/op
+ExpBenchmark.finishMax:gc.count                       common  avgt   10        ~ 0            counts
+ExpBenchmark.finishMax                                 mixed  avgt   10   4659.669 +/-   8.441   ns/op
+ExpBenchmark.finishMax:gc.alloc.rate                   mixed  avgt   10      0.003 +/-   0.001  MB/sec
+ExpBenchmark.finishMax:gc.alloc.rate.norm              mixed  avgt   10      0.016 +/-   0.001    B/op
+ExpBenchmark.finishMax:gc.count                        mixed  avgt   10        ~ 0            counts
+ExpBenchmark.finishPreferred                          common  avgt   10   2718.489 +/-  37.289   ns/op
+ExpBenchmark.finishPreferred:gc.alloc.rate            common  avgt   10      0.003 +/-   0.001  MB/sec
+ExpBenchmark.finishPreferred:gc.alloc.rate.norm       common  avgt   10      0.010 +/-   0.001    B/op
+ExpBenchmark.finishPreferred:gc.count                 common  avgt   10        ~ 0            counts
+ExpBenchmark.finishPreferred                           mixed  avgt   10   4612.807 +/-  23.192   ns/op
+ExpBenchmark.finishPreferred:gc.alloc.rate             mixed  avgt   10      0.003 +/-   0.001  MB/sec
+ExpBenchmark.finishPreferred:gc.alloc.rate.norm        mixed  avgt   10      0.016 +/-   0.001    B/op
+ExpBenchmark.finishPreferred:gc.count                  mixed  avgt   10        ~ 0            counts
+ExpBenchmark.scalarStrictMath                         common  avgt   10  11864.128 +/- 201.842   ns/op
+ExpBenchmark.scalarStrictMath:gc.alloc.rate           common  avgt   10      0.003 +/-   0.001  MB/sec
+ExpBenchmark.scalarStrictMath:gc.alloc.rate.norm      common  avgt   10      0.042 +/-   0.001    B/op
+ExpBenchmark.scalarStrictMath:gc.count                common  avgt   10        ~ 0            counts
+ExpBenchmark.scalarStrictMath                          mixed  avgt   10  12252.046 +/-  97.956   ns/op
+ExpBenchmark.scalarStrictMath:gc.alloc.rate            mixed  avgt   10      0.003 +/-   0.001  MB/sec
+ExpBenchmark.scalarStrictMath:gc.alloc.rate.norm       mixed  avgt   10      0.043 +/-   0.001    B/op
+ExpBenchmark.scalarStrictMath:gc.count                 mixed  avgt   10        ~ 0            counts
+Log10Benchmark.finish256                              common  avgt   10   6284.261 +/-  21.390   ns/op
+Log10Benchmark.finish256:gc.alloc.rate                common  avgt   10      0.003 +/-   0.001  MB/sec
+Log10Benchmark.finish256:gc.alloc.rate.norm           common  avgt   10      0.022 +/-   0.001    B/op
+Log10Benchmark.finish256:gc.count                     common  avgt   10        ~ 0            counts
+Log10Benchmark.finish256                               mixed  avgt   10   7505.768 +/- 162.109   ns/op
+Log10Benchmark.finish256:gc.alloc.rate                 mixed  avgt   10      0.003 +/-   0.001  MB/sec
+Log10Benchmark.finish256:gc.alloc.rate.norm            mixed  avgt   10      0.026 +/-   0.001    B/op
+Log10Benchmark.finish256:gc.count                      mixed  avgt   10        ~ 0            counts
+Log10Benchmark.finishMax                              common  avgt   10   6188.312 +/- 170.106   ns/op
+Log10Benchmark.finishMax:gc.alloc.rate                common  avgt   10      0.003 +/-   0.001  MB/sec
+Log10Benchmark.finishMax:gc.alloc.rate.norm           common  avgt   10      0.022 +/-   0.001    B/op
+Log10Benchmark.finishMax:gc.count                     common  avgt   10        ~ 0            counts
+Log10Benchmark.finishMax                               mixed  avgt   10   7393.354 +/-  20.590   ns/op
+Log10Benchmark.finishMax:gc.alloc.rate                 mixed  avgt   10      0.003 +/-   0.001  MB/sec
+Log10Benchmark.finishMax:gc.alloc.rate.norm            mixed  avgt   10      0.026 +/-   0.001    B/op
+Log10Benchmark.finishMax:gc.count                      mixed  avgt   10        ~ 0            counts
+Log10Benchmark.finishPreferred                        common  avgt   10   6219.516 +/- 193.484   ns/op
+Log10Benchmark.finishPreferred:gc.alloc.rate          common  avgt   10      0.003 +/-   0.001  MB/sec
+Log10Benchmark.finishPreferred:gc.alloc.rate.norm     common  avgt   10      0.022 +/-   0.001    B/op
+Log10Benchmark.finishPreferred:gc.count               common  avgt   10        ~ 0            counts
+Log10Benchmark.finishPreferred                         mixed  avgt   10   7509.370 +/- 135.895   ns/op
+Log10Benchmark.finishPreferred:gc.alloc.rate           mixed  avgt   10      0.003 +/-   0.001  MB/sec
+Log10Benchmark.finishPreferred:gc.alloc.rate.norm      mixed  avgt   10      0.026 +/-   0.001    B/op
+Log10Benchmark.finishPreferred:gc.count                mixed  avgt   10        ~ 0            counts
+Log10Benchmark.scalarStrictMath                       common  avgt   10  13978.353 +/-  70.331   ns/op
+Log10Benchmark.scalarStrictMath:gc.alloc.rate         common  avgt   10      0.003 +/-   0.001  MB/sec
+Log10Benchmark.scalarStrictMath:gc.alloc.rate.norm    common  avgt   10      0.049 +/-   0.001    B/op
+Log10Benchmark.scalarStrictMath:gc.count              common  avgt   10        ~ 0            counts
+Log10Benchmark.scalarStrictMath                        mixed  avgt   10  14141.601 +/-  53.142   ns/op
+Log10Benchmark.scalarStrictMath:gc.alloc.rate          mixed  avgt   10      0.003 +/-   0.001  MB/sec
+Log10Benchmark.scalarStrictMath:gc.alloc.rate.norm     mixed  avgt   10      0.049 +/-   0.001    B/op
+Log10Benchmark.scalarStrictMath:gc.count               mixed  avgt   10        ~ 0            counts
+
+Benchmark result is saved to /home/runner/work/vfdlibm/vfdlibm/pair/head-2.json
+
+# round 3, base
+Benchmark                                           (inputs)  Mode  Cnt      Score     Error   Units
+ExpBenchmark.finish256                                common  avgt   10   2674.680 +/-  94.683   ns/op
+ExpBenchmark.finish256:gc.alloc.rate                  common  avgt   10      0.003 +/-   0.001  MB/sec
+ExpBenchmark.finish256:gc.alloc.rate.norm             common  avgt   10      0.009 +/-   0.001    B/op
+ExpBenchmark.finish256:gc.count                       common  avgt   10        ~ 0            counts
+ExpBenchmark.finish256                                 mixed  avgt   10   4302.312 +/-  30.932   ns/op
+ExpBenchmark.finish256:gc.alloc.rate                   mixed  avgt   10      0.003 +/-   0.001  MB/sec
+ExpBenchmark.finish256:gc.alloc.rate.norm              mixed  avgt   10      0.015 +/-   0.001    B/op
+ExpBenchmark.finish256:gc.count                        mixed  avgt   10        ~ 0            counts
+ExpBenchmark.finishMax                                common  avgt   10   2658.791 +/-  66.287   ns/op
+ExpBenchmark.finishMax:gc.alloc.rate                  common  avgt   10      0.003 +/-   0.001  MB/sec
+ExpBenchmark.finishMax:gc.alloc.rate.norm             common  avgt   10      0.009 +/-   0.001    B/op
+ExpBenchmark.finishMax:gc.count                       common  avgt   10        ~ 0            counts
+ExpBenchmark.finishMax                                 mixed  avgt   10  10510.452 +/-  72.530   ns/op
+ExpBenchmark.finishMax:gc.alloc.rate                   mixed  avgt   10   3355.554 +/-  22.426  MB/sec
+ExpBenchmark.finishMax:gc.alloc.rate.norm              mixed  avgt   10  36992.037 +/-   0.001    B/op
+ExpBenchmark.finishMax:gc.count                        mixed  avgt   10    168.000            counts
+ExpBenchmark.finishMax:gc.time                         mixed  avgt   10    156.000                ms
+ExpBenchmark.finishPreferred                          common  avgt   10   2678.705 +/- 110.349   ns/op
+ExpBenchmark.finishPreferred:gc.alloc.rate            common  avgt   10      0.003 +/-   0.001  MB/sec
+ExpBenchmark.finishPreferred:gc.alloc.rate.norm       common  avgt   10      0.009 +/-   0.001    B/op
+ExpBenchmark.finishPreferred:gc.count                 common  avgt   10        ~ 0            counts
+ExpBenchmark.finishPreferred                           mixed  avgt   10   4308.987 +/-   9.020   ns/op
+ExpBenchmark.finishPreferred:gc.alloc.rate             mixed  avgt   10      0.003 +/-   0.001  MB/sec
+ExpBenchmark.finishPreferred:gc.alloc.rate.norm        mixed  avgt   10      0.015 +/-   0.001    B/op
+ExpBenchmark.finishPreferred:gc.count                  mixed  avgt   10        ~ 0            counts
+ExpBenchmark.scalarStrictMath                         common  avgt   10  11298.877 +/- 314.997   ns/op
+ExpBenchmark.scalarStrictMath:gc.alloc.rate           common  avgt   10      0.003 +/-   0.001  MB/sec
+ExpBenchmark.scalarStrictMath:gc.alloc.rate.norm      common  avgt   10      0.040 +/-   0.001    B/op
+ExpBenchmark.scalarStrictMath:gc.count                common  avgt   10        ~ 0            counts
+ExpBenchmark.scalarStrictMath                          mixed  avgt   10  11804.883 +/-  74.978   ns/op
+ExpBenchmark.scalarStrictMath:gc.alloc.rate            mixed  avgt   10      0.003 +/-   0.001  MB/sec
+ExpBenchmark.scalarStrictMath:gc.alloc.rate.norm       mixed  avgt   10      0.041 +/-   0.001    B/op
+ExpBenchmark.scalarStrictMath:gc.count                 mixed  avgt   10        ~ 0            counts
+Log10Benchmark.finish256                              common  avgt   10   6272.998 +/-  19.445   ns/op
+Log10Benchmark.finish256:gc.alloc.rate                common  avgt   10      0.003 +/-   0.001  MB/sec
+Log10Benchmark.finish256:gc.alloc.rate.norm           common  avgt   10      0.022 +/-   0.001    B/op
+Log10Benchmark.finish256:gc.count                     common  avgt   10        ~ 0            counts
+Log10Benchmark.finish256                               mixed  avgt   10   7287.027 +/- 255.063   ns/op
+Log10Benchmark.finish256:gc.alloc.rate                 mixed  avgt   10      0.003 +/-   0.001  MB/sec
+Log10Benchmark.finish256:gc.alloc.rate.norm            mixed  avgt   10      0.025 +/-   0.001    B/op
+Log10Benchmark.finish256:gc.count                      mixed  avgt   10        ~ 0            counts
+Log10Benchmark.finishMax                              common  avgt   10   6273.933 +/-   7.767   ns/op
+Log10Benchmark.finishMax:gc.alloc.rate                common  avgt   10      0.003 +/-   0.001  MB/sec
+Log10Benchmark.finishMax:gc.alloc.rate.norm           common  avgt   10      0.022 +/-   0.001    B/op
+Log10Benchmark.finishMax:gc.count                     common  avgt   10        ~ 0            counts
+Log10Benchmark.finishMax                               mixed  avgt   10  16577.264 +/- 100.534   ns/op
+Log10Benchmark.finishMax:gc.alloc.rate                 mixed  avgt   10   2109.336 +/-  12.707  MB/sec
+Log10Benchmark.finishMax:gc.alloc.rate.norm            mixed  avgt   10  36672.058 +/-   0.001    B/op
+Log10Benchmark.finishMax:gc.count                      mixed  avgt   10    119.000            counts
+Log10Benchmark.finishMax:gc.time                       mixed  avgt   10    100.000                ms
+Log10Benchmark.finishPreferred                        common  avgt   10   6091.735 +/-   6.432   ns/op
+Log10Benchmark.finishPreferred:gc.alloc.rate          common  avgt   10      0.003 +/-   0.001  MB/sec
+Log10Benchmark.finishPreferred:gc.alloc.rate.norm     common  avgt   10      0.021 +/-   0.001    B/op
+Log10Benchmark.finishPreferred:gc.count               common  avgt   10        ~ 0            counts
+Log10Benchmark.finishPreferred                         mixed  avgt   10   7206.860 +/- 140.993   ns/op
+Log10Benchmark.finishPreferred:gc.alloc.rate           mixed  avgt   10      0.003 +/-   0.001  MB/sec
+Log10Benchmark.finishPreferred:gc.alloc.rate.norm      mixed  avgt   10      0.025 +/-   0.001    B/op
+Log10Benchmark.finishPreferred:gc.count                mixed  avgt   10        ~ 0            counts
+Log10Benchmark.scalarStrictMath                       common  avgt   10  14025.138 +/-  51.487   ns/op
+Log10Benchmark.scalarStrictMath:gc.alloc.rate         common  avgt   10      0.003 +/-   0.001  MB/sec
+Log10Benchmark.scalarStrictMath:gc.alloc.rate.norm    common  avgt   10      0.049 +/-   0.001    B/op
+Log10Benchmark.scalarStrictMath:gc.count              common  avgt   10        ~ 0            counts
+Log10Benchmark.scalarStrictMath                        mixed  avgt   10  14152.281 +/-  24.461   ns/op
+Log10Benchmark.scalarStrictMath:gc.alloc.rate          mixed  avgt   10      0.003 +/-   0.001  MB/sec
+Log10Benchmark.scalarStrictMath:gc.alloc.rate.norm     mixed  avgt   10      0.050 +/-   0.001    B/op
+Log10Benchmark.scalarStrictMath:gc.count               mixed  avgt   10        ~ 0            counts
+
+Benchmark result is saved to /home/runner/work/vfdlibm/vfdlibm/pair/base-3.json
+
+# round 3, head
+Benchmark                                           (inputs)  Mode  Cnt      Score     Error   Units
+ExpBenchmark.finish256                                common  avgt   10   2727.644 +/-  45.742   ns/op
+ExpBenchmark.finish256:gc.alloc.rate                  common  avgt   10      0.003 +/-   0.001  MB/sec
+ExpBenchmark.finish256:gc.alloc.rate.norm             common  avgt   10      0.010 +/-   0.001    B/op
+ExpBenchmark.finish256:gc.count                       common  avgt   10        ~ 0            counts
+ExpBenchmark.finish256                                 mixed  avgt   10   4748.744 +/-  24.188   ns/op
+ExpBenchmark.finish256:gc.alloc.rate                   mixed  avgt   10      0.003 +/-   0.001  MB/sec
+ExpBenchmark.finish256:gc.alloc.rate.norm              mixed  avgt   10      0.017 +/-   0.001    B/op
+ExpBenchmark.finish256:gc.count                        mixed  avgt   10        ~ 0            counts
+ExpBenchmark.finishMax                                common  avgt   10   2716.284 +/-  24.139   ns/op
+ExpBenchmark.finishMax:gc.alloc.rate                  common  avgt   10      0.003 +/-   0.001  MB/sec
+ExpBenchmark.finishMax:gc.alloc.rate.norm             common  avgt   10      0.009 +/-   0.001    B/op
+ExpBenchmark.finishMax:gc.count                       common  avgt   10        ~ 0            counts
+ExpBenchmark.finishMax                                 mixed  avgt   10   4677.691 +/-  17.258   ns/op
+ExpBenchmark.finishMax:gc.alloc.rate                   mixed  avgt   10      0.003 +/-   0.001  MB/sec
+ExpBenchmark.finishMax:gc.alloc.rate.norm              mixed  avgt   10      0.016 +/-   0.001    B/op
+ExpBenchmark.finishMax:gc.count                        mixed  avgt   10        ~ 0            counts
+ExpBenchmark.finishPreferred                          common  avgt   10   2701.540 +/-  15.104   ns/op
+ExpBenchmark.finishPreferred:gc.alloc.rate            common  avgt   10      0.003 +/-   0.001  MB/sec
+ExpBenchmark.finishPreferred:gc.alloc.rate.norm       common  avgt   10      0.009 +/-   0.001    B/op
+ExpBenchmark.finishPreferred:gc.count                 common  avgt   10        ~ 0            counts
+ExpBenchmark.finishPreferred                           mixed  avgt   10   4689.717 +/-  42.832   ns/op
+ExpBenchmark.finishPreferred:gc.alloc.rate             mixed  avgt   10      0.003 +/-   0.001  MB/sec
+ExpBenchmark.finishPreferred:gc.alloc.rate.norm        mixed  avgt   10      0.016 +/-   0.001    B/op
+ExpBenchmark.finishPreferred:gc.count                  mixed  avgt   10        ~ 0            counts
+ExpBenchmark.scalarStrictMath                         common  avgt   10  12197.717 +/- 695.870   ns/op
+ExpBenchmark.scalarStrictMath:gc.alloc.rate           common  avgt   10      0.003 +/-   0.001  MB/sec
+ExpBenchmark.scalarStrictMath:gc.alloc.rate.norm      common  avgt   10      0.043 +/-   0.002    B/op
+ExpBenchmark.scalarStrictMath:gc.count                common  avgt   10        ~ 0            counts
+ExpBenchmark.scalarStrictMath                          mixed  avgt   10  12023.602 +/- 346.877   ns/op
+ExpBenchmark.scalarStrictMath:gc.alloc.rate            mixed  avgt   10      0.003 +/-   0.001  MB/sec
+ExpBenchmark.scalarStrictMath:gc.alloc.rate.norm       mixed  avgt   10      0.042 +/-   0.001    B/op
+ExpBenchmark.scalarStrictMath:gc.count                 mixed  avgt   10        ~ 0            counts
+Log10Benchmark.finish256                              common  avgt   10   6322.949 +/-   5.514   ns/op
+Log10Benchmark.finish256:gc.alloc.rate                common  avgt   10      0.003 +/-   0.001  MB/sec
+Log10Benchmark.finish256:gc.alloc.rate.norm           common  avgt   10      0.022 +/-   0.001    B/op
+Log10Benchmark.finish256:gc.count                     common  avgt   10        ~ 0            counts
+Log10Benchmark.finish256                               mixed  avgt   10   7494.614 +/- 150.403   ns/op
+Log10Benchmark.finish256:gc.alloc.rate                 mixed  avgt   10      0.003 +/-   0.001  MB/sec
+Log10Benchmark.finish256:gc.alloc.rate.norm            mixed  avgt   10      0.026 +/-   0.001    B/op
+Log10Benchmark.finish256:gc.count                      mixed  avgt   10        ~ 0            counts
+Log10Benchmark.finishMax                              common  avgt   10   6279.066 +/-  26.655   ns/op
+Log10Benchmark.finishMax:gc.alloc.rate                common  avgt   10      0.003 +/-   0.001  MB/sec
+Log10Benchmark.finishMax:gc.alloc.rate.norm           common  avgt   10      0.022 +/-   0.001    B/op
+Log10Benchmark.finishMax:gc.count                     common  avgt   10        ~ 0            counts
+Log10Benchmark.finishMax                               mixed  avgt   10   7512.526 +/- 148.088   ns/op
+Log10Benchmark.finishMax:gc.alloc.rate                 mixed  avgt   10      0.003 +/-   0.001  MB/sec
+Log10Benchmark.finishMax:gc.alloc.rate.norm            mixed  avgt   10      0.026 +/-   0.001    B/op
+Log10Benchmark.finishMax:gc.count                      mixed  avgt   10        ~ 0            counts
+Log10Benchmark.finishPreferred                        common  avgt   10   6067.576 +/-  34.359   ns/op
+Log10Benchmark.finishPreferred:gc.alloc.rate          common  avgt   10      0.003 +/-   0.001  MB/sec
+Log10Benchmark.finishPreferred:gc.alloc.rate.norm     common  avgt   10      0.021 +/-   0.001    B/op
+Log10Benchmark.finishPreferred:gc.count               common  avgt   10        ~ 0            counts
+Log10Benchmark.finishPreferred                         mixed  avgt   10   7530.341 +/- 187.759   ns/op
+Log10Benchmark.finishPreferred:gc.alloc.rate           mixed  avgt   10      0.003 +/-   0.001  MB/sec
+Log10Benchmark.finishPreferred:gc.alloc.rate.norm      mixed  avgt   10      0.026 +/-   0.001    B/op
+Log10Benchmark.finishPreferred:gc.count                mixed  avgt   10        ~ 0            counts
+Log10Benchmark.scalarStrictMath                       common  avgt   10  14368.364 +/- 437.171   ns/op
+Log10Benchmark.scalarStrictMath:gc.alloc.rate         common  avgt   10      0.003 +/-   0.001  MB/sec
+Log10Benchmark.scalarStrictMath:gc.alloc.rate.norm    common  avgt   10      0.050 +/-   0.002    B/op
+Log10Benchmark.scalarStrictMath:gc.count              common  avgt   10        ~ 0            counts
+Log10Benchmark.scalarStrictMath                        mixed  avgt   10  14208.530 +/- 138.619   ns/op
+Log10Benchmark.scalarStrictMath:gc.alloc.rate          mixed  avgt   10      0.003 +/-   0.001  MB/sec
+Log10Benchmark.scalarStrictMath:gc.alloc.rate.norm     mixed  avgt   10      0.050 +/-   0.001    B/op
+Log10Benchmark.scalarStrictMath:gc.count               mixed  avgt   10        ~ 0            counts
+
+Benchmark result is saved to /home/runner/work/vfdlibm/vfdlibm/pair/head-3.json
+
+# round 4, base
+Benchmark                                           (inputs)  Mode  Cnt      Score     Error   Units
+ExpBenchmark.finish256                                common  avgt   10   2728.795 +/-  40.582   ns/op
+ExpBenchmark.finish256:gc.alloc.rate                  common  avgt   10      0.003 +/-   0.001  MB/sec
+ExpBenchmark.finish256:gc.alloc.rate.norm             common  avgt   10      0.010 +/-   0.001    B/op
+ExpBenchmark.finish256:gc.count                       common  avgt   10        ~ 0            counts
+ExpBenchmark.finish256                                 mixed  avgt   10   4261.437 +/-  23.959   ns/op
+ExpBenchmark.finish256:gc.alloc.rate                   mixed  avgt   10      0.003 +/-   0.001  MB/sec
+ExpBenchmark.finish256:gc.alloc.rate.norm              mixed  avgt   10      0.015 +/-   0.001    B/op
+ExpBenchmark.finish256:gc.count                        mixed  avgt   10        ~ 0            counts
+ExpBenchmark.finishMax                                common  avgt   10   2725.803 +/-  41.758   ns/op
+ExpBenchmark.finishMax:gc.alloc.rate                  common  avgt   10      0.003 +/-   0.001  MB/sec
+ExpBenchmark.finishMax:gc.alloc.rate.norm             common  avgt   10      0.010 +/-   0.001    B/op
+ExpBenchmark.finishMax:gc.count                       common  avgt   10        ~ 0            counts
+ExpBenchmark.finishMax                                 mixed  avgt   10  10525.618 +/-  70.231   ns/op
+ExpBenchmark.finishMax:gc.alloc.rate                   mixed  avgt   10   3350.851 +/-  23.013  MB/sec
+ExpBenchmark.finishMax:gc.alloc.rate.norm              mixed  avgt   10  36992.037 +/-   0.001    B/op
+ExpBenchmark.finishMax:gc.count                        mixed  avgt   10    171.000            counts
+ExpBenchmark.finishMax:gc.time                         mixed  avgt   10    134.000                ms
+ExpBenchmark.finishPreferred                          common  avgt   10   2685.699 +/- 106.033   ns/op
+ExpBenchmark.finishPreferred:gc.alloc.rate            common  avgt   10      0.003 +/-   0.001  MB/sec
+ExpBenchmark.finishPreferred:gc.alloc.rate.norm       common  avgt   10      0.009 +/-   0.001    B/op
+ExpBenchmark.finishPreferred:gc.count                 common  avgt   10        ~ 0            counts
+ExpBenchmark.finishPreferred                           mixed  avgt   10   4248.678 +/-  80.683   ns/op
+ExpBenchmark.finishPreferred:gc.alloc.rate             mixed  avgt   10      0.003 +/-   0.001  MB/sec
+ExpBenchmark.finishPreferred:gc.alloc.rate.norm        mixed  avgt   10      0.015 +/-   0.001    B/op
+ExpBenchmark.finishPreferred:gc.count                  mixed  avgt   10        ~ 0            counts
+ExpBenchmark.scalarStrictMath                         common  avgt   10  11212.291 +/- 113.740   ns/op
+ExpBenchmark.scalarStrictMath:gc.alloc.rate           common  avgt   10      0.003 +/-   0.001  MB/sec
+ExpBenchmark.scalarStrictMath:gc.alloc.rate.norm      common  avgt   10      0.039 +/-   0.001    B/op
+ExpBenchmark.scalarStrictMath:gc.count                common  avgt   10        ~ 0            counts
+ExpBenchmark.scalarStrictMath                          mixed  avgt   10  11896.823 +/-  73.793   ns/op
+ExpBenchmark.scalarStrictMath:gc.alloc.rate            mixed  avgt   10      0.003 +/-   0.001  MB/sec
+ExpBenchmark.scalarStrictMath:gc.alloc.rate.norm       mixed  avgt   10      0.042 +/-   0.001    B/op
+ExpBenchmark.scalarStrictMath:gc.count                 mixed  avgt   10        ~ 0            counts
+Log10Benchmark.finish256                              common  avgt   10   6274.930 +/-  19.464   ns/op
+Log10Benchmark.finish256:gc.alloc.rate                common  avgt   10      0.003 +/-   0.001  MB/sec
+Log10Benchmark.finish256:gc.alloc.rate.norm           common  avgt   10      0.022 +/-   0.001    B/op
+Log10Benchmark.finish256:gc.count                     common  avgt   10        ~ 0            counts
+Log10Benchmark.finish256                               mixed  avgt   10   7329.166 +/-  60.672   ns/op
+Log10Benchmark.finish256:gc.alloc.rate                 mixed  avgt   10      0.003 +/-   0.001  MB/sec
+Log10Benchmark.finish256:gc.alloc.rate.norm            mixed  avgt   10      0.026 +/-   0.001    B/op
+Log10Benchmark.finish256:gc.count                      mixed  avgt   10        ~ 0            counts
+Log10Benchmark.finishMax                              common  avgt   10   6205.969 +/- 188.146   ns/op
+Log10Benchmark.finishMax:gc.alloc.rate                common  avgt   10      0.003 +/-   0.001  MB/sec
+Log10Benchmark.finishMax:gc.alloc.rate.norm           common  avgt   10      0.022 +/-   0.001    B/op
+Log10Benchmark.finishMax:gc.count                     common  avgt   10        ~ 0            counts
+Log10Benchmark.finishMax                               mixed  avgt   10  16520.553 +/- 143.368   ns/op
+Log10Benchmark.finishMax:gc.alloc.rate                 mixed  avgt   10   2116.552 +/-  18.476  MB/sec
+Log10Benchmark.finishMax:gc.alloc.rate.norm            mixed  avgt   10  36672.058 +/-   0.001    B/op
+Log10Benchmark.finishMax:gc.count                      mixed  avgt   10    121.000            counts
+Log10Benchmark.finishMax:gc.time                       mixed  avgt   10    106.000                ms
+Log10Benchmark.finishPreferred                        common  avgt   10   6107.367 +/-  26.073   ns/op
+Log10Benchmark.finishPreferred:gc.alloc.rate          common  avgt   10      0.003 +/-   0.001  MB/sec
+Log10Benchmark.finishPreferred:gc.alloc.rate.norm     common  avgt   10      0.021 +/-   0.001    B/op
+Log10Benchmark.finishPreferred:gc.count               common  avgt   10        ~ 0            counts
+Log10Benchmark.finishPreferred                         mixed  avgt   10   7220.351 +/- 167.437   ns/op
+Log10Benchmark.finishPreferred:gc.alloc.rate           mixed  avgt   10      0.003 +/-   0.001  MB/sec
+Log10Benchmark.finishPreferred:gc.alloc.rate.norm      mixed  avgt   10      0.025 +/-   0.001    B/op
+Log10Benchmark.finishPreferred:gc.count                mixed  avgt   10        ~ 0            counts
+Log10Benchmark.scalarStrictMath                       common  avgt   10  14150.444 +/- 198.157   ns/op
+Log10Benchmark.scalarStrictMath:gc.alloc.rate         common  avgt   10      0.003 +/-   0.001  MB/sec
+Log10Benchmark.scalarStrictMath:gc.alloc.rate.norm    common  avgt   10      0.049 +/-   0.001    B/op
+Log10Benchmark.scalarStrictMath:gc.count              common  avgt   10        ~ 0            counts
+Log10Benchmark.scalarStrictMath                        mixed  avgt   10  14144.241 +/-  35.555   ns/op
+Log10Benchmark.scalarStrictMath:gc.alloc.rate          mixed  avgt   10      0.003 +/-   0.001  MB/sec
+Log10Benchmark.scalarStrictMath:gc.alloc.rate.norm     mixed  avgt   10      0.049 +/-   0.001    B/op
+Log10Benchmark.scalarStrictMath:gc.count               mixed  avgt   10        ~ 0            counts
+
+Benchmark result is saved to /home/runner/work/vfdlibm/vfdlibm/pair/base-4.json
+
+# round 4, head
+Benchmark                                           (inputs)  Mode  Cnt      Score     Error   Units
+ExpBenchmark.finish256                                common  avgt   10   2739.760 +/-  17.512   ns/op
+ExpBenchmark.finish256:gc.alloc.rate                  common  avgt   10      0.003 +/-   0.001  MB/sec
+ExpBenchmark.finish256:gc.alloc.rate.norm             common  avgt   10      0.010 +/-   0.001    B/op
+ExpBenchmark.finish256:gc.count                       common  avgt   10        ~ 0            counts
+ExpBenchmark.finish256                                 mixed  avgt   10   4726.229 +/-  94.930   ns/op
+ExpBenchmark.finish256:gc.alloc.rate                   mixed  avgt   10      0.003 +/-   0.001  MB/sec
+ExpBenchmark.finish256:gc.alloc.rate.norm              mixed  avgt   10      0.017 +/-   0.001    B/op
+ExpBenchmark.finish256:gc.count                        mixed  avgt   10        ~ 0            counts
+ExpBenchmark.finishMax                                common  avgt   10   2723.076 +/-  39.006   ns/op
+ExpBenchmark.finishMax:gc.alloc.rate                  common  avgt   10      0.003 +/-   0.001  MB/sec
+ExpBenchmark.finishMax:gc.alloc.rate.norm             common  avgt   10      0.010 +/-   0.001    B/op
+ExpBenchmark.finishMax:gc.count                       common  avgt   10        ~ 0            counts
+ExpBenchmark.finishMax                                 mixed  avgt   10   4682.820 +/- 262.743   ns/op
+ExpBenchmark.finishMax:gc.alloc.rate                   mixed  avgt   10      0.003 +/-   0.001  MB/sec
+ExpBenchmark.finishMax:gc.alloc.rate.norm              mixed  avgt   10      0.016 +/-   0.001    B/op
+ExpBenchmark.finishMax:gc.count                        mixed  avgt   10        ~ 0            counts
+ExpBenchmark.finishPreferred                          common  avgt   10   2743.455 +/-  18.425   ns/op
+ExpBenchmark.finishPreferred:gc.alloc.rate            common  avgt   10      0.003 +/-   0.001  MB/sec
+ExpBenchmark.finishPreferred:gc.alloc.rate.norm       common  avgt   10      0.010 +/-   0.001    B/op
+ExpBenchmark.finishPreferred:gc.count                 common  avgt   10        ~ 0            counts
+ExpBenchmark.finishPreferred                           mixed  avgt   10   4716.237 +/-  54.805   ns/op
+ExpBenchmark.finishPreferred:gc.alloc.rate             mixed  avgt   10      0.003 +/-   0.001  MB/sec
+ExpBenchmark.finishPreferred:gc.alloc.rate.norm        mixed  avgt   10      0.016 +/-   0.001    B/op
+ExpBenchmark.finishPreferred:gc.count                  mixed  avgt   10        ~ 0            counts
+ExpBenchmark.scalarStrictMath                         common  avgt   10  11739.006 +/-  54.373   ns/op
+ExpBenchmark.scalarStrictMath:gc.alloc.rate           common  avgt   10      0.003 +/-   0.001  MB/sec
+ExpBenchmark.scalarStrictMath:gc.alloc.rate.norm      common  avgt   10      0.041 +/-   0.001    B/op
+ExpBenchmark.scalarStrictMath:gc.count                common  avgt   10        ~ 0            counts
+ExpBenchmark.scalarStrictMath                          mixed  avgt   10  12004.621 +/- 373.675   ns/op
+ExpBenchmark.scalarStrictMath:gc.alloc.rate            mixed  avgt   10      0.003 +/-   0.001  MB/sec
+ExpBenchmark.scalarStrictMath:gc.alloc.rate.norm       mixed  avgt   10      0.042 +/-   0.001    B/op
+ExpBenchmark.scalarStrictMath:gc.count                 mixed  avgt   10        ~ 0            counts
+Log10Benchmark.finish256                              common  avgt   10   6324.142 +/-   4.756   ns/op
+Log10Benchmark.finish256:gc.alloc.rate                common  avgt   10      0.003 +/-   0.001  MB/sec
+Log10Benchmark.finish256:gc.alloc.rate.norm           common  avgt   10      0.022 +/-   0.001    B/op
+Log10Benchmark.finish256:gc.count                     common  avgt   10        ~ 0            counts
+Log10Benchmark.finish256                               mixed  avgt   10   7532.035 +/- 162.298   ns/op
+Log10Benchmark.finish256:gc.alloc.rate                 mixed  avgt   10      0.003 +/-   0.001  MB/sec
+Log10Benchmark.finish256:gc.alloc.rate.norm            mixed  avgt   10      0.026 +/-   0.001    B/op
+Log10Benchmark.finish256:gc.count                      mixed  avgt   10        ~ 0            counts
+Log10Benchmark.finishMax                              common  avgt   10   6300.507 +/-  43.180   ns/op
+Log10Benchmark.finishMax:gc.alloc.rate                common  avgt   10      0.003 +/-   0.001  MB/sec
+Log10Benchmark.finishMax:gc.alloc.rate.norm           common  avgt   10      0.022 +/-   0.001    B/op
+Log10Benchmark.finishMax:gc.count                     common  avgt   10        ~ 0            counts
+Log10Benchmark.finishMax                               mixed  avgt   10   7625.614 +/-  24.439   ns/op
+Log10Benchmark.finishMax:gc.alloc.rate                 mixed  avgt   10      0.003 +/-   0.001  MB/sec
+Log10Benchmark.finishMax:gc.alloc.rate.norm            mixed  avgt   10      0.027 +/-   0.001    B/op
+Log10Benchmark.finishMax:gc.count                      mixed  avgt   10        ~ 0            counts
+Log10Benchmark.finishPreferred                        common  avgt   10   6212.235 +/- 198.799   ns/op
+Log10Benchmark.finishPreferred:gc.alloc.rate          common  avgt   10      0.003 +/-   0.001  MB/sec
+Log10Benchmark.finishPreferred:gc.alloc.rate.norm     common  avgt   10      0.022 +/-   0.001    B/op
+Log10Benchmark.finishPreferred:gc.count               common  avgt   10        ~ 0            counts
+Log10Benchmark.finishPreferred                         mixed  avgt   10   7597.703 +/-  12.339   ns/op
+Log10Benchmark.finishPreferred:gc.alloc.rate           mixed  avgt   10      0.003 +/-   0.001  MB/sec
+Log10Benchmark.finishPreferred:gc.alloc.rate.norm      mixed  avgt   10      0.027 +/-   0.001    B/op
+Log10Benchmark.finishPreferred:gc.count                mixed  avgt   10        ~ 0            counts
+Log10Benchmark.scalarStrictMath                       common  avgt   10  14290.561 +/- 515.109   ns/op
+Log10Benchmark.scalarStrictMath:gc.alloc.rate         common  avgt   10      0.003 +/-   0.001  MB/sec
+Log10Benchmark.scalarStrictMath:gc.alloc.rate.norm    common  avgt   10      0.050 +/-   0.002    B/op
+Log10Benchmark.scalarStrictMath:gc.count              common  avgt   10        ~ 0            counts
+Log10Benchmark.scalarStrictMath                        mixed  avgt   10  14499.117 +/- 573.058   ns/op
+Log10Benchmark.scalarStrictMath:gc.alloc.rate          mixed  avgt   10      0.003 +/-   0.001  MB/sec
+Log10Benchmark.scalarStrictMath:gc.alloc.rate.norm     mixed  avgt   10      0.051 +/-   0.002    B/op
+Log10Benchmark.scalarStrictMath:gc.count               mixed  avgt   10        ~ 0            counts
+
+Benchmark result is saved to /home/runner/work/vfdlibm/vfdlibm/pair/head-4.json
+
+# round 5, base
+Benchmark                                           (inputs)  Mode  Cnt      Score     Error   Units
+ExpBenchmark.finish256                                common  avgt   10   2691.095 +/- 107.215   ns/op
+ExpBenchmark.finish256:gc.alloc.rate                  common  avgt   10      0.003 +/-   0.001  MB/sec
+ExpBenchmark.finish256:gc.alloc.rate.norm             common  avgt   10      0.009 +/-   0.001    B/op
+ExpBenchmark.finish256:gc.count                       common  avgt   10        ~ 0            counts
+ExpBenchmark.finish256                                 mixed  avgt   10   4269.343 +/-  44.861   ns/op
+ExpBenchmark.finish256:gc.alloc.rate                   mixed  avgt   10      0.003 +/-   0.001  MB/sec
+ExpBenchmark.finish256:gc.alloc.rate.norm              mixed  avgt   10      0.015 +/-   0.001    B/op
+ExpBenchmark.finish256:gc.count                        mixed  avgt   10        ~ 0            counts
+ExpBenchmark.finishMax                                common  avgt   10   2613.679 +/-   2.908   ns/op
+ExpBenchmark.finishMax:gc.alloc.rate                  common  avgt   10      0.003 +/-   0.001  MB/sec
+ExpBenchmark.finishMax:gc.alloc.rate.norm             common  avgt   10      0.009 +/-   0.001    B/op
+ExpBenchmark.finishMax:gc.count                       common  avgt   10        ~ 0            counts
+ExpBenchmark.finishMax                                 mixed  avgt   10  10492.539 +/-  69.568   ns/op
+ExpBenchmark.finishMax:gc.alloc.rate                   mixed  avgt   10   3361.780 +/-  22.346  MB/sec
+ExpBenchmark.finishMax:gc.alloc.rate.norm              mixed  avgt   10  36992.037 +/-   0.001    B/op
+ExpBenchmark.finishMax:gc.count                        mixed  avgt   10    175.000            counts
+ExpBenchmark.finishMax:gc.time                         mixed  avgt   10    135.000                ms
+ExpBenchmark.finishPreferred                          common  avgt   10   2685.083 +/- 102.219   ns/op
+ExpBenchmark.finishPreferred:gc.alloc.rate            common  avgt   10      0.003 +/-   0.001  MB/sec
+ExpBenchmark.finishPreferred:gc.alloc.rate.norm       common  avgt   10      0.009 +/-   0.001    B/op
+ExpBenchmark.finishPreferred:gc.count                 common  avgt   10        ~ 0            counts
+ExpBenchmark.finishPreferred                           mixed  avgt   10   4269.191 +/-  25.876   ns/op
+ExpBenchmark.finishPreferred:gc.alloc.rate             mixed  avgt   10      0.003 +/-   0.001  MB/sec
+ExpBenchmark.finishPreferred:gc.alloc.rate.norm        mixed  avgt   10      0.015 +/-   0.001    B/op
+ExpBenchmark.finishPreferred:gc.count                  mixed  avgt   10        ~ 0            counts
+ExpBenchmark.scalarStrictMath                         common  avgt   10  11138.284 +/-  39.519   ns/op
+ExpBenchmark.scalarStrictMath:gc.alloc.rate           common  avgt   10      0.003 +/-   0.001  MB/sec
+ExpBenchmark.scalarStrictMath:gc.alloc.rate.norm      common  avgt   10      0.039 +/-   0.001    B/op
+ExpBenchmark.scalarStrictMath:gc.count                common  avgt   10        ~ 0            counts
+ExpBenchmark.scalarStrictMath                          mixed  avgt   10  11822.431 +/-  52.903   ns/op
+ExpBenchmark.scalarStrictMath:gc.alloc.rate            mixed  avgt   10      0.003 +/-   0.001  MB/sec
+ExpBenchmark.scalarStrictMath:gc.alloc.rate.norm       mixed  avgt   10      0.041 +/-   0.001    B/op
+ExpBenchmark.scalarStrictMath:gc.count                 mixed  avgt   10        ~ 0            counts
+Log10Benchmark.finish256                              common  avgt   10   6283.575 +/-  17.491   ns/op
+Log10Benchmark.finish256:gc.alloc.rate                common  avgt   10      0.003 +/-   0.001  MB/sec
+Log10Benchmark.finish256:gc.alloc.rate.norm           common  avgt   10      0.022 +/-   0.001    B/op
+Log10Benchmark.finish256:gc.count                     common  avgt   10        ~ 0            counts
+Log10Benchmark.finish256                               mixed  avgt   10   7226.671 +/- 117.168   ns/op
+Log10Benchmark.finish256:gc.alloc.rate                 mixed  avgt   10      0.003 +/-   0.001  MB/sec
+Log10Benchmark.finish256:gc.alloc.rate.norm            mixed  avgt   10      0.025 +/-   0.001    B/op
+Log10Benchmark.finish256:gc.count                      mixed  avgt   10        ~ 0            counts
+Log10Benchmark.finishMax                              common  avgt   10   6193.533 +/- 173.151   ns/op
+Log10Benchmark.finishMax:gc.alloc.rate                common  avgt   10      0.003 +/-   0.001  MB/sec
+Log10Benchmark.finishMax:gc.alloc.rate.norm           common  avgt   10      0.022 +/-   0.001    B/op
+Log10Benchmark.finishMax:gc.count                     common  avgt   10        ~ 0            counts
+Log10Benchmark.finishMax                               mixed  avgt   10  16596.184 +/-  86.596   ns/op
+Log10Benchmark.finishMax:gc.alloc.rate                 mixed  avgt   10   2106.598 +/-  10.575  MB/sec
+Log10Benchmark.finishMax:gc.alloc.rate.norm            mixed  avgt   10  36672.058 +/-   0.001    B/op
+Log10Benchmark.finishMax:gc.count                      mixed  avgt   10    118.000            counts
+Log10Benchmark.finishMax:gc.time                       mixed  avgt   10     90.000                ms
+Log10Benchmark.finishPreferred                        common  avgt   10   6072.930 +/-  33.840   ns/op
+Log10Benchmark.finishPreferred:gc.alloc.rate          common  avgt   10      0.003 +/-   0.001  MB/sec
+Log10Benchmark.finishPreferred:gc.alloc.rate.norm     common  avgt   10      0.021 +/-   0.001    B/op
+Log10Benchmark.finishPreferred:gc.count               common  avgt   10        ~ 0            counts
+Log10Benchmark.finishPreferred                         mixed  avgt   10   7350.748 +/-  68.687   ns/op
+Log10Benchmark.finishPreferred:gc.alloc.rate           mixed  avgt   10      0.003 +/-   0.001  MB/sec
+Log10Benchmark.finishPreferred:gc.alloc.rate.norm      mixed  avgt   10      0.026 +/-   0.001    B/op
+Log10Benchmark.finishPreferred:gc.count                mixed  avgt   10        ~ 0            counts
+Log10Benchmark.scalarStrictMath                       common  avgt   10  14005.022 +/-  75.901   ns/op
+Log10Benchmark.scalarStrictMath:gc.alloc.rate         common  avgt   10      0.003 +/-   0.001  MB/sec
+Log10Benchmark.scalarStrictMath:gc.alloc.rate.norm    common  avgt   10      0.049 +/-   0.001    B/op
+Log10Benchmark.scalarStrictMath:gc.count              common  avgt   10        ~ 0            counts
+Log10Benchmark.scalarStrictMath                        mixed  avgt   10  14193.150 +/- 104.309   ns/op
+Log10Benchmark.scalarStrictMath:gc.alloc.rate          mixed  avgt   10      0.003 +/-   0.001  MB/sec
+Log10Benchmark.scalarStrictMath:gc.alloc.rate.norm     mixed  avgt   10      0.050 +/-   0.001    B/op
+Log10Benchmark.scalarStrictMath:gc.count               mixed  avgt   10        ~ 0            counts
+
+Benchmark result is saved to /home/runner/work/vfdlibm/vfdlibm/pair/base-5.json
+
+# round 5, head
+Benchmark                                           (inputs)  Mode  Cnt      Score     Error   Units
+ExpBenchmark.finish256                                common  avgt   10   2724.520 +/-  42.744   ns/op
+ExpBenchmark.finish256:gc.alloc.rate                  common  avgt   10      0.003 +/-   0.001  MB/sec
+ExpBenchmark.finish256:gc.alloc.rate.norm             common  avgt   10      0.010 +/-   0.001    B/op
+ExpBenchmark.finish256:gc.count                       common  avgt   10        ~ 0            counts
+ExpBenchmark.finish256                                 mixed  avgt   10   4651.226 +/-  23.318   ns/op
+ExpBenchmark.finish256:gc.alloc.rate                   mixed  avgt   10      0.003 +/-   0.001  MB/sec
+ExpBenchmark.finish256:gc.alloc.rate.norm              mixed  avgt   10      0.016 +/-   0.001    B/op
+ExpBenchmark.finish256:gc.count                        mixed  avgt   10        ~ 0            counts
+ExpBenchmark.finishMax                                common  avgt   10   2700.268 +/-   8.240   ns/op
+ExpBenchmark.finishMax:gc.alloc.rate                  common  avgt   10      0.003 +/-   0.001  MB/sec
+ExpBenchmark.finishMax:gc.alloc.rate.norm             common  avgt   10      0.009 +/-   0.001    B/op
+ExpBenchmark.finishMax:gc.count                       common  avgt   10        ~ 0            counts
+ExpBenchmark.finishMax                                 mixed  avgt   10   4691.118 +/-  14.233   ns/op
+ExpBenchmark.finishMax:gc.alloc.rate                   mixed  avgt   10      0.003 +/-   0.001  MB/sec
+ExpBenchmark.finishMax:gc.alloc.rate.norm              mixed  avgt   10      0.016 +/-   0.001    B/op
+ExpBenchmark.finishMax:gc.count                        mixed  avgt   10        ~ 0            counts
+ExpBenchmark.finishPreferred                          common  avgt   10   2754.903 +/-   3.623   ns/op
+ExpBenchmark.finishPreferred:gc.alloc.rate            common  avgt   10      0.003 +/-   0.001  MB/sec
+ExpBenchmark.finishPreferred:gc.alloc.rate.norm       common  avgt   10      0.010 +/-   0.001    B/op
+ExpBenchmark.finishPreferred:gc.count                 common  avgt   10        ~ 0            counts
+ExpBenchmark.finishPreferred                           mixed  avgt   10   4608.035 +/-  10.677   ns/op
+ExpBenchmark.finishPreferred:gc.alloc.rate             mixed  avgt   10      0.003 +/-   0.001  MB/sec
+ExpBenchmark.finishPreferred:gc.alloc.rate.norm        mixed  avgt   10      0.016 +/-   0.001    B/op
+ExpBenchmark.finishPreferred:gc.count                  mixed  avgt   10        ~ 0            counts
+ExpBenchmark.scalarStrictMath                         common  avgt   10  11875.514 +/-  63.357   ns/op
+ExpBenchmark.scalarStrictMath:gc.alloc.rate           common  avgt   10      0.003 +/-   0.001  MB/sec
+ExpBenchmark.scalarStrictMath:gc.alloc.rate.norm      common  avgt   10      0.042 +/-   0.001    B/op
+ExpBenchmark.scalarStrictMath:gc.count                common  avgt   10        ~ 0            counts
+ExpBenchmark.scalarStrictMath                          mixed  avgt   10  12200.537 +/-  42.760   ns/op
+ExpBenchmark.scalarStrictMath:gc.alloc.rate            mixed  avgt   10      0.003 +/-   0.001  MB/sec
+ExpBenchmark.scalarStrictMath:gc.alloc.rate.norm       mixed  avgt   10      0.043 +/-   0.001    B/op
+ExpBenchmark.scalarStrictMath:gc.count                 mixed  avgt   10        ~ 0            counts
+Log10Benchmark.finish256                              common  avgt   10   6281.861 +/-   4.962   ns/op
+Log10Benchmark.finish256:gc.alloc.rate                common  avgt   10      0.003 +/-   0.001  MB/sec
+Log10Benchmark.finish256:gc.alloc.rate.norm           common  avgt   10      0.022 +/-   0.001    B/op
+Log10Benchmark.finish256:gc.count                     common  avgt   10        ~ 0            counts
+Log10Benchmark.finish256                               mixed  avgt   10   7595.888 +/-  19.530   ns/op
+Log10Benchmark.finish256:gc.alloc.rate                 mixed  avgt   10      0.003 +/-   0.001  MB/sec
+Log10Benchmark.finish256:gc.alloc.rate.norm            mixed  avgt   10      0.027 +/-   0.001    B/op
+Log10Benchmark.finish256:gc.count                      mixed  avgt   10        ~ 0            counts
+Log10Benchmark.finishMax                              common  avgt   10   6216.896 +/- 191.306   ns/op
+Log10Benchmark.finishMax:gc.alloc.rate                common  avgt   10      0.003 +/-   0.001  MB/sec
+Log10Benchmark.finishMax:gc.alloc.rate.norm           common  avgt   10      0.022 +/-   0.001    B/op
+Log10Benchmark.finishMax:gc.count                     common  avgt   10        ~ 0            counts
+Log10Benchmark.finishMax                               mixed  avgt   10   7511.973 +/- 203.441   ns/op
+Log10Benchmark.finishMax:gc.alloc.rate                 mixed  avgt   10      0.003 +/-   0.001  MB/sec
+Log10Benchmark.finishMax:gc.alloc.rate.norm            mixed  avgt   10      0.026 +/-   0.001    B/op
+Log10Benchmark.finishMax:gc.count                      mixed  avgt   10        ~ 0            counts
+Log10Benchmark.finishPreferred                        common  avgt   10   6095.549 +/-  25.128   ns/op
+Log10Benchmark.finishPreferred:gc.alloc.rate          common  avgt   10      0.003 +/-   0.001  MB/sec
+Log10Benchmark.finishPreferred:gc.alloc.rate.norm     common  avgt   10      0.021 +/-   0.001    B/op
+Log10Benchmark.finishPreferred:gc.count               common  avgt   10        ~ 0            counts
+Log10Benchmark.finishPreferred                         mixed  avgt   10   7519.177 +/- 141.141   ns/op
+Log10Benchmark.finishPreferred:gc.alloc.rate           mixed  avgt   10      0.003 +/-   0.001  MB/sec
+Log10Benchmark.finishPreferred:gc.alloc.rate.norm      mixed  avgt   10      0.026 +/-   0.001    B/op
+Log10Benchmark.finishPreferred:gc.count                mixed  avgt   10        ~ 0            counts
+Log10Benchmark.scalarStrictMath                       common  avgt   10  14289.661 +/- 514.623   ns/op
+Log10Benchmark.scalarStrictMath:gc.alloc.rate         common  avgt   10      0.003 +/-   0.001  MB/sec
+Log10Benchmark.scalarStrictMath:gc.alloc.rate.norm    common  avgt   10      0.050 +/-   0.002    B/op
+Log10Benchmark.scalarStrictMath:gc.count              common  avgt   10        ~ 0            counts
+Log10Benchmark.scalarStrictMath                        mixed  avgt   10  14487.723 +/- 552.821   ns/op
+Log10Benchmark.scalarStrictMath:gc.alloc.rate          mixed  avgt   10      0.003 +/-   0.001  MB/sec
+Log10Benchmark.scalarStrictMath:gc.alloc.rate.norm     mixed  avgt   10      0.051 +/-   0.002    B/op
+Log10Benchmark.scalarStrictMath:gc.count               mixed  avgt   10        ~ 0            counts
+
+Benchmark result is saved to /home/runner/work/vfdlibm/vfdlibm/pair/head-5.json
