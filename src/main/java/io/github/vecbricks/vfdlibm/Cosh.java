@@ -83,8 +83,10 @@ import jdk.incubator.vector.VectorSpecies;
  * <p>{@link #cosh(DoubleVector, VectorMask)}, which {@code VFdlibm.cosh} calls, is the slice
  * arm, provisionally: no timing of the two arms exists yet, so the choice is the design's, not a
  * measurement's, and a benchmark host's run of {@code CoshBenchmark} and {@code CoshKindsBench}
- * will decide it ({@code SKILLS.md}). Every place that says {@code VFdlibm.cosh runs} the slice
- * arm names this default and changes with it: search for "VFdlibm.cosh runs".
+ * will decide it ({@code SKILLS.md}). The places that state the default are {@code
+ * Cosh.cosh(x, live)}, which sets it, {@code CoshTest}, {@code Nightly}'s arm list, the Javadocs
+ * of {@code CoshBenchmark} and {@code CoshKindsBench}, {@code PLAN.md} and {@code SKILLS.md};
+ * they change with it.
  */
 final class Cosh {
 
