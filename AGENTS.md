@@ -151,7 +151,9 @@ belongs to an issue, and `[VFDLIBM] <what it achieves>` when it belongs to none:
 goal-oriented. Its description follows `.github/PULL_REQUEST_TEMPLATE` (adapted from Varka's),
 fills all five sections and explains the mechanism in prose, not only the diff. Commit messages
 and the last section of the description end with `Generated-by: <tool> (<model and version>)`
-when AI tooling was used (Apache's convention); no `Co-Authored-By`.
+when AI tooling was used (Apache's convention); no `Co-Authored-By`. The pull requests that
+Dependabot opens (`.github/dependabot.yml`) keep Dependabot's own title after the `[VFDLIBM] `
+tag and its own body, and add no changelog line.
 
 ## Releases
 
@@ -217,5 +219,10 @@ verified at the Central portal, a user token in `~/.m2/settings.xml` as the serv
 (`pom.xml`'s `publishingServerId`), and a GPG key whose public half is on a key server and whose
 passphrase is cached in the agent (`export GPG_TTY=$(tty)` and sign something once). The same
 setup serves jegg's releases.
+
+Before a release, look for newer versions of what `.github/dependabot.yml` leaves out, which
+then move by hand with their security fixes: JMH, `central-publishing-maven-plugin` and
+`maven-gpg-plugin`. Nothing tracks the solvers pinned in `dev/prove.sh`, the JDK and Python
+versions of the workflows or their runner images either.
 
 Varka pins a released version and never a snapshot.
