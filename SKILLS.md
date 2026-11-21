@@ -649,9 +649,13 @@ next port re-trying a settled question.
   replay a bounded run call `Fuzz` directly (its class comment has the command).
 - **Functions of two arguments** (`Nightly.PairFunction`, test-only code like the rest: a port
   registers its function in `PairFunction.KNOWN`; none is ported yet, and `PairHarnessTest` runs the
-  harness on a toy, `x * 0.5 + y`, with planted faults). `dev/nightly.sh` and `nightly.yml` do not
-  take `--argument` yet, so a pair function is not listed in the workflow until they do; by hand,
-  `Sweep --argument 2` sweeps the second argument. The sweep takes `--argument 1` (the default) or
+  harness on a toy, `x * 0.5 + y`, with planted faults). The workflow lists such a function in the
+  plan job's `pairs`, as well as in `all`, and gives its sweep jobs an `argument` and an artifact
+  suffix (`dev/nightly.sh` reads `NIGHTLY_ARGUMENT`, and names its log `sweep-<function>-arg<N>-`):
+  the input `pair-passes` is `alternate` (the default: the first argument for a rotation of
+  `nights` nights, then the second for as many), `both` (two jobs a stripe) or `1` or `2`. A
+  function of one argument has no `argument` field, so its entries are what they were. The sweep
+  takes `--argument 1` (the default) or
   `2`: the high words swept are that argument's, each with its three low words, and each swept value
   gets a partner for the other argument drawn from the seed, the argument and the input's index
   alone (`Sweep.partner`; a quarter each of special values, the swept value's exponent, an exponent
@@ -665,6 +669,26 @@ next port re-trying a settled question.
   function's mismatch file, and a hard-cases file of one, say `# arity: 2` before the first input
   and hold `0x<x> 0x<y>` on a line: `Inputs.hardCasePairs` reads one, and `Inputs.hardCases` refuses
   it by that line.
+- **What a pass over a function of two arguments costs** (laptop, 21 November 2026,
+  `bench/results/pair-sweep-laptop-2026-11-21.txt`; no pair function is ported, so this is two
+  stand-ins run through `PairCostProbe`, not a port). A stripe of 2^24 high words at 256 bits took
+  0.9 s for the harness alone (`toy2`) and 1.8 s for an arm that calls `StrictMath.atan2` lane by
+  lane, against 2.9 s and 3.6 s for the unary sweeps of exp and log1p, at 4 threads on 4 CPUs.
+  Scaled to a whole pass (256 stripes), the x86 sweep jobs of the arm-bound stand-in come to, on
+  that loaded laptop and so only as an indication, about 16 runner-minutes on an AVX2 draw and 23
+  on an AVX-512 one, and the second argument's pass costs what the first does: both passes in one night are twice that, one alternating pass is once. The
+  file has the method, the three runs of each row and its limits; the nightly's own logs replace
+  it once a pair function runs. It also records that, on two NaNs, the oracle's `StrictMath.atan2`
+  and a loop of calls to it differed in the payload in 12 of 12 runs (cause not read), so a pair
+  function's check may need a canonical NaN.
+- **Checking that the unary nightly is unchanged** (`dev/unary-output-check.sh`, run by a person
+  after a change to `Sweep`, `Fuzz`, `Nightly` or `Inputs`, not by CI). `check <base-ref>` builds
+  the base in a worktree, runs every unary function's sweep and fuzz on fixed slices with one
+  thread at 128, 256 and max bits, four planted faults and the usage errors on both trees, and
+  compares the 101 logs and mismatch files with the lines that vary by machine dropped: it took 48
+  seconds on the laptop. `--self-test` shows the comparison failing on a changed log and on a
+  planted fault. The workflow's plan step is checked the other way: its `run:` block, run on the
+  same inputs before and after a change, must write the same `GITHUB_OUTPUT`.
 - **Its cost, measured (the logs of 3 to 19 November 2026).** The first sizing was a laptop's,
   from a sample of high words, before any night had run; the nights' own logs replaced it.
   `bench/pool/pool.py cost --since 2026-11-05
