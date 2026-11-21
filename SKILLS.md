@@ -827,7 +827,7 @@ re-trying a settled question.
   held by `bench/alloc-check.py` (CI runs it, and it was run locally before any test was
   written), at the runner's flags and as AVX2.
 - **Two arms, one provisional default.** `coshSlice` computes the small range in the vector and
-  `coshFinish` finishes its lanes per lane; `VFdlibm.cosh` runs the slice arm. The arms differ
+  `coshFinish` finishes its lanes per lane; the default arm is the slice arm. The arms differ
   only on `|x| < 0.5*ln2`, so their cost follows the share of that range, which is 3.5% in
   Varka's baseline benchmark and 17% in Spark's unit tests (issue #32): at 8 lanes a vector
   holds one in 27% and 82% of the cases. `CoshKindsBench` has those two shares, and

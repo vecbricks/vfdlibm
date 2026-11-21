@@ -887,7 +887,16 @@ reassociation, and **needs no lemma of its own**. Where its text is not the C's:
   and `w+w` in the small range and `half` and `exp(|x|)` above it, the quotient is `(t*t)/(w+w)`
   or `half/t`, and the sum after it, `1+q`, `w`, `half*t + q` or `half*t`, is picked by the same
   test. Each operation is one IEEE operation on the same operands as the C's (R4); the values
-  the other branches' operations take in a lane are computed and never kept.
+  the other branches' operations take in a lane are computed and never kept. There is nothing
+  to prove, and no hinge of its own: the one thing that could differ is the tests, and they are
+  the C's, made on the same high word. What checks them is narrower than the tests are: the
+  four words equal the C's literals (`constantsAreTheSourcesBits`), and `CoshTest` compares
+  every arm with `StrictMath.cosh` at the thresholds and their neighbours. `cosh.splitMoved`
+  is the only planted fault that moves a compare's constant (the slice arm's `HX_SMALL`);
+  `cosh.finishMissesSmall` drops a mask. Sizing `cosh.dropHalfOverT` observed
+  that dropping `half/t` changes no result above about 18.7; this is an observation from that
+  sizing, not a result proven here, and nothing relies on it. Other compares may also move
+  without changing a result, and no test claims to catch those.
 - The lanes from `0x40862E42` up, the infinities and the NaNs are finished per lane by
   `StrictMath.cosh`, which is the C.
 

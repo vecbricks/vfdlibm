@@ -61,10 +61,13 @@ import jdk.incubator.vector.VectorSpecies;
  * </ul>
  *
  * <p>Both finish per lane the lanes from the overflow window up ({@code ix >= 0x40862E42}), the
- * infinities and the NaNs, and share one division: its numerator is {@code t*t} (small range) or
- * {@code half}, its denominator {@code w+w} or {@code exp(|x|)}, and each lane's sum is its own
- * range's: {@code 1+q}, {@code w}, {@code half*t+q} or {@code half*t}. Each lane takes one of
- * the C's branches and does that branch's operations in the C's order; the other branches'
+ * infinities and the NaNs. They share one division for cosh's own quotient. In the slice arm its
+ * numerator is {@code t*t} (small range) or {@code half}, its denominator {@code w+w} or {@code
+ * exp(|x|)}, and each lane's sum is its own range's: {@code 1+q}, {@code w}, {@code half*t+q}
+ * or {@code half*t}; it divides once more, in the polynomial of its expm1 lines ({@code
+ * (r1-t3)/(6-x*t3)}). In the finish arm it divides {@code half} by {@code exp(|x|)} in every
+ * lane, and a small-range lane takes the per-lane finish's value instead. Each lane takes one
+ * of the C's branches and does that branch's operations in the C's order; the other branches'
  * values are computed and never kept.
  *
  * <p>The {@code exp} of every lane is {@link Exp#expCore} of {@code |x|}, the only entry into
@@ -79,7 +82,8 @@ import jdk.incubator.vector.VectorSpecies;
  * <p>{@link #cosh(DoubleVector, VectorMask)}, which {@code VFdlibm.cosh} calls, is the slice
  * arm, provisionally: no timing of the two arms exists yet, so the choice is the design's, not a
  * measurement's, and a benchmark host's run of {@code CoshBenchmark} and {@code CoshKindsBench}
- * will decide it ({@code SKILLS.md}).
+ * will decide it ({@code SKILLS.md}). The default is chosen in {@code cosh(x, live)}; other
+ * places say "the default arm".
  */
 final class Cosh {
 
