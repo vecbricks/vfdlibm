@@ -34,9 +34,10 @@ import jdk.incubator.vector.VectorMask;
  *       the preferred species, 128 bits, where all 24 rows passed ({@code
  *       bench/results/alloc-arm-2026-11-20.txt}, an allocation reading and no timing).
  *   <li>128 bits on x86: the finish arm of {@code exp} and of {@code log} allocates 0.5 to 0.6
- *       million bytes per op on an EPYC 7763 (an AVX2 host), and {@code exp}'s the same on a Xeon
- *       8573C ({@code bench/results/exp-onediv-xeon8573c-2026-11-03.txt}). {@code log10}, {@code
- *       log1p} and {@code expm1} have no 128-bit row.
+ *       million bytes per op on an EPYC 7763, an AVX2 host (the files of 20 November 2026, below),
+ *       and {@code exp}'s the same on a Xeon 8573C, at the head of the pair in {@code
+ *       bench/results/exp-onediv-xeon8573c-2026-11-03.txt}. {@code log10}, {@code log1p} and
+ *       {@code expm1} have no 128-bit row.
  *   <li>512 bits on an AVX2 host, where it is the Vector API's Java fallback: the arm each of the
  *       five functions calls allocates 0.9 to 1.8 million bytes per op. Both EPYC 7763 readings
  *       are in the files of 20 November 2026 ({@code exp-epyc7763-2026-11-20.txt}, and the same

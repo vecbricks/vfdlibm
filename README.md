@@ -134,9 +134,10 @@ by CI) covers, on x86, 256 bits and the preferred species, and on Arm the prefer
 bits, where it passed (`bench/results/alloc-arm-2026-11-20.txt`, an allocation reading and no
 timing). On an EPYC 7763, an AVX2 host (the files of 20 November 2026 in `bench/results/`), the
 finish arm of `exp` and of `log` allocates 0.5 to 0.6 million bytes per op at 128 bits, `exp`'s
-the same on a Xeon 8573C (`bench/results/exp-onediv-xeon8573c-2026-11-03.txt`), and the arm each
-of the five functions calls 0.9 to 1.8 million at 512 bits, the Java fallback there; the other
-three functions have no 128-bit row. At `SPECIES_MAX`, on mixed data, the finish arm of every
+the same on a Xeon 8573C (at the head of the pair in
+`bench/results/exp-onediv-xeon8573c-2026-11-03.txt`), and the arm each of the five functions
+calls 0.9 to 1.8 million at 512 bits, the Java fallback there; the other three functions have
+no 128-bit row. At `SPECIES_MAX`, on mixed data, the finish arm of every
 function allocates 30432 to 36992 bytes per op, and the guarded arm of `expm1` and `log1p` less
 than 0.5 (`bench/results/max-finish-laptop-2026-11-20.txt`, a laptop file and not a headline,
 read at 512 and 256 bits, not at 128). Not measured: the speed of 512 bits against 256 on the
