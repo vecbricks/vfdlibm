@@ -288,7 +288,32 @@ final class Log {
       // refused inlining this late in the body (NodeCountInliningCutoff) and receive them boxed.
       if (rare.anyTrue()) {
         long rareLanes = rare.toLong();
-        for (int lane = 0; lane < species.length(); lane++) {
+        int lanes = x.length();
+        if (lanes > 0 && (rareLanes & 1L) != 0) {
+          result = result.withLane(0, StrictMath.log(x.lane(0)));
+        }
+        if (lanes > 1 && (rareLanes & 2L) != 0) {
+          result = result.withLane(1, StrictMath.log(x.lane(1)));
+        }
+        if (lanes > 2 && (rareLanes & 4L) != 0) {
+          result = result.withLane(2, StrictMath.log(x.lane(2)));
+        }
+        if (lanes > 3 && (rareLanes & 8L) != 0) {
+          result = result.withLane(3, StrictMath.log(x.lane(3)));
+        }
+        if (lanes > 4 && (rareLanes & 16L) != 0) {
+          result = result.withLane(4, StrictMath.log(x.lane(4)));
+        }
+        if (lanes > 5 && (rareLanes & 32L) != 0) {
+          result = result.withLane(5, StrictMath.log(x.lane(5)));
+        }
+        if (lanes > 6 && (rareLanes & 64L) != 0) {
+          result = result.withLane(6, StrictMath.log(x.lane(6)));
+        }
+        if (lanes > 7 && (rareLanes & 128L) != 0) {
+          result = result.withLane(7, StrictMath.log(x.lane(7)));
+        }
+        for (int lane = 8; lane < species.length(); lane++) {
           if ((rareLanes >>> lane & 1L) != 0) {
             result = result.withLane(lane, StrictMath.log(x.lane(lane)));
           }

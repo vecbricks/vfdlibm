@@ -65,9 +65,9 @@ import jdk.incubator.vector.VectorSpecies;
  * </ul>
  *
  * <p>All three are exact, and none allocates at 256 or 512 bits on ordinary data or when one
- * input in 16 is rare. At {@code SPECIES_MAX} C2 does not intrinsify lane access at a variable
- * index, and Exp's same finish boxes there on data with rare lanes (SKILLS.md); this one has not
- * been measured at {@code SPECIES_MAX}. {@link #log1p}, which {@code VFdlibm.log1p} calls, is
+ * input in 16 is rare, nor at {@code SPECIES_MAX} of up to eight lanes: the finish writes out
+ * its first eight lanes with constant indices, which C2 intrinsifies there, where a variable
+ * index it does not (SKILLS.md). {@link #log1p}, which {@code VFdlibm.log1p} calls, is
  * the guarded arm, provisionally. On the laptop ({@code
  * bench/results/log1p-laptop-avx2-2026-11-02.txt}, under {@code -XX:UseAVX=2} as C2 compiles for
  * the AVX2 hosts that are the target, and {@code log1p-laptop-2026-11-02.txt}, AVX-512; laptop
@@ -319,6 +319,32 @@ final class Log1p {
       // are lane extract and insert, which C2 intrinsifies at a variable lane index for the
       // fixed shapes. rare is already and-ed with live, so an inactive lane is never rewritten.
       long rareLanes = rare.toLong();
+      int lanes = x.length();
+      if (lanes > 0 && (rareLanes & 1L) != 0) {
+        result = result.withLane(0, StrictMath.log1p(x.lane(0)));
+      }
+      if (lanes > 1 && (rareLanes & 2L) != 0) {
+        result = result.withLane(1, StrictMath.log1p(x.lane(1)));
+      }
+      if (lanes > 2 && (rareLanes & 4L) != 0) {
+        result = result.withLane(2, StrictMath.log1p(x.lane(2)));
+      }
+      if (lanes > 3 && (rareLanes & 8L) != 0) {
+        result = result.withLane(3, StrictMath.log1p(x.lane(3)));
+      }
+      if (lanes > 4 && (rareLanes & 16L) != 0) {
+        result = result.withLane(4, StrictMath.log1p(x.lane(4)));
+      }
+      if (lanes > 5 && (rareLanes & 32L) != 0) {
+        result = result.withLane(5, StrictMath.log1p(x.lane(5)));
+      }
+      if (lanes > 6 && (rareLanes & 64L) != 0) {
+        result = result.withLane(6, StrictMath.log1p(x.lane(6)));
+      }
+      if (lanes > 7 && (rareLanes & 128L) != 0) {
+        result = result.withLane(7, StrictMath.log1p(x.lane(7)));
+      }
+      rareLanes &= ~0xffL;
       while (rareLanes != 0) {
         int lane = Long.numberOfTrailingZeros(rareLanes);
         rareLanes &= rareLanes - 1;

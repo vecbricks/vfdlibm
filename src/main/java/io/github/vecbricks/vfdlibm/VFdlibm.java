@@ -46,12 +46,14 @@ import jdk.incubator.vector.VectorMask;
  *       the same for {@code log}, {@code log10}, {@code log1p} and {@code expm1}, in {@code
  *       bench/results/}).
  *   <li>{@code DoubleVector.SPECIES_MAX} is none of the fixed shapes. On mixed data (one input in
- *       16 replaced by one that takes its own path in the C, as each benchmark class lists),
- *       {@code exp}, {@code log} and {@code log10} allocate 30432 to 36992 bytes per op there,
- *       and {@code expm1} and {@code log1p} less than 0.5 ({@code
- *       bench/results/max-finish-laptop-2026-11-20.txt}, a laptop file and not a headline, read
- *       at 512 bits and as an AVX2 host at 256; {@code SPECIES_MAX} at 128 bits was not read).
- *       The host files of {@code exp} and {@code log10} read inside that range.
+ *       16 replaced by one that takes its own path in the C, as each benchmark class lists), the
+ *       finish of every function used to allocate 30432 to 36992 bytes per op there ({@code
+ *       bench/results/max-finish-laptop-2026-11-20.txt}, and the host files of {@code exp} and
+ *       {@code log10}, which read the old code). It writes out its first eight lanes with
+ *       constant indices now, and every {@code *Max} row reads under 0.1 bytes per op ({@code
+ *       bench/results/max-finish-alloc-free-laptop-2026-11-21.txt}, a laptop file and not a
+ *       headline, read at 512 bits and as an AVX2 host at 256). {@code SPECIES_MAX} at 128 bits,
+ *       and with more than eight lanes, was not read.
  *   <li>Not measured: any port's speed at 512 bits against 256 on the EPYC 9V74 draws that have
  *       AVX-512 ({@code HARDWARE.md} has only a datapath reading for them, and lists {@code
  *       MaxVectorSize=64}), any port's speed on Arm, and allocation on an Arm host with vectors
