@@ -11,17 +11,21 @@ package io.github.vecbricks.vfdlibm;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.math.BigDecimal;
 import java.util.Arrays;
 import java.util.SplittableRandom;
 import jdk.incubator.vector.DoubleVector;
+import jdk.incubator.vector.IntVector;
 import jdk.incubator.vector.LongVector;
 import jdk.incubator.vector.VectorMask;
+import jdk.incubator.vector.VectorOperators;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
+import org.opentest4j.AssertionFailedError;
 
 /**
  * The hinges of the lemmas in {@code PROOFS.md}, each tested on the doubles where it would first
@@ -686,5 +690,199 @@ class ProofsTest {
       assertEquals(bits(r - (r * e - hxs)), bits(r - inner), at);
       assertEquals(bits(StrictMath.expm1(r)), bits(r - inner), at);
     }
+  }
+
+  // L13: a blend of branches computes the C's branch on each lane.
+
+  /** The compare of the models below: {@code ix < 0x3ff00000}, the high word of |x| below 1. */
+  private static final int L13_WORD = 0x3ff00000;
+
+  /** e_sinh.c lines 65-66's shape in scalar Java, as the C writes it. */
+  private static double l13SinhShape(double x, double t) {
+    int ix = (int) (bits(x) >>> 32) & 0x7fffffff;
+    if (ix < L13_WORD) {
+      return 2.0 * t - t * t / (t + 1.0);
+    }
+    return t + t / (t + 1.0);
+  }
+
+  /** The two branches of {@link #l13SinhShape}, each computed whole. */
+  private static double l13SinhFirst(double t) {
+    return 2.0 * t - t * t / (t + 1.0);
+  }
+
+  private static double l13SinhSecond(double t) {
+    return t + t / (t + 1.0);
+  }
+
+  /** A branch that is NaN where the other is not: {@code t + 1} below 1, {@code sqrt(t)} above. */
+  private static double l13SqrtShape(double x, double t) {
+    int ix = (int) (bits(x) >>> 32) & 0x7fffffff;
+    if (ix < L13_WORD) {
+      return t + 1.0;
+    }
+    return Math.sqrt(t);
+  }
+
+  private static VectorMask<Double> l13Below(DoubleVector x, int word) {
+    IntVector ix = Lanes.hiInt(x, Lanes.intSpecies(x.species())).and(0x7fffffff);
+    return ix.compare(VectorOperators.LT, word).cast(x.species());
+  }
+
+  /** The port's shape: operands blended by the mask, one shared division, the sums blended. */
+  private static DoubleVector l13SinhVector(DoubleVector x, DoubleVector t, int word) {
+    VectorMask<Double> below = l13Below(x, word);
+    DoubleVector q = t.blend(t.mul(t), below).div(t.add(1.0));
+    return t.add(q).blend(t.mul(2.0).sub(q), below);
+  }
+
+  /** The select as arithmetic, {@code first*m + second*(1-m)}: the shape H4 excludes. */
+  private static DoubleVector l13SinhArithmetic(DoubleVector x, DoubleVector t) {
+    VectorMask<Double> below = l13Below(x, L13_WORD);
+    DoubleVector m = DoubleVector.zero(x.species()).blend(1.0, below);
+    DoubleVector qFirst = t.mul(t).div(t.add(1.0));
+    DoubleVector qSecond = t.div(t.add(1.0));
+    DoubleVector first = t.mul(2.0).sub(qFirst);
+    DoubleVector second = t.add(qSecond);
+    return first.mul(m).add(second.mul(m.neg().add(1.0)));
+  }
+
+  private static DoubleVector l13SqrtVector(DoubleVector x, DoubleVector t, int word) {
+    return t.lanewise(VectorOperators.SQRT).blend(t.add(1.0), l13Below(x, word));
+  }
+
+  private static DoubleVector l13SqrtArithmetic(DoubleVector x, DoubleVector t) {
+    VectorMask<Double> below = l13Below(x, L13_WORD);
+    DoubleVector m = DoubleVector.zero(x.species()).blend(1.0, below);
+    return t.add(1.0).mul(m).add(t.lanewise(VectorOperators.SQRT).mul(m.neg().add(1.0)));
+  }
+
+  /** x on both sides of the compare, with every neighbour of 1.0's word, both signs. */
+  private static double[] l13Xs() {
+    double[] near = Inputs.concat(Inputs.around(1.0, 8), Inputs.around(Math.nextDown(1.0), 8));
+    double[] xs = Inputs.concat(near, Inputs.around(Lanes.fromHi(L13_WORD - 1), 4),
+        Inputs.around(Lanes.fromHi(L13_WORD + 1), 4),
+        new double[] {0.0, 1e-300, 0.25, 0.5, 2.0, 22.0, 1e300, Double.POSITIVE_INFINITY,
+            Double.NaN});
+    double[] both = new double[2 * xs.length];
+    for (int i = 0; i < xs.length; i++) {
+      both[2 * i] = xs[i];
+      both[2 * i + 1] = -xs[i];
+    }
+    return both;
+  }
+
+  /** t with a finite and an infinite discarded value, a NaN one, the zeros, and draws. */
+  private static double[] l13Ts() {
+    double[] fixed = {
+      -1.0, -4.0, -2.0, -0.5, 0.0, -0.0, 1e-300, 0.5, 1.0, 3.0, 1e155, 1e200, Double.MAX_VALUE,
+      Double.POSITIVE_INFINITY, Double.NEGATIVE_INFINITY, Double.NaN, Double.MIN_VALUE
+    };
+    return Inputs.concat(fixed, Inputs.uniform(1300L, 48, -3.0, 3.0));
+  }
+
+  /** Non-vacuity: the inputs do exercise what the lemma says it survives. */
+  @Test
+  void l13InputsAreNotVacuous() {
+    Inputs.Pairs p = Inputs.cross(l13Xs(), l13Ts());
+    int branchesDiffer = 0;
+    int discardedInfinite = 0;
+    int discardedNaN = 0;
+    for (int i = 0; i < p.x().length; i++) {
+      double x = p.x()[i];
+      double t = p.y()[i];
+      int ix = (int) (bits(x) >>> 32) & 0x7fffffff;
+      double first = l13SinhFirst(t);
+      double second = l13SinhSecond(t);
+      boolean takesFirst = ix < L13_WORD;
+      if ((ix == L13_WORD || ix == L13_WORD - 1) && bits(first) != bits(second)) {
+        branchesDiffer++;
+      }
+      double kept = takesFirst ? first : second;
+      double discarded = takesFirst ? second : first;
+      if (Double.isFinite(kept) && Double.isInfinite(discarded)) {
+        discardedInfinite++;
+      }
+      double sqrtKept = takesFirst ? t + 1.0 : Math.sqrt(t);
+      double sqrtDiscarded = takesFirst ? Math.sqrt(t) : t + 1.0;
+      if (!Double.isNaN(sqrtKept) && Double.isNaN(sqrtDiscarded)) {
+        discardedNaN++;
+      }
+    }
+    assertTrue(branchesDiffer > 100, "branches differ in bits at the compare: " + branchesDiffer);
+    assertTrue(discardedInfinite > 100, "kept finite, discarded infinite: " + discardedInfinite);
+    assertTrue(discardedNaN > 100, "kept not NaN, discarded NaN: " + discardedNaN);
+  }
+
+  /**
+   * L13: the operand blend with one shared division is the C's branch on every lane, at every
+   * width, including the lanes where the other branch's value is infinite.
+   */
+  @ParameterizedTest
+  @EnumSource(VectorWidth.class)
+  void l13SinhShapedBlendIsTheCsBranch(VectorWidth width) {
+    Inputs.Pairs p = Inputs.cross(l13Xs(), l13Ts());
+    Oracle.assertBinary("l13 sinh shape", width.species(),
+        (x, t) -> l13SinhVector(x, t, L13_WORD), ProofsTest::l13SinhShape, p.x(), p.y());
+  }
+
+  /** L13: a discarded branch whose value is NaN does not reach the lane. */
+  @ParameterizedTest
+  @EnumSource(VectorWidth.class)
+  void l13DiscardedNaNDoesNotLeak(VectorWidth width) {
+    Inputs.Pairs p = Inputs.cross(l13Xs(), l13Ts());
+    Oracle.assertBinary("l13 sqrt shape", width.species(),
+        (x, t) -> l13SqrtVector(x, t, L13_WORD), ProofsTest::l13SqrtShape, p.x(), p.y());
+  }
+
+  /** The sinh shape with H2 false: the shared division is by {@code t}, not {@code t+1}. */
+  private static DoubleVector l13WrongOperand(DoubleVector x, DoubleVector t) {
+    VectorMask<Double> below = l13Below(x, L13_WORD);
+    DoubleVector q = t.blend(t.mul(t), below).div(t);
+    return t.add(q).blend(t.mul(2.0).sub(q), below);
+  }
+
+  /** The sinh shape with H2 false: {@code 2.0*t - q} reassociated as {@code t + (t - q)}. */
+  private static DoubleVector l13Reassociated(DoubleVector x, DoubleVector t) {
+    VectorMask<Double> below = l13Below(x, L13_WORD);
+    DoubleVector q = t.blend(t.mul(t), below).div(t.add(1.0));
+    return t.add(q).blend(t.add(t.sub(q)), below);
+  }
+
+  /** A control must fail by the lanes differing, not by an empty or mismatched input. */
+  private static void assertRefuted(org.junit.jupiter.api.function.Executable check) {
+    AssertionFailedError e = assertThrows(AssertionFailedError.class, check);
+    assertTrue(e.getMessage().contains(" differ"), e.getMessage());
+  }
+
+  /**
+   * L13's controls: each way the lemma's hinges could be false fails the checks above. The
+   * compare moved one word either way (H1) shows at the words next to 1.0's; the select as
+   * arithmetic (H4) turns a discarded infinity or NaN into a NaN in the kept lane.
+   */
+  @ParameterizedTest
+  @EnumSource(VectorWidth.class)
+  void l13FalseHingesAreCaught(VectorWidth width) {
+    Inputs.Pairs p = Inputs.cross(l13Xs(), l13Ts());
+    var species = width.species();
+    assertRefuted(() -> Oracle.assertBinary("l13 word + 1", species,
+        (x, t) -> l13SinhVector(x, t, L13_WORD + 1), ProofsTest::l13SinhShape, p.x(), p.y()));
+    assertRefuted(() -> Oracle.assertBinary("l13 word - 1", species,
+        (x, t) -> l13SinhVector(x, t, L13_WORD - 1), ProofsTest::l13SinhShape, p.x(), p.y()));
+    assertRefuted(() -> Oracle.assertBinary("l13 arithmetic", species,
+        ProofsTest::l13SinhArithmetic, ProofsTest::l13SinhShape, p.x(), p.y()));
+    assertRefuted(() -> Oracle.assertBinary("l13 sqrt word + 1",
+        species, (x, t) -> l13SqrtVector(x, t, L13_WORD + 1), ProofsTest::l13SqrtShape, p.x(),
+        p.y()));
+    assertRefuted(() -> Oracle.assertBinary("l13 sqrt arithmetic",
+        species, ProofsTest::l13SqrtArithmetic, ProofsTest::l13SqrtShape, p.x(), p.y()));
+    assertRefuted(() -> Oracle.assertBinary("l13 wrong operand", species,
+        ProofsTest::l13WrongOperand, ProofsTest::l13SinhShape, p.x(), p.y()));
+    assertRefuted(() -> Oracle.assertBinary("l13 reassociated", species,
+        ProofsTest::l13Reassociated, ProofsTest::l13SinhShape, p.x(), p.y()));
+    // H3 can fail: an integer division on a discarded lane throws, a float one never does.
+    var ints = Lanes.intSpecies(species);
+    assertThrows(ArithmeticException.class,
+        () -> IntVector.broadcast(ints, 1).div(IntVector.zero(ints)));
   }
 }

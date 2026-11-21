@@ -40,8 +40,31 @@ IEEE properties used:
   `a > 0` and `u -> fl(u + b)` are non-decreasing, and so is their composition.
 - **(R3) Exact operations.** `fl(+-1 * v) = +-v`; `fl(+0 * v) = +0` for finite `v > 0`; `x - (+0) =
   x` for every `x`, `-0` included; `+0 - v = -v` for every `v != 0`.
-- **(R4) Correct rounding of the basic operations.** `+ - * /` return `fl` of the exact result;
-  with no fused multiply-add, each Java operation is one such rounding, as each C operation is.
+- **(R4) Correct rounding of the basic operations.** `+ - * /` and `sqrt` return `fl` of the exact
+  result; with no fused multiply-add, each Java operation is one such rounding, as each C
+  operation is. For `sqrt` the sources are the JDK 25 API documents (not its sources):
+  `Math.sqrt` and `StrictMath.sqrt` return "the double value closest to the true mathematical
+  square root", `NaN` for a `NaN` or a negative argument, `+infinity` for `+infinity` and the
+  argument itself for either zero; and a vector's `VectorOperators.SQRT`, `DoubleVector.sqrt()`,
+  is "conforming to the specification of `Math.sqrt(a)`" on each lane. The C calls `sqrt` in
+  e_asin.c (`s = sqrt(t)`, line 100) e_acos.c (`s = sqrt(z)`, lines 89 and 95) and
+  e_hypot.c (`w = sqrt(...)`, lines 99 and 108), and does
+  not define it: fdlibm 5.3's e_sqrt.c is not
+  among the files in `reference/`, and no claim is made here about it. The claim is the
+  oracle's: a lane of the operator is `StrictMath.sqrt`'s result. That the C's `sqrt` is that
+  function is not shown here; a port that uses the operator shows it by its tests against
+  `StrictMath`. What the documents leave open, and (R4) does not claim: the payload and sign of
+  a `NaN` result. `SqrtTest` pins the
+  lane's raw bits against `StrictMath.sqrt` on the boundary doubles (the zeros, every power of
+  two and its neighbours, the squares of the integers to 4096 and theirs, the subnormals, the
+  smallest normal, the largest double, the infinities, `NaN`s of several payloads, negative
+  numbers) and, unmasked, 8.7 million random doubles of both signs at 128, 256 and 512 bits and
+  the preferred species (a width the host lacks is skipped there). The masked form is checked
+  on the boundary doubles and 2^19 random bit patterns at those widths; `SPECIES_MAX` and
+  the three fixed widths, whether the host has them or not, on the boundary doubles and 2^18
+  random bit patterns, masked and unmasked (a width above the host's runs in Java there). That
+  the operator lowers to a vector instruction and does not box is a separate fact, read from
+  `bench/alloc-check.py` on `SqrtBenchmark` (unmasked only; no row for the masked form).
 
 ## exp (`Exp.java`, from `e_exp.c`)
 
@@ -812,14 +835,90 @@ inputs that differ are about one in `2^29` of a window), so
 and the search is a program, so nothing here is machine-checked in `proofs/`; an evaluation of
 the chain like L4's is not written.
 
+## Blends (the argument sinh and cosh share)
+
+### L13. A blend of branches computes the C's branch on each lane
+
+The C picks a branch with an `if` on the input. A vector has no per-lane branch, so a port
+computes the branches' operations on every lane and a blend keeps each lane's. There are two
+forms: blending results (each branch whole, then the blend), and blending operands (the operand
+two branches give one operation, picked first, then one operation: sinh's division by `t+one`
+with numerator `t*t` or `t`). This lemma covers both.
+
+**Hypotheses**, for each lane with input `x`:
+
+- **H1, selection.** The mask lane is set exactly when the C's condition holds on `x`: the same
+  predicate, the same constant, the same words (the high word `ix`, say). The compare is exact (an
+  integer compare, or a compare of doubles, which rounds nothing). In an `else if` chain the
+  masks are nested as the chain is, so each lane takes the first branch whose condition holds.
+- **H2, operands.** In a lane whose branch is `B`, each operation that reaches the result has as
+  operands what `B`'s same operation has in the C: either the result of an earlier operation of
+  that lane, or an operand picked by an operand blend under H1's mask where `B` has it. The
+  operations are the C's, in the C's order: no fused multiply-add, no reassociation.
+- **H3, totality.** Each operation the port computes on a lane whose branch discards it is total:
+  it returns a double, `NaN` or infinite included, and throws, traps and writes nothing. Java's
+  floating-point operations are (`+ - * /`, `sqrt`, compares, conversions of doubles and bit
+  operations: JLS 4.2.4 and 15.17.2 give infinity or `NaN` for a division by zero, with no
+  exception). Not total: an integer vector's division or remainder (a zero lane throws), and an
+  array load or store indexed by a discarded lane's value. A port may use neither on a lane it
+  discards.
+- **H4, select.** A blend returns one operand's bits in each lane. It is a select and not
+  arithmetic: `a*m + b*(1-m)` is not one, since `0*infinity` and `0*NaN` are `NaN`.
+
+**Statement.** Under H1 to H4 each lane's result equals, bit for bit, the C's result on that
+lane's input, each operation being the correct rounding of (R4), except in a lane where a kept
+operation returns a `NaN`, whether it had a `NaN` operand or makes one (`inf - inf`, `inf/inf`,
+`0*inf`, `sqrt` of a negative): the lemma claims that such a lane is a `NaN`, and not its payload
+or sign, which IEEE 754 and the JLS leave open. (The model's tests below compare those lanes by
+raw bits too, as every test does, and pin what the hosts that run them return.)
+
+**Proof.** Fix a lane. By H1 the C takes exactly one branch `B` there, the port's masks name the
+same one. Take `B`'s operations in the C's order. The first one's operands are, by H2, the C's
+(inputs, constants, or an operand blend, which by H4 returns the bits of the operand `B` has and
+by H1 is the one picked). If an operation has the C's operand bits in the C's order, its result
+is the C's, since by (R4) it is one rounding of the exact result, a function of the operands
+alone; so the second operation has the C's operands, and so on to the last, whose result is the
+lane's. The other branches' operations are computed in the lane too: by H3 they have no effect
+but their own value, and by H4 no blend of a kept value reads them. A value they take, `NaN` or
+infinite, never is an operand of a kept operation. So the lane holds `B`'s result. Where a
+kept operation returns a `NaN` the payload is not fixed by IEEE 754 or the JLS, which is the
+exception in the statement (sinh and cosh finish their `NaN` lanes per lane, so none of their
+kept results is made by a blend). QED.
+
+**Not covered.** (1) That a port's compare is the C's, which is H1 and stays with each function's
+test (`SinhTest`, `CoshTest`, at the thresholds and their neighbours). (2) A moved compare in a
+range where the branches agree in bits, which no test sees and no result shows; cosh's section
+says so. (3) The masked forms' `x.blend(result, live)`, a select under the caller's mask and not
+the C's condition. (4) That C2 lowers a blend without boxing, read from `bench/alloc-check.py`.
+(5) That a port's code has the shape of the model: the tests run models and not `Sinh` or `Cosh`,
+so a port that left H2 or H4 behind would still pass them, and only its vector tie would fail.
+
+**Hinge tests** (`ProofsTest`, at 128, 256, 512 bits and the preferred species). They run a model
+of the shape, not the ports' code: sinh's two forms with one shared division
+(`l13SinhShapedBlendIsTheCsBranch`) and a branch that is `NaN` where the other is not, `sqrt(t)`
+against `t+1` (`l13DiscardedNaNDoesNotLeak`), against their scalar form written as the C writes
+it, on `x` at the words next to `1.0`'s and `t` including `-1`, `1e200`, the infinities and
+`NaN`. `l13InputsAreNotVacuous` counts the lanes where the branches differ in bits at the
+compare, where a kept value is finite and the discarded one infinite, and where a discarded one
+is `NaN`. `l13FalseHingesAreCaught` requires the check to fail when the compare's word is moved by
+one either way (H1) and when the select is arithmetic (H4). Two more controls
+show H2's failing in the model (the shared division by `t` and not `t+1`; `2t - q` as `t + (t -
+q)`, a reassociation) and one that H3 can fail in the Vector API (an integer vector division by a
+zero lane throws), though no test of L13 runs a port: a port's wrong operand or reassociated sum
+is caught only by its own vector tie, and an H3 failure by the port not running at all.
+Each port's own instance of H1 is that tie as before.
+
+**Encoding.** No file: an induction on the operations of the branch, informal, not
+machine-checked.
+
 ## sinh (`Sinh.java`, from `e_sinh.c`)
 
 e_sinh.c returns `x + x` for a non-finite `x` (line 56), `x` itself below `2^-28` (62-63), and for
 `|x| < 22` with `t = expm1(|x|)`: `h*(2.0*t - t*t/(t+one))` below `|x| = 1` (65) and
 `h*(t + t/(t+one))` from it on (66), `h` being `0.5` with `x`'s sign (58-59). From `22` up it
 needs `exp` (70-81). The port computes the lines below 22 in the C's order, with no fused
-multiply-add and no reassociation, and **needs no lemma of its own**. Where its text is not the
-C's:
+multiply-add and no reassociation, and **needs no lemma of its own** beyond L13's blend
+argument. Where its text is not the C's:
 
 - `h` is `0.5` with `x`'s sign bit, the bits of `0.5` or'ed with `x`'s sign bit, as exp's `halF`
   is: that is exp's L5, for the same two doubles.
@@ -831,9 +930,13 @@ C's:
   C reads `t*t/(t+one)` as `(t*t)/(t+one)`. The sum after it is `2.0*t - q` or `t + q`, picked
   by the same test, and the last operation is the product with `h`. Each operation is one IEEE
   operation on the same operands as the C's, so its result is the C's (R4); the values the other
-  branch's operations take in a lane are computed and never kept. There is nothing to prove, and
-  no hinge: the one thing that could differ is the test, and it is the C's, made on the same
-  high word.
+  branch's operations take in a lane are computed and never kept. This is L13, instantiated: H1
+  is the C's compare on the same high word (`belowOne`, and `tiny` for the return of `x`), H2 is
+  the order just given, H3 holds since every operation on a lane is total (IEEE operations on
+  doubles, compares, and int and long bit operations and reinterpretations: no division of
+  integers, no indexed load), and H4 since each blend is a `blend`. The port has no hinge
+  beyond L13's, and the one that could be false is H1, the test, which is the C's, made on the
+  same high word.
 - The lanes of `|x| >= 22`, the infinities and the NaNs, which the C answers with `exp`, are
   finished per lane by `StrictMath.sinh`, which is the C: no computation of the port is in them.
 
@@ -873,7 +976,8 @@ line 62) with `t = expm1(|x|)` and `w = 1+t`, `w` below `2^-55` (65) and `1 + t*
 it (66); up to `22` `half*t + half/t` with `t = exp(|x|)` (70-72); up to `o_threshold`'s word
 `0x40862E42` `half*exp(|x|)` (76); and then `exp(half*|x|)` squared with `half` (80-88). The port
 computes the lines below `o_threshold`'s word in the C's order, with no fused multiply-add and no
-reassociation, and **needs no lemma of its own**. Where its text is not the C's:
+reassociation, and **needs no lemma of its own** beyond L13's blend argument. Where its text is
+not the C's:
 
 - The `expm1(|x|)` of line 63 is s_expm1.c's own `k == 0` path written out (lines 177-189): for
   `|x| <= 0.5*ln2` the C reduces nothing, so its `expm1` there is the tiny return (`|x| < 2^-54`,
@@ -887,9 +991,10 @@ reassociation, and **needs no lemma of its own**. Where its text is not the C's:
   and `w+w` in the small range and `half` and `exp(|x|)` above it, the quotient is `(t*t)/(w+w)`
   or `half/t`, and the sum after it, `1+q`, `w`, `half*t + q` or `half*t`, is picked by the same
   test. Each operation is one IEEE operation on the same operands as the C's (R4); the values
-  the other branches' operations take in a lane are computed and never kept. There is nothing
-  to prove, and no hinge of its own: the one thing that could differ is the tests, and they are
-  the C's, made on the same high word. What checks them is narrower than the tests are: the
+  the other branches' operations take in a lane are computed and never kept. This is L13,
+  instantiated as in sinh's section (H3 and H4 as there), with no hinge beyond L13's: the one
+  that could be false is H1, the tests, which are the C's, made on the same high word. What
+  checks them is narrower than the tests are: the
   four words equal the C's literals (`constantsAreTheSourcesBits`), and `CoshTest` compares
   every arm with `StrictMath.cosh` at the thresholds and their neighbours. `cosh.splitMoved`
   is the only planted fault that moves a compare's constant (the slice arm's `HX_SMALL`);
