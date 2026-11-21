@@ -180,9 +180,9 @@ final class Asin {
     // |x| >= 1, infinities and NaN included, is finished per lane, written out here with no call
     // that takes a vector, as Sinh's finish is: lane and withLane are lane extract and insert,
     // which C2 intrinsifies for the fixed shapes, and the only call is StrictMath.asin on a
-    // double. The first eight lanes have constant indices, which C2 intrinsifies at SPECIES_MAX
-    // too, and the loop takes the lanes past eight. rare is and-ed with live, so an inactive lane
-    // is never rewritten.
+    // double. The first eight lanes have constant indices, as in the other ports' finishes
+    // since #100, and the loop takes the lanes past eight. rare is and-ed with live, so an
+    // inactive lane is never rewritten.
     VectorMask<Double> rare = common.not();
     if (live != null) {
       rare = rare.and(live);

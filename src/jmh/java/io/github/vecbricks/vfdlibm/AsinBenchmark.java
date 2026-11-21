@@ -46,9 +46,9 @@ import org.openjdk.jmh.annotations.Warmup;
  * <p>{@code bench/alloc-check.py} runs the vector benchmarks named {@code *256}, {@code
  * *Preferred} and {@code *Max} on {@code common} and {@code mixed} inputs and fails if any
  * allocates, which means the body boxed. The {@code *Max} row is at {@code
- * DoubleVector.SPECIES_MAX}, where the finish needs its first eight lanes written out with
- * constant indices, as {@link Asin#asin}'s are, to allocate nothing. asin has one arm, so there
- * is no comparison to make between arms.
+ * DoubleVector.SPECIES_MAX}; {@link Asin#asin}'s finish writes out its first eight lanes with
+ * constant indices, as the other ports' do since #100. No reading of these rows is committed.
+ * asin has one arm, so there is no comparison to make between arms.
  */
 @State(Scope.Thread)
 @BenchmarkMode(Mode.AverageTime)
