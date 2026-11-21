@@ -157,8 +157,8 @@ expect_and_record() {
 # model name reads as before.
 arm_fields() {
   awk -v RS= -F'\n' -v what="$2" '
-    function val(line) {
-      sub(/^[^:]*:[ \t]*/, "", line); sub(/[ \t\r]+$/, "", line); return tolower(line) }
+    function val(s) {
+      sub(/^[^:]*:[ \t]*/, "", s); sub(/[ \t\r]+$/, "", s); return tolower(s) }
     /(^|\n)processor[ \t]*:/ {
       imp = ""; part = ""; var = ""; rev = ""
       for (i = 1; i <= NF; i++) {
@@ -426,7 +426,6 @@ self_test() {
   # The job's runner follows from the host's key: each row with a runner of its own is a branch
   # of benchmark.yml's runs-on, in the table's order, and ubuntu-latest is the rest.
   n=$((n + 1))
-  want="inputs.host == '"
   want=""
   for row in "${HOSTS[@]}"; do
     if [ -n "$(runner_of "$row")" ]; then
