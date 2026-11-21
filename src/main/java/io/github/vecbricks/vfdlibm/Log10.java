@@ -230,10 +230,37 @@ final class Log10 {
       }
       // The finish is written out here, with no call that takes a vector, as Log's is: lane and
       // withLane are lane extract and insert, which C2 intrinsifies for the fixed shapes, and the
-      // only call is StrictMath.log10 on a double. rare is already and-ed with live, so an
-      // inactive lane is never rewritten.
+      // only call is StrictMath.log10 on a double. The first eight lanes have constant indices,
+      // which C2 intrinsifies at SPECIES_MAX too, and the loop takes the lanes past eight. rare
+      // is already and-ed with live, so an inactive lane is never rewritten.
       if (rare.anyTrue()) {
         long rareLanes = rare.toLong();
+        int lanes = x.length();
+        if (lanes > 0 && (rareLanes & 1L) != 0) {
+          result = result.withLane(0, StrictMath.log10(x.lane(0)));
+        }
+        if (lanes > 1 && (rareLanes & 2L) != 0) {
+          result = result.withLane(1, StrictMath.log10(x.lane(1)));
+        }
+        if (lanes > 2 && (rareLanes & 4L) != 0) {
+          result = result.withLane(2, StrictMath.log10(x.lane(2)));
+        }
+        if (lanes > 3 && (rareLanes & 8L) != 0) {
+          result = result.withLane(3, StrictMath.log10(x.lane(3)));
+        }
+        if (lanes > 4 && (rareLanes & 16L) != 0) {
+          result = result.withLane(4, StrictMath.log10(x.lane(4)));
+        }
+        if (lanes > 5 && (rareLanes & 32L) != 0) {
+          result = result.withLane(5, StrictMath.log10(x.lane(5)));
+        }
+        if (lanes > 6 && (rareLanes & 64L) != 0) {
+          result = result.withLane(6, StrictMath.log10(x.lane(6)));
+        }
+        if (lanes > 7 && (rareLanes & 128L) != 0) {
+          result = result.withLane(7, StrictMath.log10(x.lane(7)));
+        }
+        rareLanes &= ~0xffL;
         while (rareLanes != 0) {
           int lane = Long.numberOfTrailingZeros(rareLanes);
           rareLanes &= rareLanes - 1;

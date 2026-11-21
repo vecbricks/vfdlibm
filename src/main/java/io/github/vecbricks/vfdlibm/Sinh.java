@@ -158,14 +158,41 @@ final class Sinh {
     // Everything from 22 up, infinities and NaN included, is finished per lane, written out here
     // with no call that takes a vector, as Log's and Expm1's finishes are: lane and withLane are
     // lane extract and insert, which C2 intrinsifies for the fixed shapes, and the only call is
-    // StrictMath.sinh on a double. rare is and-ed with live, so an inactive lane is never
-    // rewritten.
+    // StrictMath.sinh on a double. The first eight lanes have constant indices, which C2
+    // intrinsifies at SPECIES_MAX too, and the loop takes the lanes past eight. rare is and-ed
+    // with live, so an inactive lane is never rewritten.
     VectorMask<Double> rare = common.not();
     if (live != null) {
       rare = rare.and(live);
     }
     if (rare.anyTrue()) {
       long rareLanes = rare.toLong();
+      int lanes = x.length();
+      if (lanes > 0 && (rareLanes & 1L) != 0) {
+        result = result.withLane(0, StrictMath.sinh(x.lane(0)));
+      }
+      if (lanes > 1 && (rareLanes & 2L) != 0) {
+        result = result.withLane(1, StrictMath.sinh(x.lane(1)));
+      }
+      if (lanes > 2 && (rareLanes & 4L) != 0) {
+        result = result.withLane(2, StrictMath.sinh(x.lane(2)));
+      }
+      if (lanes > 3 && (rareLanes & 8L) != 0) {
+        result = result.withLane(3, StrictMath.sinh(x.lane(3)));
+      }
+      if (lanes > 4 && (rareLanes & 16L) != 0) {
+        result = result.withLane(4, StrictMath.sinh(x.lane(4)));
+      }
+      if (lanes > 5 && (rareLanes & 32L) != 0) {
+        result = result.withLane(5, StrictMath.sinh(x.lane(5)));
+      }
+      if (lanes > 6 && (rareLanes & 64L) != 0) {
+        result = result.withLane(6, StrictMath.sinh(x.lane(6)));
+      }
+      if (lanes > 7 && (rareLanes & 128L) != 0) {
+        result = result.withLane(7, StrictMath.sinh(x.lane(7)));
+      }
+      rareLanes &= ~0xffL;
       while (rareLanes != 0) {
         int lane = Long.numberOfTrailingZeros(rareLanes);
         rareLanes &= rareLanes - 1;

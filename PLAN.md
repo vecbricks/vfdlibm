@@ -103,18 +103,19 @@ five are a later, optional set; the large-argument reduction of the trigonometri
   lane is decided by measurement and recorded in the function's pull request. A rare path that is
   only a few vector operations can instead be computed and blended only for a vector that holds a
   rare lane, behind one `anyTrue`, as `log1p` does. The readings are in `SKILLS.md`, port by port.
-  For `exp` the per-lane finish allocates nothing at 256 and 512 bits (it still boxes at
-  `SPECIES_MAX` on mixed data), and the host files read the two arms by minimums: on the EPYC 7763
-  (`bench/results/exp-epyc7763-2026-11-20.txt`, two runs) the finish is 1.99 to 2.13 times faster
-  than the blend on common data and 1.50 to 1.57 on mixed data, at 256 bits and the preferred
-  species; on the Xeon Platinum 8573C (`bench/results/exp-xeon8573c-2026-11-21.txt`, one run) 1.23
-  to 1.37 on common data, a ratio that straddles 1.3x, and 1.70 to 1.84 on mixed data, at 256 bits,
-  512 bits and the preferred species. The code has changed since both runs (a fault constant and a
-  local in the k conversion), so no run has timed today's `exp`. Which arm each function keeps stays
-  provisional until the 8573C has a second run, the other AVX-512 hosts a first, and a pair exists,
-  and the rules for a tie within 1.3x and for hosts that disagree are set (issue #30); meanwhile
-  `VFdlibm` calls the finish arm of `exp`, `log` and `log10` and the guarded arm of `expm1` and
-  `log1p` (`HARDWARE.md`).
+  For `exp` the per-lane finish allocates nothing at 256 and 512 bits (and at `SPECIES_MAX` of up to
+  eight lanes, since its first eight lanes are written out with constant indices; it boxed there
+  before, `bench/results/max-finish-alloc-free-laptop-2026-11-21.txt`), and the host files read the
+  two arms by minimums: on the EPYC 7763 (`bench/results/exp-epyc7763-2026-11-20.txt`, two runs) the
+  finish is 1.99 to 2.13 times faster than the blend on common data and 1.50 to 1.57 on mixed data,
+  at 256 bits and the preferred species; on the Xeon Platinum 8573C
+  (`bench/results/exp-xeon8573c-2026-11-21.txt`, one run) 1.23 to 1.37 on common data, a ratio that
+  straddles 1.3x, and 1.70 to 1.84 on mixed data, at 256 bits, 512 bits and the preferred species.
+  The code has changed since both runs (a fault constant and a local in the k conversion), so no run
+  has timed today's `exp`. Which arm each function keeps stays provisional until the 8573C has a
+  second run, the other AVX-512 hosts a first, and a pair exists, and the rules for a tie within
+  1.3x and for hosts that disagree are set (issue #30); meanwhile `VFdlibm` calls the finish arm of
+  `exp`, `log` and `log10` and the guarded arm of `expm1` and `log1p` (`HARDWARE.md`).
 
 ## 6. Rules
 
@@ -149,14 +150,15 @@ five are a later, optional set; the large-argument reduction of the trigonometri
   and 512 bits, the preferred species and `SPECIES_MAX`. `Log1pBenchmark` does the same for `log1p`,
   with a third arm that blends the rare paths only when a vector holds a rare lane; `Expm1Benchmark`
   has the same three arms for `expm1`, `SinhBenchmark` one for `sinh` and `CoshBenchmark` two for
-  `cosh`. Each of the seven has rows at `SPECIES_MAX` (`*Max`), which the allocation check leaves
-  out: every port's finish boxes there on mixed data
-  (`bench/results/max-finish-laptop-2026-11-20.txt`). `ExpKindsBench` runs exp's two arms on one
-  kind of rare input at a time (a NaN, an overflow, an underflow, a subnormal result), to find which
-  kind costs an arm its time on mixed data (#41); it is named apart so that a run of `ExpBenchmark`
-  and the allocation check's default regex leave it out, as `CoshKindsBench`, which has cosh's
-  small-range shares, is. A function's body is larger than C2 inlines
-  by default, so a call from a loop passes boxed vectors; the benchmarks are also run with
+  `cosh`. Each of the seven has rows at `SPECIES_MAX` (`*Max`), which the allocation check covers:
+  every port's finish boxed there on mixed data until its first eight lanes were written out
+  (`bench/results/max-finish-laptop-2026-11-20.txt`, then
+  `bench/results/max-finish-alloc-free-laptop-2026-11-21.txt`). `ExpKindsBench` runs exp's two arms
+  on one kind of rare input at a time (a NaN, an overflow, an underflow, a subnormal result), to
+  find which kind costs an arm its time on mixed data (#41); it is named apart so that a run of
+  `ExpBenchmark` and the allocation check's default regex leave it out, as `CoshKindsBench`, which
+  has cosh's small-range shares, is. A function's body is larger than C2 inlines by default, so a
+  call from a loop passes boxed vectors; the benchmarks are also run with
   `-XX:CompileCommand=inline,...` to measure the body as Varka emits it, inline.
 
 ### The 0.1.0 criteria
