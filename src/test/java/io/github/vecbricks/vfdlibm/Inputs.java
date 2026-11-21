@@ -143,16 +143,15 @@ final class Inputs {
   /**
    * The published hard-to-round inputs for {@code function} ({@code "exp"}, {@code "expm1"},
    * {@code "log"}, {@code "log10"}, {@code "log1p"}, {@code "sinh"}, {@code "cosh"}, {@code
-   * "asin"}), from the test resource {@code hard-cases/<function>.txt}, whose header names the
-   * sources. At each the
-   * exact result lies very close to a rounding boundary, where a dropped correction term or a
-   * reassociated sum, an error far below one ulp, is most likely to change the returned double. A
-   * port matching fdlibm step for step matches {@code StrictMath} on them as on any input. For
-   * exp's planted faults they caught nothing that uniform draws miss, and fewer of them flip (the
-   * commit adding them has the counts); they are kept so every port is checked exactly at the
-   * boundaries. The last section of exp's, expm1's, log's and log10's files is another kind of
-   * input: a few witnesses of one-step mutants of the C that the others miss ({@code
-   * MutantsTest}), which are not hard to round.
+   * "asin"}, {@code "atan"}), from the test resource {@code hard-cases/<function>.txt}, whose
+   * header names the sources. At each the exact result lies very close to a rounding boundary,
+   * where a dropped correction term or a reassociated sum, an error far below one ulp, is most
+   * likely to change the returned double. A port matching fdlibm step for step matches {@code
+   * StrictMath} on them as on any input. For exp's planted faults they caught nothing that
+   * uniform draws miss, and fewer of them flip (the commit adding them has the counts); they are
+   * kept so every port is checked exactly at the boundaries. The last section of exp's, expm1's,
+   * log's and log10's files is another kind of input: a few witnesses of one-step mutants of the
+   * C that the others miss ({@code MutantsTest}), which are not hard to round.
    */
   static double[] hardCases(String function) {
     String resource = "hard-cases/" + function + ".txt";

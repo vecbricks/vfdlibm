@@ -23,9 +23,10 @@ import jdk.incubator.vector.VectorSpecies;
  * function at one species by {@link Nightly.BlockCheck}, every arm unmasked and masked. fdlibm
  * decides its branches on the high word (exp's and expm1's filters, reductions and tiny tests;
  * log's subnormal, non-finite and significand tests, which log10 shares; log1p's; sinh's tiny, 1
- * and 22; cosh's tiny, 0.5 ln2 and 22), so every such decision is taken by some input here.
- * asin's (2^-27, 0.5, 0.975 and 1) are taken by a sweep of it run by hand; asin is in {@code
- * Nightly}'s table and not yet in the night's list. The low word of the third input is {@code
+ * and 22; cosh's tiny, 0.5 ln2 and 22; atan's tiny, 7/16, 11/16, 19/16, 39/16 and 2^66), so
+ * every such decision is taken by some input here. asin's (2^-27, 0.5, 0.975 and 1) are taken by
+ * a sweep of it run by hand; asin is in {@code Nightly}'s table and not yet in the night's list.
+ * The low word of the third input is {@code
  * mix(seed + hi * 0x9e3779b97f4a7c15L)}, so any input of any part is reproducible from the seed
  * alone, whatever the parts and threads.
  * Taking every high-word branch is not detecting every moved split: a split one step off on the

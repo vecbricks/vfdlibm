@@ -161,7 +161,9 @@ final class Nightly {
     // In the table, so that dev/nightly.sh and the planted-fault tests can run it; the night's
     // `all=` list in nightly.yml does not name it yet (the follow-up that adds it is pending).
     ASIN("asin", StrictMath::asin, List.of(
-        new Arm("VFdlibm.asin", VFdlibm::asin, VFdlibm::asin)));
+        new Arm("VFdlibm.asin", VFdlibm::asin, VFdlibm::asin))),
+    ATAN("atan", StrictMath::atan, List.of(
+        new Arm("VFdlibm.atan", VFdlibm::atan, VFdlibm::atan)));
 
     final String id;
     final DoubleUnaryOperator oracle;
@@ -180,7 +182,8 @@ final class Nightly {
         }
       }
       throw new IllegalArgumentException(
-          "unknown function '" + id + "'; known: exp, expm1, log, log10, log1p, sinh, cosh, asin");
+          "unknown function '" + id + "'; known: exp, expm1, log, log10, log1p, sinh, cosh,"
+              + " asin, atan");
     }
 
     @Override
