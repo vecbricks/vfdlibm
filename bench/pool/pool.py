@@ -132,6 +132,18 @@ def positive(text):
     return value
 
 
+def iso_date(text):
+    """An argument that must be a real day written YYYY-MM-DD. The shape is checked as well
+    as the calendar, since date.fromisoformat takes other forms (20261120, 2026-W47-5)."""
+    if not re.fullmatch(r"[0-9]{4}-[0-9]{2}-[0-9]{2}", text):
+        raise argparse.ArgumentTypeError("%s is not a date as YYYY-MM-DD" % text)
+    try:
+        datetime.date.fromisoformat(text)
+    except ValueError:
+        raise argparse.ArgumentTypeError("%s is not a day of the calendar" % text) from None
+    return text
+
+
 def not_negative(kind):
     """The type of an argument that must be a number of that kind, zero or above."""
     def parse(text):
@@ -561,10 +573,11 @@ def cost(args):
     and machine, for the nights from --since to --until."""
     rows = read(args.file, COST_COLUMNS)
     # --since and --until pick the nights, by the date of their run, to quote one set of them,
-    # as the nights of five functions, apart from the two of four.
+    # as the nights of five functions, apart from the two of four. The parser has checked them;
+    # a caller that builds the arguments itself is checked here, as the strings are compared.
     for given in (args.since, args.until):
-        if given and not re.fullmatch(r"\d{4}-\d\d-\d\d", given):
-            sys.exit("%s is not a date as YYYY-MM-DD" % given)
+        if given:
+            iso_date(given)
     rows = [r for r in rows if (not args.since or r["date"] >= args.since)
             and (not args.until or r["date"] <= args.until)]
     if not rows:
@@ -832,40 +845,61 @@ def selftest(args):
              job_row("2026-11-19", 2, "sweep (exp, stripe 0/2)",
                      "--add-modules=x -Dvfdlibm.fault=exp.dropCorrection"),
              job_row("2026-11-20", 3, "sweep (exp, stripe 0/2)", "--add-modules=x")]
-    tmpdir = tempfile.TemporaryDirectory()
-    tmp = tmpdir.name
-    path = os.path.join(tmp, "cost.tsv")
-    with open(path, "w", encoding="ascii") as out:
-        out.write("\n".join(lines) + "\n")
-    text = io.StringIO()
-    with contextlib.redirect_stdout(text):
-        cost(argparse.Namespace(file=path, by_cpu=False, since=None, until=None))
-    said = text.getvalue()
-    assert said.startswith("2 jobs of 2 nights, 2026-11-18 to 2026-11-20;"), said[:80]
-    assert "Minutes one job takes" in said
-    # --since picks nights by date, and a date not as YYYY-MM-DD is refused.
-    text = io.StringIO()
-    with contextlib.redirect_stdout(text):
-        cost(argparse.Namespace(file=path, by_cpu=False, since="2026-11-20", until=None))
-    assert text.getvalue().startswith("1 jobs of 1 nights, 2026-11-20 to 2026-11-20;")
-    try:
-        cost(argparse.Namespace(file=path, by_cpu=False, since="2026-11-5", until=None))
-        raise AssertionError("a date not as YYYY-MM-DD was taken")
-    except SystemExit:
-        pass
-    assert "Left out, a fault was planted in them: 2026-11-19, run 2." in said, said[-400:]
-    assert "| 2026-11-19 |" not in said
-    tmpdir.cleanup()
-    print("pool.py selftest: the fault-run rule and the log readers passed")
+    with tempfile.TemporaryDirectory() as tmp:
+        path = os.path.join(tmp, "cost.tsv")
+        with open(path, "w", encoding="ascii") as out:
+            out.write("\n".join(lines) + "\n")
+        text = io.StringIO()
+        with contextlib.redirect_stdout(text):
+            cost(argparse.Namespace(file=path, by_cpu=False, since=None, until=None))
+        said = text.getvalue()
+        assert said.startswith("2 jobs of 2 nights, 2026-11-18 to 2026-11-20;"), said[:80]
+        assert "Minutes one job takes" in said
+        # --since picks nights by date.
+        text = io.StringIO()
+        with contextlib.redirect_stdout(text):
+            cost(argparse.Namespace(file=path, by_cpu=False, since="2026-11-20", until=None))
+        assert text.getvalue().startswith("1 jobs of 1 nights, 2026-11-20 to 2026-11-20;")
+        assert "Left out, a fault was planted in them: 2026-11-19, run 2." in said, said[-400:]
+        assert "| 2026-11-19 |" not in said
+    # A date must be a real day written YYYY-MM-DD: the shape alone, 2026-13-45, a week date and
+    # a compact one are refused, and a real day is kept.
+    assert iso_date("2026-11-20") == "2026-11-20"
+    for bad in ("2026-11-5", "2026-13-45", "2026-02-30", "20261120", "2026-W47-5", ""):
+        try:
+            iso_date(bad)
+        except argparse.ArgumentTypeError:
+            continue
+        raise AssertionError("a date was taken: " + repr(bad))
+    # The command line takes a date only through iso_date, on all four options: a real day
+    # parses, and a bad one is refused with a message that names it.
+    for command in ("fetch", "cost"):
+        for option in ("--since", "--until"):
+            argv = [command] + (["x.tsv"] if command == "cost" else []) + [option]
+            assert getattr(build_parser().parse_args(argv + ["2026-11-20"]),
+                           option[2:]) == "2026-11-20"
+            for given in ("2026-11-5", "2026-13-45"):
+                said_err = io.StringIO()
+                try:
+                    with contextlib.redirect_stderr(said_err):
+                        build_parser().parse_args(argv + [given])
+                except SystemExit:
+                    assert given + " is not a" in said_err.getvalue(), said_err.getvalue()
+                    continue
+                raise AssertionError("the command line took " + " ".join(argv + [given]))
+    print("pool.py selftest: the fault-run rule, the log readers and the dates passed")
 
 
-def main():
+def build_parser():
+    """The command line's parser, apart from main so that selftest can try it."""
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     commands = parser.add_subparsers(dest="command", required=True)
     f = commands.add_parser("fetch", help="read the jobs' logs with gh; rows go to stdout")
     f.add_argument("--repo", help="OWNER/REPO; default the checkout's repository")
-    f.add_argument("--since", help="the first night, YYYY-MM-DD (UTC); default the earliest")
-    f.add_argument("--until", help="the last night, YYYY-MM-DD (UTC); default the latest")
+    f.add_argument("--since", type=iso_date,
+                   help="the first night, YYYY-MM-DD (UTC); default the earliest")
+    f.add_argument("--until", type=iso_date,
+                   help="the last night, YYYY-MM-DD (UTC); default the latest")
     f.add_argument("--parallel", type=positive, default=4,
                    help="logs fetched at once (default 4)")
     f.add_argument("--without-logs", action="store_true",
@@ -892,14 +926,20 @@ def main():
     t.set_defaults(run=table)
     c = commands.add_parser("cost", help="tabulate a file that fetch --cost wrote")
     c.add_argument("file")
-    c.add_argument("--since", help="the first night to count, YYYY-MM-DD; default the earliest")
-    c.add_argument("--until", help="the last night to count, YYYY-MM-DD; default the latest")
+    c.add_argument("--since", type=iso_date,
+                   help="the first night to count, YYYY-MM-DD; default the earliest")
+    c.add_argument("--until", type=iso_date,
+                   help="the last night to count, YYYY-MM-DD; default the latest")
     c.add_argument("--by-cpu", action="store_true",
                    help="split the sweep and fuzz tables by CPU model, not by vector width")
     c.set_defaults(run=cost)
     st = commands.add_parser("selftest", help="check the readers and the fault-run rule offline")
     st.set_defaults(run=selftest)
-    args = parser.parse_args()
+    return parser
+
+
+def main():
+    args = build_parser().parse_args()
     args.run(args)
 
 

@@ -591,7 +591,7 @@ a settled question.
     13.2 for log1p; at 128 bits on the same machine 67.5, 88.2, 80.7, 262.1 and 199.5; and at
     128 bits on Arm, natively, 7.2, 9.5, 9.7, 13.4 and 12.7. An x86 draw with 512-bit vectors
     is faster and its range wide (exp at 512 bits: 3.5 to 7.1 minutes), and `--by-cpu` splits
-    the draws.
+    the draws, keeping the EPYC 9V74's draws without AVX-512 apart from those with it.
 - **Why x86 sweeps 128 bits by a slice (the owner's decision, 2 November 2026).** The 128-bit
   species is 80 to 91% of a whole sweep's cost on a 256-bit x86 machine (the medians above: exp 80.7
   of 100.2 minutes, expm1 262.1 of 288.0): x86 C2 lowers no mask at two 64-bit lanes (above), so
@@ -626,13 +626,25 @@ a settled question.
     average 72 minutes, that is 13/5 of the night's medians (sweep 309, fuzz 359, Arm 273: 941
     runner-minutes, 15.7 hours; 13 times 72 is 936), the old slots 8, 3 and 4 give 120 minutes
     of fuzz and a span of 128. Slots 5, 6 and 4, the best split of 15 by this model, give 62,
-    60 and 68, a span of 76 (and 34 for five functions, from 24, 23 and 26). The model is
-    linear and counts no whole waves of jobs, so 76 is a lower bound; the sweep's 62, plus its
-    longest job, 19.8, plus the 8 minutes, gives 90 as the upper. The 8 minutes are one fit
-    (54 against 46). So the defaults keep `fuzz-seconds` 240, `nights` 1, `shards` 2
-    and `arm-shards` 4, and `max-parallel` is 5 for the sweep, 6 for the fuzz and 4 for Arm. At
-    13 functions the span is within 90 by the upper bound, with no room above it: each further
-    average function adds about 5 minutes (Arm's 273 over 13 functions and 4 slots).
+    60 and 68, a span of 76 (and 34 for five functions, from 24, 23 and 26). So the defaults
+    keep `fuzz-seconds` 240, `nights` 1, `shards` 2 and `arm-shards` 4, and `max-parallel` is
+    5 for the sweep, 6 for the fuzz and 4 for Arm.
+  - **How firm that is: not very.** The 13-function fit is unverified, and no night has run on
+    the new slots. The model divides a kind's minutes by its slots and counts no whole waves
+    of jobs, so 76 is a lower bound; the sweep's 62, plus its longest job, 19.8, plus the 8
+    minutes, gives 90 as an estimate of the worst case, which is the budget itself: with no
+    margin. (It adds a median to a longest job, so it is neither a median nor a maximum.) The 8
+    minutes are one fit (54 against 46). Each further average function adds about 5 minutes
+    (Arm's 273 over 13 functions and 4 slots). For today's five functions the prediction is 34
+    minutes, Arm's 105 over 4 slots (26) plus the 8; the sweep's 119 over 5 slots (24) and the
+    fuzz's 138 over 6 (23) are below it. The sweep's slots go from 8 to 5, and its 10 jobs of
+    about 11 minutes run in two waves on either, so for five functions that move costs
+    nothing. It pays for the fuzz's 6 and Arm's 4 slots under the cap of 15 matrix jobs, and at
+    13 functions the sweep's 26 jobs take 6 waves on 5 slots where 8 would take 4. The first
+    nights on the new slots check both: fetch them with `pool.py fetch` and read the span from
+    `pool.py cost`. The budget is a median span of 90 minutes, so a median of the nights above
+    90 breaks it and calls for one of the levers below; a single long night does not. At 13
+    functions a median between 76 and 90 is inside it, and shows how far the model is off.
   - **What gives when it does not fit,** cheapest first, with what each buys at 13 functions
     (the table's means times 2.6): `fuzz-seconds` 120 saves 224 runner-minutes a night (172 in
     the fuzz jobs, 52 in Arm's) and halves what a species is fuzzed; `nights` 2 saves 192, 124
@@ -640,8 +652,7 @@ a settled question.
     `arm-shards` 2 saves 14 and buys nothing, since a job's setup is half a minute, so the slots
     and not the shards bound the span. Which of these to give up first is the owner's.
   - **Not in it.** The two-argument functions (#33, #34) need another sweep and a cost of their
-    own, measured before they join; 13 times 72 assumes none. The prediction of 34 minutes for
-    five functions under the new slots is checked by the first nights after this change.
+    own, measured before they join; 13 times 72 assumes none.
 - **When a night fails,** the `alert` job (the only one with `issues: write`) opens an issue
   labelled `nightly-failure`, or comments on the open one, with the run's link, the seed, each
   job's result, the dispatch inputs that replay the run (seed, `nights`, `shards`, `arm-shards`,
