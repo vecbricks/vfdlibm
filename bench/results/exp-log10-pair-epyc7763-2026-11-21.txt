@@ -25,19 +25,23 @@
 #   head's; Log10Benchmark.finishMax 36672.058 against 0.026 to 0.027. Its time follows the
 #   allocation: Exp 10435.8 to 10505.3 ns/op in the base's rounds against 4624.7 to 4760.1 in
 #   the head's (+124.6% by median, +126.3% by best), Log10 16415.8 to 16472.2 against 7436.3 to
-#   7640.2. A change in time there is the boxing gone, not the finish arm getting faster at a
-#   fixed shape. On common data those rows allocate nothing in either side and read the same
-#   (Exp 2662.0 to 2742.8 against 2681.7 to 2741.6; Log10 6215.7 to 6323.9 against 6194.7
-#   to 6324.5). The blended *Max rows read the same on both sides.
+#   7640.2 (+115.7% by median, +120.2% by best). A change in time there is the boxing gone, not
+#   the finish arm getting faster at a fixed shape. On common data those rows allocate under 0.03 B/op in
+#   either side and read the same (Exp 2662.0 to 2742.8 against 2681.7 to 2741.6; Log10 6215.7 to
+#   6323.9 against 6194.7 to 6324.5). The blended *Max rows read the same on both sides.
 # - The finish at the fixed shapes, which the change touches too, and which "no cost" would have
 #   to cover. On mixed data, ExpBenchmark.finish256 (4306.5 to 4650.2 ns/op by median, -7.4% by
 #   median and -8.5% by best) and ExpBenchmark.finishPreferred (4269.2 to 4632.5, -7.8% and
 #   -8.3%; the preferred species is 256 bits on this host) are slower in the head by a margin
 #   that both measures show and that is under the pair's 10% threshold, so the verdict does not
 #   count them; Log10Benchmark.finish256 and finishPreferred on mixed data are -4.0% and -2.6%
-#   by median (-4.0% and -3.9% by best). On common data the same rows are within 1.8% by median
-#   and 1.2% by best. These are the figures of one pair of 5 rounds, with a ratio under 1.3x,
-#   and were not re-run: no claim rests on them here, and the file does not call them noise.
+#   by median (-4.0% and -3.9% by best). On common data the same four rows read -1.8% and +0.2%
+#   (ExpBenchmark.finish256), +3.2% and +3.3% (ExpBenchmark.finishPreferred, the head faster),
+#   -1.7% and -1.2% (Log10Benchmark.finish256) and -0.1% and +0.1% (Log10Benchmark.
+#   finishPreferred), by median and by best. These are the figures of one pair of 5 rounds, with
+#   ratios under 1.3x, not re-run: a possible cost of the finish at the fixed shapes on mixed
+#   data, to re-run by minimums before anyone writes that the change costs nothing, or that it
+#   costs this much.
 # - The machine's own spread: ExpBenchmark.scalarStrictMath, which no change touches, reads -5.7%
 #   by median and -0.2% by best (common) and -3.4% and -0.2% (mixed).
 #
