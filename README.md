@@ -127,6 +127,17 @@ and the fault names are for this project's tests only: they are not part of the 
 the compatibility promise, and any release, a patch included, may rename or remove them. With the
 property unset, the results are unchanged, and each lane still equals `StrictMath`'s.
 
+**Which species to pass.** Every species of 128 bits or more gives the same bits, at different
+costs. The allocation check (`bench/alloc-check.py`, run by CI) covers 256 bits, 512 bits on a
+host with AVX-512, and the preferred species, which is 128 bits on Arm
+(`bench/results/alloc-arm-2026-11-20.txt`, an allocation reading and no timing). Slow paths:
+128 bits on x86 and 512 bits without AVX-512 allocate over 1.3 MB per op
+(`bench/results/exp-epyc7763-2026-11-02.txt`), and at `SPECIES_MAX`, `exp`, `log` and `log10`
+allocate 30432 to 36992 bytes per op on data with rare lanes, and `expm1` and `log1p` less than
+0.5 (`bench/results/max-finish-laptop-2026-11-20.txt`, a laptop file and not a headline). Not
+measured: 512 bits against 256 on a CPU whose AVX-512 datapath is 256 bits wide, such as the EPYC
+9V74, and the speed of anything on Arm. The same list is in the Javadoc of `VFdlibm`.
+
 ## Supported JDKs
 
 0.1.x supports **JDK 25 only**. The Vector API is incubating, and its API and C2's lowering of

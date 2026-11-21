@@ -22,6 +22,33 @@ import jdk.incubator.vector.VectorMask;
  * and returns every other lane of its argument untouched, raw bits and all. An inactive lane
  * never sends the vector down a slow path.
  *
+ * <p>Which species to pass. Every species of 128 bits or more gives the same bits, but not at the
+ * same cost, and the types do not say. What the files under {@code bench/results/} show:
+ *
+ * <ul>
+ *   <li>256 bits, and 512 bits on a host that has AVX-512, run natively. {@code
+ *       bench/alloc-check.py}, which CI runs, fails a body that allocates 1 byte per op or more,
+ *       at 256 bits and at {@code DoubleVector.SPECIES_PREFERRED}.
+ *   <li>128 bits is native on Arm, where it is the preferred species: all 24 of the check's
+ *       {@code *Preferred} rows passed there ({@code bench/results/alloc-arm-2026-11-20.txt}, an
+ *       allocation reading and no timing). On x86, 128 bits runs lane by lane and allocates over
+ *       1.3 MB per op ({@code bench/results/exp-epyc7763-2026-11-02.txt}).
+ *   <li>512 bits on a host without AVX-512 runs in the Vector API's Java fallback, and allocates
+ *       as much (the same file).
+ *   <li>{@code DoubleVector.SPECIES_MAX} is none of the fixed shapes. On data with rare lanes (the
+ *       NaNs, infinities and out-of-range inputs that take their own path in the C), {@code exp},
+ *       {@code log} and {@code log10} allocate 30432 to 36992 bytes per op there, and {@code
+ *       expm1} and {@code log1p} less than 0.5 ({@code
+ *       bench/results/max-finish-laptop-2026-11-20.txt}, a laptop file and not a headline).
+ *   <li>Not measured: whether 512 bits beats 256 on a CPU whose AVX-512 datapath is 256 bits wide
+ *       (the EPYC 9V74 draws that have AVX-512 prefer 512 bits), and the speed of anything on
+ *       Arm.
+ * </ul>
+ *
+ * <p>So a fixed species of 256 bits, of 512 bits where the host has AVX-512, or the preferred
+ * species on Arm, is what the check covers; 128 bits on x86, 512 bits without AVX-512 and
+ * {@code SPECIES_MAX} are slow paths.
+ *
  * <p>Each function is ported from fdlibm 5.3's C source, kept in {@code reference/fdlibm-5.3/};
  * the class that holds a function's port names the file it follows and carries its notice.
  *
