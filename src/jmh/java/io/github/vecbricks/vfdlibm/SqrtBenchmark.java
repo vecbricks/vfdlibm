@@ -31,7 +31,8 @@ import org.openjdk.jmh.annotations.Warmup;
  * of {@code sqrt} (the operator is the library's, PROOFS.md (R4)); this class exists so that
  * {@code bench/alloc-check.py} shows on each host whether C2 lowers the operator to a vector
  * instruction or boxes it, before a port that calls it (asin, acos) relies on it. It makes no
- * claim about speed, and no result file backs one.
+ * claim about speed, and no result file backs one. It is named {@code SqrtBenchmark} on
+ * purpose, so that the allocation check includes it, though it is no port's benchmark.
  *
  * <p>{@code inputs} picks the data: {@code common} draws positive doubles over 2^-1000 to 2^1000;
  * {@code mixed} replaces one input in 16 with a zero of either sign, a negative number, an

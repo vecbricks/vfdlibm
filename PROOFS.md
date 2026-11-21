@@ -47,7 +47,8 @@ IEEE properties used:
   square root", `NaN` for a `NaN` or a negative argument, `+infinity` for `+infinity` and the
   argument itself for either zero; and a vector's `VectorOperators.SQRT`, `DoubleVector.sqrt()`,
   is "conforming to the specification of `Math.sqrt(a)`" on each lane. The C calls `sqrt` in
-  e_asin.c (`s = sqrt(t)`, line 100) and e_acos.c (`s = sqrt(z)`, lines 89 and 95) and does
+  e_asin.c (`s = sqrt(t)`, line 100) e_acos.c (`s = sqrt(z)`, lines 89 and 95) and
+  e_hypot.c (`w = sqrt(...)`, lines 99 and 108), and does
   not define it: fdlibm 5.3's e_sqrt.c is not
   among the files in `reference/`, and no claim is made here about it. The claim is the
   oracle's: a lane of the operator is `StrictMath.sqrt`'s result. That the C's `sqrt` is that
@@ -865,8 +866,11 @@ with numerator `t*t` or `t`). This lemma covers both.
   arithmetic: `a*m + b*(1-m)` is not one, since `0*infinity` and `0*NaN` are `NaN`.
 
 **Statement.** Under H1 to H4 each lane's result equals, bit for bit, the C's result on that
-lane's input, each operation being the correct rounding of (R4), except when an operand of a
-kept operation is a `NaN`: then the lane is a `NaN`, and its payload and sign are not claimed.
+lane's input, each operation being the correct rounding of (R4), except in a lane where a kept
+operation returns a `NaN`, whether it had a `NaN` operand or makes one (`inf - inf`, `inf/inf`,
+`0*inf`, `sqrt` of a negative): the lemma claims that such a lane is a `NaN`, and not its payload
+or sign, which IEEE 754 and the JLS leave open. (The model's tests below compare those lanes by
+raw bits too, as every test does, and pin what the hosts that run them return.)
 
 **Proof.** Fix a lane. By H1 the C takes exactly one branch `B` there, the port's masks name the
 same one. Take `B`'s operations in the C's order. The first one's operands are, by H2, the C's
@@ -876,8 +880,8 @@ is the C's, since by (R4) it is one rounding of the exact result, a function of 
 alone; so the second operation has the C's operands, and so on to the last, whose result is the
 lane's. The other branches' operations are computed in the lane too: by H3 they have no effect
 but their own value, and by H4 no blend of a kept value reads them. A value they take, `NaN` or
-infinite, never is an operand of a kept operation. So the lane holds `B`'s result. For a `NaN`
-operand the payload an operation returns is not fixed by IEEE 754 or the JLS, which is the
+infinite, never is an operand of a kept operation. So the lane holds `B`'s result. Where a
+kept operation returns a `NaN` the payload is not fixed by IEEE 754 or the JLS, which is the
 exception in the statement (sinh and cosh finish their `NaN` lanes per lane, so none of their
 kept results is made by a blend). QED.
 
@@ -897,9 +901,11 @@ it, on `x` at the words next to `1.0`'s and `t` including `-1`, `1e200`, the inf
 `NaN`. `l13InputsAreNotVacuous` counts the lanes where the branches differ in bits at the
 compare, where a kept value is finite and the discarded one infinite, and where a discarded one
 is `NaN`. `l13FalseHingesAreCaught` requires the check to fail when the compare's word is moved by
-one either way (H1) and when the select is arithmetic (H4). No control refutes H2 or H3: a wrong
-operand or a reassociated sum in a port, or an operation that throws on a discarded lane, is
-caught only by the port's own vector tie (and an H3 failure by the port not running at all).
+one either way (H1) and when the select is arithmetic (H4). Two more controls
+show H2's failing in the model (the shared division by `t` and not `t+1`; `2t - q` as `t + (t -
+q)`, a reassociation) and one that H3 can fail in the Vector API (an integer vector division by a
+zero lane throws), though no test of L13 runs a port: a port's wrong operand or reassociated sum
+is caught only by its own vector tie, and an H3 failure by the port not running at all.
 Each port's own instance of H1 is that tie as before.
 
 **Encoding.** No file: an induction on the operations of the branch, informal, not

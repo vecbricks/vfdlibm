@@ -835,6 +835,26 @@ class ProofsTest {
         (x, t) -> l13SqrtVector(x, t, L13_WORD), ProofsTest::l13SqrtShape, p.x(), p.y());
   }
 
+  /** The sinh shape with H2 false: the shared division is by {@code t}, not {@code t+1}. */
+  private static DoubleVector l13WrongOperand(DoubleVector x, DoubleVector t) {
+    VectorMask<Double> below = l13Below(x, L13_WORD);
+    DoubleVector q = t.blend(t.mul(t), below).div(t);
+    return t.add(q).blend(t.mul(2.0).sub(q), below);
+  }
+
+  /** The sinh shape with H2 false: {@code 2.0*t - q} reassociated as {@code t + (t - q)}. */
+  private static DoubleVector l13Reassociated(DoubleVector x, DoubleVector t) {
+    VectorMask<Double> below = l13Below(x, L13_WORD);
+    DoubleVector q = t.blend(t.mul(t), below).div(t.add(1.0));
+    return t.add(q).blend(t.add(t.sub(q)), below);
+  }
+
+  /** A control must fail by the lanes differing, not by an empty or mismatched input. */
+  private static void assertRefuted(org.junit.jupiter.api.function.Executable check) {
+    AssertionFailedError e = assertThrows(AssertionFailedError.class, check);
+    assertTrue(e.getMessage().contains(" differ"), e.getMessage());
+  }
+
   /**
    * L13's controls: each way the lemma's hinges could be false fails the checks above. The
    * compare moved one word either way (H1) shows at the words next to 1.0's; the select as
@@ -845,16 +865,24 @@ class ProofsTest {
   void l13FalseHingesAreCaught(VectorWidth width) {
     Inputs.Pairs p = Inputs.cross(l13Xs(), l13Ts());
     var species = width.species();
-    assertThrows(AssertionFailedError.class, () -> Oracle.assertBinary("l13 word + 1", species,
+    assertRefuted(() -> Oracle.assertBinary("l13 word + 1", species,
         (x, t) -> l13SinhVector(x, t, L13_WORD + 1), ProofsTest::l13SinhShape, p.x(), p.y()));
-    assertThrows(AssertionFailedError.class, () -> Oracle.assertBinary("l13 word - 1", species,
+    assertRefuted(() -> Oracle.assertBinary("l13 word - 1", species,
         (x, t) -> l13SinhVector(x, t, L13_WORD - 1), ProofsTest::l13SinhShape, p.x(), p.y()));
-    assertThrows(AssertionFailedError.class, () -> Oracle.assertBinary("l13 arithmetic", species,
+    assertRefuted(() -> Oracle.assertBinary("l13 arithmetic", species,
         ProofsTest::l13SinhArithmetic, ProofsTest::l13SinhShape, p.x(), p.y()));
-    assertThrows(AssertionFailedError.class, () -> Oracle.assertBinary("l13 sqrt word + 1",
+    assertRefuted(() -> Oracle.assertBinary("l13 sqrt word + 1",
         species, (x, t) -> l13SqrtVector(x, t, L13_WORD + 1), ProofsTest::l13SqrtShape, p.x(),
         p.y()));
-    assertThrows(AssertionFailedError.class, () -> Oracle.assertBinary("l13 sqrt arithmetic",
+    assertRefuted(() -> Oracle.assertBinary("l13 sqrt arithmetic",
         species, ProofsTest::l13SqrtArithmetic, ProofsTest::l13SqrtShape, p.x(), p.y()));
+    assertRefuted(() -> Oracle.assertBinary("l13 wrong operand", species,
+        ProofsTest::l13WrongOperand, ProofsTest::l13SinhShape, p.x(), p.y()));
+    assertRefuted(() -> Oracle.assertBinary("l13 reassociated", species,
+        ProofsTest::l13Reassociated, ProofsTest::l13SinhShape, p.x(), p.y()));
+    // H3 can fail: an integer division on a discarded lane throws, a float one never does.
+    var ints = Lanes.intSpecies(species);
+    assertThrows(ArithmeticException.class,
+        () -> IntVector.broadcast(ints, 1).div(IntVector.zero(ints)));
   }
 }
