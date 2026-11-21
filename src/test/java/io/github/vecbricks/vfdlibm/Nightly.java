@@ -103,7 +103,11 @@ final class Nightly {
         // VFdlibm.expm1 is Expm1.expm1Guarded, so the guarded arm is checked under that name.
         new Arm("VFdlibm.expm1", VFdlibm::expm1, VFdlibm::expm1),
         new Arm("Expm1.expm1Blended", x -> Expm1.expm1Blended(x, null), Expm1::expm1Blended),
-        new Arm("Expm1.expm1Finish", x -> Expm1.expm1Finish(x, null), Expm1::expm1Finish))),
+        new Arm("Expm1.expm1Finish", x -> Expm1.expm1Finish(x, null), Expm1::expm1Finish),
+        // The core entry sinh nests, as Exp's above: the core in every lane, the rare mask's
+        // lanes finished per lane here, no masked form. It catches expm1Rare missing a lane the
+        // core gets wrong, never expm1Rare marking too many: an extra lane matches by StrictMath.
+        new Arm("Expm1.expm1Core+expm1Rare", Nightly::expm1CoreAndRare, null))),
     LOG("log", StrictMath::log, List.of(
         new Arm("VFdlibm.log", VFdlibm::log, VFdlibm::log),
         new Arm("Log.logBlended", x -> Log.logBlended(x, null), Log::logBlended))),
@@ -144,6 +148,17 @@ final class Nightly {
     for (long bits = rare; bits != 0; bits &= bits - 1) {
       int lane = Long.numberOfTrailingZeros(bits);
       core = core.withLane(lane, StrictMath.exp(x.lane(lane)));
+    }
+    return core;
+  }
+
+  /** {@link Expm1#expm1Core}, with the lanes {@link Expm1#expm1Rare} sets finished per lane. */
+  private static DoubleVector expm1CoreAndRare(DoubleVector x) {
+    DoubleVector core = Expm1.expm1Core(x);
+    long rare = Expm1.expm1Rare(x).toLong();
+    for (long bits = rare; bits != 0; bits &= bits - 1) {
+      int lane = Long.numberOfTrailingZeros(bits);
+      core = core.withLane(lane, StrictMath.expm1(x.lane(lane)));
     }
     return core;
   }

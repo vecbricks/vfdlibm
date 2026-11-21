@@ -81,6 +81,12 @@ import jdk.incubator.vector.VectorSpecies;
  * no direction is read ({@code SKILLS.md}); further runs on the benchmark hosts decide, each for
  * its own instruction set, the AVX-512 hosts first ({@code HARDWARE.md}), and the other two
  * arms are kept so the choice can be re-measured.
+ *
+ * <p>{@link #expm1Core} and {@link #expm1Rare} split the finish arm into its branch-free part and
+ * its rare-lane mask, as {@code Exp.expCore} and {@code Exp.expRare} do, so that a port that
+ * computes through expm1's common path ({@code Sinh}, over {@code |x|}) can nest it as {@code
+ * Log10} nests {@code Log.logCore}. The core is the same body in a fourth mode, so its lanes
+ * outside the rare set are the arms' bits, and no new departure from the C.
  */
 final class Expm1 {
 
@@ -155,10 +161,14 @@ final class Expm1 {
    */
   private static final boolean DROPPING_K_FORCING = Faults.is(DROP_K_FORCING);
 
-  /** How the rare lanes are computed: blended always, blended behind a test, or per lane. */
+  /**
+   * How the rare lanes are computed: blended always, blended behind a test, per lane, or not at
+   * all (the core).
+   */
   private static final int BLEND = 0;
   private static final int GUARDED = 1;
   private static final int FINISH = 2;
+  private static final int CORE = 3;
 
   private Expm1() {}
 
@@ -197,8 +207,41 @@ final class Expm1 {
   }
 
   /**
-   * The three arms in one body, so they share every line but the rare paths; {@code mode} is a
-   * constant at each call above, and once inlined the other arms' code folds away.
+   * The arm's common path alone: {@code StrictMath.expm1} in every lane that {@link #expm1Rare}
+   * leaves clear, and an unspecified value in the lanes it sets, which the caller finishes per
+   * lane or never uses. It is the finish arm's body without the rare block, the {@code live}
+   * blend and the finish, so its only calls into vfdlibm are the {@code Lanes} calls that start
+   * the body, and a caller that nests it adds only Vector API operations after them.
+   */
+  static DoubleVector expm1Core(DoubleVector x) {
+    return expm1(x, null, CORE);
+  }
+
+  /**
+   * The lanes {@link #expm1Core} leaves to a per-lane finish: s_expm1.c's early returns, which
+   * are the non-finite lanes, {@code x > o_threshold}, {@code x < -56*ln2} (lines 146-158) and
+   * {@code |x| < 2^-54} (line 177). Each expression is the body's own, so once both are inlined
+   * beside {@link #expm1Core} C2 computes them once. The guarded arm's fault {@link
+   * #GUARD_MISSES_FILTER} is not read here: it belongs to that arm only.
+   */
+  static VectorMask<Double> expm1Rare(DoubleVector x) {
+    VectorSpecies<Double> species = x.species();
+    VectorSpecies<Integer> intSpecies = Lanes.intSpecies(species);
+    IntVector hx = Lanes.hiInt(x, intSpecies);
+    VectorMask<Integer> negative = hx.compare(VectorOperators.LT, 0);
+    IntVector ax = hx.and(0x7fffffff);
+    VectorMask<Integer> big = ax.compare(VectorOperators.GE, HX_56_LN2);
+    VectorMask<Integer> filter = ax.compare(VectorOperators.GE, HX_FILTER);
+    VectorMask<Integer> nonFinite = ax.compare(VectorOperators.GE, HX_NON_FINITE);
+    VectorMask<Integer> tiny = ax.compare(VectorOperators.LT, HX_TINY);
+    VectorMask<Double> overflow =
+        filter.cast(species).and(x.compare(VectorOperators.GT, O_THRESHOLD));
+    return nonFinite.or(tiny).or(big.and(negative)).cast(species).or(overflow);
+  }
+
+  /**
+   * The four modes in one body, so they share every line but the rare paths; {@code mode} is a
+   * constant at each call above, and once inlined the other modes' code folds away.
    */
   private static DoubleVector expm1(DoubleVector x, VectorMask<Double> live, int mode) {
     VectorSpecies<Double> species = x.species();
@@ -308,7 +351,8 @@ final class Expm1 {
     // The rare lanes, the early returns of lines 146-158 and 177-179: the non-finite lanes, the
     // lanes of x > o_threshold and x < -56*ln2 (the outer test and the sign; line 156's x+tiny <
     // 0.0 is the blend's own test below), and |x| < 2^-54. The blended arm never reads this mask,
-    // and its code folds away there.
+    // and its code folds away there; the core (mode CORE) reads neither this mask nor the blends
+    // and the finish below, so all of it folds away, and expm1Rare computes the mask apart.
     VectorMask<Double> overflow =
         filter.cast(species).and(x.compare(VectorOperators.GT, O_THRESHOLD));
     VectorMask<Integer> negativeBig = big.and(negative);

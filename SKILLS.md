@@ -522,6 +522,15 @@ a settled question.
 - **Lefevre's direction bit is the 54th bit of the exact |result|.** testlibm-data's last field
   agreed with that for all 7578 `em1` lines (3836 ones, 3742 zeros), not with "the exact
   result is above the rounded one", which splits about evenly.
+- **A core entry for a port that nests expm1 (21 November 2026).** `Expm1.expm1Core` is the
+  finish arm's body in a fourth mode, without its rare block, the `live` blend and the finish,
+  and `Expm1.expm1Rare` is the mask of the lanes it leaves to a per-lane finish, as `Exp.expCore`
+  and `Exp.expRare` are: `StrictMath.expm1` in every lane outside the mask, an unspecified value
+  inside it. The same body gives no new departure, and the mask is written apart from it, with
+  the body's own expressions, so C2 computes them once when a caller uses both. Its rows in
+  `Expm1Benchmark` (`core256`, `corePreferred`) pass `bench/alloc-check.py`, at the host's flags
+  and as AVX2, on `common` and `mixed` data. Four of expm1's five faults reach it, so its test
+  arm is caught by them as the other arms are; `guardMissesFilter` belongs to the guarded arm.
 
 ## The nightly sweep and fuzz
 
