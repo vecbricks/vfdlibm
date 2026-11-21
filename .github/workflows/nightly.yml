@@ -368,11 +368,13 @@ jobs:
     timeout-minutes: 90
     strategy:
       fail-fast: false
-      # The free organisation plan runs 20 jobs at once across vecbricks: with fuzz's 6, arm's 4
-      # and proofs, this run takes at most 16, leaving 4 for CI. The slots split 15 by each
-      # kind's minutes, so that the night's span stays under 90 minutes at 13 functions
-      # (SKILLS.md, "The budget").
-      max-parallel: 5
+      # The free organisation plan runs 20 jobs at once across vecbricks. The plan job runs
+      # before the sweep, the fuzz and Arm, which run together with the proofs job, and the
+      # fault-caught and alert jobs run after them: with the fuzz's 8, Arm's 5 and the proofs
+      # job, this run takes 20 while the matrices are full, and a CI run or a benchmark dispatch
+      # queues behind or ahead of it. The 19 slots are split by each kind's minutes and jobs
+      # (SKILLS.md, "The budget", "Slots 6, 8 and 5").
+      max-parallel: 6
       matrix: ${{ fromJSON(needs.plan.outputs.sweep) }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -432,7 +434,7 @@ jobs:
     timeout-minutes: 90
     strategy:
       fail-fast: false
-      max-parallel: 6
+      max-parallel: 8
       matrix: ${{ fromJSON(needs.plan.outputs.fuzz) }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -480,7 +482,7 @@ jobs:
     timeout-minutes: 120
     strategy:
       fail-fast: false
-      max-parallel: 4
+      max-parallel: 5
       matrix: ${{ fromJSON(needs.plan.outputs.arm) }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
