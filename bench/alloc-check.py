@@ -10,11 +10,11 @@ r"""Fail when a port's vector body allocates, which means it boxed.
 
 A boxed body computes the right bits, so the tests pass on it; only the allocation rate shows
 that the Vector API fell back to Java (SKILLS.md, "Allocation is the verdict"). This script runs
-every JMH benchmark method named *256 or *Preferred of a class named *Benchmark, on common and
-mixed inputs, under -prof gc
-with the body inlined as Varka emits it, and fails if any measured iteration of any row allocates
-THRESHOLD bytes per op or more. It reads the numbers from JMH's JSON result, and fails too when
-a benchmark that JMH lists for the regex threw or has no row there for an inputs value it runs.
+every JMH benchmark method named *256, *Preferred or *Max of a class named *Benchmark, on common and
+mixed inputs, under -prof gc with the body inlined as Varka emits it, and fails if any measured
+iteration of any row allocates THRESHOLD bytes per op or more. It reads the numbers from JMH's JSON
+result, and fails too when a benchmark that JMH lists for the regex threw or has no row there for an
+inputs value it runs.
 
 Rows left out: 128 bits, since on x86 C2 lowers no mask at two 64-bit lanes and every masked
 128-bit body boxes (SKILLS.md); and 512 bits, which runs in software on an AVX2 host (the
