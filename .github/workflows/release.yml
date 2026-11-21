@@ -121,7 +121,16 @@ jobs:
         with:
           distribution: zulu
           java-version: 25
-          cache: maven
+      # A cache of the Maven repository per kind of job and architecture. When the pom has
+      # changed, restore-keys start from the last cache saved for that kind, which setup-java's
+      # `cache: maven` does not. A job saves its cache only if it succeeds.
+      - name: Cache Maven's local repository (release)
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.m2/repository
+          key: m2-${{ runner.os }}-${{ runner.arch }}-java25-release-${{ hashFiles('**/pom.xml') }}
+          restore-keys: |
+            m2-${{ runner.os }}-${{ runner.arch }}-java25-release-
       # The command is the owner's `mvn -B -Prelease deploy` with `verify` for `deploy`, so the
       # Javadoc run, the sources jar and the signing are the ones a release makes; the upload is
       # bound to the deploy phase, which verify never reaches. The key is generated here, lives
