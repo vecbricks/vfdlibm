@@ -63,22 +63,30 @@ final class Atan {
 
   // The constants of s_atan.c, as its source writes them; AtanTest checks the words.
   static final double ONE = 1.0;
-  static final double[] ATAN_HI = {
-    4.63647609000806093515e-01, 7.85398163397448278999e-01,
-    9.82793723247329054082e-01, 1.57079632679489655800e+00
-  };
-  static final double[] ATAN_LO = {
-    2.26987774529616870924e-17, 3.06161699786838301793e-17,
-    1.39033110312309984516e-17, 6.12323399573676603587e-17
-  };
-  static final double[] AT = {
-    3.33333333333329318027e-01, -1.99999999998764832476e-01,
-    1.42857142725034663711e-01, -1.11111104054623557880e-01,
-    9.09088713343650656196e-02, -7.69187620504482999495e-02,
-    6.66107313738753120669e-02, -5.83357013379057348645e-02,
-    4.97687799461593236017e-02, -3.65315727442169155270e-02,
-    1.62858201153657823623e-02
-  };
+  // Scalar constants, which C2 folds into the body; the arrays below hold the same doubles for
+  // the tests and are not read by the body.
+  private static final double HI0 = 4.63647609000806093515e-01;
+  private static final double HI1 = 7.85398163397448278999e-01;
+  private static final double HI2 = 9.82793723247329054082e-01;
+  private static final double HI3 = 1.57079632679489655800e+00;
+  private static final double LO0 = 2.26987774529616870924e-17;
+  private static final double LO1 = 3.06161699786838301793e-17;
+  private static final double LO2 = 1.39033110312309984516e-17;
+  private static final double LO3 = 6.12323399573676603587e-17;
+  private static final double AT0 = 3.33333333333329318027e-01;
+  private static final double AT1 = -1.99999999998764832476e-01;
+  private static final double AT2 = 1.42857142725034663711e-01;
+  private static final double AT3 = -1.11111104054623557880e-01;
+  private static final double AT4 = 9.09088713343650656196e-02;
+  private static final double AT5 = -7.69187620504482999495e-02;
+  private static final double AT6 = 6.66107313738753120669e-02;
+  private static final double AT7 = -5.83357013379057348645e-02;
+  private static final double AT8 = 4.97687799461593236017e-02;
+  private static final double AT9 = -3.65315727442169155270e-02;
+  private static final double AT10 = 1.62858201153657823623e-02;
+  static final double[] ATAN_HI = {HI0, HI1, HI2, HI3};
+  static final double[] ATAN_LO = {LO0, LO1, LO2, LO3};
+  static final double[] AT = {AT0, AT1, AT2, AT3, AT4, AT5, AT6, AT7, AT8, AT9, AT10};
 
   // The high words s_atan.c compares |x| against.
   /** {@code |x| >= 2^66}: the lanes the C answers with a constant or {@code x+x} (line 97). */
@@ -102,7 +110,7 @@ final class Atan {
   private static final boolean DROPPING_LO = Faults.is(DROP_LO);
   private static final int HX_ID1_USED = Faults.is(SPLIT_MOVED) ? 0x40000000 : HX_ID1;
   private static final double ATAN_HI_1_USED =
-      Faults.is(HI_ONE_ULP_OFF) ? Math.nextUp(ATAN_HI[1]) : ATAN_HI[1];
+      Faults.is(HI_ONE_ULP_OFF) ? Math.nextUp(HI1) : HI1;
 
   private Atan() {}
 
@@ -152,16 +160,16 @@ final class Atan {
     DoubleVector z = reduced.mul(reduced);
     DoubleVector w = z.mul(z);
     // s1 = z*(aT0+w*(aT2+w*(aT4+w*(aT6+w*(aT8+w*aT10))))), innermost first.
-    DoubleVector a8 = w.mul(AT[10]).add(AT[8]);
-    DoubleVector a6 = w.mul(a8).add(AT[6]);
-    DoubleVector a4 = w.mul(a6).add(AT[4]);
-    DoubleVector a2 = w.mul(a4).add(AT[2]);
-    DoubleVector s1 = z.mul(w.mul(a2).add(AT[0]));
+    DoubleVector a8 = w.mul(AT10).add(AT8);
+    DoubleVector a6 = w.mul(a8).add(AT6);
+    DoubleVector a4 = w.mul(a6).add(AT4);
+    DoubleVector a2 = w.mul(a4).add(AT2);
+    DoubleVector s1 = z.mul(w.mul(a2).add(AT0));
     // s2 = w*(aT1+w*(aT3+w*(aT5+w*(aT7+w*aT9)))).
-    DoubleVector b7 = w.mul(AT[9]).add(AT[7]);
-    DoubleVector b5 = w.mul(b7).add(AT[5]);
-    DoubleVector b3 = w.mul(b5).add(AT[3]);
-    DoubleVector s2 = w.mul(w.mul(b3).add(AT[1]));
+    DoubleVector b7 = w.mul(AT9).add(AT7);
+    DoubleVector b5 = w.mul(b7).add(AT5);
+    DoubleVector b3 = w.mul(b5).add(AT3);
+    DoubleVector s2 = w.mul(w.mul(b3).add(AT1));
     DoubleVector sum = s1.add(s2);
     DoubleVector product = reduced.mul(sum);
 
@@ -169,14 +177,14 @@ final class Atan {
     DoubleVector plain = reduced.sub(product);
 
     // Lines 131-132: atanhi[id] - ((x*(s1+s2) - atanlo[id]) - x), negated for hx < 0.
-    DoubleVector hi = DoubleVector.broadcast(species, ATAN_HI[3]);
-    DoubleVector lo = DoubleVector.broadcast(species, ATAN_LO[3]);
-    hi = hi.blend(DoubleVector.broadcast(species, ATAN_HI[2]), idUpTo2);
-    lo = lo.blend(DoubleVector.broadcast(species, ATAN_LO[2]), idUpTo2);
+    DoubleVector hi = DoubleVector.broadcast(species, HI3);
+    DoubleVector lo = DoubleVector.broadcast(species, LO3);
+    hi = hi.blend(DoubleVector.broadcast(species, HI2), idUpTo2);
+    lo = lo.blend(DoubleVector.broadcast(species, LO2), idUpTo2);
     hi = hi.blend(DoubleVector.broadcast(species, ATAN_HI_1_USED), idUpTo1);
-    lo = lo.blend(DoubleVector.broadcast(species, ATAN_LO[1]), idUpTo1);
-    hi = hi.blend(DoubleVector.broadcast(species, ATAN_HI[0]), id0);
-    lo = lo.blend(DoubleVector.broadcast(species, ATAN_LO[0]), id0);
+    lo = lo.blend(DoubleVector.broadcast(species, LO1), idUpTo1);
+    hi = hi.blend(DoubleVector.broadcast(species, HI0), id0);
+    lo = lo.blend(DoubleVector.broadcast(species, LO0), id0);
     if (DROPPING_LO) {
       lo = DoubleVector.zero(species);
     }

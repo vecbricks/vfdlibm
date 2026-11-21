@@ -10,9 +10,11 @@ package io.github.vecbricks.vfdlibm;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.SplittableRandom;
 import java.util.function.BiFunction;
 import java.util.function.Consumer;
 import jdk.incubator.vector.DoubleVector;
@@ -72,9 +74,19 @@ class AtanTest {
    * guess.
    */
   static double cAtan(double x) {
+    return cAtan(x, WORDS);
+  }
+
+  /** The six words the C compares {@code ix} against, in the order the transcription reads them. */
+  static final int[] WORDS = {
+    Atan.HX_TINY, Atan.HX_NO_REDUCTION, Atan.HX_ID0, Atan.HX_ID1, Atan.HX_ID2, Atan.HX_BIG
+  };
+
+  /** {@link #cAtan(double)} with the compare words given, so that a test can move one. */
+  static double cAtan(double x, int[] words) {
     int hx = (int) (Double.doubleToRawLongBits(x) >>> 32);
     int ix = hx & 0x7fffffff;
-    if (ix >= Atan.HX_BIG) {
+    if (ix >= words[5]) {
       // Lines 97-102: x+x for a NaN, else atanhi[3]+atanlo[3] with x's sign.
       if (ix > 0x7ff00000 || (ix == 0x7ff00000 && (int) Double.doubleToRawLongBits(x) != 0)) {
         return x + x;
@@ -82,15 +94,15 @@ class AtanTest {
       return hx > 0 ? Atan.ATAN_HI[3] + Atan.ATAN_LO[3] : -Atan.ATAN_HI[3] - Atan.ATAN_LO[3];
     }
     int id;
-    if (ix < Atan.HX_NO_REDUCTION) {
-      if (ix < Atan.HX_TINY) {
+    if (ix < words[1]) {
+      if (ix < words[0]) {
         return x;
       }
       id = -1;
     } else {
       x = Math.abs(x);
-      if (ix < Atan.HX_ID1) {
-        if (ix < Atan.HX_ID0) {
+      if (ix < words[3]) {
+        if (ix < words[2]) {
           id = 0;
           x = (2.0 * x - Atan.ONE) / (2.0 + x);
         } else {
@@ -98,7 +110,7 @@ class AtanTest {
           x = (x - Atan.ONE) / (x + Atan.ONE);
         }
       } else {
-        if (ix < Atan.HX_ID2) {
+        if (ix < words[4]) {
           id = 2;
           x = (x - 1.5) / (Atan.ONE + 1.5 * x);
         } else {
@@ -181,6 +193,59 @@ class AtanTest {
         Inputs.uniform(seed + 3, 1 << 16, 2.4375, 1000.0),
         Inputs.uniform(seed + 4, 1 << 16, -1000.0, -0.4375),
         Inputs.uniform(seed + 5, 1 << 16, -0.4375, 0.4375)));
+  }
+
+  /**
+   * Draws over the two words either side of each compare's word, {@code word - 1} and {@code
+   * word}, both signs, with random low words: the lanes a compare moved by one word would send
+   * to the other branch.
+   */
+  static double[] gapInputs(int word, long seed) {
+    SplittableRandom random = new SplittableRandom(seed);
+    double[] xs = new double[1 << 16];
+    for (int i = 0; i < xs.length; i++) {
+      long hi = (long) (word - (i & 1)) << 32;
+      long sign = (i & 2) == 0 ? 0L : Long.MIN_VALUE;
+      xs[i] = Double.longBitsToDouble(sign | hi | (random.nextLong() & 0xffffffffL));
+    }
+    return xs;
+  }
+
+  @ParameterizedTest
+  @EnumSource(VectorWidth.class)
+  void wordsOfEachCompare(VectorWidth width) {
+    for (int k = 0; k < WORDS.length; k++) {
+      assertAtan(width.species(), gapInputs(WORDS[k], 7900L + k));
+    }
+  }
+
+  /**
+   * The draws of {@link #gapInputs} see a compare moved by one word, in either direction, for
+   * the four compares at 7/16, 11/16, 19/16 and 39/16: the scalar transcription with that word
+   * moved differs from {@code StrictMath.atan} on them. They see none for the compares at
+   * {@code 2^-29} and {@code 2^66}: moved by one word, the lanes of the word between give the
+   * same bits, so no test of results can see those two move (PROOFS.md, atan).
+   */
+  @Test
+  void gapDrawsSeeAMovedCompareWhereOneCanBeSeen() {
+    for (int k = 0; k < WORDS.length; k++) {
+      for (int delta = -1; delta <= 1; delta += 2) {
+        int[] moved = WORDS.clone();
+        moved[k] += delta;
+        long differing = 0;
+        for (double x : gapInputs(WORDS[k], 7900L + k)) {
+          if (Double.doubleToRawLongBits(cAtan(x, moved))
+              != Double.doubleToRawLongBits(StrictMath.atan(x))) {
+            differing++;
+          }
+        }
+        if (k == 0 || k == 5) {
+          assertEquals(0L, differing, "compare " + k + " moved by " + delta);
+        } else {
+          assertTrue(differing > 0, "compare " + k + " moved by " + delta + " is not seen");
+        }
+      }
+    }
   }
 
   /** The published hard-to-round inputs, and their negations: see {@link Inputs#hardCases}. */

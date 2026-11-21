@@ -1071,6 +1071,18 @@ sampled bit patterns, dense draws, the published hard cases and their negations,
 subset of a vector's lanes rare; `scalarTranscriptionIsStrictMath` checks that `cAtan`, s_atan.c
 in scalar Java, is `StrictMath.atan`. The planted faults are `atan.dropLo` (`atanlo` dropped),
 `atan.splitMoved` (the `19/16` word moved to 2, which moves a compare) and `atan.hiOneUlpOff`
-(`atanhi[1]` one ulp up). No fault reaches the compares at `0x3fdc0000`, `0x3fe60000`,
-`0x40038000`, `0x3e200000` or `0x44100000`, and a compare moved without changing a result is
-not caught by a test of results; no test claims to catch those.
+(`atanhi[1]` one ulp up).
+
+What is checked of each compare, and what is not. `wordsOfEachCompare` draws, at every width,
+over the word of each compare and the word below it. For the four compares at `0x3fdc0000`,
+`0x3fe60000`, `0x3ff30000` and `0x40038000`, a move by one word, either way, changes many
+results of that word's lanes: a throwaway program (not committed) counted 295796 and 295321,
+546013 and 546557, 237329 and 237381, and 382326 and 381390 changed of 2^22 draws, for the
+move down and up of each, and `gapDrawsSeeAMovedCompareWhereOneCanBeSeen` shows on the scalar
+transcription, with the word moved, that those draws differ from `StrictMath.atan`. No fault
+planted in the port moves those compares by one word, though; `atan.splitMoved` moves the one
+at `0x3ff30000` by more. For the compares at `0x3e200000` and `0x44100000` it is the other
+way: moved by one word, the lanes of the word between give the same bits (0 of 2^22 draws
+changed, and the test pins that), so no test of results sees those two move, and they are not
+checked. That a move by more than one word is seen was not measured, except for the
+`0x3ff30000` one.
