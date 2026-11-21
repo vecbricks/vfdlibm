@@ -110,7 +110,7 @@ class HarnessSelfTest {
   void oraclePassesCorrectBinaryFunction(VectorWidth width) {
     Inputs.Pairs p = Inputs.cross(
         Inputs.specials(), Inputs.concat(Inputs.specials(), Inputs.sampled(2L, 16)));
-    Oracle.assertBinary(
+    Oracle.assertPair(
         "pow", width.species(), HarnessSelfTest::pow, StrictMath::pow, p.x(), p.y());
   }
 
@@ -183,7 +183,7 @@ class HarnessSelfTest {
     faultLane = 0;
     Oracle.assertUnary("exp", species, HarnessSelfTest::exp, StrictMath::exp,
         new double[] {0.0, 1.0});
-    binaryInputs(species, (x, y) -> Oracle.assertBinary(
+    binaryInputs(species, (x, y) -> Oracle.assertPair(
         "pow", species, HarnessSelfTest::pow, StrictMath::pow, x, y));
   }
 
@@ -204,7 +204,7 @@ class HarnessSelfTest {
         faultLane = lane;
         AssertionFailedError e = PlantedFaultTest.assertCaught(
             ONE_ULP,
-            () -> Oracle.assertBinary(
+            () -> Oracle.assertPair(
                 "pow", species, HarnessSelfTest::pow, StrictMath::pow, xs, ys));
         assertReports(e, lane, 2, xs.length);
       }
@@ -304,7 +304,7 @@ class HarnessSelfTest {
     Oracle.assertUnaryMasked(
         "exp", species, HarnessSelfTest::maskedExp, StrictMath::exp, maskedInputs(), 11L);
     Inputs.Pairs p = Inputs.cross(Inputs.specials(), Inputs.sampled(4L, 16));
-    Oracle.assertBinaryMasked(
+    Oracle.assertPairMasked(
         "pow", species, HarnessSelfTest::maskedPow, StrictMath::pow, p.x(), p.y(), 12L);
   }
 
@@ -341,7 +341,7 @@ class HarnessSelfTest {
     Arrays.fill(ys, 3.0);
     assertThrows(
         AssertionFailedError.class,
-        () -> Oracle.assertBinaryMasked(
+        () -> Oracle.assertPairMasked(
             "pow", species, (x, y, live) -> pow(x, y), StrictMath::pow, xs, ys, 15L));
   }
 
@@ -407,7 +407,7 @@ class HarnessSelfTest {
   void hardCasesLoadEachFunctionsFile() {
     Map<String, Integer> counts = Map.of(
         "exp", 2283, "expm1", 7584, "log", 2820, "log10", 1886, "log1p", 7550, "sinh", 2215,
-        "cosh", 2026, "atan", 1735);
+        "cosh", 2026, "asin", 1655, "atan", 1735);
     counts.forEach((function, count) -> {
       long[] bits = rawBits(Inputs.hardCases(function));
       assertEquals(count.intValue(), bits.length, function);

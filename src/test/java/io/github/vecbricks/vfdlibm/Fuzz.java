@@ -175,6 +175,16 @@ final class Fuzz {
       coshPoints());
 
   /**
+   * asin: e_asin.c's high-word tests (the tiny return below 2^-27, the first form below 0.5, the
+   * root form above 0.975, the per-lane finish from 1 and the non-finite words) and the doubles
+   * at them: the three constants' words are one test each, so a split moved by one word shows
+   * only in that word's lanes.
+   */
+  static final Edges ASIN = new Edges(
+      new int[] {Asin.HX_TINY, Asin.HX_HALF, Asin.HX_SPLIT, Asin.HX_ONE, 0x7ff00000, 0},
+      new int[0],
+      false,
+      new double[] {0x1p-27, 0.5, 0.975, 1.0, Math.nextDown(1.0), Math.sqrt(0.5), 0.9});
    * atan: s_atan.c's high-word tests (the tiny return, the four range splits at 7/16, 11/16,
    * 19/16 and 39/16, the {@code 2^66} word and the non-finite words), the doubles at those
    * edges, the word and the double 2 where {@code atan.splitMoved} moves the 19/16 split, and the
@@ -242,6 +252,7 @@ final class Fuzz {
       case LOG1P -> LOG1P;
       case SINH -> SINH;
       case COSH -> COSH;
+      case ASIN -> ASIN;
       case ATAN -> ATAN;
     };
   }

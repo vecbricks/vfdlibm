@@ -157,6 +157,10 @@ final class Nightly {
         // it too.
         new Arm("Cosh.coshSlice", x -> Cosh.coshSlice(x, null), Cosh::coshSlice),
         new Arm("Cosh.coshFinish", x -> Cosh.coshFinish(x, null), Cosh::coshFinish))),
+    // In the table, so that dev/nightly.sh and the planted-fault tests can run it; the night's
+    // `all=` list in nightly.yml does not name it yet (the follow-up that adds it is pending).
+    ASIN("asin", StrictMath::asin, List.of(
+        new Arm("VFdlibm.asin", VFdlibm::asin, VFdlibm::asin))),
     ATAN("atan", StrictMath::atan, List.of(
         new Arm("VFdlibm.atan", VFdlibm::atan, VFdlibm::atan)));
 
@@ -177,7 +181,8 @@ final class Nightly {
         }
       }
       throw new IllegalArgumentException(
-          "unknown function '" + id + "'; known: exp, expm1, log, log10, log1p, sinh, cosh, atan");
+          "unknown function '" + id + "'; known: exp, expm1, log, log10, log1p, sinh, cosh,"
+              + " asin, atan");
     }
 
     @Override
@@ -712,9 +717,10 @@ final class Nightly {
         }
         for (int i = 0; i < n; i++) {
           long bits = Double.doubleToRawLongBits(got[i]);
-          if (bits != want[i]) {
-            mismatches.add(arm.name(), -1, i % lanes, Double.doubleToRawLongBits(xs[i]),
-                Double.doubleToRawLongBits(ys[i]), want[i], bits);
+          long xb = Double.doubleToRawLongBits(xs[i]);
+          long yb = Double.doubleToRawLongBits(ys[i]);
+          if (!PairBits.matches(xb, yb, want[i], bits)) {
+            mismatches.add(arm.name(), -1, i % lanes, xb, yb, want[i], bits);
           }
         }
         if (arm.masked() == null) {
@@ -727,11 +733,12 @@ final class Nightly {
               DoubleVector.fromArray(species, ys, i), mask).intoArray(got, i);
           for (int lane = 0; lane < lanes; lane++) {
             long x = Double.doubleToRawLongBits(xs[i + lane]);
-            long expected = (live >>> lane & 1) != 0 ? want[i + lane] : x;
+            long y = Double.doubleToRawLongBits(ys[i + lane]);
+            boolean active = (live >>> lane & 1) != 0;
+            long expected = active ? want[i + lane] : x;
             long bits = Double.doubleToRawLongBits(got[i + lane]);
-            if (bits != expected) {
-              mismatches.add(arm.name(), live, lane, x, Double.doubleToRawLongBits(ys[i + lane]),
-                  expected, bits);
+            if (active ? !PairBits.matches(x, y, expected, bits) : bits != expected) {
+              mismatches.add(arm.name(), live, lane, x, y, expected, bits);
             }
           }
         }

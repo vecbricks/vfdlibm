@@ -66,6 +66,29 @@ IEEE properties used:
   the operator lowers to a vector instruction and does not box is a separate fact, read from
   `bench/alloc-check.py` on `SqrtBenchmark` (unmasked only; no row for the masked form).
 
+## The contract of a function of two arguments
+
+Each lane of a function of two arguments equals `StrictMath`'s result by
+`Double.doubleToRawLongBits`, except on a lane where both arguments are NaN and their bits differ.
+There the result must equal one of the two arguments' bits with the quiet bit set, all 64 bits,
+the sign included; which of the two is not specified. Every other lane keeps the raw-bit rule: a
+NaN made from arguments that are not both NaN, one NaN argument with a finite one, and two NaNs
+with identical bits.
+
+The exception is there because `StrictMath.atan2` returns `x + y` on two NaNs (as the C of `pow`
+does, reading `reference/fdlibm-5.3`), and which operand's payload a sum of two NaNs keeps is
+fixed neither by IEEE 754 nor by the JLS. The C of `hypot` adds the absolute values, so its sign
+is cleared: the rule above does not say what that lane's sign must be, and its port settles it.
+
+On JDK 25.0.5.1 and x86-64 the interpreter and C2 returned `y`'s payload and C1 `x`'s of
+`atan2`, for every one of 65,536 pairs a mode (issue 33), so a raw-bit comparison with
+`StrictMath` fails by the tier the oracle's call is in. `PairBits.matches` is the one comparison
+of such a lane, used by `Oracle`'s asserts and the nightly's pair check, and
+`PairNanTest` shows that it fails for a canonical NaN, a NaN of a third payload, the other sign, a
+result not quieted, and one payload bit off on a lane that is not two different NaNs. A function of
+one argument keeps the raw-bit rule on every lane: its NaN results were the same in every mode in
+the same probe.
+
 ## exp (`Exp.java`, from `e_exp.c`)
 
 The C reduces `|x| > 0.5 ln2` in two forms (lines 129-136), the near form for `|x| < 1.5 ln2` and
@@ -1026,6 +1049,65 @@ with s_expm1.c's lines in scalar Java, is `StrictMath.cosh`.
 stand, `expCore` being the same body. Informal here: that the port's blends take each branch on
 exactly the C's lanes, and that it computes these steps, the code's text.
 
+## asin (`Asin.java`, from `e_asin.c`)
+
+e_asin.c reads `hx = __HI(x)` and `ix = hx&0x7fffffff` (lines 78-79). For `ix >= 0x3ff00000` it
+returns `x*pio2_hi + x*pio2_lo` for exactly `+-1` and `(x-x)/(x-x)` above (80-84). Below that, for
+`|x| < 0.5` (`ix < 0x3fe00000`, line 85) it returns `x` below `2^-27` (86-87) and otherwise `x+x*w`
+with `t = x*x`, `w = p/q` (89-93); from `0.5` up it takes `t = (one-fabs(x))*0.5`, the same `p`
+and `q` in `t`, and `s = sqrt(t)` (96-100), then above `0.975` (`ix >= 0x3FEF3333`, line 101)
+`pio2_hi-(2.0*(s+s*w)-pio2_lo)` with `w = p/q` (102-103), and below it `pio4_hi-(p-q)` with the
+split root (105-111); the sign is applied last (113). The port computes the lines below `|x| = 1`
+in the C's order, with no fused multiply-add and no reassociation, and **needs no lemma of its
+own** beyond L13's blend argument and (R4)'s `sqrt`. Where its text is not the C's:
+
+- The braces of lines 86-89 close the tiny test before its `else`, so that `else` belongs to
+  `if(ix<0x3e400000)` and governs the one statement `t = x*x;` (line 89); `p`, `q`, `w` and the
+  return (90-93) are not in it, though the indentation says so, and run for every lane that
+  reaches them. The test inside the braces, `huge+x>one`, is true for every `|x| < 2^-27`
+  (`1e300 + x` is above 1 for zeros and subnormals too), so those lanes return `x`; the other
+  lanes of `|x| < 0.5` take `t = x*x` and then the same `p`, `q` and `w`. The port returns `x`
+  in the tiny lanes by the same compare, and `AsinTest.cAsin` transcribes the C's structure.
+- `w = s; __LO(w) = 0` (lines 105-106) is the AND of the lane's 64 bits with
+  `0xFFFFFFFF00000000`, which is what clearing the low word of an IEEE double is: the port does
+  the C's own operation on the bits, an exact one, and no arithmetic replaces it. So there is
+  nothing to prove about it: the claim is that the port clears the word the C clears.
+  `asin.skipLowClear` is the fault that omits it.
+- The three ranges below 1 share one pass: `t` is `x*x` or `(one-fabs(x))*0.5` by the C's
+  compare, and the polynomials `p`, `q` and the division `p/q` are then the same operations in
+  all three (lines 90-92, 98-99 and 102 or 108), on `t`. The split range's second division,
+  `(t-w*w)/(s+w)`, is computed on every lane and kept by the lanes of `0.5 <= |x| <= 0.975`.
+- The sign is `hx>0 ? t : -t`: the port blends `t` and its negation, which is exact, under the
+  mask `hx > 0` on the same word.
+- The lanes of `|x| >= 1`, the infinities and the NaNs, which the C answers with its first branch,
+  are finished per lane by `StrictMath.asin`, which is the C: no computation of the port is in
+  them.
+
+**L13 for asin.** H1 (selection) holds: every mask is the C's compare on the same `ix` or `hx`
+(`ix < 0x3ff00000`, `< 0x3fe00000`, `< 0x3e400000`, `>= 0x3FEF3333`, `hx > 0`). H2 (operands)
+holds for the blend of `t`, the one operand two branches give the polynomials, and for the sums,
+which are the C's in its order. H3 (totality) holds: every operation is an IEEE operation on
+doubles, a compare, a bit operation or a reinterpretation, with no integer division and no
+indexed load, so a discarded lane's `sqrt` of a negative `t` or a `NaN` is a value and nothing
+else. H4 (select) holds: each blend is a `blend`. Not covered: that H1's words are the C's is
+`AsinTest`'s (`constantsAreTheSourcesBits`, and the thresholds and their neighbours), which
+catches `asin.splitMoved` (moved to `0x3FFF3333`, above every lane of the range). No committed
+fault covers a word moved by one. Once, by hand, with `0x3FEF3334` in the compare in place of
+`0x3FEF3333`, `AsinTest.thresholdsAndSpecials` failed, at `0.975`'s own word, whose lanes are
+the only ones that move; the port's code having
+L13's shape is `AsinTest`'s tie and not L13's tests, which run a model; and (R4)'s `sqrt` is the
+operator's, tested by `SqrtTest`, with the C's own `sqrt` not shown there.
+
+**Hinge tests.** The vector tie is `AsinTest`: `VFdlibm.asin` against `StrictMath.asin` at every
+width and `SPECIES_MAX`, unmasked and masked, on the thresholds of lines 80, 85, 86 and 101 and
+their neighbours, sampled bit patterns, dense draws of `(-1, 1)`, of `(-0.6, -0.4)`, `(0.4, 0.6)`
+and `(0.95, 1)` and their negations, the magnitudes from `2^-60` to `1`, the published hard cases
+(1655 inputs, one of them 1) and their negations, and every subset of a vector's lanes rare
+(`everySubsetOfLanesRare`); `scalarTranscriptionIsStrictMath` checks that `cAsin`, e_asin.c in
+scalar Java, is `StrictMath.asin`. L13's own tests are `ProofsTest.l13*`.
+
+**Encoding.** No file of its own: nothing here is a fold. Informal here: that the port's blends
+take each branch on exactly the C's lanes, and that it computes these steps, the code's text.
 ## atan (`Atan.java`, from `s_atan.c`)
 
 s_atan.c returns, from `|x| >= 2^66`, `x + x` for a NaN and `atanhi[3] + atanlo[3]` with `x`'s

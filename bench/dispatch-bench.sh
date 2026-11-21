@@ -19,9 +19,10 @@
 #                           [benchmark regex] [extra JVM options]
 #
 # The host is one of epyc7763 (AMD EPYC 7763, the default), xeon8573c (Intel Xeon Platinum
-# 8573C), xeon6973p (Intel Xeon 6973P-C) or epyc9v45 (AMD EPYC 9V45); bench/host.sh holds the
-# keys and each host's CPU string. The keys are checked against this checkout's table, and the
-# run checks its machine against the <ref>'s, so the two should hold the same hosts.
+# 8573C), xeon6973p (Intel Xeon 6973P-C), epyc9v45 (AMD EPYC 9V45) or neoversen2 (Arm Neoverse
+# N2, GitHub's Arm runner, which has no timing result yet); bench/host.sh holds the keys and
+# each host's CPU string and runner. The keys are checked against this checkout's table, and
+# the run checks its machine against the <ref>'s, so the two should hold the same hosts.
 # bench/dispatch-epyc.sh is this script with the default host, kept for the calls written
 # before the other hosts.
 #
@@ -32,7 +33,10 @@
 # comes first in the job, after only the fetch of its script and that script's own test, and
 # what a miss costs on the current workflow has not been measured. --attempts 1 is a single
 # opportunistic try. Running out of attempts on a CPU miss is exit status 3, not a failure of
-# the run; when the last attempt failed before the CPU check, it is 1.
+# the run; when the last attempt failed before the CPU check, it is 1. For neoversen2 it
+# defaults to 3: the Arm label gave one CPU in three probe draws (HARDWARE.md), so a miss most
+# likely means the pool changed or the mapping is wrong, which more tries do not mend, and three
+# hourly ones are a cap on the wait, not a hope of a draw.
 #
 # --base <base> makes each run a pair (bench/pair.sh in the workflow): the benchmarks on <base>
 # and on the dispatched <ref> as head, alternating, on one machine. <base> is a branch or tag of
@@ -92,6 +96,7 @@ KEYS=$(bash "$(dirname "$0")/host.sh" --keys) || {
 known=0; for k in $KEYS; do [ "$k" = "$H" ] && known=1; done
 [ $known = 1 ] || { echo "unknown host '$H'" >&2; usage; }
 [ "$H" = epyc9v45 ] && A=${A:-18}
+[ "$H" = neoversen2 ] && A=${A:-3}
 case "$A" in "") ;; *[!0-9]*|0) echo "--attempts takes a positive number" >&2; usage ;; esac
 [ $# -ge 1 ] && [ $# -le 3 ] || usage
 B=$1; N=${2:-ExpBenchmark}; X=${3:-}

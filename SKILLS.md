@@ -2,9 +2,9 @@
 
 Lessons about benchmarking, the JIT and the Vector API that every port follows. Most were learned in
 Varka (github.com/vecbricks/varka, its `sql/varka/skills/`) and are rewritten here for a vector math
-library; the last sections are what the `exp`, `log`, `log1p`, `log10`, `expm1`, `sinh`, `cosh`
-and `atan` ports taught. Each entry says where its numbers come from. A new lesson goes in the
-section it belongs to, as a short entry; a negative result belongs here too, since it stops the
+library; the last sections are what the `exp`, `log`, `log1p`, `log10`, `expm1`, `sinh`, `cosh`,
+`asin` and `atan` ports taught. Each entry says where its numbers come from. A new lesson goes in
+the section it belongs to, as a short entry; a negative result belongs here too, since it stops the
 next port re-trying a settled question.
 
 ## Benchmarking with JMH
@@ -75,8 +75,8 @@ next port re-trying a settled question.
   the bodies run unboxed on Arm, where on x86 every masked one boxes (below); that is read from
   the allocation alone, and no `PrintIntrinsics` line was read there. `ci.yml`'s `alloc` job
   has that row since, as `bench/alloc-check.py --preferred-only`. The file is an allocation
-  reading, not a timing: no Arm host is a benchmark host, and nothing here says how fast those
-  bodies are.
+  reading, not a timing: the Arm host (`neoversen2`) has no timing result, and nothing here says
+  how fast those bodies are.
 - **When the check fails, ask it why.** `bench/alloc-check.py --why` reads the failed run's
   result and runs each failing row once more, under the JVM options the result records for it,
   with the two flags of the next entries and C2 alone compiling (`-XX:-TieredCompilation`:
@@ -224,6 +224,12 @@ next port re-trying a settled question.
   first, so the AVX-512 hosts are read first; each host decides for its own instruction set, and
   none speaks for another's. Laptop numbers never headline; laptop files say "laptop numbers, not
   headlines" in their header. `HARDWARE.md` lists the hosts' flags, JVM settings and ratios.
+- **The Arm Neoverse N2 is a host for allocation readings, and has no timing result.** GitHub's
+  `ubuntu-24.04-arm` runner was one CPU in three probe draws, and the same features in all 332
+  jobs of the census (`HARDWARE.md`, "The Arm host"), with 128-bit vectors, so `benchmark.yml`
+  runs it on `host: neoversen2` and `ci.yml`'s `alloc` job runs the check there. The four hosts
+  above stay the only ones headline numbers come from; no file under `bench/results/` has a timing
+  from this one, and whether the ports' arms should differ on Arm waits for host runs.
 - **The EPYC 9V74 is not a host: its runners expose no AVX-512.** The three GitHub 9V74 VMs that
   Varka measured had no `avx512` flags and ran at `UseAVX=2`, `MaxVectorSize=32`, so a 9V74 file
   could only ever decide for Zen 4 at AVX2 width, which the EPYC 7763 already covers. It was
@@ -246,8 +252,9 @@ next port re-trying a settled question.
   current workflow has not been measured. No decision waits on a 9V45 file; when
   one exists, it is read with the other AVX-512 hosts.
 - **The benchmark fails on any other CPU, and is retried, never relaxed.**
-  `.github/workflows/benchmark.yml` takes a `host` input with exactly four choices and maps each
-  to a model-name string fixed in `bench/host.sh`'s table (the workflow's probe step runs
+  `.github/workflows/benchmark.yml` takes a `host` input with exactly five choices (four x86
+  hosts and the Arm one above) and maps each to a CPU string fixed in `bench/host.sh`'s
+  table (the workflow's probe step runs
   `bench/host.sh --expect <host>`, and CI runs `bench/host.sh --self-test`, which classifies
   every kind of machine in the pool's census), as runs of that host printed it, matched ignoring
   case: `INTEL(R) XEON(R) PLATINUM 8573C` (Varka's fork runs 41465323581, 41255932044 and
@@ -258,13 +265,17 @@ next port re-trying a settled question.
   the script's self-test and looks for the host's key in it, and fails unless the
   model name ends with the host's string, for the two EPYCs, whose full names the runs printed, or
   contains it, for the two Xeons, whose full names no run had recorded then (the pool's census,
-  `bench/pool/`, has since printed both as whole names);
+  `bench/pool/`, has since printed both as whole names); the Arm host's runner prints no model
+  name, so its string is the kernel's `implementer 0x41 part 0xd49` for every core, the whole
+  string, with `sve` and `sve2` (`HARDWARE.md`, "The Arm host");
   `bench/dispatch-bench.sh --host <host>` dispatches it and, when the run failed on that check,
   waits an hour and dispatches again, until a run passes, fails on something else, or (for the
-  9V45, or with `--attempts`) the attempts run out (`bench/dispatch-epyc.sh` is the same with
-  `--host epyc7763`). A run that failed while fetching the script, before any step looked at
+  9V45 and the Arm host, or with `--attempts`) the attempts run out (`bench/dispatch-epyc.sh` is
+  the same with `--host epyc7763`). A run that failed while fetching the script, before any step looked at
   the machine, is tried again too, each counting as an attempt; the third in a row stops it.
-  Other CPUs (the EPYC 9V74, the Xeon Platinum 8370C) are common draws, and
+  The Arm host's default is 3 attempts, not none: its label gave one CPU in three probe draws, so
+  a miss is most likely a changed pool, not a draw to wait out. Other CPUs (the EPYC 9V74, the
+  Xeon Platinum 8370C) are common draws, and
   accepting one would put a result on a different machine from every result before it. If a
   host stays scarce for days, changing the hosts is a decision for the owner, not a change to
   the check.
@@ -665,10 +676,20 @@ next port re-trying a settled question.
   2^-32 for a random partner and more where the two exponents are near, and which
   the fuzz meets because its draws put both arguments at their edges at once (`toy2-xy` in
   `PairHarnessTest`: both sweeps pass it, the fuzz finds it). The masked form of an arm keeps the
-  first argument's bits in a lane that is not live (`Oracle.assertBinaryMasked`'s contract). A pair
+  first argument's bits in a lane that is not live (`Oracle.assertPairMasked`'s contract). A pair
   function's mismatch file, and a hard-cases file of one, say `# arity: 2` before the first input
   and hold `0x<x> 0x<y>` on a line: `Inputs.hardCasePairs` reads one, and `Inputs.hardCases` refuses
   it by that line.
+- **One comparator for a function of two arguments** (`PairBits.matches(x, y, want, got)`, test
+  code). Every comparison of a pair function's lane goes through it: `Oracle.assertPair` and the
+  live lanes of `assertPairMasked` (a lane that is not live keeps `x`'s raw bits), and the
+  nightly's `PairChecker`, so its mismatch file and the replay of that file use it too. A new
+  comparison of such a function written with `doubleToRawLongBits` is a defect. The `jar-check.sh`
+  consumer cannot use it (the jar holds no test classes): its `same` compares one argument's
+  functions, and when `atan2` arrives its two-argument form takes a copy of the rule written in the
+  consumer, with a lane of two NaNs of different bits in its inputs. `PairNanTest` is the proof it
+  can fail: toys with one change fail it, and a comparator changed to accept any NaN, or none, fails
+  `PairNanTest` too (each tried by hand before the last case was added).
 - **What a pass over a function of two arguments costs** (laptop, 21 November 2026,
   `bench/results/pair-sweep-laptop-2026-11-21.txt`; no pair function is ported, so this is two
   stand-ins run through `PairCostProbe`, not a port). A stripe of 2^24 high words at 256 bits took
@@ -946,3 +967,33 @@ next port re-trying a settled question.
   where expm1's has 16 of each and caught it. The 17 mutants that only the fuzz or the search
   showed now have a witness each among the hard cases, and `MutantsTest` pins them; a port's
   survey row that reads `fuzz` or `search` is a hard case waiting to be added.
+
+## What the asin port taught
+
+- **The first port over `sqrt`.** The body calls `VectorOperators.SQRT` on `t`; `SqrtTest`
+  checks the operator's raw bits against `StrictMath.sqrt` (PROOFS.md, (R4)), and
+  `bench/alloc-check.py` passed on `AsinBenchmark`'s rows (`finish256`, `finishPreferred` and
+  `finishMax`, common and mixed data) and on `SqrtBenchmark`'s (`sqrtMax` has no row: the class
+  has no `SPECIES_MAX` arm), at this laptop's flags and as an AVX2 host (`-XX:UseAVX=2
+  -XX:MaxVectorSize=32`); CI runs it. The readings are not committed as results
+  files, so no figure of them is quoted. That says nothing of 128 bits or of the masked form's
+  lowering; no timing is committed either, so the port claims no speed.
+- **One arm, no tie to break.** The three ranges below 1 share `t`'s polynomials and the one
+  division `p/q`, and the split range's second division is computed on every lane; the rare lanes
+  (`|x| >= 1`, NaN) are finished per lane. There is no second body to compare, so the arm needs
+  no default rule, and the benchmark has no `slice` row.
+- **e_asin.c's misleading indentation.** The `else` of lines 86-89 belongs to the tiny test and
+  governs `t = x*x;` alone: `p`, `q`, `w` and the return after it are not in it, though they are
+  indented as if they were. The tiny lanes return `x` first (`huge+x>one` is true there). The
+  port, `AsinTest.cAsin` and PROOFS.md transcribe what the C does, not what its indentation
+  suggests.
+- **The faults, sized on 2^22 draws** (a throwaway program over `VFdlibm.asin`, run once per
+  fault): `asin.dropPio2Lo` changed 970339 of the draws of `[-1, 1]`, `asin.skipLowClear`
+  234026 (467198 of `[0.5, 1)`, none above `0.975`, where the root form has no low-word clear) and
+  `asin.splitMoved` 20855 of `[-1, 1]` and 833300 of `[0.975, 1)`. The split is moved to the word
+  `0x3FFF3333`, above every lane of the range: moved by one word it changes only the lanes of one
+  word, as the sinh section says, and that move is not planted. Tried once by hand, as
+  `0x3FEF3334`, the threshold inputs failed on that word's lanes.
+- **Hard cases: 1655 inputs**, from `dev/testlibm-extract.py asn asin` (the tag `asn` is asin's;
+  the extractor's recheck passes on all 1655 lines). All are positive, between 6.5e-8 and 1, and
+  the one at 1 is a rare lane.

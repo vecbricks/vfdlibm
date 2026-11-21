@@ -36,7 +36,7 @@ here="$(cd "$(dirname "$0")" && pwd)"
 
 flags="$(grep -m1 -E '^(flags|Features)' /proc/cpuinfo | sed 's/.*: //')"
 has() { if grep -qw "$1" <<<"$flags"; then echo yes; else echo no; fi; }
-echo "cpu: $(grep -m1 'model name' /proc/cpuinfo | sed 's/.*: //')"
+echo "cpu: $(bash "$here/host.sh" --cpu)"
 echo "cores: $(nproc); distinct core max MHz:" \
   "$(lscpu --extended=MAXMHZ 2>/dev/null | tail -n +2 | sort -u | tr '\n' ' ')"
 echo "vector flags: avx2=$(has avx2) avx512f=$(has avx512f) avx512dq=$(has avx512dq);" \

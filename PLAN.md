@@ -40,9 +40,10 @@ own logarithm and exponential and calls only `sqrt`, `fabs` and `scalbn`. `sinh`
 (`VFdlibm.sinh`, from `e_sinh.c`, computing through `expm1`'s common path below 22 and finishing
 the rest per lane), and so is `cosh` (`VFdlibm.cosh`, from `e_cosh.c`, through `exp`'s common path
 and expm1's `k == 0` lines, with two arms for its small range: the default arm is the slice arm,
-provisionally, until a benchmark host times them), and so is `atan` (`VFdlibm.atan`, from
-`s_atan.c`, five ranges through one division on blended operands, the lanes from `2^66` up
-finished per lane). `log`, `log10` and
+provisionally, until a benchmark host times them). `asin` is done too (`VFdlibm.asin`, from
+`e_asin.c`, with `sqrt` as the Vector API's `SQRT`, one arm, and the lanes of `|x| >= 1` finished
+per lane), and so is `atan` (`VFdlibm.atan`, from `s_atan.c`, five ranges through one division on
+blended operands, the lanes from `2^66` up finished per lane). `log`, `log10` and
 `log1p` are done too (`VFdlibm.log`, from `e_log.c`, `VFdlibm.log10`, from `e_log10.c`, which
 computes through log's common path, and `VFdlibm.log1p`, from `s_log1p.c`), and so is `expm1`
 (`VFdlibm.expm1`, from `s_expm1.c`, whose reduction is exp's).
@@ -55,7 +56,9 @@ five are a later, optional set; the large-argument reduction of the trigonometri
 
 ## 4. Testing
 
-- **The oracle** is `StrictMath` on the same JVM, compared by `doubleToRawLongBits`.
+- **The oracle** is `StrictMath` on the same JVM, compared by `doubleToRawLongBits`; for a function
+  of two arguments, a lane of two NaNs with different bits is compared by `PairBits` (`PROOFS.md`,
+  "The contract of a function of two arguments").
 - **Inputs:**
   - sampled bit patterns over the whole `double` domain;
   - dense sweeps around each threshold fdlibm branches on;
@@ -64,7 +67,7 @@ five are a later, optional set; the large-argument reduction of the trigonometri
   - published hard cases: inputs where the exact result lies very close to a rounding boundary, from
     Lefevre and Muller's worst-case tables (ARITH 15, 2001) and Lefevre's list of round-to-nearest
     hard cases, one resource per function under `src/test/resources/.../hard-cases/` (so far `exp`,
-    `expm1`, `log`, `log10`, `log1p`, `sinh`, `cosh` and `atan`), loaded with
+    `expm1`, `log`, `log10`, `log1p`, `sinh`, `cosh`, `asin` and `atan`), loaded with
     `Inputs.hardCases("<function>")`. The inputs of Lefevre's list come out of
     `dev/testlibm-extract.py`, which rechecks each line with 400-digit arithmetic against exact
     values it derives itself (`sinh`'s, `cosh`'s and `atan`'s files were written by it; it also
@@ -85,12 +88,13 @@ five are a later, optional set; the large-argument reduction of the trigonometri
   -XX:MaxVectorSize=32`, 128 and 256 bits on every draw), on x86 with `-XX:MaxVectorSize=16`
   (all of it at 128 bits) and on Arm (128 bits).
 - **Nightly:** `.github/workflows/nightly.yml` sweeps every high word of exp, expm1, log, log10,
-  log1p, sinh, cosh and atan with three low words each (every branch fdlibm decides on the high
-  word) at every width but 128 bits on x86, where a rotating 1/32 slice a night covers it in 32
-  nights, and at 128 bits on Arm every night; it fuzzes from a fresh seed at every width, and
-  runs every proof under both solvers; a failure opens an issue labelled `nightly-failure` with
-  the mismatching inputs, ready for a `hard-cases` file (`SKILLS.md`), and a dispatch that plants
-  a fault, to test that alert, opens one labelled `nightly-fault-test`.
+  log1p, sinh, cosh and atan (asin is in `Nightly`'s table and not yet in the night's list) with
+  three low words each (every branch fdlibm decides on the high word) at every width but 128 bits
+  on x86, where a rotating 1/32 slice a night covers it in 32 nights, and at 128 bits on Arm every
+  night; it fuzzes from a fresh seed at every width, and runs every proof under both solvers; a
+  failure opens an issue labelled `nightly-failure` with the mismatching inputs, ready for a
+  `hard-cases` file (`SKILLS.md`), and a dispatch that plants a fault, to test that alert, opens
+  one labelled `nightly-fault-test`.
 - **Masked forms:** a masked form is checked under seeded random masks, all-true and all-false;
   active lanes must equal `StrictMath` and inactive lanes must keep the input's raw bits (for a
   two-argument function, the first argument's).
@@ -153,11 +157,12 @@ five are a later, optional set; the large-argument reduction of the trigonometri
   and 512 bits, the preferred species and `SPECIES_MAX`. `Log1pBenchmark` does the same for `log1p`,
   with a third arm that blends the rare paths only when a vector holds a rare lane; `Expm1Benchmark`
   has the same three arms for `expm1`, `SinhBenchmark` one for `sinh`, `CoshBenchmark` two for
-  `cosh` and `AtanBenchmark` one for `atan`. Each of the eight has rows at `SPECIES_MAX`
-  (`*Max`), which the allocation check covers: every port's finish boxed there on mixed data
-  until its first eight lanes were written out
+  `cosh`, `AsinBenchmark` one for `asin` and `AtanBenchmark` one for `atan`. Each of the nine has
+  rows at `SPECIES_MAX` (`*Max`), which the allocation check covers: every earlier port's finish
+  boxed there on mixed data until its first eight lanes were written out
   (`bench/results/max-finish-laptop-2026-11-20.txt`, then
-  `bench/results/max-finish-alloc-free-laptop-2026-11-21.txt`). `ExpKindsBench` runs exp's two arms
+  `bench/results/max-finish-alloc-free-laptop-2026-11-21.txt`; neither has an asin row, whose
+  finish was written in the new shape from the start). `ExpKindsBench` runs exp's two arms
   on one kind of rare input at a time (a NaN, an overflow, an underflow, a subnormal result), to
   find which kind costs an arm its time on mixed data (#41); it is named apart so that a run of
   `ExpBenchmark` and the allocation check's default regex leave it out, as `CoshKindsBench`, which
