@@ -34,7 +34,9 @@ import org.openjdk.jmh.annotations.Warmup;
  * its lanes there, which says little: a vector holds a small lane with probability {@code 1 -
  * (1-p)^n}, so at 3.5% 13% of the 4-lane and 25% of the 8-lane vectors do (the share of Varka's
  * baseline benchmark, {@code x} in [-10, 10)), and at 17% (the share of Spark's unit tests,
- * -2.0 to 2.0 in steps of 0.1) 52% and 77% (the survey on issue #32).
+ * -2.0 to 2.0 in steps of 0.1) 52% and 77% (the survey on issue #32). Those are the shares in
+ * theory; the exact placement below has 35 of the 256 four-lane vectors and 34 of the 128
+ * eight-lane ones hold a small lane at 3.5% (14% and 27%), and 134 and 105 at 17% (52% and 82%).
  *
  * <p>{@code inputs} is {@code none} or {@code small}, and {@code percent} the share of the
  * places where {@code small} puts a small-range input; any other value is refused. Every lane
