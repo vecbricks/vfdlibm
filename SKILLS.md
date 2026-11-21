@@ -686,6 +686,11 @@ next port re-trying a settled question.
   function's mismatch file, and a hard-cases file of one, say `# arity: 2` before the first input
   and hold `0x<x> 0x<y>` on a line: `Inputs.hardCasePairs` reads one, and `Inputs.hardCases` refuses
   it by that line.
+  `hard-cases/atan2.txt` is one: Lefevre's data has no tag of a function of two arguments, so
+  `dev/testlibm-extract.py atn atan2` derives its 20820 pairs from the 1735 `atn` inputs `t`, as
+  `(+-t * 2^j, +-2^j)` for `j` in 0, 1, -5 (so `|y/x| = t` exactly), which are inputs of atan's
+  core through `atan2`'s own code and not hard cases of its quadrants; `HardCasePairsTest` checks
+  the file's shape.
 - **One comparator for a function of two arguments** (`PairBits.matches(candidates, x, y, want,
   got)`, test code). Every comparison of a pair function's lane goes through it: `Oracle.assertPair`
   and the live lanes of `assertPairMasked` (a lane that is not live keeps `x`'s raw bits), and the

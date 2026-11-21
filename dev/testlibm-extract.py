@@ -25,6 +25,21 @@ result is the function's exact value rounded to nearest at 53 bits, and the dire
 after the round bit repeat the pattern of a midpoint. The run stops with status 1 and no output
 on a mismatch, and prints its summary on the standard error.
 
+Pairs for a function of two arguments. Lefevre's file has no tag of a function of two arguments
+(its tags are all functions of one), so `atan2` has no data of its own. What it has is `atn`:
+the inputs t where atan(t) is hard to round, and atan2(y, x) with y/x = t exactly reaches the
+same input of the core (e_atan2.c computes atan(fabs(y/x)), and atan(y) when x is 1.0). So the
+pair mode, `atn atan2`, takes each distinct |t| of the `atn` lines, in the file's order, after
+the same recheck of the line as for `atan`, and prints for j in 0, 1, -5, x in +2^j, -2^j and
+y in +|t| * 2^j, -|t| * 2^j (in this order, y changing fastest) the pair `y x` as raw bits, `y`
+first because it is atan2's first argument, which the harness calls its first (the format of a
+`# arity: 2` hard-cases file). A pair is kept only if y is exact (|t| * 2^j a normal double) and
+the recheck finds y/x = +-|t| in 400-digit arithmetic; a pair that is not is counted on the
+standard error, and the run stops with status 1 if any is dropped for another reason. The pairs
+are inputs of atan's core through atan2's own division and quadrant code, not hard cases of
+atan2: the quadrants 2 and 3 compute pi - (z - pi_lo) and (z - pi_lo) - pi, which fdlibm does
+not round correctly, and StrictMath's value there is the oracle's.
+
 The tags in use: `sh` (sinh), `ch` (cosh), `em1` (expm1), `atn` (atan), `asn` (asin) and `acs`
 (acos), the functions this knows the exact value of; the file also holds other tags. The exact
 values are derived here, not read from the file: the exponential's series and `Decimal.exp` for
@@ -41,6 +56,8 @@ Usage, from the repository root; python3 -I keeps the working directory off the 
     python3 -I dev/testlibm-extract.py ch cosh testlibm-data.xz | head
 The arguments are the tag, the function (sinh, cosh, expm1, atan, asin or acos) and the data
 file, plain or .xz. The tag and the function must be a pair of the table above.
+    python3 -I dev/testlibm-extract.py atn atan2 testlibm-data.xz > atan2-pairs.txt
+is the pair mode, described above: the tag is `atn`, the function `atan2`.
     python3 -I dev/testlibm-extract.py --self-test
 checks pi's first 50 digits, 4*atan(1) against pi, and the exact values at a few inputs against
 the platform's `math` to 2^-50, and shows that the recheck fails on a result one unit in the
@@ -63,6 +80,8 @@ from decimal import Decimal, getcontext, localcontext
 
 getcontext().prec = 400
 TAGS = {"sh": "sinh", "ch": "cosh", "em1": "expm1", "atn": "atan", "asn": "asin", "acs": "acos"}
+PAIRS = {("atn", "atan2"): "atan"}   # (tag, function of two arguments): the function of one argument
+GAP_EXPONENTS = (0, 1, -5)            # the pairs are (+-t * 2^j, +-2^j) for these j
 EPSILON = Decimal(10) ** -395
 _PI = []
 
@@ -202,6 +221,35 @@ def check(function, x_double, x_decimal, result, direction):
     return None, repeats
 
 
+def derive_pairs(t):
+    """The pairs (y, x) of the pair mode for the double t >= 0, and how many were dropped as
+    not exact, which happens when t * 2^j is out of range or subnormal."""
+    pairs, dropped = [], 0
+    for j in GAP_EXPONENTS:
+        try:
+            y = math.ldexp(t, j)
+        except OverflowError:
+            y = math.inf
+        if math.isinf(y) or abs(y) < 2.0 ** -1022:
+            dropped += 4
+            continue
+        for x_sign in (1.0, -1.0):
+            x = x_sign * math.ldexp(1.0, j)
+            for y_sign in (1.0, -1.0):
+                pairs.append((y_sign * y, x))
+    return pairs, dropped
+
+
+def pair_problem(y, x, t):
+    """None if y/x is exactly +-t in 400-digit arithmetic, and y and x are doubles that say so."""
+    for d in (y, x):
+        if math.isinf(d) or math.isnan(d):
+            return "a pair holds a non-finite value"
+    if x == 0.0 or abs(Decimal(y) / Decimal(x)) != Decimal(t):
+        return "|y/x| is not t exactly"
+    return None
+
+
 def as_parsed(r):
     """The double r as (integer, exponent), the form parse() gives."""
     mantissa, exponent = math.frexp(r)
@@ -243,6 +291,29 @@ def self_test():
                     problem, _ = check(function, x, Decimal(x), as_parsed(neighbour), direction)
                     if problem is None:
                         failures.append("%s(%r): a result one ulp off passes" % (function, x))
+    t = 0.7777777777777777
+    pairs, dropped = derive_pairs(t)
+    if len(pairs) != 12 or dropped != 0:
+        failures.append("derive_pairs(%r) gives %d pairs, %d dropped" % (t, len(pairs), dropped))
+    for y, x in pairs:
+        if pair_problem(y, x, t) is not None:
+            failures.append("the pair (%r, %r) is not +-t exactly" % (y, x))
+        if abs(x) not in (1.0, 2.0, 2.0 ** -5):
+            failures.append("x %r is not +-2^j" % x)
+        # the recheck fails on a y one unit in the last place off, and on a wrong t
+        if pair_problem(math.nextafter(y, math.inf), x, t) is None:
+            failures.append("a y one ulp off passes for (%r, %r)" % (y, x))
+        if pair_problem(y, x, math.nextafter(t, math.inf)) is None:
+            failures.append("a t one ulp off passes for (%r, %r)" % (y, x))
+    if sorted(abs(y) / abs(x) for y, x in pairs) != [t] * 12:
+        failures.append("a pair's |y/x| is not t")
+    quadrants = {(y < 0, x < 0) for y, x in pairs}
+    if len(quadrants) != 4:
+        failures.append("the signs of y and x do not run through all four quadrants")
+    over, dropped_over = derive_pairs(1.5e308)
+    if dropped_over != 4 or len(over) != 8:
+        failures.append("t = 1.5e308 keeps %d pairs and drops %d, not 8 and 4: only j = 1 "
+                        "overflows" % (len(over), dropped_over))
     for failure in failures:
         print("self-test failed: " + failure, file=sys.stderr)
     if failures:
@@ -250,9 +321,55 @@ def self_test():
     print("self-test ok", file=sys.stderr)
 
 
+def pair_mode(tag, function, path):
+    """The pairs of a function of two arguments from the data of a function of one."""
+    one = PAIRS[(tag, function)]
+    opener = lzma.open if path.endswith(".xz") else open
+    with opener(path, "rt", encoding="ascii") as data:
+        lines = [line.split() for line in data]
+    lines = [f for f in lines if len(f) >= 5 and f[0] == "N" and f[1] == tag]
+    out, seen, problems, dropped, negative = [], set(), [], 0, 0
+    for f in lines:
+        x = parse(f[2])
+        t = math.ldexp(x[0], x[1])
+        if value(x) != Decimal(t):
+            problems.append("%s: x is not a double" % f[2])
+            continue
+        problem, _ = check(one, t, Decimal(t), parse(f[3]), int(f[4]))
+        if problem:
+            problems.append("%s: %s" % (f[2], problem))
+            continue
+        if t < 0:
+            negative += 1
+        t = abs(t)
+        if t in seen:
+            continue
+        seen.add(t)
+        pairs, lost = derive_pairs(t)
+        dropped += lost
+        for y, x_pair in pairs:
+            problem = pair_problem(y, x_pair, t)
+            if problem:
+                problems.append("%r, %r: %s" % (y, x_pair, problem))
+                continue
+            out.append("0x%016x 0x%016x" % tuple(
+                struct.unpack(">Q", struct.pack(">d", d))[0] for d in (y, x_pair)))
+    print("%d lines of mode N for %s, %d distinct |t| (%d negative inputs), %d pairs, %d dropped "
+          "as inexact, %d problems" % (
+              len(lines), tag, len(seen), negative, len(out), dropped, len(problems)),
+          file=sys.stderr)
+    for problem in problems:
+        print(problem, file=sys.stderr)
+    if problems:
+        sys.exit(1)
+    print("\n".join(out))
+
+
 def main(argv):
     if len(argv) == 2 and argv[1] == "--self-test":
         return self_test()
+    if len(argv) == 4 and (argv[1], argv[2]) in PAIRS:
+        return pair_mode(*argv[1:])
     if len(argv) != 4 or TAGS.get(argv[1]) != argv[2]:
         sys.exit(__doc__)
     tag, function, path = argv[1:]
