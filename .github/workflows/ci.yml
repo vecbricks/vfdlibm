@@ -101,8 +101,8 @@ jobs:
       - name: Check the proofs
         run: dev/prove.sh --lint
 
-  # The script that writes and checks results files from a run's artifact (bench/record.py):
-  # Python only, no JVM, no solver.
+  # The scripts that write and check results files from a run's artifact (bench/record.py) and
+  # hard-case inputs from Lefevre's list (dev/testlibm-extract.py): Python only, no JVM, no solver.
   record:
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -113,6 +113,8 @@ jobs:
           python-version: "3.12"
       - name: Self-test of bench/record.py
         run: bench/record.py --selftest
+      - name: Self-test of dev/testlibm-extract.py
+        run: python3 -I dev/testlibm-extract.py --self-test
 
   # A boxed vector body computes the right bits, so the tests pass on it; only its allocation
   # shows that the Vector API fell back to Java. bench/alloc-check.py runs every vector
