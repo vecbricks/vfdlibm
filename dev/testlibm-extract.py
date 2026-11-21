@@ -42,9 +42,15 @@ Usage, from the repository root; python3 -I keeps the working directory off the 
 The arguments are the tag, the function (sinh, cosh, expm1, atan, asin or acos) and the data
 file, plain or .xz. The tag and the function must be a pair of the table above.
     python3 -I dev/testlibm-extract.py --self-test
-checks the exact values against the platform's `math` and identities, and shows that the recheck
-fails on a result one unit in the last place off, on the wrong direction bit and on another
-function's value.
+checks pi's first 50 digits, 4*atan(1) against pi, and the exact values at a few inputs against
+the platform's `math` to 2^-50, and shows that the recheck fails on a result one unit in the
+last place off, on the wrong direction bit and, for atan against asin, on another function's
+value. It does not check the exact values to their 390 digits; the recheck of the data does, by
+accepting only the file's correctly rounded results.
+
+The inputs are not all hard cases: the summary on the standard error counts the lines with fewer
+than 40 bits after the round bit pointing at the midpoint (none for `atn`, one for `asn`, most of
+`acs`), and a file of hard cases written from this output should say which lines it keeps.
 To check a committed file against the data: the output must equal the file's lines that start
 with 0x, in the same order (sections after the data's, if any, are the file's own).
 """
@@ -162,6 +168,8 @@ def exact(function, x):
 def check(function, x_double, x_decimal, result, direction):
     """Returns (problem or None, bits after the round bit that repeat a midpoint's pattern)."""
     ax = abs(exact(function, x_decimal))
+    if ax == 0:
+        return "the exact value is zero, which has no binade", 0
     binade = math.floor(float(ax.ln() / Decimal(2).ln()))
     while pow2(binade) > ax:
         binade -= 1
