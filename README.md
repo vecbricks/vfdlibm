@@ -61,12 +61,12 @@ public final class Main {
     }
 
     boolean same = true;
-    for (int k = 0; k < xs.length; k++) {
+    for (int k = 0; k < SPECIES.loopBound(xs.length); k++) { // the lanes VFdlibm computed
       long got = Double.doubleToRawLongBits(ys[k]);
       same &= got == Double.doubleToRawLongBits(StrictMath.exp(xs[k]));
     }
     System.out.println("exp(" + xs[0] + ") = " + ys[0] + " at " + SPECIES.vectorBitSize()
-        + " bits; every lane has StrictMath's bits: " + same);
+        + " bits; the computed lanes have StrictMath's bits: " + same);
 
     // Only the lanes set in the mask are computed; the others keep the input's bits.
     DoubleVector x = DoubleVector.fromArray(SPECIES, xs, 0);
@@ -80,11 +80,14 @@ public final class Main {
 The Vector API is still incubating, and the JVM does not resolve an incubating module unless it
 is told to, so **at run time** a client adds the module: `--add-modules jdk.incubator.vector`
 on the class path, as here (without it the run fails with `NoClassDefFoundError:
-jdk/incubator/vector/DoubleVector`; `javac` needs no flag for a class-path build, since it
-resolves the module by default). The class path comes from Maven:
+jdk/incubator/vector/DoubleVector`; on the JDK this was checked with, 25.0.5, a plain `javac`
+needed no flag for a class-path build, and passing it there is harmless). The example assumes
+the host's preferred species is 128 bits or more, which the library requires of every vector
+it is given. The class path comes from Maven:
 
 ```sh
-mvn -q compile dependency:build-classpath -Dmdep.outputFile=cp.txt
+mvn -q compile org.apache.maven.plugins:maven-dependency-plugin:3.7.0:build-classpath \
+  -Dmdep.outputFile=cp.txt
 java --add-modules jdk.incubator.vector -cp "target/classes:$(cat cp.txt)" example.Main
 ```
 
@@ -92,7 +95,7 @@ which prints, on a host with 512-bit vectors (the width is the host's), and the 
 warning that an incubator module is in use:
 
 ```
-exp(0.5) = 1.6487212707001282 at 512 bits; every lane has StrictMath's bits: true
+exp(0.5) = 1.6487212707001282 at 512 bits; the computed lanes have StrictMath's bits: true
 masked: lane 0 is 1.6487212707001282, lane 1 is 1.0
 ```
 
@@ -111,15 +114,23 @@ built and run with no `--add-modules` at all (without the second `requires`, `ja
 the package `jdk.incubator.vector` is not visible):
 
 ```sh
-mvn -q clean compile dependency:build-classpath -Dmdep.outputFile=cp.txt
+mvn -q clean compile org.apache.maven.plugins:maven-dependency-plugin:3.7.0:build-classpath \
+  -Dmdep.outputFile=cp.txt
 java --module-path "target/classes:$(cat cp.txt)" -m example/example.Main
 ```
 
-Each function takes a vector of any species of 128 bits or more, and is built for and tested on
-Java 25. Ported so far: `exp`, `expm1`, `log`, `log10` and `log1p`. The system property
-`vfdlibm.fault` plants a fault, for this project's tests only, and works in the shipped jar too:
-never set it, including through `JAVA_TOOL_OPTIONS`; a JVM that has it set prints a warning to
-`System.err` once.
+Each function takes a vector of any species of 128 bits or more. Ported so far: `exp`,
+`expm1`, `log`, `log10` and `log1p`. The system property `vfdlibm.fault` plants a fault, for
+this project's tests only, and works in the shipped jar too: never set it, including through
+`JAVA_TOOL_OPTIONS`; a JVM that has it set prints a warning to `System.err` once.
+
+## Supported JDKs
+
+0.1.x supports **JDK 25 only**. The Vector API is incubating, and its API and C2's lowering of
+it move between JDK releases, so what a newer JDK does with these functions has not been
+measured here. The contract, bit identity with `StrictMath`, is tested on JDK 25 and on no
+other: every CI row, the nightly sweep and the benchmarks run Zulu 25. The example above is
+checked on JDK 25 too.
 
 ## Why
 
