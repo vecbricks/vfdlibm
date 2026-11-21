@@ -37,10 +37,9 @@ import jdk.incubator.vector.VectorSpecies;
  * {@code 2^-28} return {@code x}. From {@code 22} up the C needs {@code exp}: {@code
  * h*exp(|x|)} up to {@code o_threshold}, and {@code exp(|x|/2)} squared with {@code h} until the
  * overflow. Every operation is the C's, in the C's order, with no fused multiply-add and no
- * reassociation, so no lemma of its own is needed beyond L13's blend argument ({@code
- * PROOFS.md}); what it rests on through {@link
- * Expm1#expm1Core}, L10 and L11 and through them exp's L1, L2 and L5, is in {@code PROOFS.md}'s
- * sinh section.
+ * reassociation, so no lemma of its own is needed beyond L13's blend argument; what it rests on
+ * through {@link Expm1#expm1Core}, L10 and L11 and through them exp's L1, L2 and L5, is in
+ * {@code PROOFS.md}'s sinh section (L13 is in its section "Blends").
  *
  * <p>The {@code expm1} is {@link Expm1#expm1Core} of {@code |x|}, the only entry into {@code
  * Expm1} this class uses: e_expm1's common path in every lane, which is the C's result for every

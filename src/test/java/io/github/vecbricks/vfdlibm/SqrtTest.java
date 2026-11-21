@@ -44,6 +44,11 @@ class SqrtTest {
   /** The inputs of the boundary and of structure, which a random draw reaches only by luck. */
   private static final double[] BOUNDARY = boundary();
 
+  /** The random doubles, built once, on first use: 70 MB. */
+  private static final class Random {
+    static final double[] XS = random();
+  }
+
   private static double[] boundary() {
     double[] xs = Inputs.specials();
     for (int e = -1074; e <= 1023; e++) {
@@ -99,7 +104,7 @@ class SqrtTest {
   @ParameterizedTest
   @EnumSource(VectorWidth.class)
   void sqrtIsStrictMathsOnRandomDoubles(VectorWidth width) {
-    assertSqrt(width.species(), random());
+    assertSqrt(width.species(), Random.XS);
   }
 
   @ParameterizedTest

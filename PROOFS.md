@@ -56,8 +56,11 @@ IEEE properties used:
   lane's raw bits against `StrictMath.sqrt` on the boundary doubles (the zeros, every power of
   two and its neighbours, the squares of the integers to 4096 and theirs, the subnormals, the
   smallest normal, the largest double, the infinities, `NaN`s of several payloads, negative
-  numbers) and 8.7 million random doubles, half of them positive, unmasked and masked, at 128,
-  256 and 512 bits, `SPECIES_MAX` and the preferred species, on the hosts that run it. That
+  numbers) and, unmasked, 8.7 million random doubles of both signs at 128, 256 and 512 bits and
+  the preferred species (a width the host lacks is skipped there). The masked form is checked
+  on the boundary doubles and 2^19 random bit patterns at those widths; `SPECIES_MAX` and the
+  widths the host lacks, which run in Java, on the boundary doubles and 2^18 random bit
+  patterns, masked and unmasked. That
   the operator lowers to a vector instruction and does not box is a separate fact, read from
   `bench/alloc-check.py` on `SqrtBenchmark` (unmasked only; no row for the masked form).
 
@@ -861,7 +864,8 @@ with numerator `t*t` or `t`). This lemma covers both.
   arithmetic: `a*m + b*(1-m)` is not one, since `0*infinity` and `0*NaN` are `NaN`.
 
 **Statement.** Under H1 to H4 each lane's result equals, bit for bit, the C's result on that
-lane's input, each operation being the correct rounding of (R4).
+lane's input, each operation being the correct rounding of (R4), except when an operand of a
+kept operation is a `NaN`: then the lane is a `NaN`, and its payload and sign are not claimed.
 
 **Proof.** Fix a lane. By H1 the C takes exactly one branch `B` there, the port's masks name the
 same one. Take `B`'s operations in the C's order. The first one's operands are, by H2, the C's
@@ -872,15 +876,17 @@ alone; so the second operation has the C's operands, and so on to the last, whos
 lane's. The other branches' operations are computed in the lane too: by H3 they have no effect
 but their own value, and by H4 no blend of a kept value reads them. A value they take, `NaN` or
 infinite, never is an operand of a kept operation. So the lane holds `B`'s result. For a `NaN`
-operand the payload an operation returns is not fixed by IEEE 754 or the JLS; the lemma claims
-nothing about it (sinh and cosh finish their `NaN` lanes per lane, so none of their kept results
-is made by a blend). QED.
+operand the payload an operation returns is not fixed by IEEE 754 or the JLS, which is the
+exception in the statement (sinh and cosh finish their `NaN` lanes per lane, so none of their
+kept results is made by a blend). QED.
 
 **Not covered.** (1) That a port's compare is the C's, which is H1 and stays with each function's
 test (`SinhTest`, `CoshTest`, at the thresholds and their neighbours). (2) A moved compare in a
 range where the branches agree in bits, which no test sees and no result shows; cosh's section
 says so. (3) The masked forms' `x.blend(result, live)`, a select under the caller's mask and not
 the C's condition. (4) That C2 lowers a blend without boxing, read from `bench/alloc-check.py`.
+(5) That a port's code has the shape of the model: the tests run models and not `Sinh` or `Cosh`,
+so a port that left H2 or H4 behind would still pass them, and only its vector tie would fail.
 
 **Hinge tests** (`ProofsTest`, at 128, 256, 512 bits and the preferred species). They run a model
 of the shape, not the ports' code: sinh's two forms with one shared division
@@ -890,8 +896,10 @@ it, on `x` at the words next to `1.0`'s and `t` including `-1`, `1e200`, the inf
 `NaN`. `l13InputsAreNotVacuous` counts the lanes where the branches differ in bits at the
 compare, where a kept value is finite and the discarded one infinite, and where a discarded one
 is `NaN`. `l13FalseHingesAreCaught` requires the check to fail when the compare's word is moved by
-one either way (H1) and when the select is arithmetic (H4). Each port's own instance of H1 is
-the vector tie of its test, as before.
+one either way (H1) and when the select is arithmetic (H4). No control refutes H2 or H3: a wrong
+operand or a reassociated sum in a port, or an operation that throws on a discarded lane, is
+caught only by the port's own vector tie (and an H3 failure by the port not running at all).
+Each port's own instance of H1 is that tie as before.
 
 **Encoding.** No file: an induction on the operations of the branch, informal, not
 machine-checked.
