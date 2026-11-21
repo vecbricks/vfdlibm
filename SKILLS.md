@@ -802,8 +802,9 @@ next port re-trying a settled question.
     keep `fuzz-seconds` 240, `nights` 1, `shards` 2 and `arm-shards` 4, and `max-parallel` was
     5 for the sweep, 6 for the fuzz and 4 for Arm until 21 November 2026 (the entry on slots 6,
     8 and 5 below).
-  - **How firm that is: not very.** The 13-function fit is unverified, and no night has run on
-    the new slots. The model divides a kind's minutes by its slots and counts no whole waves
+  - **How firm that is: not very.** (This entry and the next two are the state of 20 November
+    2026, on slots 5, 6 and 4; the slots are now 6, 8 and 5, below.) The 13-function fit is
+    unverified, and no night has run on the new slots. The model divides a kind's minutes by its slots and counts no whole waves
     of jobs, so 76 is a lower bound; the sweep's 62, plus its longest job, 19.8, plus the 8
     minutes, gives 90 as an estimate of the worst case, which is the budget itself: with no
     margin. (It adds a median to a longest job, so it is neither a median nor a maximum.) The 8
