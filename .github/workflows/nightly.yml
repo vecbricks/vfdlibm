@@ -320,7 +320,16 @@ jobs:
         with:
           distribution: zulu
           java-version: 25
-          cache: maven
+      # A cache of the Maven repository per kind of job and architecture. When the pom has
+      # changed, restore-keys start from the last cache saved for that kind, which setup-java's
+      # `cache: maven` does not. A job saves its cache only if it succeeds.
+      - name: Cache Maven's local repository (nightly)
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.m2/repository
+          key: m2-${{ runner.os }}-${{ runner.arch }}-java25-nightly-${{ hashFiles('**/pom.xml') }}
+          restore-keys: |
+            m2-${{ runner.os }}-${{ runner.arch }}-java25-nightly-
       # The machine in the log: CPU, vector flags, UseAVX and MaxVectorSize, and the datapath.
       - name: Record the machine
         continue-on-error: true
@@ -369,7 +378,13 @@ jobs:
         with:
           distribution: zulu
           java-version: 25
-          cache: maven
+      - name: Cache Maven's local repository (nightly)
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.m2/repository
+          key: m2-${{ runner.os }}-${{ runner.arch }}-java25-nightly-${{ hashFiles('**/pom.xml') }}
+          restore-keys: |
+            m2-${{ runner.os }}-${{ runner.arch }}-java25-nightly-
       - name: Record the machine
         continue-on-error: true
         run: bench/datapath.sh
@@ -411,7 +426,13 @@ jobs:
         with:
           distribution: zulu
           java-version: 25
-          cache: maven
+      - name: Cache Maven's local repository (nightly)
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.m2/repository
+          key: m2-${{ runner.os }}-${{ runner.arch }}-java25-nightly-${{ hashFiles('**/pom.xml') }}
+          restore-keys: |
+            m2-${{ runner.os }}-${{ runner.arch }}-java25-nightly-
       - name: Record the machine
         continue-on-error: true
         run: bench/datapath.sh
