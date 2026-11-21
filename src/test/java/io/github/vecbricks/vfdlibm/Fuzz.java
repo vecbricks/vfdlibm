@@ -47,7 +47,8 @@ import jdk.incubator.vector.VectorSpecies;
  *
  * <p>{@code --draws} bounds each thread to that many inputs (rounded up to a block), besides
  * {@code --seconds}: a run that ends on it draws the same inputs whatever the machine's load,
- * which a time limit does not.
+ * which a time limit does not. {@code --seconds} stays required, and a run that it ends first
+ * has drawn fewer inputs than {@code --draws}.
  *
  * <p>Each thread draws from its own stream, {@code seed} mixed with the thread's number, so a run
  * is the same inputs in the same order per thread; how far each thread gets depends on the time.
@@ -187,8 +188,9 @@ final class Fuzz {
       return Nightly.ERROR;
     }
 
-    String what = String.format("fuzz %s at %d bits for %.0f s", function.id,
-        species.vectorBitSize(), budget);
+    String bound = draws == Long.MAX_VALUE ? "" : " or " + draws + " inputs a thread";
+    String what = String.format("fuzz %s at %d bits for %.0f s%s", function.id,
+        species.vectorBitSize(), budget, bound);
     System.out.println(what);
     System.out.println("seed: " + Nightly.seedText(seed));
     System.out.println("arms: " + Nightly.armNames(function));
@@ -196,8 +198,9 @@ final class Fuzz {
     Nightly.printHost(species);
     String context = String.format("function=%s species=%s seed=%s", function.id, species,
         Nightly.seedText(seed));
-    String replay = String.format("Fuzz --function %s --species %s --seed %s --threads %d",
-        function.id, Nightly.speciesName(species), Nightly.seedText(seed), threads);
+    String replay = String.format("Fuzz --function %s --species %s --seed %s --threads %d%s",
+        function.id, Nightly.speciesName(species), Nightly.seedText(seed), threads,
+        draws == Long.MAX_VALUE ? "" : " --draws " + draws);
 
     Edges edges = edges(function);
     long start = System.nanoTime();
