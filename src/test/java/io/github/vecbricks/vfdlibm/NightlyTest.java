@@ -66,10 +66,10 @@ class NightlyTest {
   void fuzzDrawsAreBoundedAndValidated() {
     assumeTrue(Faults.planted() == null);
     String out = dir.resolve("fuzz.txt").toString();
-    // A run that ignored --draws would go on for the 600 seconds: two minutes fail it.
-    assertEquals(Nightly.OK, assertTimeoutPreemptively(Duration.ofSeconds(120), () ->
+    // A run that ignored --draws would go on for the 60 seconds: 30 fail it.
+    assertEquals(Nightly.OK, assertTimeoutPreemptively(Duration.ofSeconds(30), () ->
         Fuzz.run(new String[] {
-          "--function", "exp", "--seed", "0x5eed", "--seconds", "600", "--draws", "4096",
+          "--function", "exp", "--seed", "0x5eed", "--seconds", "60", "--draws", "4096",
           "--threads", "2", "--out", out})));
     assertEquals(Nightly.ERROR, Fuzz.run(new String[] {
       "--function", "exp", "--seed", "0x5eed", "--seconds", "600", "--draws", "0",
@@ -89,19 +89,20 @@ class NightlyTest {
 
   /**
    * Inputs each fuzz thread draws in {@link #fuzzCatchesThePlantedFault}. The streams are fixed
-   * by the seed, so the fuzz finds each fault at one input index, the same at every species;
-   * only the time to reach it varies with the machine. Measured on a laptop, one stream per run,
-   * for the 20 faults the test runs: with the test's seed 0x5eed (first thread) the index is
-   * 4,096 for 16 faults and, for the others, 69,632 (exp.thresholdMoved), 57,344
-   * (exp.dropKForcing), 20,480 (expm1.dropKForcing) and 16,384 (log.thresholdMoved); the second
-   * thread's seed 0x5eee finds them at 24,576, 159,744, 110,592 and 4,096. Over 20 seeds the
-   * longest is 614,400 (exp.dropKForcing), which a million would clear only 1.6 times, but the
-   * seed is fixed. One thread finding the fault is enough, so a fault's index is the smaller of
-   * its two threads': the largest is 57,344 (exp.dropKForcing), and a million inputs is 17
-   * times that (14 times the first thread's alone, 69,632). The time was the trouble: on
-   * GitHub's x86 runner (4 cores, 128 bits) the one second the test used to allow drew 32,768
-   * inputs, 16,384 a thread, one block short of expm1.dropKForcing's 20,480 (run 44893905573,
-   * job 136815350908). Now the inputs are bounded and the seconds only end a hung run.
+   * by the seed, so the fuzz finds each fault at one input index, the same at the 128, 256, 512,
+   * preferred and max species of the host measured; only the time to reach it varies with the
+   * machine. Measured on an x86 laptop, one stream per run, for the 20 faults the test runs: with
+   * the test's seed 0x5eed (first thread) the index is 4,096 for 16 faults and, for the others,
+   * 69,632 (exp.thresholdMoved), 57,344 (exp.dropKForcing), 20,480 (expm1.dropKForcing) and
+   * 16,384 (log.thresholdMoved); the second thread's seed 0x5eee finds them at 24,576, 159,744,
+   * 110,592 and 4,096. Over 20 seeds the longest is 614,400 (exp.dropKForcing), which a million
+   * would clear only 1.6 times, but the seed is fixed. One thread finding the fault is enough, so
+   * a fault's index is the smaller of its two threads': the largest is 57,344 (exp.dropKForcing),
+   * and a million inputs is 17 times that (14 times the first thread's alone, 69,632). The time
+   * was the trouble: on GitHub's x86 runner (4 cores, 128 bits) the one second the test used to
+   * allow drew 32,768 inputs, 16,384 a thread, one block short of expm1.dropKForcing's 20,480
+   * (run 44893905573, job 136815350908). Now the inputs are bounded and the seconds only end a
+   * hung run.
    */
   private static final String DRAWS = "1000000";
 
