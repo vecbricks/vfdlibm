@@ -760,11 +760,12 @@ re-trying a settled question.
   only on `|x| < 0.5*ln2`, so their cost follows the share of that range, which is 3.5% in
   Varka's baseline benchmark and 17% in Spark's unit tests (issue #32): at 8 lanes a vector
   holds one in 27% and 82% of the cases. `CoshKindsBench` has those two shares. The one run
-  there is, on a laptop under load, `bench/results/cosh-laptop-2026-11-21.txt`: at the preferred
-  species (512 bits) the finish arm is 2.1 and 3.5 times the slice arm's time on those shares,
-  and equal to it without small lanes, while `CoshBenchmark`'s common and mixed rows, at 0.6% and
-  less, put the finish arm ahead, and at 256 bits no order shows. The errors are a third to a
-  half of the scores, so no direction is read; a benchmark host's run decides the default.
+  there is, on a laptop under load, `bench/results/cosh-laptop-2026-11-21.txt`, and its file
+  disowns it: the errors are a third to a half of the scores and its rows disagree (at 512 bits
+  the finish arm is 2.1 and 3.5 times the slice arm's time on those shares, while
+  `CoshBenchmark`'s common and mixed rows put it ahead, and at 256 bits no order shows). So the
+  default is the plan's baseline design, chosen without a measurement that reads, and a benchmark
+  host's run decides it.
 - **Which exp faults reach cosh.** `exp.dropCorrection` and `exp.constantOffByOneUlp`, which
   change `expCore`'s lanes of `|x| >= 0.5 ln2`. `exp.thresholdMoved` moves the subnormal
   scale-back, which `expCore` leaves out, and `exp.dropKForcing` the lanes of the word of 0.5
