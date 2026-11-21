@@ -76,10 +76,10 @@ import jdk.incubator.vector.VectorSpecies;
  * exists; after it there are only Vector API operations and the per-lane finish written out in
  * the body.
  *
- * <p>{@link #cosh(DoubleVector, VectorMask)}, which {@code VFdlibm.cosh} calls, is the finish
- * arm, provisionally: the arms
- * were timed on a laptop only, not a benchmark host, and the choice stands until a host decides
- * it ({@code SKILLS.md}).
+ * <p>{@link #cosh(DoubleVector, VectorMask)}, which {@code VFdlibm.cosh} calls, is the slice
+ * arm, provisionally: the arms were timed on a laptop only, under load, and no host has decided
+ * it ({@code bench/results/cosh-laptop-2026-11-21.txt}, {@code SKILLS.md}). The choice stands
+ * until a benchmark host's rows do.
  */
 final class Cosh {
 
@@ -137,24 +137,25 @@ final class Cosh {
   private Cosh() {}
 
   /**
-   * cosh as {@code VFdlibm.cosh} computes it, the finish arm. {@code live} is null for every
+   * cosh as {@code VFdlibm.cosh} computes it, the slice arm. {@code live} is null for every
    * lane; otherwise only live lanes are computed, inactive lanes return {@code x}'s lane
    * untouched, and an inactive lane never takes the per-lane finish.
    */
   static DoubleVector cosh(DoubleVector x, VectorMask<Double> live) {
-    return cosh(x, live, FINISH);
+    return cosh(x, live, SLICE);
   }
 
   /**
-   * cosh with the small range computed in the vector. {@code live} is as for {@link
-   * #cosh(DoubleVector, VectorMask)}.
+   * cosh with the small range computed in the vector, as {@link #cosh(DoubleVector,
+   * VectorMask)} does.
    */
   static DoubleVector coshSlice(DoubleVector x, VectorMask<Double> live) {
     return cosh(x, live, SLICE);
   }
 
   /**
-   * cosh with the small range finished per lane, as {@link #cosh(DoubleVector, VectorMask)}.
+   * cosh with the small range finished per lane. {@code live} is as for {@link
+   * #cosh(DoubleVector, VectorMask)}.
    */
   static DoubleVector coshFinish(DoubleVector x, VectorMask<Double> live) {
     return cosh(x, live, FINISH);

@@ -122,9 +122,9 @@ final class Nightly {
     SINH("sinh", StrictMath::sinh, List.of(
         new Arm("VFdlibm.sinh", VFdlibm::sinh, VFdlibm::sinh))),
     COSH("cosh", StrictMath::cosh, List.of(
-        // VFdlibm.cosh is Cosh.coshFinish, so the finish arm is checked under that name.
+        // VFdlibm.cosh is Cosh.cosh, the slice arm, so that arm is checked under that name.
         new Arm("VFdlibm.cosh", VFdlibm::cosh, VFdlibm::cosh),
-        new Arm("Cosh.coshSlice", x -> Cosh.coshSlice(x, null), Cosh::coshSlice)));
+        new Arm("Cosh.coshFinish", x -> Cosh.coshFinish(x, null), Cosh::coshFinish)));
 
     final String id;
     final DoubleUnaryOperator oracle;

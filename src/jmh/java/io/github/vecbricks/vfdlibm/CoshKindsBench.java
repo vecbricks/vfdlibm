@@ -27,7 +27,8 @@ import org.openjdk.jmh.annotations.Warmup;
 /**
  * cosh's two arms at a share of small-range lanes, to decide which of them {@link VFdlibm#cosh}
  * runs: the scalar {@code StrictMath.cosh} loop, {@link Cosh#coshSlice} (the small range, {@code
- * |x| < 0.5*ln2}, computed in the vector) and {@link Cosh#coshFinish} (finished per lane), each
+ * |x| < 0.5*ln2}, computed in the vector, what {@code VFdlibm.cosh} runs) and {@link
+ * Cosh#coshFinish} (finished per lane), each
  * vector form at 256 bits and at the host's preferred species, over an array of 1024 doubles.
  * The arms differ only in that range, and {@code CoshBenchmark}'s {@code common} data has 0.6% of
  * its lanes there, which says little: a vector holds a small lane with probability {@code 1 -

@@ -38,7 +38,8 @@ row order decides which comes first. `exp` is the first port and is done (`VFdli
 `e_exp.c`); `sinh` and `cosh` build on it and on `expm1`, and `pow` on neither: `e_pow.c` has its
 own logarithm and exponential and calls only `sqrt`, `fabs` and `scalbn`. `sinh` is done
 (`VFdlibm.sinh`, from `e_sinh.c`, computing through `expm1`'s common path below 22 and finishing
-the rest per lane). `log`, `log10` and
+the rest per lane), and so is `cosh` (`VFdlibm.cosh`, from `e_cosh.c`, through `exp`'s common path
+and expm1's `k == 0` lines, with two arms for its small range). `log`, `log10` and
 `log1p` are done too (`VFdlibm.log`, from `e_log.c`, `VFdlibm.log10`, from `e_log10.c`, which
 computes through log's common path, and `VFdlibm.log1p`, from `s_log1p.c`), and so is `expm1`
 (`VFdlibm.expm1`, from `s_expm1.c`, whose reduction is exp's).
@@ -60,13 +61,13 @@ five are a later, optional set; the large-argument reduction of the trigonometri
   - published hard cases: inputs where the exact result lies very close to a rounding boundary, from
     Lefevre and Muller's worst-case tables (ARITH 15, 2001) and Lefevre's list of round-to-nearest
     hard cases, one resource per function under `src/test/resources/.../hard-cases/` (so far `exp`,
-    `expm1`, `log`, `log10`, `log1p` and `sinh`), loaded with `Inputs.hardCases("<function>")`.
-    The inputs of Lefevre's list come out of `dev/testlibm-extract.py`, which rechecks each line
-    with 400-digit arithmetic (`sinh`'s file was written by it).
-    A port that keeps fdlibm's operations, or departs from them only where `PROOFS.md` proves the
-    result equal, matches `StrictMath` on them by construction; they sit where a dropped correction
-    term or a reassociated sum, an error far below one ulp, is most likely to change the returned
-    double.
+    `expm1`, `log`, `log10`, `log1p`, `sinh` and `cosh`), loaded with
+    `Inputs.hardCases("<function>")`. The inputs of Lefevre's list come out of
+    `dev/testlibm-extract.py`, which rechecks each line with 400-digit arithmetic (`sinh`'s and
+    `cosh`'s files were written by it). A port that keeps fdlibm's operations, or departs from them
+    only where `PROOFS.md` proves the result equal, matches `StrictMath` on them by construction;
+    they sit where a dropped correction term or a reassociated sum, an error far below one ulp, is
+    most likely to change the returned double.
 - **Every check proves it can fail:** a flag plants a known fault (a dropped correction term, a
   constant off by one ulp, a branch threshold moved), and the suite must catch it. The flag is
   the system property `vfdlibm.fault`, read once into a `static final` in the main sources'
@@ -80,12 +81,12 @@ five are a later, optional set; the large-argument reduction of the trigonometri
   -XX:MaxVectorSize=32`, 128 and 256 bits on every draw), on x86 with `-XX:MaxVectorSize=16`
   (all of it at 128 bits) and on Arm (128 bits).
 - **Nightly:** `.github/workflows/nightly.yml` sweeps every high word of exp, expm1, log, log10,
-  log1p and sinh with three low words each (every branch fdlibm decides on the high word) at every
-  width but 128 bits on x86, where a rotating 1/32 slice a night covers it in 32 nights, and at 128
-  bits on Arm every night; it fuzzes from a fresh seed at every width, and runs every proof under
-  both solvers; a failure opens an issue labelled `nightly-failure` with the mismatching inputs,
-  ready for a `hard-cases` file (`SKILLS.md`), and a dispatch that plants a fault, to test that
-  alert, opens one labelled `nightly-fault-test`.
+  log1p, sinh and cosh with three low words each (every branch fdlibm decides on the high word) at
+  every width but 128 bits on x86, where a rotating 1/32 slice a night covers it in 32 nights, and
+  at 128 bits on Arm every night; it fuzzes from a fresh seed at every width, and runs every proof
+  under both solvers; a failure opens an issue labelled `nightly-failure` with the mismatching
+  inputs, ready for a `hard-cases` file (`SKILLS.md`), and a dispatch that plants a fault, to test
+  that alert, opens one labelled `nightly-fault-test`.
 - **Masked forms:** a masked form is checked under seeded random masks, all-true and all-false;
   active lanes must equal `StrictMath` and inactive lanes must keep the input's raw bits (for a
   two-argument function, the first argument's).
@@ -139,14 +140,16 @@ five are a later, optional set; the large-argument reduction of the trigonometri
   function adds its own benchmark the same way. `Log10Benchmark` does the same for `log10`, at 256
   and 512 bits, the preferred species and `SPECIES_MAX`. `Log1pBenchmark` does the same for `log1p`,
   with a third arm that blends the rare paths only when a vector holds a rare lane; `Expm1Benchmark`
-  has the same three arms for `expm1`, and `SinhBenchmark` one for `sinh`. Each of the six has rows
-  at `SPECIES_MAX` (`*Max`), which the allocation check leaves out: every port's finish boxes there
-  on mixed data (`bench/results/max-finish-laptop-2026-11-20.txt`). `ExpKindsBench` runs exp's two
-  arms on one kind of rare input at a time (a NaN, an overflow, an underflow, a subnormal result),
-  to find which kind costs an arm its time on mixed data (#41); it is named apart so that a run of
-  `ExpBenchmark` and the allocation check's default regex leave it out. A function's body is larger
-  than C2 inlines by default, so a call from a loop passes boxed vectors; the benchmarks are also
-  run with `-XX:CompileCommand=inline,...` to measure the body as Varka emits it, inline.
+  has the same three arms for `expm1`, `SinhBenchmark` one for `sinh` and `CoshBenchmark` two for
+  `cosh`. Each of the seven has rows at `SPECIES_MAX` (`*Max`), which the allocation check leaves
+  out: every port's finish boxes there on mixed data
+  (`bench/results/max-finish-laptop-2026-11-20.txt`). `ExpKindsBench` runs exp's two arms on one
+  kind of rare input at a time (a NaN, an overflow, an underflow, a subnormal result), to find which
+  kind costs an arm its time on mixed data (#41); it is named apart so that a run of `ExpBenchmark`
+  and the allocation check's default regex leave it out, as `CoshKindsBench`, which has cosh's
+  small-range shares, is. A function's body is larger than C2 inlines
+  by default, so a call from a loop passes boxed vectors; the benchmarks are also run with
+  `-XX:CompileCommand=inline,...` to measure the body as Varka emits it, inline.
 
 ### The 0.1.0 criteria
 

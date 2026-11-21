@@ -1,8 +1,8 @@
 # What vfdlibm has learned
 
-Lessons about benchmarking, the JIT and the Vector API that every port follows. Most were learned
-in Varka (github.com/vecbricks/varka, its `sql/varka/skills/`) and are rewritten here for a vector
-math library; the last sections are what the `exp`, `log`, `log1p`, `log10`, `expm1` and `sinh`
+Lessons about benchmarking, the JIT and the Vector API that every port follows. Most were learned in
+Varka (github.com/vecbricks/varka, its `sql/varka/skills/`) and are rewritten here for a vector math
+library; the last sections are what the `exp`, `log`, `log1p`, `log10`, `expm1`, `sinh` and `cosh`
 ports taught. Each entry says where its numbers come from. A new lesson goes in the section it
 belongs to, as a short entry; a negative result belongs here too, since it stops the next port
 re-trying a settled question.
@@ -644,16 +644,21 @@ re-trying a settled question.
     minutes, gives 90 as an estimate of the worst case, which is the budget itself: with no
     margin. (It adds a median to a longest job, so it is neither a median nor a maximum.) The 8
     minutes are one fit (54 against 46). Each further average function adds about 5 minutes
-    (Arm's 273 over 13 functions and 4 slots). For today's five functions the prediction is 34
-    minutes, Arm's 105 over 4 slots (26) plus the 8; the sweep's 119 over 5 slots (24) and the
-    fuzz's 138 over 6 (23) are below it. The sweep's slots go from 8 to 5, and its 10 jobs of
-    about 11 minutes run in two waves on either, so for five functions that move costs
-    nothing. It pays for the fuzz's 6 and Arm's 4 slots under the cap of 15 matrix jobs, and at
-    13 functions the sweep's 26 jobs take 6 waves on 5 slots where 8 would take 4. The first
-    nights on the new slots check both: fetch them with `pool.py fetch` and read the span from
+    (Arm's 273 over 13 functions and 4 slots). For the five functions the table measured the
+    prediction was 34 minutes, Arm's 105 over 4 slots (26) plus the 8; the sweep's 119 over 5
+    slots (24) and the fuzz's 138 over 6 (23) are below it. The sweep's slots go from 8 to 5, and
+    its 10 jobs of about 11 minutes run in two waves on either, so for five functions that move
+    costs nothing. It pays for the fuzz's 6 and Arm's 4 slots under the cap of 15 matrix jobs,
+    and at 13 functions the sweep's 26 jobs take 6 waves on 5 slots where 8 would take 4. The
+    first nights on the new slots check both: fetch them with `pool.py fetch` and read the span from
     `pool.py cost`. The budget is a median span of 90 minutes, so a median of the nights above
     90 breaks it and calls for one of the levers below; a single long night does not. At 13
     functions a median between 76 and 90 is inside it, and shows how far the model is off.
+  - **Seven functions now.** The table is of five; sinh and cosh join it, so the nightly runs
+    seven. At the five's average cost the model gives 167, 193 and 147 minutes for the sweep, the
+    fuzz and Arm, over 5, 6 and 4 slots 33, 32 and 37, a span of 45 (a lower bound, as above).
+    Their own cost is not measured: the first nights with them are, with `pool.py fetch` and
+    `cost`, and this entry is requoted from those.
   - **What gives when it does not fit,** cheapest first, with what each buys at 13 functions
     (the table's means times 2.6): `fuzz-seconds` 120 saves 224 runner-minutes a night (172 in
     the fuzz jobs, 52 in Arm's) and halves what a species is fuzzed; `nights` 2 saves 192, 124
@@ -740,6 +745,40 @@ re-trying a settled question.
   other files were: every result is the correctly rounded value, every direction bit the 54th
   bit of the exact result, and every input has 46 or more bits after the round bit pointing at
   the midpoint.
+
+## What the cosh port taught
+
+- **One `Exp.expCore`, and expm1's lines written out, not nested.** cosh needs `exp(|x|)` from
+  0.5 ln2 up and `expm1(|x|)` below it. Below 0.5 ln2 the C's `expm1` reduces nothing, so it is
+  s_expm1.c's lines 177-189, which the port transcribes with `Expm1`'s constants: `Expm1`'s
+  body, with its reduction and its seven forms, beside `Exp`'s would be two port bodies in one
+  graph (above). With one `expCore` and about 35 more operations, `CoshBenchmark`'s rows are
+  held by `bench/alloc-check.py` (CI runs it, and it was run locally before any test was
+  written), at the runner's flags and as AVX2; no figure is committed.
+- **Two arms, one provisional default.** `coshSlice` computes the small range in the vector and
+  `coshFinish` finishes its lanes per lane; `VFdlibm.cosh` runs the slice arm. The arms differ
+  only on `|x| < 0.5*ln2`, so their cost follows the share of that range, which is 3.5% in
+  Varka's baseline benchmark and 17% in Spark's unit tests (issue #32): at 8 lanes a vector
+  holds one in 27% and 82% of the cases. `CoshKindsBench` has those two shares. The one run
+  there is, on a laptop under load, `bench/results/cosh-laptop-2026-11-21.txt`: at the preferred
+  species (512 bits) the finish arm is 2.1 and 3.5 times the slice arm's time on those shares,
+  and equal to it without small lanes, while `CoshBenchmark`'s common and mixed rows, at 0.6% and
+  less, put the finish arm ahead, and at 256 bits no order shows. The errors are a third to a
+  half of the scores, so no direction is read; a benchmark host's run decides the default.
+- **Which exp faults reach cosh.** `exp.dropCorrection` and `exp.constantOffByOneUlp`, which
+  change `expCore`'s lanes of `|x| >= 0.5 ln2`. `exp.thresholdMoved` moves the subnormal
+  scale-back, which `expCore` leaves out, and `exp.dropKForcing` the lanes of the word of 0.5
+  ln2, which cosh computes from expm1's lines. `CoshTest` fails under the first two and passes
+  under the other two (run with `-Dtest=CoshTest -Dvfdlibm.test.jvmArgs=-Dvfdlibm.fault=<name>`),
+  and the nightly's `reach` map says the same.
+- **Sizing the faults, on 2^22 draws each.** `cosh.splitMoved` moves the small range's end from
+  0.5 ln2 to 1: 2070784 of the draws of `(-1, 1)` change, and none do when it moves by one word.
+  `cosh.halfOneUlpOff` changes 4144395 of the draws of `(-30, 30)`, `cosh.dropHalfOverT` 2568400
+  and `cosh.finishMissesSmall` 503123 of those of `(-0.34, 0.34)`. The last is the finish arm's
+  alone and the first the slice arm's alone, so their catchers name one arm each.
+- **Lefevre's list has 2026 `ch` lines,** positive inputs only, rechecked and written by
+  `dev/testlibm-extract.py` as sinh's were, each with 46 or more bits after the round bit
+  pointing at the midpoint.
 
 ## What the mutant survey taught
 
