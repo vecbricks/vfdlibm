@@ -1,6 +1,8 @@
 # Published hard-to-round inputs for log, one double per line as its raw bits in hex
 # (Double.doubleToRawLongBits), read by Inputs.hardCases("log"). Lines starting with # are
 # comments. Only the input values are taken from the sources below; they are numeric facts.
+# The last section, 3, holds 4 inputs of another kind, found by the mutant survey (see
+# there); the others are the published cases, which the sections before it name.
 #
 # At such an input the exact log(x) lies unusually close to a rounding boundary of binary64
 # (a midpoint between two doubles for round-to-nearest, a double itself for the directed
@@ -2843,3 +2845,18 @@
 0x3fefffffffffffef
 0x3feffffffffffff4
 0x3feffffffffffffe
+#
+# Section 3: inputs that show a one-step change of the C that the other sections' inputs and
+# the unit tests' did not, found by the mutant survey (dev/survey/README.md): each is an
+# input on which the named mutant of the transcription in Mutants.java is not StrictMath's
+# result while the transcription itself is. They are not hard to round; they are where a
+# constant or a threshold one step off shows, which a port that follows the C would then show
+# too. MutantsTest checks each against its mutant. One per mutant, in the survey's order:
+# Lg3-ulp
+0x3fe6a0dc5d06b879
+# Lg4+ulp
+0x3ff6a09e66436ea9
+# Lg4-ulp
+0x3ff6a0995fd5e385
+# hx<0x00100000-1
+0x000ffffffffece5e

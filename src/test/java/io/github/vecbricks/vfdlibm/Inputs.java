@@ -147,7 +147,9 @@ final class Inputs {
    * matching fdlibm step for step matches {@code StrictMath} on them as on any input. For exp's
    * planted faults they caught nothing that uniform draws miss, and fewer of them flip (the
    * commit adding them has the counts); they are kept so every port is checked exactly at the
-   * boundaries.
+   * boundaries. The last section of exp's, expm1's, log's and log10's files is another kind of
+   * input: a few witnesses of one-step mutants of the C that the others miss ({@code
+   * MutantsTest}), which are not hard to round.
    */
   static double[] hardCases(String function) {
     String resource = "hard-cases/" + function + ".txt";

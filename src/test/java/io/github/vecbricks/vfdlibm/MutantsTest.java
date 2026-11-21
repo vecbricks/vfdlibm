@@ -96,6 +96,51 @@ class MutantsTest {
     }
   }
 
+  /**
+   * The inputs the survey found for mutants that the unit tests' inputs missed: function,
+   * mutant, input bits. Each is in the function's hard cases (the last section of the file), so the
+   * suite shows the mutant from then on; {@code dev/survey/README.md} says which rows moved.
+   */
+  private static final String[][] WITNESSES = {
+    {"exp", "invln2+ulp", "0x4080b08f291b07d7"},
+    {"exp", "invln2-ulp", "0xc0853d0be66558b9"},
+    {"exp", "ln2LO-ulp", "0x40862e41b4b81a53"},
+    {"exp", "P3+ulp", "0xc05af233642a11e6"},
+    {"exp", "P3-ulp", "0x3fd62e455f911a51"},
+    {"expm1", "ln2_lo+ulp", "0x40813d11ecc9bf58"},
+    {"expm1", "ln2_lo-ulp", "0x40613becdec29a5c"},
+    {"expm1", "Q2+ulp", "0x405033caf119c34c"},
+    {"expm1", "Q2-ulp", "0x4012059671dffac3"},
+    {"expm1", "k<20-1", "0x402a129199ab1c18"},
+    {"expm1", "k<20+1", "0x402b2688d692d264"},
+    {"log", "Lg3-ulp", "0x3fe6a0dc5d06b879"},
+    {"log", "Lg4+ulp", "0x3ff6a09e66436ea9"},
+    {"log", "Lg4-ulp", "0x3ff6a0995fd5e385"},
+    {"log", "hx<0x00100000-1", "0x000ffffffffece5e"},
+    {"log10", "log.Lg3+ulp", "0x3fe6a09e667f6b7d"},
+    {"log10", "log.Lg3-ulp", "0x3fe6a09e66b789a6"},
+    {"log10", "log.Lg4-ulp", "0x3fe6a09e65d9ba3e"},
+  };
+
+  /** Each witness is a hard case, shows its mutant, and is no input the C itself gets wrong. */
+  @Test
+  void theHardCasesHoldAWitnessOfEachMutantTheSurveyFound() {
+    for (String[] w : WITNESSES) {
+      Mutants.Port port = Mutants.of(w[0]);
+      Mutants.Mutant mutant = port.mutants().stream()
+          .filter(m -> m.name().equals(w[1])).findFirst().orElseThrow();
+      long bits = Long.parseUnsignedLong(w[2].substring(2), 16);
+      double x = Double.longBitsToDouble(bits);
+      String at = w[0] + " " + w[1] + " at " + Oracle.hex(x);
+      assertTrue(Arrays.stream(Inputs.hardCases(w[0]))
+          .anyMatch(h -> Double.doubleToRawLongBits(h) == bits), at + " is not a hard case");
+      long want = Double.doubleToRawLongBits(port.oracle().applyAsDouble(x));
+      assertEquals(want, Double.doubleToRawLongBits(port.apply(x, port.unchanged())), at);
+      assertTrue(want != Double.doubleToRawLongBits(port.apply(x, mutant)),
+          at + " does not show its mutant");
+    }
+  }
+
   /** A dropped reduction term changes many of exp's results, and none where no k is reduced. */
   @Test
   void aCountIsTheInputsThatDiffer() {
