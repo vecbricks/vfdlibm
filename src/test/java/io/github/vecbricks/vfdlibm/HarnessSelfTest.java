@@ -110,7 +110,7 @@ class HarnessSelfTest {
   void oraclePassesCorrectBinaryFunction(VectorWidth width) {
     Inputs.Pairs p = Inputs.cross(
         Inputs.specials(), Inputs.concat(Inputs.specials(), Inputs.sampled(2L, 16)));
-    Oracle.assertBinary(
+    Oracle.assertPair(
         "pow", width.species(), HarnessSelfTest::pow, StrictMath::pow, p.x(), p.y());
   }
 
@@ -183,7 +183,7 @@ class HarnessSelfTest {
     faultLane = 0;
     Oracle.assertUnary("exp", species, HarnessSelfTest::exp, StrictMath::exp,
         new double[] {0.0, 1.0});
-    binaryInputs(species, (x, y) -> Oracle.assertBinary(
+    binaryInputs(species, (x, y) -> Oracle.assertPair(
         "pow", species, HarnessSelfTest::pow, StrictMath::pow, x, y));
   }
 
@@ -204,7 +204,7 @@ class HarnessSelfTest {
         faultLane = lane;
         AssertionFailedError e = PlantedFaultTest.assertCaught(
             ONE_ULP,
-            () -> Oracle.assertBinary(
+            () -> Oracle.assertPair(
                 "pow", species, HarnessSelfTest::pow, StrictMath::pow, xs, ys));
         assertReports(e, lane, 2, xs.length);
       }

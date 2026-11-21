@@ -665,7 +665,7 @@ re-trying a settled question.
   2^-32 for a random partner and more where the two exponents are near, and which
   the fuzz meets because its draws put both arguments at their edges at once (`toy2-xy` in
   `PairHarnessTest`: both sweeps pass it, the fuzz finds it). The masked form of an arm keeps the
-  first argument's bits in a lane that is not live (`Oracle.assertBinaryMasked`'s contract). A pair
+  first argument's bits in a lane that is not live (`Oracle.assertPairMasked`'s contract). A pair
   function's mismatch file, and a hard-cases file of one, say `# arity: 2` before the first input
   and hold `0x<x> 0x<y>` on a line: `Inputs.hardCasePairs` reads one, and `Inputs.hardCases` refuses
   it by that line.
