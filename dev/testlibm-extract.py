@@ -42,7 +42,7 @@ import lzma
 import math
 import struct
 import sys
-from decimal import Decimal, getcontext
+from decimal import Decimal, getcontext, localcontext
 
 getcontext().prec = 400
 FUNCTIONS = ("sinh", "cosh", "expm1")
@@ -57,10 +57,20 @@ def parse(text):
     return sign * int(whole + fraction, 2), int(exponent) - len(fraction)
 
 
+def pow2(exponent):
+    """2 to an integer exponent, exact: a power of two down to 2^-1074 has about 750 digits."""
+    with localcontext() as context:
+        context.prec = 1600
+        return Decimal(2) ** exponent
+
+
 def value(parsed):
-    """A parsed (integer, exponent) as an exact Decimal."""
+    """A parsed (integer, exponent) as an exact Decimal: a power of two down to 2^-1074 needs 750
+    digits and the integer 16, so the product is made with room."""
     integer, exponent = parsed
-    return Decimal(integer) * Decimal(2) ** exponent
+    with localcontext() as context:
+        context.prec = 1600
+        return Decimal(integer) * pow2(exponent)
 
 
 def taylor(x, odd_only):
@@ -92,11 +102,11 @@ def check(function, x_double, x_decimal, result, direction):
     """Returns (problem or None, bits after the round bit that repeat a midpoint's pattern)."""
     ax = abs(exact(function, x_decimal))
     binade = math.floor(float(ax.ln() / Decimal(2).ln()))
-    while Decimal(2) ** binade > ax:
+    while pow2(binade) > ax:
         binade -= 1
-    while Decimal(2) ** (binade + 1) <= ax:
+    while pow2(binade + 1) <= ax:
         binade += 1
-    scaled = ax / Decimal(2) ** (binade - 53)           # 54 integer bits: 2^53 <= scaled < 2^54
+    scaled = ax / pow2(binade - 53)          # 54 integer bits: 2^53 <= scaled < 2^54
     integer = int(scaled)
     fraction = scaled - integer
     bit54 = integer & 1
@@ -105,7 +115,10 @@ def check(function, x_double, x_decimal, result, direction):
     remainder = half - rounded
     if remainder > Decimal("0.5") or (remainder == Decimal("0.5") and rounded & 1):
         rounded += 1
-    if Decimal(rounded) * Decimal(2) ** (binade - 52) != abs(value(result)):
+    with localcontext() as context:
+        context.prec = 1600
+        rounded_value = Decimal(rounded) * pow2(binade - 52)
+    if rounded_value != abs(value(result)):
         return "the file's result is not the exact value rounded to nearest", 0
     if bit54 != direction:
         return "the direction bit is not the 54th bit of the exact value", 0

@@ -97,8 +97,11 @@ class SinhTest {
   static double[] thresholds() {
     double overflow = Double.longBitsToDouble(0x408633ce_8fb9f87dL);
     double[] xs = Inputs.specials(22.0, -22.0, 1.0, -1.0, overflow, -overflow, 0x1p-28);
+    // 0x3fd62e42 is expm1's word of 0.5*ln2, where its unreduced lanes end and its k forcing
+    // matters (expm1.dropKForcing reaches sinh only there, PROOFS.md, L10, H14).
     int[] words = {
-      Sinh.HX_TINY, Sinh.HX_ONE, Sinh.HX_LIMIT, 0x40862E42, 0x408633ce, 0x7ff00000
+      Sinh.HX_TINY, Sinh.HX_ONE, Sinh.HX_LIMIT, 0x40862E42, 0x408633ce, 0x7ff00000,
+      Expm1.HX_HALF_LN2, Expm1.HX_HALF_LN2 + 1
     };
     for (int word : words) {
       double edge = Lanes.fromHi(word);

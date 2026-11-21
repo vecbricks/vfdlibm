@@ -731,7 +731,9 @@ a settled question.
 - **Which expm1 faults reach sinh.** Those that change a lane of `|x| < 22`: `dropCorrection`,
   `constantOffByOneUlp` and `dropKForcing`. `expm1.thresholdMoved` moves the form of `k = 56`,
   which sinh's `k` (at most 32) never takes, and `guardMissesFilter` belongs to the guarded arm.
-  The nightly's `reach` map is per fault for that reason.
+  `SinhTest` fails under the first three and passes under the other two (run with `-Dtest=SinhTest
+  -Dvfdlibm.test.jvmArgs=-Dvfdlibm.fault=<name>`). The nightly's `reach` map is per fault for that
+  reason.
 - **Lefevre's list has `sh` and `ch` lines.** 2215 and 2026 lines of mode N, positive inputs
   only, so `SinhTest` draws the negations too. Rechecked with 400-digit decimal arithmetic as the
   other files were: every result is the correctly rounded value, every direction bit the 54th
