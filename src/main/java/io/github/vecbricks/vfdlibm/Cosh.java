@@ -81,7 +81,9 @@ import jdk.incubator.vector.VectorSpecies;
  * <p>{@link #cosh(DoubleVector, VectorMask)}, which {@code VFdlibm.cosh} calls, is the slice
  * arm, provisionally: no timing of the two arms exists yet, so the choice is the design's, not a
  * measurement's, and a benchmark host's run of {@code CoshBenchmark} and {@code CoshKindsBench}
- * will decide it ({@code SKILLS.md}).
+ * will decide it ({@code SKILLS.md}). Comments elsewhere that say {@code VFdlibm.cosh} runs the
+ * slice arm ({@code CoshBenchmark}, {@code CoshKindsBench}, {@code Nightly}'s arm list, {@code
+ * SKILLS.md}, {@code PLAN.md}) name this default, and change with it.
  */
 final class Cosh {
 

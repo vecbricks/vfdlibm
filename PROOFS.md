@@ -887,7 +887,9 @@ reassociation, and **needs no lemma of its own**. Where its text is not the C's:
   and `w+w` in the small range and `half` and `exp(|x|)` above it, the quotient is `(t*t)/(w+w)`
   or `half/t`, and the sum after it, `1+q`, `w`, `half*t + q` or `half*t`, is picked by the same
   test. Each operation is one IEEE operation on the same operands as the C's (R4); the values
-  the other branches' operations take in a lane are computed and never kept.
+  the other branches' operations take in a lane are computed and never kept. There is nothing
+  to prove, and no hinge: the one thing that could differ is the tests, and they are the C's,
+  made on the same high word, so `CoshTest`'s thresholds are a check and no hinge.
 - The lanes from `0x40862E42` up, the infinities and the NaNs are finished per lane by
   `StrictMath.cosh`, which is the C.
 
