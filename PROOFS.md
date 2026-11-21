@@ -1066,8 +1066,10 @@ doubles, a compare, a bit operation or a reinterpretation, with no integer divis
 indexed load, so a discarded lane's `sqrt` of a negative `t` or a `NaN` is a value and nothing
 else. H4 (select) holds: each blend is a `blend`. Not covered: that H1's words are the C's is
 `AsinTest`'s (`constantsAreTheSourcesBits`, and the thresholds and their neighbours), which
-catches `asin.splitMoved` (moved to `0x3FFF3333`, above every lane of the range) and does not
-claim to catch a word moved by one, which changes only that word's lanes; the port's code having
+catches `asin.splitMoved` (moved to `0x3FFF3333`, above every lane of the range). No committed
+fault covers a word moved by one. Once, by hand, with `0x3FEF3334` in the compare in place of
+`0x3FEF3333`, `AsinTest.thresholdsAndSpecials` failed, at `0.975`'s own word, whose lanes are
+the only ones that move; the port's code having
 L13's shape is `AsinTest`'s tie and not L13's tests, which run a model; and (R4)'s `sqrt` is the
 operator's, tested by `SqrtTest`, with the C's own `sqrt` not shown there.
 

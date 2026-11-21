@@ -45,9 +45,9 @@ import org.openjdk.jmh.annotations.Warmup;
  *
  * <p>{@code bench/alloc-check.py} runs the vector benchmarks named {@code *256} and
  * {@code *Preferred} on {@code common} and {@code mixed} inputs and fails if any allocates, which
- * means the body boxed. The {@code *Max} row, at {@code DoubleVector.SPECIES_MAX}, is not
- * checked: the per-lane finish boxes there on mixed data (SKILLS.md); it is here to measure
- * that. asin has one arm, so there is no comparison to make between arms.
+ * means the body boxed. The {@code *Max} row, at {@code DoubleVector.SPECIES_MAX}, exists and
+ * that check does not cover it; no reading of it is committed. asin has one arm, so there is no
+ * comparison to make between arms.
  */
 @State(Scope.Thread)
 @BenchmarkMode(Mode.AverageTime)

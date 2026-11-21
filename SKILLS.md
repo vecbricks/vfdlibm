@@ -923,7 +923,8 @@ next port re-trying a settled question.
   234026 (467198 of `[0.5, 1)`, none above `0.975`, where the root form has no low-word clear) and
   `asin.splitMoved` 20855 of `[-1, 1]` and 833300 of `[0.975, 1)`. The split is moved to the word
   `0x3FFF3333`, above every lane of the range: moved by one word it changes only the lanes of one
-  word, as the sinh section says, and that move is not planted.
+  word, as the sinh section says, and that move is not planted. Tried once by hand, as
+  `0x3FEF3334`, the threshold inputs failed on that word's lanes.
 - **Hard cases: 1655 inputs**, from `dev/testlibm-extract.py asn asin` (the tag `asn` is asin's;
   the extractor's recheck passes on all 1655 lines). All are positive, between 6.5e-8 and 1, and
   the one at 1 is a rare lane.
