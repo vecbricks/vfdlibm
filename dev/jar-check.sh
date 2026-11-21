@@ -461,6 +461,8 @@ public final class Consumer {
     return names;
   }
 
+  // A function of two arguments compares through a copy of the rule of PairBits.matches (a lane
+  // of two NaNs with different bits equals one argument's bits, quieted), not this raw comparison.
   private static void same(String name, double in, double got, double expected) {
     lanes++;
     if (Double.doubleToRawLongBits(got) != Double.doubleToRawLongBits(expected)) {

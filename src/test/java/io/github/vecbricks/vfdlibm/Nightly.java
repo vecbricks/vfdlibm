@@ -710,9 +710,10 @@ final class Nightly {
         }
         for (int i = 0; i < n; i++) {
           long bits = Double.doubleToRawLongBits(got[i]);
-          if (bits != want[i]) {
-            mismatches.add(arm.name(), -1, i % lanes, Double.doubleToRawLongBits(xs[i]),
-                Double.doubleToRawLongBits(ys[i]), want[i], bits);
+          long xb = Double.doubleToRawLongBits(xs[i]);
+          long yb = Double.doubleToRawLongBits(ys[i]);
+          if (!PairBits.matches(xb, yb, want[i], bits)) {
+            mismatches.add(arm.name(), -1, i % lanes, xb, yb, want[i], bits);
           }
         }
         if (arm.masked() == null) {
@@ -725,11 +726,12 @@ final class Nightly {
               DoubleVector.fromArray(species, ys, i), mask).intoArray(got, i);
           for (int lane = 0; lane < lanes; lane++) {
             long x = Double.doubleToRawLongBits(xs[i + lane]);
-            long expected = (live >>> lane & 1) != 0 ? want[i + lane] : x;
+            long y = Double.doubleToRawLongBits(ys[i + lane]);
+            boolean active = (live >>> lane & 1) != 0;
+            long expected = active ? want[i + lane] : x;
             long bits = Double.doubleToRawLongBits(got[i + lane]);
-            if (bits != expected) {
-              mismatches.add(arm.name(), live, lane, x, Double.doubleToRawLongBits(ys[i + lane]),
-                  expected, bits);
+            if (active ? !PairBits.matches(x, y, expected, bits) : bits != expected) {
+              mismatches.add(arm.name(), live, lane, x, y, expected, bits);
             }
           }
         }

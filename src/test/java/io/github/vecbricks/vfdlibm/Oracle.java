@@ -24,7 +24,9 @@ import jdk.incubator.vector.VectorSpecies;
 /**
  * The oracle every function is tested against: {@code StrictMath} on the same JVM, compared lane
  * by lane by {@link Double#doubleToRawLongBits}, so a different NaN payload or a zero of the other
- * sign is a failure just as a one-ulp difference is.
+ * sign is a failure just as a one-ulp difference is. A function of two arguments is compared by
+ * {@link PairBits#matches}, which keeps that rule except on a lane where both arguments are NaN
+ * with different bits.
  *
  * <p>A check feeds an array of inputs through the vector function one species-length vector at a
  * time and compares every lane that holds an input. It runs all inputs before failing and reports
@@ -104,13 +106,13 @@ final class Oracle {
       assertEquals(lanes, got.length, name + " returned a vector of another length");
       for (int lane = 0; lane < lanes && base + lane < xs.length; lane++) {
         double want = oracle.applyAsDouble(x[lane], y[lane]);
-        if (Double.doubleToRawLongBits(want) != Double.doubleToRawLongBits(got[lane])) {
+        if (!PairBits.matches(x[lane], y[lane], want, got[lane])) {
           differing++;
           if (first == null) {
             first = String.format(
                 "%s at %s lane %d (input %d): x = %s, y = %s: expected %s, got %s",
-                name, species, lane, base + lane, hex(x[lane]), hex(y[lane]), hex(want),
-                hex(got[lane]));
+                name, species, lane, base + lane, hex(x[lane]), hex(y[lane]),
+                PairBits.expected(x[lane], y[lane], want), hex(got[lane]));
           }
         }
       }
@@ -196,13 +198,20 @@ final class Oracle {
         assertEquals(lanes, got.length, name + " returned a vector of another length");
         for (int lane = 0; lane < lanes && base + lane < xs.length; lane++) {
           double want = live[lane] ? oracle.applyAsDouble(x[lane], y[lane]) : x[lane];
-          if (Double.doubleToRawLongBits(want) != Double.doubleToRawLongBits(got[lane])) {
+          // Only a live lane of a function of two arguments has the NaN-pair rule; a lane that is
+          // not live keeps x's bits, and a function of one argument has no pair.
+          boolean ok = live[lane] && binary
+              ? PairBits.matches(x[lane], y[lane], want, got[lane])
+              : Double.doubleToRawLongBits(want) == Double.doubleToRawLongBits(got[lane]);
+          if (!ok) {
             differing++;
             if (first == null) {
               first = String.format(
                   "%s at %s under mask %s, %s lane %d (input %d): x = %s%s: expected %s, got %s",
                   name, species, mask, live[lane] ? "active" : "inactive", lane, base + lane,
-                  hex(x[lane]), binary ? ", y = " + hex(y[lane]) : "", hex(want), hex(got[lane]));
+                  hex(x[lane]), binary ? ", y = " + hex(y[lane]) : "",
+                  live[lane] && binary ? PairBits.expected(x[lane], y[lane], want) : hex(want),
+                  hex(got[lane]));
             }
           }
         }

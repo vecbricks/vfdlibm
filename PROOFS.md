@@ -66,6 +66,26 @@ IEEE properties used:
   the operator lowers to a vector instruction and does not box is a separate fact, read from
   `bench/alloc-check.py` on `SqrtBenchmark` (unmasked only; no row for the masked form).
 
+## The contract of a function of two arguments
+
+Each lane of a function of two arguments equals `StrictMath`'s result by
+`Double.doubleToRawLongBits`, except on a lane where both arguments are NaN and their bits differ.
+There the result must equal one of the two arguments' bits with the quiet bit set, all 64 bits,
+the sign included; which of the two is not specified. Every other lane keeps the raw-bit rule: a
+NaN made from arguments that are not both NaN, one NaN argument with a finite one, and two NaNs
+with identical bits.
+
+The exception is there because `StrictMath.atan2` returns `x + y` on two NaNs (as the C of `pow`
+and `hypot` do, reading `reference/fdlibm-5.3`), and which operand's payload a sum of two NaNs
+keeps is fixed neither by IEEE 754 nor by the JLS. On JDK 25.0.5.1 and x86-64 the interpreter and
+C2 returned `y`'s payload and C1 `x`'s, for every one of 65,536 pairs a mode (issue 33), so a
+raw-bit comparison with `StrictMath` fails by the tier the oracle's call is in. `PairBits.matches`
+is the one comparison of such a lane, used by `Oracle`'s asserts and the nightly's pair check, and
+`PairNanTest` shows that it fails for a canonical NaN, a NaN of a third payload, the other sign, a
+result not quieted, and one payload bit off on a lane that is not two different NaNs. A function of
+one argument keeps the raw-bit rule on every lane: its NaN results were the same in every mode in
+the same probe.
+
 ## exp (`Exp.java`, from `e_exp.c`)
 
 The C reduces `|x| > 0.5 ln2` in two forms (lines 129-136), the near form for `|x| < 1.5 ln2` and

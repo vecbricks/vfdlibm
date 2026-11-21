@@ -160,7 +160,9 @@ fdlibm's own sequence of operations, lane by lane. That is this library.
 ## What a function promises
 
 - **Bit identity.** For every `double` input, each lane equals `StrictMath.f` on that input,
-  compared by `Double.doubleToRawLongBits`. NaN payloads and signed zeros are included.
+  compared by `Double.doubleToRawLongBits`. NaN payloads and signed zeros are included. For a
+  function of two arguments, a lane where both arguments are NaN with different bits equals one of
+  the two, with the quiet bit set (which one is not specified: `StrictMath`'s own choice varies).
 - **fdlibm's operations, in fdlibm's order.** Only IEEE `+ - * /`, `sqrt` and bit operations. There
   is no fused multiply-add and no reassociation, so the rounding of every step is fdlibm's.
 - **Rare paths, exact too.** Lanes on a rare path (huge arguments, subnormals, special cases) are
