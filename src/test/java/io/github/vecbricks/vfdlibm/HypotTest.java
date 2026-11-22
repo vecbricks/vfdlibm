@@ -674,8 +674,8 @@ class HypotTest {
   }
 
   /**
-   * How long a child JVM may take: a generous bound for a run of a few seconds, the {@code -Xint}
-   * one included.
+   * How long a child JVM may take: a generous bound that keeps a hung child from stalling the
+   * suite.
    */
   static final int CHILD_SECONDS = 60;
 
