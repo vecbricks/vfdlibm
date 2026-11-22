@@ -8,9 +8,11 @@ on:
   workflow_call:
 
 # A push to a pull request cancels that pull request's run still going, whose head is no longer
-# the one to merge. Any other run is a group of its own (its run id), so a run on main and the
-# jobs release.yml calls always finish. When release.yml calls this workflow, github.workflow is
-# the caller's name, so its group never meets this workflow's own run of the same pull request.
+# the one to merge. Every run of one pull request shares the group, so a re-run of an older run
+# cancels the current head's run too: re-run only the newest. Any other run is a group of its own
+# (its run id), so a run on main and the jobs release.yml calls always finish; release.yml calls
+# this workflow only off pull requests. github.workflow is the caller's name in a call, which
+# would keep a future caller's pull request apart from this workflow's own.
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
