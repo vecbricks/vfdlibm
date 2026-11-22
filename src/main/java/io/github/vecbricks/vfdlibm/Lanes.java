@@ -178,7 +178,7 @@ final class Lanes {
   /**
    * {@code __HI(y) += (k << 20)}: adds {@code k} to each lane's binary exponent by adding {@code
    * k << 52} to its bits. The low word of {@code k << 52} is zero, so the sum's high word is the
-   * C's {@code int} sum modulo 2^32 and its low word is unchanged.
+   * C's {@code int} sum modulo 2^32 and its low word is unchanged (PROOFS.md, L15).
    */
   static DoubleVector addExponent(DoubleVector y, LongVector k) {
     return fromBits(bits(y).add(k.lanewise(VectorOperators.LSHL, 52)));

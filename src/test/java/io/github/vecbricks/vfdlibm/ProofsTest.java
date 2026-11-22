@@ -885,4 +885,154 @@ class ProofsTest {
     assertThrows(ArithmeticException.class,
         () -> IntVector.broadcast(ints, 1).div(IntVector.zero(ints)));
   }
+
+  // L15: expm1's words in long lanes, as Varka emits them.
+
+  /** L15: Expm1's thresholds of k are the C's literals, 56 (line 197) and 20 (line 203). */
+  @Test
+  void l15ThresholdsAreTheCs() {
+    assertEquals(56, Expm1.K_FAR);
+    assertEquals(20, Expm1.K_SPLIT);
+  }
+
+  /**
+   * L15 (a), (b): for every k from -1100 to 1100 whose form reads a word, the long word is
+   * the C's int word widened, and the double it heads is the one the C's form means, 1-2^-k for
+   * {@code 2 <= k < 20} and 2^-k for {@code 20 <= k <= 56}, the C's literals; and at a k where
+   * the int and the long shifts differ, k = 40, the lane's form reads the other word (H16).
+   */
+  @Test
+  void l15LongWordsAreExpm1sInts() {
+    // The far, k == 1, k == 0 and k == -1 lanes read t = one, whose word heads 1.0, for every k.
+    assertEquals(bits(1.0), Lanes.fromHiBits(0x3ff00000));
+    assertEquals(bits(1.0), 0x3ff00000L << 32);
+    int read = 0;
+    for (int k = -1100; k <= 1100; k++) {
+      long kl = k;
+      String at = "k = " + k;
+      if (k >= 2 && k < 20) {
+        int word = 0x3ff00000 - (0x200000 >> k);
+        long longWord = 0x3ff00000L - (0x200000L >>> kl);
+        assertEquals((long) word, longWord, at);
+        assertEquals(bits(1.0 - Math.scalb(1.0, -k)), longWord << 32, at);
+        assertEquals(Lanes.fromHiBits(word), longWord << 32, at);
+        read++;
+      } else if (k >= 20 && k <= 56) {
+        int word = (0x3ff - k) << 20;
+        long longWord = (0x3ffL - kl) << 20;
+        assertEquals((long) word, longWord, at);
+        assertEquals(bits(Math.scalb(1.0, -k)), longWord << 32, at);
+        assertEquals(Lanes.fromHiBits(word), longWord << 32, at);
+        read++;
+      }
+    }
+    assertEquals(55, read);
+    // k = 40, a lane of the high form, which does not read the mid word: an int shift takes the
+    // count modulo 32 and a long one modulo 64, so the words differ there, and H16 is needed.
+    assertNotEquals((long) (0x200000 >> 40), 0x200000L >>> 40L);
+  }
+
+  /**
+   * L15 (d): the C's {@code __HI(y) += (k<<20)} is {@code yBits + ((long) k << 52)}: the low word
+   * kept, no carry into the high word, and the high word the int sum modulo 2^32, the carry out
+   * of bit 63 dropped. Over every k from -1100 to 1100 and high words that wrap either way.
+   */
+  @Test
+  void l15ExponentAddIsTheCsHighWordAdd() {
+    SplittableRandom random = new SplittableRandom(1500L);
+    long[] ys = new long[1 << 10];
+    int[] his = {0, 0x3fe00000, 0x3ff00000, 0x7fefffff, 0x7fffffff, 0x80000000, 0xbff00000,
+        0xffffffff};
+    int[] los = {0, 1, 0x7fffffff, 0x80000000, 0xffffffff};
+    int n = 0;
+    for (int hi : his) {
+      for (int lo : los) {
+        ys[n++] = ((long) hi << 32) | (lo & 0xffffffffL);
+      }
+    }
+    while (n < ys.length) {
+      ys[n++] = random.nextLong();
+    }
+    for (int k = -1100; k <= 1100; k++) {
+      for (long y : ys) {
+        int hi = (int) (y >>> 32);
+        int lo = (int) y;
+        long want = ((long) (hi + (k << 20)) << 32) | (lo & 0xffffffffL);
+        assertEquals(want, y + ((long) k << 52), () -> "y = " + Long.toHexString(y));
+      }
+    }
+  }
+
+  /** The C's k for x on the lanes it reduces (lines 162 and 170), and 0 on the others (L10). */
+  private static int l15K(double x) {
+    int hx = (int) (bits(x) >>> 32) & 0x7fffffff;
+    return hx > Expm1.HX_HALF_LN2 ? (int) (Expm1.INVLN2 * x + (x < 0 ? -0.5 : 0.5)) : 0;
+  }
+
+  /** A lane the C returns early from (lines 146-158 and 177), whose result Expm1 replaces. */
+  private static boolean l15Rare(double x) {
+    int hx = (int) (bits(x) >>> 32) & 0x7fffffff;
+    return hx >= Expm1.HX_FILTER && !(x <= Expm1.O_THRESHOLD)
+        || x < 0 && hx >= Expm1.HX_56_LN2 || hx < Expm1.HX_TINY;
+  }
+
+  /**
+   * Inputs at every k the lanes kept can take, -56 to 1024 (L10's domain, its two ends checked
+   * here), several per k, shuffled so that a vector mixes the forms of k.
+   */
+  private static double[] l15EveryK() {
+    double lowest = -Math.nextDown(Lanes.fromHi(Expm1.HX_56_LN2));
+    assertFalse(l15Rare(lowest));
+    assertTrue(l15Rare(Math.nextDown(lowest)));
+    assertEquals(-56, l15K(lowest));
+    assertFalse(l15Rare(Expm1.O_THRESHOLD));
+    assertTrue(l15Rare(Math.nextUp(Expm1.O_THRESHOLD)));
+    assertEquals(1024, l15K(Expm1.O_THRESHOLD));
+    // ln2 rounded; any value near it puts (k + d) * ln2 at k for these offsets d. At k = 0 the
+    // offset 0 would give x = 0, a tiny lane, so that one input is 0.2 instead.
+    double ln2 = 0x1.62e42fefa39efp-1;
+    double[] offsets = {-0.49, -0.3, -0.1, 0.0, 0.1, 0.3, 0.49};
+    double[] xs = new double[1081 * offsets.length + 2];
+    int n = 0;
+    xs[n++] = lowest;
+    xs[n++] = Expm1.O_THRESHOLD;
+    for (int k = -56; k <= 1024; k++) {
+      for (double d : offsets) {
+        double x = k == 0 && d == 0.0 ? 0.2 : (k + d) * ln2;
+        xs[n++] = Math.min(Math.max(x, lowest), Expm1.O_THRESHOLD);
+      }
+    }
+    boolean[] seen = new boolean[1081];
+    for (double x : xs) {
+      int k = l15K(x);
+      assertFalse(l15Rare(x), Oracle.hex(x));
+      assertTrue(k >= -56 && k <= 1024, Oracle.hex(x));
+      seen[k + 56] = true;
+    }
+    for (int k = -56; k <= 1024; k++) {
+      assertTrue(seen[k + 56], "no input at k = " + k);
+    }
+    SplittableRandom random = new SplittableRandom(1501L);
+    for (int i = xs.length - 1; i > 0; i--) {
+      int j = random.nextInt(i + 1);
+      double swap = xs[i];
+      xs[i] = xs[j];
+      xs[j] = swap;
+    }
+    return xs;
+  }
+
+  /**
+   * L15's H16 on Expm1's own masks: Expm1.expm1Blended, the body Varka's kernel emits, against
+   * StrictMath by raw bits on every k from -56 to 1024, with the forms mixed within a vector. A
+   * mask that kept a word on a lane whose form does not read it (the mid word at k = 40, the high
+   * word on a far lane) fails here wherever that word differs from the lane's own. The int mid
+   * word equals one's on a far lane with k mod 32 >= 22, so a mid word kept there would pass.
+   */
+  @ParameterizedTest
+  @EnumSource(VectorWidth.class)
+  void l15MasksKeepEachWordOnItsLanes(VectorWidth width) {
+    Oracle.assertUnary("l15 expm1Blended", width.species(), x -> Expm1.expm1Blended(x, null),
+        StrictMath::expm1, l15EveryK());
+  }
 }
