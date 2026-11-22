@@ -141,13 +141,16 @@ five are a later, optional set; the large-argument reduction of the trigonometri
   Which arm each function keeps follows the two rules issue #30 set on 21 November 2026: a tie
   within 1.3x on every host that has a file goes to the finish arm, except for `cosh`, whose
   per-lane set is not rare, so a host run decides its arm; and where hosts disagree, each species
-  keeps the arm its own rows choose by that rule (decided; no function needs it yet, so `VFdlibm`
-  runs one arm at every species). Every default stays provisional until a host run revises it (a
-  second run of the 8573C, a first of the other AVX-512 hosts). Meanwhile `VFdlibm` calls the
-  finish arm of `exp`, `log` and `log10`; the guarded arm of `expm1` and `log1p`, which
-  the rule would move to the finish arm if their 256-bit, 512-bit and preferred rows are still
-  within 1.3x on the 8573C's
-  second run (issue #30); the slice
+  keeps the arm its own rows choose by that rule. The `*Max` rows of the files committed so far
+  (`exp`, `expm1`, `log`, `log10` and `log1p`, of 20 and 21 November) time the finish that boxed at
+  `SPECIES_MAX` before issue #37, so they are left out of both rules; a new run's `*Max` rows time
+  today's finish. On the other rows no function needs rule 2 yet, so `VFdlibm` runs one arm at every
+  species; the nearest is `log`, whose 8573C mixed rows at 512 bits and the preferred species read
+  the blend lower by 1.29 to 1.30x, on the 1.3x line. Every default stays provisional until a host
+  run revises it (a second run of the 8573C, a first of the other AVX-512 hosts). Meanwhile
+  `VFdlibm` calls the finish arm of `exp`, `log` and `log10`; the guarded arm of `expm1` and
+  `log1p`, which rule 1 would move to the finish arm at the 8573C's second run unless the guarded
+  arm wins by more than 1.3x there (issue #30); the slice
   arm of `cosh`, provisionally, as the rule's exception
   (`bench/results/cosh-xeon8573c-2026-11-21.txt` and `cosh-epyc7763-2026-11-21.txt` read the
   finish arm lower on every row by ratios near 1.3x or inside it, and give no direction; it waits

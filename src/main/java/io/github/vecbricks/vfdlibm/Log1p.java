@@ -84,14 +84,13 @@ import jdk.incubator.vector.VectorSpecies;
  * every one of those rows (the EPYC's 512-bit rows run in the Java fallback and are left out),
  * so no direction is read, and the lowest minimum moves between the finish and the guarded arm
  * from row to row. The Xeon file of 3 November ({@code log1p-xeon8573c-2026-11-03.txt}) had the
- * guarded arm lowest on every 256-bit, 512-bit and preferred row. The rules for a tie within
- * 1.3x and for hosts that disagree are set (issue #30): a tie goes to the finish arm, so rule 1
- * would move log1p to the finish arm if its 256-bit, 512-bit and preferred rows are still within
- * 1.3x on the Xeon 8573C's
- * second run; until then the
- * guarded arm stays, provisionally, and a first run of the other AVX-512 hosts ({@code
- * HARDWARE.md}) or a pair may revise the choice. The other two are
- * kept so the choice can be re-measured, on other hosts and as the JDK changes.
+ * guarded arm lowest on every 256-bit, 512-bit and preferred row. The rules for a tie within 1.3x
+ * and for hosts that disagree are set (issue #30): a tie goes to the finish arm, so rule 1 would
+ * move log1p to the finish arm at the Xeon 8573C's second run unless the guarded arm wins by more
+ * than 1.3x there (the {@code *Max} rows of the files committed so far time the finish that boxed
+ * before issue #37 and are left out); until then the guarded arm stays, provisionally, and a first
+ * run of the other AVX-512 hosts ({@code HARDWARE.md}) or a pair may revise the choice. The other
+ * two are kept so the choice can be re-measured, on other hosts and as the JDK changes.
  */
 final class Log1p {
 

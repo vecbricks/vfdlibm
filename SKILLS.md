@@ -337,8 +337,10 @@ stops the next port re-trying a settled question.
   time `exp` as of a5683c3 and a1db6df, and `Exp.java` has changed since by a fault constant, a
   local and the finish's first eight lanes written out with constant indices (issue #37), so no run
   has timed today's body as a whole: the pair above times rows of it after that change, on one
-  host. `VFdlibm.exp` keeps the finish arm, which those files read lower than the blend by more
-  than 1.3x on mixed data on both hosts, and to which issue #30's rules send a tie;
+  host. `VFdlibm.exp` keeps the finish arm, which those files read lower than the blend by more than
+  1.3x on mixed data at 256 bits and the preferred species on both hosts and at 512 bits on the
+  8573C (the `*Max` rows of the files committed so far time the finish that boxed before issue #37
+  and are left out), and to which issue #30's rules send a tie;
   provisionally, until a host run revises it: a second run of the Xeon 8573C, a first of the
   other AVX-512 hosts or a pair. Each
   port measures both on common and mixed
@@ -476,11 +478,10 @@ stops the next port re-trying a settled question.
   as of a5683c3, before a fault constant and a mask local were added; the Xeon file of 21 November
   times it as of a1db6df; neither times it after the finish's first eight lanes written out with
   constant indices (issue #37). `VFdlibm.log1p` uses the guarded arm provisionally: by the rules
-  issue #30 set, a tie within 1.3x goes to the finish arm, so rule 1 would move log1p to it if
-  its 256-bit, 512-bit and preferred rows are still within 1.3x on the Xeon 8573C's second run; a
-  first run of the other AVX-512
-  hosts or a pair may revise
-  the choice. A port whose rare paths are
+  issue #30 set, a tie within 1.3x goes to the finish arm, so rule 1 would move log1p to it at the
+  Xeon 8573C's second run unless the guarded arm wins by more than 1.3x there (the `*Max` rows of
+  the files committed so far time the finish that boxed before issue #37 and are left out); a first
+  run of the other AVX-512 hosts or a pair may revise the choice. A port whose rare paths are
   cheap in vector form should measure this shape beside the other two.
 - **The in-body finish allocates nothing in log1p too.** log1p's finish was first a call,
   `finishPerLane(x, result, rare)`, and boxed: 52,928 B/op on mixed data at 256 bits under
@@ -561,8 +562,9 @@ stops the next port re-trying a settled question.
   (issue #37); the pair of that change (the exp entry above) reads log10's mixed finish rows 2.6%
   to 4.0% slower by median and 3.7% to 4.1% by best on the EPYC 7763, the cause not known.
   `VFdlibm.log10` calls the finish arm by the rules issue #30 set (a tie within 1.3x goes to the
-  finish arm), provisionally until a host run revises it: a second run of the Xeon 8573C, a first
-  of the other AVX-512 hosts or a pair.
+  finish arm; its `*Max` rows, where the blend reads lower on mixed data, time the finish that boxed
+  before issue #37 and are left out), provisionally until a host run revises it: a second run of the
+  Xeon 8573C, a first of the other AVX-512 hosts or a pair.
 
 ## What the expm1 port taught
 
@@ -619,11 +621,10 @@ stops the next port re-trying a settled question.
   of 4 November (`bench/results/expm1-xeon8573c-2026-11-04.txt`, one run, at another commit) had
   guarded lowest on the preferred rows of both kinds of data; the file of 21 November has finish
   lowest there on common data. `VFdlibm.expm1` keeps the guarded arm provisionally: by the rules
-  issue #30 set, a tie within 1.3x goes to the finish arm, so rule 1 would move expm1 to it if
-  its 256-bit, 512-bit and preferred rows are still within 1.3x on the Xeon 8573C's second run; a
-  first run of the other AVX-512
-  hosts or a pair may revise
-  the choice. Both files time `Expm1`
+  issue #30 set, a tie within 1.3x goes to the finish arm, so rule 1 would move expm1 to it at the
+  Xeon 8573C's second run unless the guarded arm wins by more than 1.3x there (the `*Max` rows of
+  the files committed so far time the finish that boxed before issue #37 and are left out); a first
+  run of the other AVX-512 hosts or a pair may revise the choice. Both files time `Expm1`
   before its core entry (below) and before the finish's first eight lanes written out with
   constant indices (issue #37), and `Expm1.java` changed between their two commits too (a fault
   constant and a local in the k conversion, as for `Exp`), so the cross-host comparison rests on

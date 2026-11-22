@@ -83,9 +83,10 @@ import jdk.incubator.vector.VectorSpecies;
  * bench/results/exp-log10-pair-epyc7763-2026-11-21.txt} and {@code
  * bench/results/exp-log10-pair-rerun-epyc7763-2026-11-21.txt}), the cause not known, and no
  * AVX-512 host paired. log10 calls the finish arm by the rules issue #30 set (a tie within 1.3x
- * goes to the finish arm), provisionally until a host run revises it: a second run of the Xeon
- * 8573C, a first of the other AVX-512 hosts ({@code HARDWARE.md}) or a pair; the second arm is
- * kept so the choice can be re-measured.
+ * goes to the finish arm; its {@code *Max} rows, where the blend reads lower on mixed data, time
+ * the finish that boxed before issue #37 and are left out), provisionally until a host run revises
+ * it: a second run of the Xeon 8573C, a first of the other AVX-512 hosts ({@code HARDWARE.md}) or a
+ * pair; the second arm is kept so the choice can be re-measured.
  */
 final class Log10 {
 
