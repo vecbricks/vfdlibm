@@ -337,9 +337,10 @@ stops the next port re-trying a settled question.
   time `exp` as of a5683c3 and a1db6df, and `Exp.java` has changed since by a fault constant, a
   local and the finish's first eight lanes written out with constant indices (issue #37), so no run
   has timed today's body as a whole: the pair above times rows of it after that change, on one
-  host. `VFdlibm.exp` keeps the finish arm by the rules issue #30 set (a tie within 1.3x goes to
-  the finish arm; where hosts disagree, one arm per species), provisionally until a host run
-  revises it: a second run of the Xeon 8573C, a first of the other AVX-512 hosts or a pair. Each
+  host. `VFdlibm.exp` keeps the finish arm, which those files read lower than the blend by more
+  than 1.3x on mixed data on both hosts, and to which issue #30's rules send a tie;
+  provisionally, until a host run revises it: a second run of the Xeon 8573C, a first of the
+  other AVX-512 hosts or a pair. Each
   port measures both on common and mixed
   data, decides per branch, and records the decision in its pull request (`PLAN.md` section 5).
 - **A blended alternative costs its whole form in every lane.** exp computed the C's near form and
@@ -1151,8 +1152,14 @@ stops the next port re-trying a settled question.
   AVX2 host, and CI runs it. Those local readings are not committed, so no figure of them is
   quoted. Each host has timed both arms once (`bench/results/atan2-xeon8573c-2026-11-22.txt` and
   `atan2-epyc7763-2026-11-22.txt`): on the Xeon they read within 1.3x of each other at every
-  width, and on the EPYC 7763 near 1.3x or inside it, so neither file gives them a direction, and
-  the guarded one stays the default provisionally until a re-run and issue #30's rules decide it.
+  width, and on the EPYC 7763 near 1.3x or inside it, so neither file gives them a direction.
+  atan2 has no finish arm (both arms compute the special lanes in the vector; blended runs their
+  blends in every vector, guarded behind a test), so rule 1 of issue #30 does not pick between
+  them ([the issue's corrected comment](https://github.com/vecbricks/vfdlibm/issues/30#issuecomment-7085437272)).
+  The guarded arm stays the default at every species: on those files it reads lower on the
+  slower input at every species on the EPYC 7763 and at 256 bits on the 8573C, and at 512 bits
+  on the 8573C the rows are a tie (blended lower by 3.3% at the preferred species and 1.3% at
+  `SPECIES_MAX`, inside the run's spread), which waits for the 8573C's second run.
 - **A lane the core must not see.** A NaN, an infinity or a huge `t` in a lane the special blends
   overwrite would send the vector to atan's per-lane finish. The mask `t < 2^66` keeps them out
   (a NaN compares false), and a vector with no special lane never reaches the finish.

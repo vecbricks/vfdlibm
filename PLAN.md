@@ -50,8 +50,8 @@ ranges through one division on blended operands, the lanes from `2^66` up finish
 so is `acos` (`VFdlibm.acos`, from `e_acos.c`, built as asin is), and so is `atan2`
 (`VFdlibm.atan2`, from `e_atan2.c`, the first function of two arguments: the special lanes blended
 over the general path, which calls `atan`'s core, no lane finished per lane, and two arms, the
-blended one and the guarded one `VFdlibm` calls, provisionally: the host files of 22 November time
-both and give them no direction). `log`, `log10` and `log1p` are done too (`VFdlibm.log`, from
+blended one and the guarded one `VFdlibm` calls at every species, section 5 below says why).
+`log`, `log10` and `log1p` are done too (`VFdlibm.log`, from
 `e_log.c`, `VFdlibm.log10`, from `e_log10.c`, which computes through log's common path, and
 `VFdlibm.log1p`, from `s_log1p.c`), and so is `expm1` (`VFdlibm.expm1`, from `s_expm1.c`, whose
 reduction is exp's).
@@ -140,16 +140,22 @@ five are a later, optional set; the large-argument reduction of the trigonometri
   Which arm each function keeps follows the two rules issue #30 set on 21 November 2026: a tie
   within 1.3x on every host that has a file goes to the finish arm, except for `cosh`, whose
   per-lane set is not rare, so a host run decides its arm; and where hosts disagree, each species
-  keeps the arm its own rows choose by that rule. Every default stays provisional until a host run
-  revises it (a second run of the 8573C, a first of the other AVX-512 hosts). Meanwhile `VFdlibm`
-  calls the finish arm of `exp`, `log` and `log10`; the guarded arm of `expm1` and `log1p`, which
+  keeps the arm its own rows choose by that rule (decided; no function needs it yet, so `VFdlibm`
+  runs one arm at every species). Every default stays provisional until a host run revises it (a
+  second run of the 8573C, a first of the other AVX-512 hosts). Meanwhile `VFdlibm` calls the
+  finish arm of `exp`, `log` and `log10`; the guarded arm of `expm1` and `log1p`, which
   the rule would move to the finish arm once the 8573C's second run is in (issue #30); the slice
   arm of `cosh`, provisionally, as the rule's exception
   (`bench/results/cosh-xeon8573c-2026-11-21.txt` and `cosh-epyc7763-2026-11-21.txt` read the
   finish arm lower on every row by ratios near 1.3x or inside it, and give no direction); and the
-  guarded arm of `atan2`, which has no finish arm, provisionally until a re-run
-  (`atan2-xeon8573c-2026-11-22.txt` and `atan2-epyc7763-2026-11-22.txt` give its arms no
-  direction).
+  guarded arm of `atan2` at every species. atan2 has no finish arm (both arms compute the special
+  lanes in the vector; blended runs their blends in every vector, guarded behind a test), so rule
+  1 does not pick between them ([issue #30's corrected
+  comment](https://github.com/vecbricks/vfdlibm/issues/30#issuecomment-7085437272)). On
+  `atan2-xeon8573c-2026-11-22.txt` and `atan2-epyc7763-2026-11-22.txt`, one run each, guarded
+  reads lower on the slower input at every species on the EPYC 7763 and at 256 bits on the 8573C;
+  at 512 bits on the 8573C the rows are a tie (blended lower by 3.3% at the preferred species and
+  1.3% at `SPECIES_MAX`, inside the run's spread), which waits for the 8573C's second run.
 
 ## 6. Rules
 
