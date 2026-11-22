@@ -86,6 +86,9 @@ final class AsmCheck {
 
   /** The library's file name on this architecture, or null where the check does not run. */
   static String libraryName() {
+    if (!System.getProperty("os.name").equals("Linux")) {
+      return null;
+    }
     String arch = System.getProperty("os.arch");
     return switch (arch) {
       case "amd64", "x86_64" -> "hsdis-amd64.so";
@@ -95,14 +98,14 @@ final class AsmCheck {
 
   /**
    * The directory holding hsdis: {@code $VFDLIBM_HSDIS_DIR} if set, else {@code target/hsdis}
-   * (where {@code dev/hsdis-build.sh} builds it), else {@code ~/hsdis}. Found means the file
+   * (where {@code dev/hsdis-build.sh} builds it, on Capstone, the output the rules and the
+   * self-test read; a binutils hsdis prints another one). Found means the file
    * exists; whether HotSpot loads it is known only from a probe's output ({@link
    * #disassembled}).
    */
   static Hsdis findHsdis() {
     return findHsdis(System.getenv(HSDIS_DIR_ENV), libraryName(),
-        List.of(Path.of("target", "hsdis").toAbsolutePath(),
-            Path.of(System.getProperty("user.home"), "hsdis")));
+        List.of(Path.of("target", "hsdis").toAbsolutePath()));
   }
 
   /** {@link #findHsdis()} with the environment's value and the default places given. */
@@ -166,8 +169,9 @@ final class AsmCheck {
         }
       });
       if (!process.waitFor(CHILD_SECONDS, TimeUnit.SECONDS)) {
+        process.destroyForcibly().waitFor(10, TimeUnit.SECONDS);
         throw new AssertionError("the probe JVM did not finish in " + CHILD_SECONDS + " s: "
-            + command);
+            + command + "\n" + tail(bytes.toString(StandardCharsets.UTF_8), 60));
       }
       drained.join();
     } finally {

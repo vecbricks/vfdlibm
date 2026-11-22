@@ -23,16 +23,16 @@
 # checked against the SHA-256 pinned below; they are compiled, not read. A product JVM finds
 # hsdis-<arch>.so on LD_LIBRARY_PATH; no JDK is built.
 #
-# The disassembler behind them is Capstone (BSD), version 5 or later. The system's is used when
-# its capstone.h says 5 or more (apt install libcapstone-dev, Ubuntu 25.04 and later), and the
-# build takes gcc and a second. Otherwise, or with --capstone-source, Capstone's pinned release is
+# The disassembler behind them is Capstone (BSD), version 5. The system's is used when its
+# capstone.h says 5 (apt install libcapstone-dev, Ubuntu 25.04 and later), and the build takes
+# gcc only; 6 renamed the Arm architecture this script names. Otherwise, or with --capstone-source, Capstone's pinned release is
 # fetched, checked against its SHA-256 and built with cmake under target/hsdis/capstone, for this
 # host's architecture only, and linked in statically. Version 4 will not do: Ubuntu 24.04's
 # 4.0.2, which GitHub's ubuntu-latest has, printed an AVX-512 body of exp at 256 bits with
 # ".byte 0x62" and garbage after it, a "call" among the garbage (SKILLS.md, "The assembly check").
 #
 # The library goes to target/hsdis/hsdis-amd64.so on x86-64 and target/hsdis/hsdis-aarch64.so on
-# Arm (or --out <dir>). Then the check runs: a JVM with LD_LIBRARY_PATH=<dir> prints one compiled
+# Arm (or --out <dir>); mvn clean deletes it, and the check then skips until it is built again. Then the check runs: a JVM with LD_LIBRARY_PATH=<dir> prints one compiled
 # method of a two-line class of this script's own, and the build passes only if the output holds
 # a [Disassembly] section with an instruction line in it. Without a disassembler HotSpot prints
 # raw hex instead and does not fail, so the exit status of that JVM would prove nothing.
@@ -116,10 +116,10 @@ command -v gcc > /dev/null || { echo "hsdis-build: gcc not found" >&2; exit 1; }
   || { echo "hsdis-build: no jni.h under $java_home/include" >&2; exit 1; }
 mkdir -p "$out"
 
-# The system's Capstone if it is 5 or later, else the pinned release built here.
+# The system's Capstone if it is 5, else the pinned release built here.
 system_major=$(sed -n 's/^#define CS_API_MAJOR \([0-9]*\).*/\1/p' \
   /usr/include/capstone/capstone.h 2> /dev/null || true)
-if [ -z "$capstone_source" ] && [ "${system_major:-0}" -ge 5 ]; then
+if [ -z "$capstone_source" ] && [ "${system_major:-0}" = 5 ]; then
   echo "using the system's Capstone (API $system_major)"
   cs_include=/usr/include/capstone
   cs_link=(-lcapstone)

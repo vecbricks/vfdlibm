@@ -38,7 +38,7 @@ import org.junit.jupiter.params.provider.EnumSource;
  * Vector API's Java fallback. Its width and FMA rules are asserted. The width is the child's
  * species, so the preferred species at 128 bits ({@code -XX:MaxVectorSize=16}) is treated alike.
  *
- * <p>Skipped, with the reason, on a host that is not x86-64, when no hsdis is found ({@link
+ * <p>Skipped, with the reason, on a host that is not Linux on x86-64, when no hsdis is found ({@link
  * AsmCheck#findHsdis}), and when one is found but HotSpot printed no disassembly with it; with
  * {@code VFDLIBM_ASM_REQUIRED=true}, as CI's x86 rows set, the last two fail instead.
  */
@@ -94,8 +94,8 @@ class ExpAsmTest {
    */
   static String probe(VectorWidth width) throws IOException, InterruptedException {
     if (AsmCheck.libraryName() == null) {
-      abort("the assembly check reads x86-64 code only; this host is "
-          + System.getProperty("os.arch"));
+      abort("the assembly check reads Linux x86-64 code only; this host is "
+          + System.getProperty("os.name") + " " + System.getProperty("os.arch"));
     }
     AsmCheck.Hsdis hsdis = AsmCheck.findHsdis();
     if (!hsdis.found()) {
