@@ -39,8 +39,9 @@ import jdk.incubator.vector.VectorSpecies;
  * equal words {@code b} may be the larger) and their signs cleared (lines 58-62); where {@code
  * ha-hb > 0x3c00000} the result is {@code a+b} (line 63); above {@code 2^500} both are scaled by
  * {@code 2^-600} through their words (lines 65-76), and where {@code b < 2^-500} by {@code 2^600}
- * through their words (lines 86-90) or, for a subnormal {@code b}, by {@code 2^1022} through a
- * multiplication (lines 78-84), after which {@code b = 0} returns {@code a}; then {@code
+ * through their words (lines 86-90), or, where {@code b} is subnormal or zero, a zero {@code b}
+ * returns {@code a} (line 79) and any other is scaled by {@code 2^1022} through a multiplication
+ * (lines 80-84); then {@code
  * sqrt(t1*t1-(b*(-b)-t2*(a+t1)))} where {@code w = a-b > b} and {@code
  * sqrt(t1*y1-(w*(-w)-(t1*y2+t2*b)))} otherwise, over operands split at the high word (lines
  * 94-109), times {@code 2^k} where {@code k != 0} (lines 110-114).
@@ -86,7 +87,7 @@ final class Hypot {
   static final String DROP_EARLY_RETURN = "hypot.dropEarlyReturn";
   static final String REFRESHED_WORDS = "hypot.refreshedWords";
   static final String DROP_T2 = "hypot.dropT2";
-  static final String SWAP_BY_VALUE = "hypot.swapByValue";
+  static final String DROP_Y2 = "hypot.dropY2";
   // Read once into constants, so the body holds no call and an unplanted fault folds away. Each
   // was sized on draws before it was wired (SKILLS.md, "What the hypot port taught").
   /** Line 63's return of {@code a+b} dropped. */
@@ -95,8 +96,8 @@ final class Hypot {
   private static final boolean REFRESHING_WORDS = Faults.is(REFRESHED_WORDS);
   /** Line 99's {@code t2*(a+t1)} dropped. */
   private static final boolean DROPPING_T2 = Faults.is(DROP_T2);
-  /** Line 60's swap by the values {@code |y| > |x|}, not by the high words. */
-  private static final boolean SWAPPING_BY_VALUE = Faults.is(SWAP_BY_VALUE);
+  /** Line 108's {@code t1*y2} dropped. */
+  private static final boolean DROPPING_Y2 = Faults.is(DROP_Y2);
 
   private Hypot() {}
 
@@ -113,9 +114,7 @@ final class Hypot {
     IntVector hy = Lanes.hiInt(y, intSpecies).and(0x7fffffff);
 
     // Line 60: if(hb > ha) swap, by the words; a lane of equal words keeps a=x, b=y.
-    VectorMask<Integer> swapI = SWAPPING_BY_VALUE
-        ? y.abs().compare(VectorOperators.GT, x.abs()).cast(intSpecies)
-        : hy.compare(VectorOperators.GT, hx);
+    VectorMask<Integer> swapI = hy.compare(VectorOperators.GT, hx);
     VectorMask<Double> swap = swapI.cast(species);
     IntVector ha = hx.blend(hy, swapI);
     IntVector hb = hy.blend(hx, swapI);
@@ -199,7 +198,8 @@ final class Hypot {
         .convertShape(VectorOperators.I2L, longSpecies, 0))
         .lanewise(VectorOperators.LSHL, 32).viewAsFloatingLanes();
     DoubleVector t2b = twoA.sub(t1b);
-    DoubleVector r2 = t1b.mul(y1).sub(w.mul(w.neg()).sub(t1b.mul(y2).add(t2b.mul(b))));
+    DoubleVector inner2 = DROPPING_Y2 ? t2b.mul(b) : t1b.mul(y2).add(t2b.mul(b));
+    DoubleVector r2 = t1b.mul(y1).sub(w.mul(w.neg()).sub(inner2));
     // Lines 99 and 108: one square root, of the radicand of each lane's form.
     DoubleVector root = r2.blend(r1, above).lanewise(VectorOperators.SQRT);
 

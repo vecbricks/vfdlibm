@@ -1074,7 +1074,7 @@ class HypotTest {
   static Map<String, Executable> faultCatchers() {
     Map<String, Executable> catchers = new LinkedHashMap<>();
     for (String fault : new String[] {
-        Hypot.DROP_EARLY_RETURN, Hypot.REFRESHED_WORDS, Hypot.DROP_T2, Hypot.SWAP_BY_VALUE}) {
+        Hypot.DROP_EARLY_RETURN, Hypot.REFRESHED_WORDS, Hypot.DROP_T2, Hypot.DROP_Y2}) {
       catchers.put(fault, () -> forEachWidth(species ->
           PlantedFaultTest.assertCaught(fault, () -> assertHypot(species, faultRunInputs()))));
     }

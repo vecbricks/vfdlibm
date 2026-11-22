@@ -1330,11 +1330,16 @@ blend and 10 to 23 instructions. At 128 bits the bodies are 8 to 16 times longer
   each). `hypot.dropEarlyReturn`: 0 of Varka's range `[-10, 10)`, 1,779,887 of sampled bits,
   1,620,600 of the fuzz's edges, 14,850 of the 40,401 special pairs. `hypot.refreshedWords`: 170,825
   of subnormal-`b` pairs, 16,550 at the scalings, 24,077 of equal words, 0 of the special pairs.
-  `hypot.dropT2`: 2,096,152 of `[-10, 10)`, 3,096,883 of subnormal-`b` pairs. `hypot.swapByValue`
-  (line 60 by `|y| > |x|`): 0 of 4,194,304 equal-word pairs, 1,995 of sampled bits, 105,259 of the
-  edges and 2,316 of the special pairs, which are where both high words are zero (a zero beside a
-  subnormal whose high word is zero), so a swap by value at equal nonzero words changed no result
-  in those draws. The fault run's inputs hold the special pairs and the subnormal-`b` pairs.
+  `hypot.dropT2`: 2,096,152 of `[-10, 10)`, 3,096,883 of subnormal-`b` pairs. `hypot.dropY2`
+  (line 108's `t1*y2` dropped): 2,098,152 of `[-10, 10)`, 2,004,618 of equal words, 2,200,389 of
+  `a` near `2b`. The fault run's inputs hold the special pairs and the subnormal-`b` pairs.
+- **A swap by value is not a fault anyone can see.** Line 60 swapped by `|y| > |x|` instead of by
+  the high words was a candidate fault. In a review's scalar model it changed no finite result (0
+  of 9,216 finite special pairs and of 20,000,000 equal-word pairs), and in the vector it was caught
+  only because a NaN `y` beside a finite `x` then skips the swap, so `ha` stays finite and the rare
+  mask misses the lane: a fault of the finish, not of the swap. It was replaced by `dropY2`. That
+  the C's word compare and a value compare agree on finite lanes is a reading of those draws, not
+  a proof; the port keeps the C's compare.
 - **Hard cases, computed.** No published table holds hypot's; `dev/hypot-hard-cases.py` derives
   8,400 pairs with exact integer arithmetic (near-midpoint families of both forms of the medium
   path, exact triples with nearly equal legs, scaled into each range), and

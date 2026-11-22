@@ -1555,4 +1555,4 @@ sampled bit patterns, Varka's baseline range and every exponent; the 8,400 pairs
 `hard-cases/hypot.txt`; and every subset of a vector's lanes rare beside lanes of every way out
 of the C. The planted faults are `hypot.dropEarlyReturn` (line 63's return dropped),
 `hypot.refreshedWords` (L16), `hypot.dropT2` (line 99's `t2*(a+t1)` dropped) and
-`hypot.swapByValue` (line 60's swap by `|y| > |x|`, not by the words).
+`hypot.dropY2` (line 108's `t1*y2` dropped).
