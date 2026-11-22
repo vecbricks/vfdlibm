@@ -53,9 +53,12 @@ on:
 permissions:
   contents: read
 
+# A push to a pull request cancels that pull request's older run (re-run only the newest, since a
+# re-run cancels the head's run too). A tag's or a dispatch's run is never cancelled while it
+# runs, though a newer run on the same ref replaces one still pending.
 concurrency:
   group: release-${{ github.ref }}
-  cancel-in-progress: false
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   version:
