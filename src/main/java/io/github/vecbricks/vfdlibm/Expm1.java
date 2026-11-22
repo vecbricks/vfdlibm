@@ -56,9 +56,10 @@ import jdk.incubator.vector.VectorSpecies;
  * the far form's {@code D2I} and {@code t = k} its {@code I2D}, as in {@code Exp}; the words
  * {@code 0x3ff00000-(0x200000>>k)} and {@code (0x3ff-k)<<20} are int lanes too, shifted by
  * {@code k} lane by lane, and the C's {@code __HI(y) += (k<<20)} is the long add of {@code k <<
- * 52} to the bits ({@code Lanes.addExponent}, written out). Each form is computed in every lane
- * and blended by the masks of {@code k}; a form's value on a lane that does not take it is never
- * kept, whatever the shift counts there.
+ * 52} to the bits ({@code Lanes.addExponent}, written out; PROOFS.md, L15). Each form is computed
+ * in every lane and blended by the masks of {@code k}; a form's value on a lane that does not take
+ * it is never kept, whatever the shift counts there. Varka's emitted kernel holds these words in
+ * long lanes instead (PROOFS.md, L15, checked in Varka's {@code VarkaMathPortSuite}).
  *
  * <p>Three arms differ in the C's rare paths, the early returns: the filter ({@code +-inf},
  * NaN, {@code x > o_threshold} and {@code x < -56*ln2}) and {@code |x| < 2^-54}. A positive
@@ -346,9 +347,9 @@ final class Expm1 {
     VectorMask<Double> highLanes = high.cast(species);
     DoubleVector y = tv.sub(em.sub(r)).blend(r.sub(em.add(tv)).add(one), highLanes);
     // Lines 199, 206 and 211: __HI(y) += (k<<20), as the long add of k << 52 to y's bits
-    // (Lanes.addExponent, written out). The addend's low word is zero, so y's low word is kept
-    // and nothing carries out of it: the high word becomes __HI(y) + (k<<20) modulo 2^32, the
-    // C's int add. Line 200: the far lanes return y-one.
+    // (Lanes.addExponent, written out; PROOFS.md, L15). The addend's low word is zero, so y's
+    // low word is kept and nothing carries out of it: the high word becomes __HI(y) + (k<<20)
+    // modulo 2^32, the C's int add. Line 200: the far lanes return y-one.
     LongVector yBits = (LongVector) y.viewAsIntegralLanes();
     DoubleVector scaled = (DoubleVector) yBits.add(kLong.lanewise(VectorOperators.LSHL, 52))
         .viewAsFloatingLanes();

@@ -741,43 +741,85 @@ itself (L10), and the code's text.
 
 ### L15. expm1's words in long lanes, as Varka emits them
 
-Varka's emitted kernel (`VarkaMathPort.expm1`) computes `Expm1.expm1Blended`'s operations with
-the C's `int` words in long lanes, as `Log` holds its words (L8), since a kernel's high-word tests
-are L3's compares of `|x|`'s bits and its `k` is the long `I2L` of the `D2I`. The doubles are the
-same operations in the same order; this lemma covers the words.
+Varka's emitted kernel (`VarkaMathPort.expm1`, in vecbricks/varka, not in this repository)
+computes `Expm1.expm1Blended`'s operations with the C's `int` words in long lanes, as `Log` holds
+its words (L8), since a kernel's high-word tests are L3's compares of `|x|`'s bits and its `k` is
+the long `I2L` of the `D2I`. The doubles are the same operations in the same order; this lemma
+covers the words. `Expm1` here keeps those words in `IntVector` lanes, so (a) to (c) are about
+Varka's kernel only; (d), the exponent add, is also `Expm1`'s own (and `Lanes.addExponent`'s).
 
-**Statement.** Let `k` be the C's `int k` (from L10's reduction) widened to a long. On a lane
-with `2 <= k < 20`, the long `0x3ff00000 - (0x200000 >>> k)` is the C's `0x3ff00000 -
-(0x200000>>k)` widened; on a lane with `20 <= k <= 56`, the long `(0x3ff - k) << 20` is the C's
-`(0x3ff-k)<<20` widened; and for every long `w` whose low 32 bits are the C's word `W`, `w << 32`
-is the bits of the double whose high word is `W` and whose low word is 0, the C's `t = one;
-__HI(t) = W`. The tests of `k`, `k <= -2`, `k > 56`, `2 <= k < 20`, `k == 1`, `k == -1` and `k ==
-0`, are the C's on the long.
+**Statement.** Let `k` be the C's `int k` (from L10's reduction) widened to a long.
+- (a) On a lane with `2 <= k < 20`, the long `0x3ff00000 - (0x200000 >>> k)` is the C's
+  `0x3ff00000 - (0x200000>>k)` widened; on a lane with `20 <= k <= 56`, the long `(0x3ff - k) <<
+  20` is the C's `(0x3ff-k)<<20` widened.
+- (b) For every long `w` whose low 32 bits are the C's word `W`, `w << 32` is the bits of the
+  double whose high word is `W` and whose low word is 0, the C's `t = one; __HI(t) = W`.
+- (c) The tests of `k`, `k <= -2`, `k > 56`, `2 <= k < 20`, `k == 1`, `k == -1` and `k == 0`, are
+  the C's on the long.
+- (d) For every double `y` and every `k` with `|k| < 2^11`, `bits(y) + (k << 52)` (a long add)
+  has `y`'s low word and the high word `__HI(y) + (k<<20)` modulo 2^32: the C's `__HI(y) +=
+  (k<<20)` (lines 199, 206 and 211), wherever the C's `int` add does not overflow.
 
 **Hypotheses.**
-- (H16) The words are read only on the lanes whose form uses them: `Expm1` picks `t`'s word by
-  the masks of `k`, and a word computed on any other lane is never kept, whatever the shift count
-  there.
+- (H16) The words are read only on the lanes whose form uses them: the kernel picks `t`'s word
+  by the masks of `k`, and a word computed on any other lane is never kept, whatever the shift
+  count there. It is needed: at `k = 40`, a lane of the `20 <= k <= 56` form, `0x200000 >> 40`
+  (an `int` shift, count modulo 32) and `0x200000 >>> 40` (a long one, modulo 64) differ.
+- (H17) `-56 <= k <= 1024` on every lane whose result is kept. L10's domain is the lanes the C
+  does not return early from: `x <= o_threshold`, and `hx < 0x4043687A` for a negative `x`. The
+  formula `(int) fl(fl(x*invln2) + h)` is non-decreasing in `x` on each sign (R2, and the
+  truncation), and it gives -56 at the lowest such `x` and 1024 at `o_threshold`.
 
-**Proof.** For `2 <= k < 20`, `0x200000 >> k` is a positive int below `2^20`, so the arithmetic
-and the logical shift agree (JLS 15.19) and the difference lies in `(0x3fe00000, 0x3ff00000)`,
-inside 32 bits. For `20 <= k <= 56`, `0x3ff - k` lies in `[0x3c7, 0x3eb]` and its shift by 20 in
-`[0x3c700000, 0x3eb00000]`, below `2^31`, so no int overflows and the long is the int widened.
-`w << 32` keeps `w`'s low 32 bits as the high word and shifts the rest out, with zeros below, so
-the bits above `W` in `w` are irrelevant. `k` is an `int` widened, so each compare with an int
-constant has the int compare's answer. No IEEE property is used.
+**Proof.**
+1. (a) For `2 <= k < 20`, `0x200000 >> k` is a positive int below `2^20`, so the arithmetic
+   and the logical shift agree (JLS 15.19) and the difference lies in `(0x3fe00000, 0x3ff00000)`,
+   inside 32 bits. For `20 <= k <= 56`, `0x3ff - k` lies in `[0x3c7, 0x3eb]` and its shift by 20
+   in `[0x3c700000, 0x3eb00000]`, below `2^31`, so no int overflows and the long is the int
+   widened.
+2. (b) `w << 32` keeps `w`'s low 32 bits as the high word and shifts the rest out, with zeros
+   below, so the bits above `W` in `w` are irrelevant.
+3. (c) `k` is an `int` widened, so each compare with an int constant has the int compare's answer
+   (JLS 5.6).
+4. (d) `k << 52`, for `|k| < 2^11`, is `(k<<20) * 2^32` modulo 2^64, with `k<<20` the C's int (no
+   overflow for `|k| < 2^11`): its low 32 bits are zero. Adding it to `bits(y)` leaves the low
+   word, and no carry passes from the low word into the high one. The high 32 bits get `k<<20`
+   added modulo 2^32, since a carry out of bit 63 is dropped by the long add. That is the C's
+   `int` add on the high word wherever that add does not overflow (and its two's-complement wrap
+   where it does).
 
-**Hinge tests (scalar).** `ProofsTest.l15LongWordsAreExpm1sInts`: for every `k` from -1100 to
-1100, the long words against the C's int words on the lanes that read them and the long tests
-against the int tests; and the two shifts at `k = 40`, a lane of the `20 <= k <= 56` form, which
-does not read that word, where they differ (H16 needed). **Vector tie.** Varka's
-`VarkaMathPortSuite` runs the emitted kernel against `VFdlibm.expm1` and `Expm1.expm1Blended` by
-raw bits, on 2^24 sampled inputs and the fixed vectors at each `k` form's edge.
+No IEEE property is used but R2, in H17. With H16, (a) to (c) give the C's `t` on each lane that
+reads it, and (d) the C's scaled `y`; H17 puts every kept lane's `k` in the range the steps cover.
 
-**Encoding.** None; the steps are integer ranges, checked exhaustively over every `k` the
-reduction gives on the lanes kept, `-56 <= k <= 1024` (`x <= o_threshold`, L10); the words are
-read only for `2 <= k <= 56`, so the range -1100 to 1100 covers every case. The test does not
-check H16 itself: that `Expm1`'s masks read each word only on its lanes is the code's text.
+**Hinge tests (scalar).** `ProofsTest.l15ThresholdsAreTheCs`: `Expm1.K_FAR` and `K_SPLIT` are the
+C's 56 and 20. `ProofsTest.l15LongWordsAreExpm1sInts` (a, b): for every `k` from -1100 to 1100
+whose form reads a word, by the C's literal bounds (55 of them), the long word against the C's int
+word and the double it heads against `1 - 2^-k` or `2^-k`; `one`'s word against 1.0, once; and
+the two shifts at `k = 40`, where they differ. `ProofsTest.l15ExponentAddIsTheCsHighWordAdd`
+(d): for every `k` from -1100 to 1100 and 1024 `y` bit patterns (high words 0, `0x3fe00000`,
+`0x3ff00000`, `0x7fefffff`, `0x7fffffff`, `0x80000000`, `0xbff00000` and `0xffffffff`, which
+wrap either way, against low words 0, 1, `0x7fffffff`, `0x80000000` and `0xffffffff`, and seeded
+draws), the long add against the C's int add on the high word. (c) has no scalar test: comparing
+an int with its widening cannot fail; the vector test below runs every form.
+**Vector tie, here.** `ProofsTest.l15MasksKeepEachWordOnItsLanes` checks H16 on `Expm1`'s own
+masks, which Varka's kernel emits: `Expm1.expm1Blended`, at every width, against
+`StrictMath.expm1` by raw bits on 7569 inputs that cover every `k` from -56 to 1024 (each input's
+`k` and that it is no early-return lane are asserted, and H17's two end doubles with them),
+shuffled so that a vector mixes the forms, `k == -1`, `0` and `1` among them. A mask that kept a
+word on a lane whose form does not read it fails there wherever that word differs from the
+lane's own (the int mid word is one's on a far lane with `k mod 32 >= 22`, so not there):
+blending the mid word over `k == 40` made the 7 inputs at `k = 40` differ, and keeping the high
+word on the far lanes 7163 of the 7569 (each at every width, mutations made by hand and
+reverted). That Varka's kernel uses
+these masks and its long words is not checked here. **Vector tie, in Varka.** Where L15's own
+claim, the kernel, is checked: Varka's `VarkaMathPortSuite` (vecbricks/varka PR #1629) runs the
+emitted `VarkaMathPort.expm1` against `VFdlibm.expm1` and `Expm1.expm1Blended` by raw bits, on
+2^24 sampled inputs and the fixed vectors at each `k` form's edge.
+
+**Encoding.** None, no machine-checked file: the steps are integer ranges and identities, checked
+by the Java loops above over `-1100 <= k <= 1100`, which holds every `k` of H17, `-56 <= k <=
+1024`; the bounds themselves rest on L10's domain and the monotonicity of the formula, the end
+doubles asserted by `l15MasksKeepEachWordOnItsLanes`. Informal: that Varka's kernel is
+`expm1Blended`'s operations with these long words, which only Varka's vector tie checks.
 
 ## log10 (`Log10.java`, from `e_log10.c`)
 
