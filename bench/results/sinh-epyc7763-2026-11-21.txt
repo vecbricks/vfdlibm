@@ -11,11 +11,13 @@
 # taken from JMH's "Result" blocks in the raw output.
 #
 # The code: Sinh.java and Cosh.java are the same at 5d6eb14 and 03ea082, the commits of the Xeon's
-# and the EPYC's runs, and between them Expm1.java and the benchmarks' Javadoc changed in comments
-# only, so the two hosts time one code. Both commits hold 5a452fa (#100), so the *Max rows time
-# the finish that writes out its first eight lanes with constant indices. The JMH options include
-# -foe true, so a row that failed would have failed the run; every row of SinhBenchmark has a
-# Result block, which bench/record.py requires.
+# and the EPYC's runs, and so is the code they call, Expm1.expm1Core (sinh) and Exp.expCore
+# (cosh): between the commits Exp.java, Expm1.java and the benchmarks' Javadoc changed in comments
+# only, and the rest of the diff (Asin, Log, Log1p, Log10, VFdlibm, ExpKindsBench) is not called
+# by these benchmarks, so the two hosts time one code. Both commits hold 5a452fa (#100), so the
+# *Max rows time the finish that writes out its first eight lanes with constant indices. The JMH
+# options include -foe true, so a row that failed would have failed the run; every row of
+# SinhBenchmark has a Result block, which bench/record.py requires.
 #
 # The run held 3 classes; this file has SinhBenchmark's blocks and rows of it.
 #
@@ -60,7 +62,7 @@
 # - Rows whose own maximum is more than 10% above their minimum: scalarStrictMath common (min
 #   19,305, avg 20,976, max 22,609). A ratio from that minimum is one run's and wants a re-run
 #   before it is quoted.
-# - Finish256, finishPreferred and finishMax are one width on this host, and read within 1.01 of
+# - Finish256, finishPreferred and finishMax are one width on this host, and read within 1.02 of
 #   each other on both inputs (finishMax over finishPreferred 1.00 / 1.01): no direction.
 # - Mixed over common data, each arm's minimum: finish256 1.23, finishMax 1.24, finishPreferred
 #   1.23, scalar loop 0.98.

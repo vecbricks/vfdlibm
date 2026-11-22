@@ -1,4 +1,5 @@
-# CoshKindsBench on an Intel Xeon Platinum 8573C GitHub runner, 21 November 2026: cosh's two arms at a share of small-range lanes, one run at 5d6eb14
+# CoshKindsBench on an Intel Xeon Platinum 8573C GitHub runner, 21 November 2026: cosh's two arms
+# at a share of small-range lanes, one run at 5d6eb14
 #
 # Produced by .github/workflows/benchmark.yml, dispatched by bench/dispatch-bench.sh --host
 # xeon8573c on main at 5d6eb14, for (Sinh|Cosh)Benchmark|CoshKindsBench: run 44940776246, 21
@@ -11,10 +12,12 @@
 # table is taken from JMH's "Result" blocks in the raw output.
 #
 # The code: Sinh.java and Cosh.java are the same at 5d6eb14 and 03ea082, the commits of the Xeon's
-# and the EPYC's runs, and between them Expm1.java and the benchmarks' Javadoc changed in comments
-# only, so the two hosts time one code. The JMH options include -foe true, so a row that failed
-# would have failed the run; every row of CoshKindsBench has a Result block, which bench/record.py
-# requires.
+# and the EPYC's runs, and so is the code they call, Expm1.expm1Core (sinh) and Exp.expCore
+# (cosh): between the commits Exp.java, Expm1.java and the benchmarks' Javadoc changed in comments
+# only, and the rest of the diff (Asin, Log, Log1p, Log10, VFdlibm, ExpKindsBench) is not called
+# by these benchmarks, so the two hosts time one code. The JMH options include -foe true, so a row
+# that failed would have failed the run; every row of CoshKindsBench has a Result block, which
+# bench/record.py requires.
 #
 # The run held 3 classes; this file has CoshKindsBench's blocks and rows of it.
 #
@@ -57,8 +60,9 @@
 #   / +1,719; slice256 (4,161 / 4,064) -165 / +20; slicePreferred (3,168 / 3,080) -37 / +130;
 #   scalarStrictMath (11,344 / 11,328) -211 / -680.
 # - Small over none, by minimums (3.5% / 17%): finish256 1.33 / 1.74; finishPreferred 1.31 /
-#   1.82 (past 1.3x, the small row higher; 1.31 and 1.33 only just). slice256 0.96 / 1.00,
-#   slicePreferred 0.99 / 1.04 and scalarStrictMath 0.98 / 0.94: inside 1.3x, no direction.
+#   1.82 (the 17% rows are past 1.3x, the small row higher; the 3.5% rows, 1.33 and 1.31, are at
+#   its edge, no direction until a re-run). slice256 0.96 / 1.00, slicePreferred 0.99 / 1.04 and
+#   scalarStrictMath 0.98 / 0.94: inside 1.3x, no direction.
 # - Slice over finish, by minimums, on none at 3.5% / 17%: 256 bits 1.70 / 1.58, preferred 1.50
 #   / 1.46 (outside 1.3x, finish lower). On small at 3.5% / 17%: 256 bits 1.23 / 0.91, preferred
 #   1.14 / 0.84 (inside 1.3x in both directions, no direction read; 0.91 and 0.84 are 1.10 and
