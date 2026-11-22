@@ -69,7 +69,8 @@ case "$(uname -m)" in
   aarch64) arch=aarch64; cs_arch=CS_ARCH_ARM64; cs_mode=CS_MODE_ARM ;;
   *) echo "hsdis-build: unsupported architecture $(uname -m)" >&2; exit 1 ;;
 esac
-java_home="${JAVA_HOME:-$(dirname "$(dirname "$(readlink -f "$(command -v java)")")")}"
+java_home="${JAVA_HOME:-$(dirname "$(dirname "$(readlink -f "$(command -v java || true)")")")}"
+[ -x "$java_home/bin/java" ] || { echo "hsdis-build: no JDK found (set JAVA_HOME)" >&2; exit 1; }
 
 # Passes when a JVM given $1 on LD_LIBRARY_PATH prints real instructions for a compiled method.
 check_loads() {
@@ -80,7 +81,7 @@ check_loads() {
   fi
   # HotSpot loads an hsdis in the JDK's own lib before LD_LIBRARY_PATH's; the check would read it.
   local own
-  for own in "$java_home/lib/hsdis-$arch.so" "$java_home/lib/server/hsdis-$arch.so"; do
+  for own in "$java_home"/lib/{,server/}{,lib}hsdis-"$arch".so; do
     if [ -e "$own" ]; then
       echo "hsdis-build: the JDK has its own $own, which HotSpot loads instead of $dir's" >&2
       return 1

@@ -127,9 +127,11 @@ final class AsmCheck {
   static String hsdisInJdk() {
     Path lib = Path.of(System.getProperty("java.home"), "lib");
     for (Path dir : List.of(lib, lib.resolve("server"))) {
-      Path file = dir.resolve(libraryName());
-      if (Files.exists(file)) {
-        return file.toString();
+      for (String name : List.of(libraryName(), "lib" + libraryName())) {
+        Path file = dir.resolve(name);
+        if (Files.exists(file)) {
+          return file.toString();
+        }
       }
     }
     return null;
@@ -217,8 +219,11 @@ final class AsmCheck {
     }
   }
 
-  /** A method's C2 code from its entry point to its stubs. */
-  record Body(String method, List<Instruction> code) {}
+  /**
+   * A method's C2 code from its entry point to its stubs, and the lines in that range that were
+   * neither an instruction, a comment HotSpot attaches to one, a {@code #} header line nor blank.
+   */
+  record Body(String method, List<Instruction> code, List<String> unread) {}
 
   // A mnemonic may be a directive (".byte") or "(bad)": what a disassembler prints for bytes it
   // does not decode, which undecodedViolations must see rather than the parser drop.
@@ -275,6 +280,7 @@ final class AsmCheck {
       return Optional.empty();
     }
     List<Instruction> code = new ArrayList<>();
+    List<String> unread = new ArrayList<>();
     boolean disassembly = false;
     boolean inCode = false;
     for (int i = start + 1; i < lines.length; i++) {
@@ -301,11 +307,13 @@ final class AsmCheck {
             Instruction last = code.remove(code.size() - 1);
             code.add(new Instruction(last.address(), last.mnemonic(), last.operands(),
                 last.notes() + " ;" + n.group(1).trim()));
+          } else if (!line.isBlank() && !line.trim().startsWith("#") && !isEntry(line)) {
+            unread.add(line);
           }
         }
       }
     }
-    return disassembly && !code.isEmpty() ? Optional.of(new Body(method, code)) : Optional.empty();
+    return disassembly && !code.isEmpty() ? Optional.of(new Body(method, code, unread)) : Optional.empty();
   }
 
   // ---------------------------------------------------------------------------------------------
@@ -373,8 +381,13 @@ final class AsmCheck {
    * the garbage after it.
    */
   static List<String> undecodedViolations(Body body) {
-    return matching(body, insn -> insn.mnemonic().startsWith(".")
+    List<String> violations = matching(body, insn -> insn.mnemonic().startsWith(".")
         || insn.mnemonic().equals("(bad)"), "was not decoded (hsdis's Capstone is older than 5?)");
+    // A line in the code that the parser could not read could hide a call or an FMA.
+    for (String line : body.unread()) {
+      violations.add(body.method() + ": a line in its code was not read: " + line.trim());
+    }
+    return violations;
   }
 
   /** Every instruction whose inlined frames name StrictMath or FdLibm. */

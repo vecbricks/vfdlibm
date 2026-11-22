@@ -68,7 +68,9 @@ class ExpAsmTest {
     for (String arm : ARMS) {
       Optional<AsmCheck.Body> body = AsmCheck.lastC2(output, PROBE + "::" + arm);
       if (body.isEmpty()) {
-        fail("no standard C2 compile of " + arm + " at " + width + "; the probe's output ends:\n"
+        fail("no standard C2 compile of " + arm + " at " + width + " (this JVM's options, "
+            + "which the probe got too: " + java.lang.management.ManagementFactory
+                .getRuntimeMXBean().getInputArguments() + "); the probe's output ends:\n"
             + AsmCheck.tail(output, 40));
       }
       System.out.println("| exp | " + width + " | " + bits + " | " + arm + " | "

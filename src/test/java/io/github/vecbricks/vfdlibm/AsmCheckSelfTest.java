@@ -194,6 +194,11 @@ class AsmCheckSelfTest {
     AsmCheck.Body body = body(nmethod(code));
     assertEquals(2, AsmCheck.undecodedViolations(body).size(), body.code().toString());
     assertEquals(List.of(), AsmCheck.undecodedViolations(body(nmethod(clean512()))));
+    // a line the parser does not read (here a mnemonic in capitals) is reported, not dropped
+    String odd = clean512() + "  0x00007ac3981f8a50:   VFMADD231PD\t\tzmm0, zmm1, zmm2\n";
+    List<String> violations = AsmCheck.undecodedViolations(body(nmethod(odd)));
+    assertEquals(1, violations.size(), violations.toString());
+    assertTrue(violations.get(0).contains("not read"), violations.toString());
   }
 
   /** HotSpot's output when no hsdis is loaded: the same nmethod as hex words under MachCode. */
