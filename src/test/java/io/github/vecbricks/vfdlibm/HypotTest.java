@@ -21,6 +21,7 @@ package io.github.vecbricks.vfdlibm;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -90,7 +91,11 @@ class HypotTest {
     /** Lines 101-108: {@code w<=b}. */
     W_NOT_ABOVE_B,
     /** Line 94 with equal high words and {@code b > a}: no swap, {@code w} negative. */
-    EQUAL_WORDS_B_LARGER
+    EQUAL_WORDS_B_LARGER,
+    /** Lines 80-84 then lines 96-99: the stale {@code ha} split at line 97. */
+    SUBNORMAL_B_W_ABOVE_B,
+    /** Lines 80-84 then lines 101-108: the stale {@code hb} and {@code ha} split at 103 and 106. */
+    SUBNORMAL_B_W_NOT_ABOVE_B
   }
 
   private static int hi(double d) {
@@ -210,6 +215,9 @@ class HypotTest {
       t2 = a - t1; // 98
       w = Math.sqrt(t1 * t1 - (b * (-b) - t2 * (a + t1))); // 99
       took(paths, Path.W_ABOVE_B);
+      if (k == -1022) {
+        took(paths, Path.SUBNORMAL_B_W_ABOVE_B);
+      }
     } else {
       a = a + a; // 101
       y1 = 0; // 102
@@ -220,6 +228,9 @@ class HypotTest {
       t2 = a - t1; // 107
       w = Math.sqrt(t1 * y1 - (w * (-w) - (t1 * y2 + t2 * b))); // 108
       took(paths, Path.W_NOT_ABOVE_B);
+      if (k == -1022) {
+        took(paths, Path.SUBNORMAL_B_W_NOT_ABOVE_B);
+      }
     }
     if (k != 0) { // 110
       t1 = 1.0; // 111
@@ -662,7 +673,17 @@ class HypotTest {
     }
   }
 
-  /** The output of {@link #main} run in a JVM with {@code mode}'s flag; fails on a bad exit. */
+  /**
+   * How long a child JVM may take. At the suite's size the {@code -Xint} child, the slowest, took
+   * 2.8 s on the laptop under a load of 26, and the compiled ones under 1 s.
+   */
+  static final int CHILD_SECONDS = 60;
+
+  /**
+   * The output of {@link #main} run in a JVM with {@code mode}'s flag; fails on a bad exit. The
+   * child inherits no option from {@code JAVA_TOOL_OPTIONS}, {@code JDK_JAVA_OPTIONS} or {@code
+   * _JAVA_OPTIONS}, which could change its mode.
+   */
   static String runInJvm(JitMode mode, int draws, int passes)
       throws IOException, InterruptedException {
     List<String> command = new ArrayList<>();
@@ -675,7 +696,11 @@ class HypotTest {
         Integer.toString(draws), Integer.toString(passes)));
     // ByteArrayOutputStream is synchronized, so a timeout can report what was read so far.
     ByteArrayOutputStream bytes = new ByteArrayOutputStream();
-    Process process = new ProcessBuilder(command).redirectErrorStream(true).start();
+    ProcessBuilder builder = new ProcessBuilder(command).redirectErrorStream(true);
+    builder.environment().keySet().removeAll(
+        List.of("JAVA_TOOL_OPTIONS", "JDK_JAVA_OPTIONS", "_JAVA_OPTIONS"));
+    long start = System.nanoTime();
+    Process process = builder.start();
     try {
       CompletableFuture<Void> drained = CompletableFuture.runAsync(() -> {
         try (InputStream in = process.getInputStream()) {
@@ -684,9 +709,9 @@ class HypotTest {
           throw new UncheckedIOException(e);
         }
       });
-      if (!process.waitFor(10, TimeUnit.MINUTES)) {
-        throw new AssertionError(mode + ": the JVM did not finish in 10 minutes; its output:\n"
-            + bytes.toString(StandardCharsets.UTF_8));
+      if (!process.waitFor(CHILD_SECONDS, TimeUnit.SECONDS)) {
+        throw new AssertionError(mode + ": the JVM did not finish in " + CHILD_SECONDS
+            + " s; its output:\n" + bytes.toString(StandardCharsets.UTF_8));
       }
       drained.join();
     } finally {
@@ -694,7 +719,8 @@ class HypotTest {
       process.destroyForcibly();
     }
     String text = bytes.toString(StandardCharsets.UTF_8);
-    System.out.println("hypot gate, " + mode + ":\n" + text);
+    System.out.printf("hypot gate, %s, %.1f s:%n%s%n", mode,
+        (System.nanoTime() - start) / 1e9, text);
     assertEquals(0, process.exitValue(), mode + ":\n" + text);
     return text;
   }
@@ -721,13 +747,22 @@ class HypotTest {
 
   /**
    * The same check in a JVM per JIT mode, where {@code StrictMath} and the transcription each run
-   * in that mode's tiers: every pass of every mode passes, and each JVM had the mode's flag. That
-   * C1 or C2 compiled either method is not checked; the output shows which candidate each mode's
-   * {@code StrictMath} returned, and that is not asserted, since it is not specified.
+   * in that mode's tiers: every pass of every mode passes, each JVM had the mode's flag, and its
+   * {@code java.vm.info} says interpreted mode for {@code -Xint} and mixed mode for the others.
+   * That C1 or C2 compiled either method is not checked; the output shows which candidate each
+   * mode's {@code StrictMath} returned, and that is not asserted, since it is not specified.
+   *
+   * <p>The children do not depend on the vector width, so they run only where the test JVM has no
+   * {@code -XX:} option, which is where {@code vfdlibm.test.jvmArgs} is empty: in ci.yml the rows
+   * "x86 128+256 bits, 512 on AVX-512 runners" and "Arm 128 bits" (once per architecture), and a
+   * plain {@code mvn -B verify}, {@code dev/release.sh}'s included. The other rows skip them.
    */
   @ParameterizedTest
   @EnumSource(JitMode.class)
   void scalarTranscriptionIsStrictMathInEveryJitMode(JitMode mode) throws Exception {
+    List<String> own = ManagementFactory.getRuntimeMXBean().getInputArguments();
+    assumeTrue(own.stream().noneMatch(a -> a.startsWith("-XX:")),
+        "a row with width options: " + own);
     String text = runInJvm(mode, DRAWS >> 2, 3);
     String jvm = text.lines().filter(l -> l.startsWith("jvm: ")).findFirst().orElseThrow();
     if (mode.flag != null) {
@@ -735,9 +770,7 @@ class HypotTest {
     } else {
       assertTrue(!jvm.contains("-Xint") && !jvm.contains("Tiered"), jvm);
     }
-    if (mode == JitMode.INTERPRETER) {
-      assertTrue(jvm.contains("interpreted mode"), jvm);
-    }
+    assertTrue(jvm.contains(mode == JitMode.INTERPRETER ? "interpreted mode" : "mixed mode"), jvm);
     assertTrue(text.contains("result: ok"), text);
   }
 
