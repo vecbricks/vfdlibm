@@ -313,7 +313,9 @@ final class AsmCheck {
         }
       }
     }
-    return disassembly && !code.isEmpty() ? Optional.of(new Body(method, code, unread)) : Optional.empty();
+    return disassembly && !code.isEmpty()
+        ? Optional.of(new Body(method, code, unread))
+        : Optional.empty();
   }
 
   // ---------------------------------------------------------------------------------------------
