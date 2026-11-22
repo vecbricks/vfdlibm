@@ -39,8 +39,9 @@ import org.junit.jupiter.params.provider.EnumSource;
  * species, so the preferred species at 128 bits ({@code -XX:MaxVectorSize=16}) is treated alike.
  *
  * <p>Skipped, with the reason, on a host that is not Linux on x86-64, when no hsdis is found
- * ({@link AsmCheck#findHsdis}), and when one is found but HotSpot printed no disassembly with it;
- * with {@code VFDLIBM_ASM_REQUIRED=true}, as CI's x86 rows set, the last two fail instead.
+ * ({@link AsmCheck#findHsdis}), when the JDK has one of its own that HotSpot would load first, and
+ * when one is found but HotSpot printed no disassembly with it; with {@code
+ * VFDLIBM_ASM_REQUIRED=true}, as CI's x86 rows set, the last three fail instead.
  */
 class ExpAsmTest {
 

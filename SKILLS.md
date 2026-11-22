@@ -278,7 +278,7 @@ standard `C2-compiled nmethod` of each, from its entry point to its stubs, in In
   holding no `[Disassembly]` instruction line, not by HotSpot's `Loading hsdis library failed`,
   which it printed both with no library and with a file that was none. An hsdis in the JDK's own
   `lib` would be loaded first, so the check skips (fails, required) when one is there. CI's x86 rows
-  build hsdis and set `VFDLIBM_ASM_REQUIRED=true`, which makes the last two fail instead; the Arm
+  build hsdis and set `VFDLIBM_ASM_REQUIRED=true`, which makes the last three fail instead; the Arm
   row skips.
 
 **The census of exp's arms, 22 November 2026, on the laptop** (AMD Ryzen AI 9 HX PRO 370, JDK

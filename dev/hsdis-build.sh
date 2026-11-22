@@ -78,6 +78,14 @@ check_loads() {
     echo "hsdis-build: no hsdis-$arch.so in $dir" >&2
     return 1
   fi
+  # HotSpot loads an hsdis in the JDK's own lib before LD_LIBRARY_PATH's; the check would read it.
+  local own
+  for own in "$java_home/lib/hsdis-$arch.so" "$java_home/lib/server/hsdis-$arch.so"; do
+    if [ -e "$own" ]; then
+      echo "hsdis-build: the JDK has its own $own, which HotSpot loads instead of $dir's" >&2
+      return 1
+    fi
+  done
   work=$(mktemp -d)
   cat > "$work/HsdisCheck.java" << 'EOF'
 public class HsdisCheck {
