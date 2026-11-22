@@ -22,8 +22,9 @@ import jdk.incubator.vector.VectorSpecies;
  * into a {@code static final}, a constant to C2. The data are {@code ExpBenchmark}'s common inputs,
  * {@code [-20, 20]}, so no lane takes a rare path: the per-lane finish is compiled as an uncommon
  * trap, and no {@code StrictMath} code is compiled into the C2 loops (AGENTS.md, licence). The
- * C1 compiles printed beside them keep the finish's calls to {@code StrictMath.exp} and are not
- * read. Every static method but {@code main} is an arm, and {@link ExpAsmTest} checks each.
+ * C1 compiles printed beside them keep the finish, with {@code StrictMath.exp}'s one-line wrapper
+ * inlined and a call into {@code FdLibm}, and are not read. Every static method but {@code main}
+ * is an arm, and {@link ExpAsmTest} checks each.
  */
 final class ExpAsmProbe {
 

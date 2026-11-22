@@ -248,8 +248,8 @@ standard `C2-compiled nmethod` of each, from its entry point to its stubs, in In
   call anywhere in the method fails. The same data keep `StrictMath`'s code out of the C2 body
   that is read (no rare lane, no call to compile), which the licence rule needs; the last rule is a
   backstop, since HotSpot names inlined frames only at calls, traps and safepoints. The output
-  also holds each loop's C1 compile, which is not read: it keeps the finish, and with it a call to
-  `StrictMath.exp`, a call and not that method's code.
+  also holds each loop's C1 compile, which is not read: it keeps the finish, with `StrictMath.exp`'s
+  one-line wrapper inlined and a call into `FdLibm`, whose code is not in it.
 - **At 128 bits on x86 the call rule is not asserted.** Every arm calls the Vector API's Java
   fallback, 60 to 132 calls per method (the census below), as "At two 64-bit lanes x86 C2 lowers
   no mask" predicts. Width and FMA are asserted there; the width is the child's species, so the

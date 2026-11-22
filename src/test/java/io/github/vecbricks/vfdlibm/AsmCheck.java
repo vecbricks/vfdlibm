@@ -307,7 +307,8 @@ final class AsmCheck {
             Instruction last = code.remove(code.size() - 1);
             code.add(new Instruction(last.address(), last.mnemonic(), last.operands(),
                 last.notes() + " ;" + n.group(1).trim()));
-          } else if (!line.isBlank() && !line.trim().startsWith("#") && !isEntry(line)) {
+          } else if (!n.matches() && !line.isBlank() && !line.trim().startsWith("#")
+              && !isEntry(line)) {
             unread.add(line);
           }
         }
