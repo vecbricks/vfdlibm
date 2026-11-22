@@ -13,13 +13,14 @@
 # The lines from "Host" to "Command" are the workflow's header; "Array" describes the benchmark;
 # the min/avg/max table is taken from JMH's "Result" blocks in the raw output.
 #
-# The code: the rows run Cosh.java, Exp.java (expCore), Expm1.java and Lanes.java, and
-# CoshBenchmark.java and CoshKindsBench.java drive them; git diff 03ea082 bc7e91b over those six
-# files shows comment lines only. Between 03ea082 and bc7e91b pom.xml
-# changed only in its version, its build timestamp and new fault executions, none of which a
-# benchmark runs. So the two runs time one code. Their headers agree on the host key, CPU, JDK,
-# vector flags and JMH options. The JMH options include -foe true, so a row that failed would have
-# failed the run; every row of CoshBenchmark has a Result block, which bench/record.py requires.
+# The code: the rows run Cosh.java, Exp.java (expCore), Expm1.java, Lanes.java and Faults.java,
+# and CoshBenchmark.java and CoshKindsBench.java drive them; git diff 03ea082 bc7e91b over those
+# seven files shows comment lines only. Between 03ea082 and bc7e91b pom.xml changed only in its
+# version, its build timestamp, new fault executions and maven-gpg-plugin 3.2.7 to 3.2.8 (the
+# release profile), none of which a benchmark runs. So the two runs time one code. Their headers
+# agree on the host key, CPU, JDK, vector flags and JMH options. The JMH options include -foe
+# true, so a row that failed would have failed the run; every row of CoshBenchmark has a Result
+# block, which bench/record.py requires.
 #
 # The run held 3 classes; this file has CoshBenchmark's blocks and rows of it.
 #
@@ -53,7 +54,8 @@
 #   range computed in the vector) and finish (the small range finished per lane).
 # - The cut-off, by minimums: a ratio under 1.30 has no direction; one from 1.30 to under 1.40 on
 #   one run is near 1.3x and has no direction until a re-run; with this re-run, a direction needs
-#   both runs outside 1.3x and agreeing.
+#   both runs outside 1.3x and agreeing. The 256-bit, preferred and SPECIES_MAX rows are one width
+#   on this host, so a direction there needs all three to meet that.
 # - The finish512 and slice512 rows read 241,198 / 247,908 and 333,474 / 333,649 ns (common /
 #   mixed) and allocate 1,132,833 / 1,139,265 and 1,703,937 / 1,709,409 B/op: 512-bit vectors are
 #   wider than this host's, which the Vector API runs in Java. Do not quote them as the code's
@@ -67,12 +69,13 @@
 #   run's, the widest sliceMax mixed (0.97) and slicePreferred common (1.02).
 # - Slice over finish, by minimums, first run / this run: on common data 1.33 / 1.37 at 256 bits,
 #   1.35 / 1.36 at the preferred species and 1.34 / 1.34 at SPECIES_MAX; on mixed data 1.30 /
-#   1.31, 1.29 / 1.33 and 1.33 / 1.29. Both runs are outside 1.3x and agree, the finish arm lower,
-#   on common data at all three (one width on this host) and on mixed data at 256 bits; at the
-#   preferred species and SPECIES_MAX on mixed data one of the two runs reads 1.29, inside 1.3x,
-#   so no direction there. Every one of these ratios is under 1.40. Which arm VFdlibm.cosh keeps
-#   is not decided here: cosh is issue #30's named exception, whose arm a host run decides, and
-#   the CoshKindsBench re-run reads the shares of small lanes that decision rests on.
+#   1.31, 1.29 / 1.33 and 1.33 / 1.29. On common data both runs are outside 1.3x and agree at all
+#   three, the finish arm lower: a direction on common data. On mixed data a run reads 1.29 at the
+#   preferred species and at SPECIES_MAX, inside 1.3x, and the first run's 1.30 at 256 bits is the
+#   one its file put on the line, so no direction on mixed data. Every one of these ratios is
+#   under 1.40. Which arm VFdlibm.cosh keeps is not decided here: cosh is issue #30's named
+#   exception, whose arm a host run decides, and the CoshKindsBench re-run reads the arms at the
+#   shares of small lanes that decision rests on.
 # - Scalar StrictMath over each vector arm, by minimums, this run (common / mixed): finish256 2.97
 #   / 2.25, finishMax 2.96 / 2.24, finishPreferred 2.91 / 2.25, slice256 2.16 / 1.72, sliceMax
 #   2.20 / 1.74, slicePreferred 2.15 / 1.70; the first run read the same within 0.07. All are

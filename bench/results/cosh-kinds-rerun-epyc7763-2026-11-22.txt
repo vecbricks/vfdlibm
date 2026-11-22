@@ -14,13 +14,14 @@
 # describes the benchmark; the min/avg/max table is taken from JMH's "Result" blocks in the raw
 # output.
 #
-# The code: the rows run Cosh.java, Exp.java (expCore), Expm1.java and Lanes.java, and
-# CoshBenchmark.java and CoshKindsBench.java drive them; git diff 03ea082 bc7e91b over those six
-# files shows comment lines only. Between 03ea082 and bc7e91b pom.xml
-# changed only in its version, its build timestamp and new fault executions, none of which a
-# benchmark runs. So the two runs time one code. Their headers agree on the host key, CPU, JDK,
-# vector flags and JMH options. The JMH options include -foe true, so a row that failed would have
-# failed the run; every row of CoshKindsBench has a Result block, which bench/record.py requires.
+# The code: the rows run Cosh.java, Exp.java (expCore), Expm1.java, Lanes.java and Faults.java,
+# and CoshBenchmark.java and CoshKindsBench.java drive them; git diff 03ea082 bc7e91b over those
+# seven files shows comment lines only. Between 03ea082 and bc7e91b pom.xml changed only in its
+# version, its build timestamp, new fault executions and maven-gpg-plugin 3.2.7 to 3.2.8 (the
+# release profile), none of which a benchmark runs. So the two runs time one code. Their headers
+# agree on the host key, CPU, JDK, vector flags and JMH options. The JMH options include -foe
+# true, so a row that failed would have failed the run; every row of CoshKindsBench has a Result
+# block, which bench/record.py requires.
 #
 # The run held 3 classes; this file has CoshKindsBench's blocks and rows of it.
 #
@@ -56,7 +57,8 @@
 #   too.
 # - The cut-off, by minimums: a ratio under 1.30 has no direction; one from 1.30 to under 1.40 on
 #   one run is near 1.3x and has no direction until a re-run; with this re-run, a direction needs
-#   both runs outside 1.3x and agreeing.
+#   both runs outside 1.3x and agreeing. The 256-bit, preferred and SPECIES_MAX rows are one width
+#   on this host, so a direction there needs all three to meet that.
 # - Allocation: every vector row reads 0.024 B/op or less and the scalar rows 0.051 or less, so no
 #   body boxed at 256 bits or at the preferred species (also 256 bits here).
 # - Run to run, by minimums, this run over the first: every row reads 0.96 to 1.03 of the first

@@ -14,12 +14,12 @@
 # describes the benchmark; the min/avg/max table is taken from JMH's "Result" blocks in the raw
 # output.
 #
-# The code: the rows run Atan2.java and Atan.java (atan's core), and Atan2Benchmark.java drives
-# them; git diff d3bb335 bc7e91b over those three files shows comment lines only (Atan.java is
-# unchanged), and pom.xml is the same at both commits. So the two runs time one code. Their
-# headers agree on the host key, CPU, JDK, vector flags and JMH options. The JMH options include
-# -foe true, so a row that failed would have failed the run; every row of Atan2Benchmark has a
-# Result block, which bench/record.py requires.
+# The code: the rows run Atan2.java, Atan.java (atan's core), Lanes.java and Faults.java, and
+# Atan2Benchmark.java drives them; git diff d3bb335 bc7e91b over those five files shows comment
+# lines only (Atan.java, Lanes.java and Faults.java are unchanged), and pom.xml is the same at
+# both commits. So the two runs time one code. Their headers agree on the host key, CPU, JDK,
+# vector flags and JMH options. The JMH options include -foe true, so a row that failed would have
+# failed the run; every row of Atan2Benchmark has a Result block, which bench/record.py requires.
 #
 # The run held 3 classes; this file has Atan2Benchmark's blocks and rows of it.
 #
@@ -54,7 +54,8 @@
 #   missing, and each is a row of the first run's table too.
 # - The cut-off, by minimums: a ratio under 1.30 has no direction; one from 1.30 to under 1.40 on
 #   one run is near 1.3x and has no direction until a re-run; with this re-run, a direction needs
-#   both runs outside 1.3x and agreeing.
+#   both runs outside 1.3x and agreeing. The 256-bit, preferred and SPECIES_MAX rows are one width
+#   on this host, so a direction there needs all three to meet that.
 # - Allocation, read before any time: every vector row (256 bits, the preferred species and
 #   SPECIES_MAX, which are all 256 bits here) reads 0.044 B/op or less and the scalar rows 0.054
 #   or less, so no body of either arm boxed. The class has no 512-bit row.
@@ -67,18 +68,19 @@
 # - Blended over guarded, by minimums, first run / this run: at 256 bits 1.23 / 1.32 on common
 #   data and 1.34 / 1.18 on mixed; at the preferred species 1.38 / 1.32 and 1.24 / 1.31; at
 #   SPECIES_MAX 1.11 / 1.03 and 1.26 / 1.11. Only the preferred species on common data has both
-#   runs outside 1.3x and agreeing, guarded lower; the other five pairs have a run inside 1.3x.
-#   The three widths are one width on this host, and on common data the same code reads 1.23 /
-#   1.32 at 256 bits beside 1.38 / 1.32 at the preferred species. So the two runs give atan2's
-#   arms no direction on this host.
+#   runs outside 1.3x and agreeing, guarded lower; at 256 bits and SPECIES_MAX, the same width, a
+#   run reads inside 1.3x on both inputs. So the two runs give atan2's arms no direction on this
+#   host.
 # - Scalar StrictMath over each vector arm, by minimums, first run / this run: guarded256 1.67 /
 #   1.67 and 1.61 / 1.47, guardedMax 1.41 / 1.41 and 1.56 / 1.56, guardedPreferred 1.72 / 1.72 and
-#   1.55 / 1.57 (common, then mixed): outside 1.3x in both runs, the vector arm lower. The blended
-#   rows read 1.20 to 1.41 in this run and 1.20 to 1.36 in the first, and blendedMax mixed moves
-#   from 1.24 to 1.41: no direction between the blended arm and the scalar loop.
+#   1.55 / 1.57 (common, then mixed): outside 1.3x in both runs at all three widths, the vector
+#   arm lower (guardedMax common reads 1.22 above guardedPreferred common in both runs, the same
+#   code at the same width). The blended rows read 1.20 to 1.41 in this run and 1.20 to 1.36 in
+#   the first, and blendedMax mixed moves from 1.24 to 1.41: no direction between the blended arm
+#   and the scalar loop.
 # - No row's own maximum is more than 10% above its minimum (the widest is blendedMax common,
-#   11,280 to 12,336, 9.4%, and blendedMax mixed, 10,704 to 11,647, 8.8%; the blended rows'
-#   run-to-run moves are of that size). One re-run on one draw of the host.
+#   11,280 to 12,336, 9.4%, and blendedMax mixed, 10,704 to 11,647, 8.8%; blendedMax mixed moved
+#   by more than that between the runs, 0.88). One re-run on one draw of the host.
 #
 # Row                              inputs          min          avg          max   (ns/op)
 # Atan2Benchmark.blended256        common      12193.7      12292.6      12396.2
