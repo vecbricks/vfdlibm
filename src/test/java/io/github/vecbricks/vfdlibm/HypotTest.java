@@ -62,13 +62,16 @@ class HypotTest {
   enum Variant {
     /** e_hypot.c line by line. */
     AS_WRITTEN,
-    /** Lines 80-84 with {@code ha} and {@code hb} read again from the scaled {@code a}, {@code b}. */
+    /**
+     * Lines 80-84 with {@code ha} and {@code hb} read again from the scaled {@code a} and {@code
+     * b}.
+     */
     REFRESHED_WORDS,
     /** Line 63's early return of {@code a+b} dropped. */
     NO_EARLY_RETURN
   }
 
-  /** The way out of the C a lane took, counted by {@link #cHypot(double, double, Variant, long[])}. */
+  /** The way out of the C a lane took: {@link #cHypot(double, double, Variant, long[])} counts. */
   enum Path {
     /** Line 63: the ratio exceeds 2^60. */
     RATIO,
@@ -119,7 +122,8 @@ class HypotTest {
    * {@link #cHypot(double, double)} as {@code variant} says, counting into {@code paths} (by
    * {@link Path#ordinal()}, when not null) the ways out the lane took. The line numbers are
    * e_hypot.c's. The C's {@code sqrt} is {@code Math.sqrt}, the correctly rounded square root
-   * (PROOFS.md, R4); every radicand here is finite.
+   * (PROOFS.md, R4); as written every radicand is finite, while {@link Variant#NO_EARLY_RETURN}
+   * may take {@code sqrt(+inf)} (as for {@code x = 0x1p1000, y = 1.0}).
    */
   static double cHypot(double x, double y, Variant variant, long[] paths) {
     double a;
@@ -523,7 +527,8 @@ class HypotTest {
   // ---------------------------------------------------------------------------------------------
 
   /** What one pass over the inputs found: every mismatch counted, the first 100 kept. */
-  record Tally(long checked, long mismatched, List<String> mismatches, long[] paths, NanTally strict,
+  record Tally(long checked, long mismatched, List<String> mismatches, long[] paths,
+      NanTally strict,
       NanTally transcribed) {}
 
   /**
@@ -600,7 +605,8 @@ class HypotTest {
    * The check in a JVM of its own: {@code [draws [passes [variants]]]}, by default {@link #DRAWS}
    * and 3. It prints the JVM's arguments, each pass's count of pairs, mismatches (the first 100
    * with their bits) and the candidates of the two-NaN lanes, then, given {@code variants}, how
-   * many pairs each {@link Variant} changes, and exits 1 if any pass has a mismatch.
+   * many pairs each {@link Variant} changes, and exits 1 if any pass has a mismatch, no two-NaN
+   * lane of distinct candidates or a {@link Path} never taken.
    *
    * <pre>
    *   java -Xint --add-modules jdk.incubator.vector -cp target/classes:target/test-classes \
@@ -622,6 +628,16 @@ class HypotTest {
       System.out.println("pass " + pass + ": transcription " + t.transcribed().show());
       t.mismatches().forEach(m -> System.out.println("MISMATCH " + m));
       failed |= t.mismatched() > 0 || t.checked() == 0;
+      if (t.strict().first() + t.strict().second() == 0) {
+        System.out.println("pass " + pass + ": no two-NaN lane of distinct candidates");
+        failed = true;
+      }
+      for (Path path : Path.values()) {
+        if (t.paths()[path.ordinal()] == 0) {
+          System.out.println("pass " + pass + ": " + path + " is never taken");
+          failed = true;
+        }
+      }
     }
     for (Variant variant : Variant.values()) {
       if (args.length > 2 && args[2].equals("variants") && variant != Variant.AS_WRITTEN) {
@@ -657,21 +673,27 @@ class HypotTest {
     command.addAll(List.of("-Xmx256m", "--add-modules", "jdk.incubator.vector", "-cp",
         System.getProperty("java.class.path"), HypotTest.class.getName(),
         Integer.toString(draws), Integer.toString(passes)));
+    // ByteArrayOutputStream is synchronized, so a timeout can report what was read so far.
+    ByteArrayOutputStream bytes = new ByteArrayOutputStream();
     Process process = new ProcessBuilder(command).redirectErrorStream(true).start();
-    CompletableFuture<String> output = CompletableFuture.supplyAsync(() -> {
-      try (InputStream in = process.getInputStream()) {
-        ByteArrayOutputStream bytes = new ByteArrayOutputStream();
-        in.transferTo(bytes);
-        return bytes.toString(StandardCharsets.UTF_8);
-      } catch (IOException e) {
-        throw new UncheckedIOException(e);
+    try {
+      CompletableFuture<Void> drained = CompletableFuture.runAsync(() -> {
+        try (InputStream in = process.getInputStream()) {
+          in.transferTo(bytes);
+        } catch (IOException e) {
+          throw new UncheckedIOException(e);
+        }
+      });
+      if (!process.waitFor(10, TimeUnit.MINUTES)) {
+        throw new AssertionError(mode + ": the JVM did not finish in 10 minutes; its output:\n"
+            + bytes.toString(StandardCharsets.UTF_8));
       }
-    });
-    if (!process.waitFor(10, TimeUnit.MINUTES)) {
+      drained.join();
+    } finally {
+      // a JVM still running here (a timeout, an interrupt) is not left behind
       process.destroyForcibly();
-      throw new AssertionError(mode + ": the JVM did not finish in 10 minutes");
     }
-    String text = output.join();
+    String text = bytes.toString(StandardCharsets.UTF_8);
     System.out.println("hypot gate, " + mode + ":\n" + text);
     assertEquals(0, process.exitValue(), mode + ":\n" + text);
     return text;
