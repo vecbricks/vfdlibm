@@ -76,9 +76,10 @@ import jdk.incubator.vector.VectorSpecies;
  * faster on mixed data, since it no longer boxes. The cause is not known, and no AVX-512 host has
  * been paired.
  * The first run's head is a branch tip, not a commit of main (that file's header says so).
- * Which arm is kept waits for a second run of the Xeon 8573C and a first of the other AVX-512 hosts
- * ({@code HARDWARE.md}), a pair, and the rules for a tie within 1.3x and for hosts that disagree
- * (issue #30). The second arm is kept so the choice can be re-measured, on other hosts and as
+ * The rules for a tie within 1.3x and for hosts that disagree are set (issue #30): a tie goes to
+ * the finish arm, which exp keeps, and the choice stays provisional until a host run revises it,
+ * a second run of the Xeon 8573C, a first of the other AVX-512 hosts ({@code HARDWARE.md}) or a
+ * pair. The second arm is kept so the choice can be re-measured, on other hosts and as
  * the JDK changes. The folds above cut the common path C2 emits from 77 instructions with two
  * divisions to 52 with one at 512 bits on AVX-512, and from 107 to 64 at 256 bits under {@code
  * -XX:UseAVX=2} ({@code bench/asm/README.md}). The folded body was timed once as a pair against

@@ -93,9 +93,10 @@ import jdk.incubator.vector.VectorSpecies;
  * core rows, and also times the finish before the eight lanes; its minimums read the guarded
  * arm over the finish at 1.02 on common data and 1.07 to 1.08 on mixed data, against 1.13 to
  * 1.15 and 1.07 to 1.08 in the 20 November files, all within 1.3x, and no pair or re-run backs
- * the 1.02. The choice waits for a second run
- * of the Xeon 8573C and a first of the other AVX-512 hosts ({@code HARDWARE.md}), a pair, and
- * the rules for a tie within 1.3x and for hosts that disagree (issue #30); the other two arms
+ * the 1.02. The rules for a tie within 1.3x and for hosts that disagree are set (issue #30): a
+ * tie goes to the finish arm, so rule 1 would move expm1 to the finish arm once the Xeon 8573C's
+ * second run is in; until then the guarded arm stays, provisionally, and a first run of the
+ * other AVX-512 hosts ({@code HARDWARE.md}) or a pair may revise the choice; the other two arms
  * are kept so it can be re-measured ({@code SKILLS.md}).
  *
  * <p>{@link #expm1Core} and {@link #expm1Rare} split the finish arm into its branch-free part and

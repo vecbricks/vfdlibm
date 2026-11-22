@@ -337,9 +337,10 @@ stops the next port re-trying a settled question.
   time `exp` as of a5683c3 and a1db6df, and `Exp.java` has changed since by a fault constant, a
   local and the finish's first eight lanes written out with constant indices (issue #37), so no run
   has timed today's body as a whole: the pair above times rows of it after that change, on one
-  host. Which arm `VFdlibm.exp` keeps is not decided here: it waits for a second
-  run of the Xeon 8573C and a first of the other AVX-512 hosts, a pair and the rules for a tie
-  within 1.3x and for hosts that disagree (issue #30). Each port measures both on common and mixed
+  host. `VFdlibm.exp` keeps the finish arm by the rules issue #30 set (a tie within 1.3x goes to
+  the finish arm; where hosts disagree, one arm per species), provisionally until a host run
+  revises it: a second run of the Xeon 8573C, a first of the other AVX-512 hosts or a pair. Each
+  port measures both on common and mixed
   data, decides per branch, and records the decision in its pull request (`PLAN.md` section 5).
 - **A blended alternative costs its whole form in every lane.** exp computed the C's near form and
   its `k == 0` form for every lane and blended them. Proving that the far form and the general tail
@@ -407,9 +408,9 @@ stops the next port re-trying a settled question.
   512-bit rows run in the Java fallback), so the files show no disagreement between the hosts at
   equal width. Both files time the `log` of a5683c3 and a1db6df, before the finish's first eight
   lanes written out with constant indices (issue #37); `LogBenchmark` gained its `finishMax` row
-  after the EPYC run, which is why that file has none. Which arm `VFdlibm.log` keeps is not decided
-  here: it waits for a second Xeon run, a pair and the rules for a tie within 1.3x and for hosts
-  that disagree (issue #30). Measure the finish only once it allocates nothing.
+  after the EPYC run, which is why that file has none. `VFdlibm.log` keeps the finish arm by the
+  rules issue #30 set (a tie within 1.3x goes to the finish arm), provisionally until a host run
+  revises it: a second Xeon run or a pair. Measure the finish only once it allocates nothing.
 
 - **Int words can live in long lanes, with an exact dk.** log first kept its words in int lanes
   for the `I2D`; moving them to the long lanes of the bits drops `L2I`, `I2L`, `I2D` and the
@@ -471,9 +472,10 @@ stops the next port re-trying a settled question.
   datapath read higher, `HARDWARE.md`) had guarded lowest on every row. The EPYC file times `Log1p`
   as of a5683c3, before a fault constant and a mask local were added; the Xeon file of 21 November
   times it as of a1db6df; neither times it after the finish's first eight lanes written out with
-  constant indices (issue #37). `VFdlibm.log1p` uses the guarded arm provisionally: the decision
-  waits for a second run of the Xeon 8573C and a first of the other AVX-512 hosts, a pair and the
-  rules for a tie within 1.3x and for hosts that disagree (issue #30). A port whose rare paths are
+  constant indices (issue #37). `VFdlibm.log1p` uses the guarded arm provisionally: by the rules
+  issue #30 set, a tie within 1.3x goes to the finish arm, so rule 1 would move log1p to it once
+  the Xeon 8573C's second run is in; a first run of the other AVX-512 hosts or a pair may revise
+  the choice. A port whose rare paths are
   cheap in vector form should measure this shape beside the other two.
 - **The in-body finish allocates nothing in log1p too.** log1p's finish was first a call,
   `finishPerLane(x, result, rare)`, and boxed: 52,928 B/op on mixed data at 256 bits under
@@ -553,9 +555,9 @@ stops the next port re-trying a settled question.
   of a5683c3 and a1db6df, before the finish's first eight lanes written out with constant indices
   (issue #37); the pair of that change (the exp entry above) reads log10's mixed finish rows 2.6%
   to 4.0% slower by median and 3.7% to 4.1% by best on the EPYC 7763, the cause not known.
-  `VFdlibm.log10` calls the finish arm provisionally: the decision waits for a second run of the
-  Xeon 8573C and a first of the other AVX-512 hosts, a pair and the rules for a tie
-  within 1.3x and for hosts that disagree (issue #30).
+  `VFdlibm.log10` calls the finish arm by the rules issue #30 set (a tie within 1.3x goes to the
+  finish arm), provisionally until a host run revises it: a second run of the Xeon 8573C, a first
+  of the other AVX-512 hosts or a pair.
 
 ## What the expm1 port taught
 
@@ -611,9 +613,10 @@ stops the next port re-trying a settled question.
   arm has the lowest minimum on mixed data (finish on the EPYC, guarded on the Xeon). The Xeon file
   of 4 November (`bench/results/expm1-xeon8573c-2026-11-04.txt`, one run, at another commit) had
   guarded lowest on the preferred rows of both kinds of data; the file of 21 November has finish
-  lowest there on common data. `VFdlibm.expm1` keeps the guarded arm provisionally: the decision
-  waits for a second run of the Xeon 8573C and a first of the other AVX-512 hosts, a pair and the
-  rules for a tie within 1.3x and for hosts that disagree (issue #30). Both files time `Expm1`
+  lowest there on common data. `VFdlibm.expm1` keeps the guarded arm provisionally: by the rules
+  issue #30 set, a tie within 1.3x goes to the finish arm, so rule 1 would move expm1 to it once
+  the Xeon 8573C's second run is in; a first run of the other AVX-512 hosts or a pair may revise
+  the choice. Both files time `Expm1`
   before its core entry (below) and before the finish's first eight lanes written out with
   constant indices (issue #37), and `Expm1.java` changed between their two commits too (a fault
   constant and a local in the k conversion, as for `Exp`), so the cross-host comparison rests on
@@ -989,12 +992,14 @@ stops the next port re-trying a settled question.
   not kept. Each host has since run both classes once
   (`bench/results/cosh-xeon8573c-2026-11-21.txt`, `cosh-epyc7763-2026-11-21.txt`,
   `cosh-kinds-xeon8573c-2026-11-21.txt` and `cosh-kinds-epyc7763-2026-11-21.txt`), and no file
-  decides the arm: on `CoshBenchmark` the ratios between the arms are near 1.3x, waiting for a
-  re-run before a direction is written, or inside it, with no direction; on `CoshKindsBench` the
-  finish arm reads lower by more than 1.3x only on data with no small lane, and the arms read
-  within 1.3x of each other, with no direction, at 3.5% and 17% of small lanes, Varka's and
-  Spark's shares. So the default is still the plan's baseline design, not a measurement, and
-  stays provisional until a re-run and issue #30's rules decide it.
+  decides the arm: on `CoshBenchmark` the finish arm reads lower on every row, slice over finish
+  1.24 to 1.35 on the Xeon 8573C and 1.29 to 1.35 on the EPYC 7763, ratios near 1.3x or inside
+  it that give no direction until a re-run; on `CoshKindsBench` the finish arm reads lower by
+  more than 1.3x only on data with no small lane, and the arms read within 1.3x of each other,
+  with no direction, at 3.5% and 17% of small lanes, Varka's and Spark's shares. cosh is the
+  named exception to issue #30's tie rule (its per-lane set is not rare, so a host run decides),
+  so the default is still the plan's baseline design, not a measurement, and stays provisional
+  until a host run decides it.
 - **Which exp faults reach cosh.** `exp.dropCorrection` and `exp.constantOffByOneUlp`, which
   change `expCore`'s lanes of `|x| >= 0.5 ln2`. `exp.thresholdMoved` moves the subnormal
   scale-back, which `expCore` leaves out, and `exp.dropKForcing` the lanes of the word of 0.5

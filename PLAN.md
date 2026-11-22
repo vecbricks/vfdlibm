@@ -42,7 +42,8 @@ own logarithm and exponential and calls only `sqrt`, `fabs` and `scalbn`. `sinh`
 (`VFdlibm.sinh`, from `e_sinh.c`, computing through `expm1`'s common path below 22 and finishing
 the rest per lane), and so is `cosh` (`VFdlibm.cosh`, from `e_cosh.c`, through `exp`'s common path
 and expm1's `k == 0` lines, with two arms for its small range: the default arm is the slice arm,
-provisionally, the host files of 21 November timing both and deciding neither). `asin` is done
+provisionally: the host files of 21 November read the finish arm lower on every `CoshBenchmark`
+row, by ratios near 1.3x or inside it, and decide neither). `asin` is done
 too (`VFdlibm.asin`, from `e_asin.c`, with `sqrt` as the Vector API's `SQRT`, one arm, and the
 lanes of `|x| >= 1` finished per lane), and so is `atan` (`VFdlibm.atan`, from `s_atan.c`, five
 ranges through one division on blended operands, the lanes from `2^66` up finished per lane), and
@@ -136,12 +137,19 @@ five are a later, optional set; the large-argument reduction of the trigonometri
   The code has changed since both runs (a fault constant and a local in the k conversion, and the
   finish's first eight lanes written out with constant indices), so no run has timed today's `exp`
   but for the rows of that pair.
-  Which arm each function keeps stays provisional until the 8573C has a second run, the other
-  AVX-512 hosts a first, and a pair exists, and the rules for a tie within 1.3x and for hosts that
-  disagree are set (issue #30); meanwhile `VFdlibm` calls the finish arm of `exp`, `log` and
-  `log10`, the guarded arm of `expm1`, `log1p` and `atan2` and the slice arm of `cosh`
-  (`bench/results/cosh-*-2026-11-21.txt` and `atan2-*-2026-11-22.txt` give the arms of `cosh`
-  and `atan2` no direction, and each wants a re-run on the EPYC 7763 too).
+  Which arm each function keeps follows the two rules issue #30 set on 21 November 2026: a tie
+  within 1.3x on every host that has a file goes to the finish arm, except for `cosh`, whose
+  per-lane set is not rare, so a host run decides its arm; and where hosts disagree, each species
+  keeps the arm its own rows choose by that rule. Every default stays provisional until a host run
+  revises it (a second run of the 8573C, a first of the other AVX-512 hosts). Meanwhile `VFdlibm`
+  calls the finish arm of `exp`, `log` and `log10`; the guarded arm of `expm1` and `log1p`, which
+  the rule would move to the finish arm once the 8573C's second run is in (issue #30); the slice
+  arm of `cosh`, provisionally, as the rule's exception
+  (`bench/results/cosh-xeon8573c-2026-11-21.txt` and `cosh-epyc7763-2026-11-21.txt` read the
+  finish arm lower on every row by ratios near 1.3x or inside it, and give no direction); and the
+  guarded arm of `atan2`, which has no finish arm, provisionally until a re-run
+  (`atan2-xeon8573c-2026-11-22.txt` and `atan2-epyc7763-2026-11-22.txt` give its arms no
+  direction).
 
 ## 6. Rules
 

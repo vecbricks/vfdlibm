@@ -182,10 +182,12 @@ fdlibm's own sequence of operations, lane by lane. That is this library.
   one arm, `exp`, `expm1`, `log`, `log10`, `log1p`, `cosh` and `atan2`, each have files from the
   Xeon Platinum 8573C and the EPYC 7763 (`bench/results/`), and each file's reading is in
   `SKILLS.md`; where two arms are within 1.3x of each other no direction is read, and where the
-  hosts disagree the files say so. The decision waits for a second run of the 8573C and a first of
-  the other AVX-512 hosts (`HARDWARE.md`, the EPYC 9V45 when drawn), for `cosh` and `atan2` a
-  second run of the EPYC 7763 too, a pair, and the rules for a tie and for hosts that disagree
-  (issue #30). The laptop's numbers do not agree at every width.
+  hosts disagree the files say so. The rules are set (issue #30): a tie within 1.3x goes to the
+  finish arm, except for `cosh`, whose arm a host run decides, and where hosts disagree each
+  species keeps its own arm. Every default stays provisional until a host run revises it: a second
+  run of the 8573C and a first of the other AVX-512 hosts (`HARDWARE.md`, the EPYC 9V45 when
+  drawn), and for `cosh` and `atan2` a second run of the EPYC 7763 too. The laptop's numbers do
+  not agree at every width.
 
 ## Testing
 
