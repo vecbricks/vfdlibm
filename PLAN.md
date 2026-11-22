@@ -108,7 +108,9 @@ five are a later, optional set; the large-argument reduction of the trigonometri
   every night; it fuzzes from a fresh seed at every width, and runs every proof under both solvers;
   a failure opens an issue labelled `nightly-failure` with the mismatching inputs, ready for a
   `hard-cases` file (`SKILLS.md`), and a dispatch that plants a fault, to test that alert, opens one
-  labelled `nightly-fault-test`.
+  labelled `nightly-fault-test`. `hypot` is registered with `Sweep` and `Fuzz`
+  (`Nightly.PairFunction.HYPOT`), so a slice runs by hand, but the night does not list it yet: a
+  later pull request adds it to `nightly.yml`, as #126 did for atan2 after its port.
 - **Masked forms:** a masked form is checked under seeded random masks, all-true and all-false;
   active lanes must equal `StrictMath` and inactive lanes must keep the input's raw bits (for a
   two-argument function, the first argument's).

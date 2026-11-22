@@ -1323,9 +1323,8 @@ blend and 10 to 23 instructions. At 128 bits the bodies are 8 to 16 times longer
   return, the zero `b` and the three scalings included, is in the vector. A blended non-finite arm
   would rest on the hardware's NaN propagation for one-NaN lanes and has no timing to justify it,
   and #30 sends a tie to the finish. The first run of the vector tests passed on every input.
-  `bench/alloc-check.py` passes on `HypotBenchmark`'s rows (`finish256`, `finishPreferred`,
-  `finishMax`, common and mixed data) at this laptop's flags and as an AVX2 host; those local
-  readings are not committed, so no figure of them is quoted, and no results file times hypot.
+  CI's `bench/alloc-check.py` covers `HypotBenchmark`'s rows (`finish256`, `finishPreferred`,
+  `finishMax`, common and mixed data); no file under `bench/results/` reads or times them yet.
 - **The faults, sized on 2^22 draws each** (a throwaway program over `VFdlibm.hypot` at 256 bits,
   once per fault; counts of pairs that differ from `StrictMath.hypot`; the unplanted port 0 on
   each). `hypot.dropEarlyReturn`: 0 of Varka's range `[-10, 10)`, 1,779,887 of sampled bits,

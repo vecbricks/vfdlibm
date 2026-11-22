@@ -98,13 +98,20 @@ class HardCasePairsTest {
         exact++;
         continue;
       }
-      BigDecimal ulp = new BigDecimal(Math.ulp(r));
-      BigDecimal half = ulp.divide(BigDecimal.valueOf(2));
+      // the midpoints of the three gaps on each side of r, from its neighbours, so that the
+      // narrower gap below a power of two is taken as it is; each distance in that gap's width
+      double[] doubles = {
+        Math.nextDown(Math.nextDown(Math.nextDown(r))), Math.nextDown(Math.nextDown(r)),
+        Math.nextDown(r), r, Math.nextUp(r), Math.nextUp(Math.nextUp(r)),
+        Math.nextUp(Math.nextUp(Math.nextUp(r)))
+      };
       BigDecimal best = null;
-      for (int k = -3; k <= 3; k += 2) {
-        BigDecimal m = new BigDecimal(r).add(half.multiply(BigDecimal.valueOf(k)));
+      for (int k = 0; k + 1 < doubles.length; k++) {
+        BigDecimal lo = new BigDecimal(doubles[k]);
+        BigDecimal gap = new BigDecimal(doubles[k + 1]).subtract(lo);
+        BigDecimal m = lo.add(gap.divide(BigDecimal.valueOf(2)));
         BigDecimal d = s.subtract(m.pow(2)).abs()
-            .divide(m.multiply(BigDecimal.valueOf(2)).multiply(ulp), context);
+            .divide(m.multiply(BigDecimal.valueOf(2)).multiply(gap), context);
         best = best == null || d.compareTo(best) < 0 ? d : best;
       }
       assertTrue(best.compareTo(bound) < 0, where + ": " + best + " ulp from a midpoint");

@@ -32,7 +32,8 @@ import jdk.incubator.vector.VectorMask;
  * exp}, {@code log} and {@code log10} call is the finish arm, the one {@code expm1}, {@code
  * log1p} and {@code atan2} call is the guarded arm, and the one {@code cosh} calls is the slice
  * arm; {@code hypot} has one arm, the finish. No file under {@code bench/results/} reads {@code
- * hypot} yet: what the list below says of it is the allocation check's, which covers it.
+ * hypot} yet: every file the list below cites predates it, and of the list only the allocation
+ * check that CI runs covers it.
  *
  * <ul>
  *   <li>Covered by {@code bench/alloc-check.py}, which CI runs and which fails a body that
