@@ -58,7 +58,10 @@ import jdk.incubator.vector.VectorSpecies;
  * leaves those lanes out, so that no infinity or NaN of theirs reaches its finish. Two arms
  * share the body below: {@code blended} computes the special lanes' blends in every vector,
  * {@code guarded} only in a vector with a live special lane, which is the one {@code VFdlibm}
- * calls until a benchmark host has timed them (no timing of {@code atan2} exists).
+ * calls, provisionally. Each host has timed the two arms once ({@code
+ * bench/results/atan2-xeon8573c-2026-11-22.txt} and {@code atan2-epyc7763-2026-11-22.txt}):
+ * neither file gives them a direction, the Xeon's ratios being inside 1.3x and the EPYC 7763's
+ * near it or inside it, so the default stays until a re-run and issue #30's rules decide it.
  */
 final class Atan2 {
 

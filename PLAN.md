@@ -42,17 +42,18 @@ own logarithm and exponential and calls only `sqrt`, `fabs` and `scalbn`. `sinh`
 (`VFdlibm.sinh`, from `e_sinh.c`, computing through `expm1`'s common path below 22 and finishing
 the rest per lane), and so is `cosh` (`VFdlibm.cosh`, from `e_cosh.c`, through `exp`'s common path
 and expm1's `k == 0` lines, with two arms for its small range: the default arm is the slice arm,
-provisionally, until a benchmark host times them). `asin` is done too (`VFdlibm.asin`, from
-`e_asin.c`, with `sqrt` as the Vector API's `SQRT`, one arm, and the lanes of `|x| >= 1` finished
-per lane), and so is `atan` (`VFdlibm.atan`, from `s_atan.c`, five ranges through one division on
-blended operands, the lanes from `2^66` up finished per lane), and so is `acos`
-(`VFdlibm.acos`, from `e_acos.c`, built as asin is), and so is `atan2` (`VFdlibm.atan2`, from
-`e_atan2.c`, the first function of two arguments: the special lanes blended over the general path,
-which calls `atan`'s core, no lane finished per lane, and two arms, the blended one and the guarded
-one `VFdlibm` calls, provisionally). `log`, `log10` and
-`log1p` are done too (`VFdlibm.log`, from `e_log.c`, `VFdlibm.log10`, from `e_log10.c`, which
-computes through log's common path, and `VFdlibm.log1p`, from `s_log1p.c`), and so is `expm1`
-(`VFdlibm.expm1`, from `s_expm1.c`, whose reduction is exp's).
+provisionally, the host files of 21 November timing both and deciding neither). `asin` is done
+too (`VFdlibm.asin`, from `e_asin.c`, with `sqrt` as the Vector API's `SQRT`, one arm, and the
+lanes of `|x| >= 1` finished per lane), and so is `atan` (`VFdlibm.atan`, from `s_atan.c`, five
+ranges through one division on blended operands, the lanes from `2^66` up finished per lane), and
+so is `acos` (`VFdlibm.acos`, from `e_acos.c`, built as asin is), and so is `atan2`
+(`VFdlibm.atan2`, from `e_atan2.c`, the first function of two arguments: the special lanes blended
+over the general path, which calls `atan`'s core, no lane finished per lane, and two arms, the
+blended one and the guarded one `VFdlibm` calls, provisionally: the host files of 22 November time
+both and give them no direction). `log`, `log10` and `log1p` are done too (`VFdlibm.log`, from
+`e_log.c`, `VFdlibm.log10`, from `e_log10.c`, which computes through log's common path, and
+`VFdlibm.log1p`, from `s_log1p.c`), and so is `expm1` (`VFdlibm.expm1`, from `s_expm1.c`, whose
+reduction is exp's).
 
 `tan`, `tanh` and `cbrt` are fdlibm on aarch64 but Intel LIBM stubs on x86, so a port of them
 matches the JVM only on Arm. `sin` and `cos` are HotSpot's own stubs on both architectures, so
@@ -137,8 +138,10 @@ five are a later, optional set; the large-argument reduction of the trigonometri
   but for the rows of that pair.
   Which arm each function keeps stays provisional until the 8573C has a second run, the other
   AVX-512 hosts a first, and a pair exists, and the rules for a tie within 1.3x and for hosts that
-  disagree are set (issue #30); meanwhile `VFdlibm` calls the finish arm of `exp`, `log` and `log10`
-  and the guarded arm of `expm1` and `log1p` (`HARDWARE.md`).
+  disagree are set (issue #30); meanwhile `VFdlibm` calls the finish arm of `exp`, `log` and
+  `log10`, the guarded arm of `expm1`, `log1p` and `atan2` and the slice arm of `cosh`
+  (`bench/results/cosh-*-2026-11-21.txt` and `atan2-*-2026-11-22.txt` give the arms of `cosh`
+  and `atan2` no direction, and each wants a re-run on the EPYC 7763 too).
 
 ## 6. Rules
 
@@ -179,8 +182,11 @@ five are a later, optional set; the large-argument reduction of the trigonometri
   finish of `exp`, `expm1`, `log`, `log10` and `log1p` boxed there on mixed data until its first
   eight lanes were written out (`bench/results/max-finish-laptop-2026-11-20.txt`, then
   `bench/results/max-finish-alloc-free-laptop-2026-11-21.txt`, a laptop reading of allocation only);
-  no file reads the earlier finish of `sinh` or `cosh`, and none has an `asin`, `atan`, `acos` or
-  `atan2` row, whose finishes were written in the new shape from the start. `ExpKindsBench` runs
+  no file reads the earlier finish of `sinh` or `cosh`, whose current rows the host files of 21
+  November read (`bench/results/sinh-xeon8573c-2026-11-21.txt` and the like). `asin`, `atan` and
+  `acos` were written with the new finish from the start, and `atan2` finishes no lane per lane;
+  the host files of 22 November read their rows (`bench/results/asin-xeon8573c-2026-11-22.txt`
+  and the like). `ExpKindsBench` runs
   exp's two arms on one kind of rare input at a time (a NaN, an overflow, an underflow, a subnormal
   result), to find which kind costs an arm its time on mixed data (#41); it is named apart so that
   a run of

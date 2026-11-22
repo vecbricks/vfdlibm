@@ -48,6 +48,8 @@ import org.openjdk.jmh.annotations.Warmup;
  * DoubleVector.SPECIES_MAX}, where the finish walked the set bits of the rare mask, a variable
  * lane index that boxes there, until it wrote out its first eight lanes with constant indices
  * (bench/results/max-finish-alloc-free-laptop-2026-11-21.txt).
+ * bench/results/atan-xeon8573c-2026-11-22.txt and atan-epyc7763-2026-11-22.txt read these rows,
+ * one run on each host.
  */
 @State(Scope.Thread)
 @BenchmarkMode(Mode.AverageTime)

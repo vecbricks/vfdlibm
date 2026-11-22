@@ -135,13 +135,18 @@ are unchanged, and each lane still meets the contract below.
 allocates differs. The allocation check (`bench/alloc-check.py`, run by CI) covers 256 bits, the
 preferred species and `SPECIES_MAX` (up to eight lanes) on x86, and the preferred species, 128
 bits, on GitHub's Arm runner. The files under `bench/results/` read as allocating, and the check
-does not cover: `exp` and `log` at 128 bits on x86, and every function at 512 bits on an AVX2
-host. `SPECIES_MAX` was read on a laptop only (`max-finish-alloc-free-laptop-2026-11-21.txt`); the
-host files that have a `*Max` row (the Xeon's of 21 November for all five functions, the EPYC's of
-20 November for `exp` and `log10`, and `exp-onediv-xeon8573c-2026-11-03.txt`) read the old finish.
-The Javadoc of `VFdlibm` gives each reading with its file, and lists what is not measured: the
-speed of 512 bits against 256 on the EPYC 9V74 draws that have AVX-512, and any port's speed on
-Arm.
+does not cover: `exp` and `log` at 128 bits on x86, and every function but `atan2`, which has no
+512-bit row, at 512 bits on an AVX2 host. `SPECIES_MAX` of today's `exp`, `expm1`, `log`, `log10`
+and `log1p` was read on a laptop (`max-finish-alloc-free-laptop-2026-11-21.txt`), and on a host
+only for `exp` and `log10`, at 256 bits, by the EPYC 7763 pair
+(`exp-log10-pair-epyc7763-2026-11-21.txt` and its re-run); the other host files that have a
+`*Max` row of those five (the Xeon's of 21 November for all five, the EPYC's of
+20 November for `exp` and `log10` and of 21 November for all five, and
+`exp-onediv-xeon8573c-2026-11-03.txt`) read the old finish. The host files of 21 November for
+`sinh` and `cosh` and of 22 November for `asin`, `atan`, `acos` and `atan2` (`bench/results/`)
+read their `*Max` rows as they are now, under 0.05 bytes per op. The Javadoc of `VFdlibm` gives
+each reading with its file, and lists what is not measured: the speed of 512 bits against 256 on
+the EPYC 9V74 draws that have AVX-512, and any port's speed on Arm.
 
 ## Supported JDKs
 
@@ -173,13 +178,14 @@ fdlibm's own sequence of operations, lane by lane. That is this library.
 - **Rare paths, exact too.** Lanes on a rare path (huge arguments, subnormals, special cases) are
   either computed in the vector, every branch blended (in every vector, or only in a vector that
   holds a rare lane), or finished by `StrictMath` per lane; the result is exact either way. The
-  choice is made per function from benchmarks, and stays provisional. `exp`, `expm1`, `log`, `log10`
-  and `log1p` each have files from the Xeon Platinum 8573C and the EPYC 7763 (`bench/results/`), and
-  each file's reading is in `SKILLS.md`; where two arms are within 1.3x of each other no direction
-  is read, and where the hosts disagree the files say so. The decision waits for a second run of the
-  8573C and a first of the other AVX-512 hosts (`HARDWARE.md`, the EPYC 9V45 when drawn), a pair,
-  and the rules for a tie and for hosts that disagree (issue #30). The laptop's numbers do not agree
-  at every width.
+  choice is made per function from benchmarks, and stays provisional. The functions with more than
+  one arm, `exp`, `expm1`, `log`, `log10`, `log1p`, `cosh` and `atan2`, each have files from the
+  Xeon Platinum 8573C and the EPYC 7763 (`bench/results/`), and each file's reading is in
+  `SKILLS.md`; where two arms are within 1.3x of each other no direction is read, and where the
+  hosts disagree the files say so. The decision waits for a second run of the 8573C and a first of
+  the other AVX-512 hosts (`HARDWARE.md`, the EPYC 9V45 when drawn), for `cosh` and `atan2` a
+  second run of the EPYC 7763 too, a pair, and the rules for a tie and for hosts that disagree
+  (issue #30). The laptop's numbers do not agree at every width.
 
 ## Testing
 
