@@ -28,8 +28,9 @@ import jdk.incubator.vector.VectorMask;
  * <p>Which species to pass. Every species of 128 bits or more gives the same bits. The files
  * under {@code bench/results/}, in the source repository and not in the jar, read what the body
  * allocates at each, in bytes per op, an op being one pass over 1024 doubles. The arm that {@code
- * exp}, {@code log} and {@code log10} call is the finish arm, and the one {@code expm1} and {@code
- * log1p} call is the guarded arm.
+ * exp}, {@code log} and {@code log10} call is the finish arm, the one {@code expm1}, {@code
+ * log1p} and {@code atan2} call is the guarded arm, and the one {@code cosh} calls is the slice
+ * arm.
  *
  * <ul>
  *   <li>Covered by {@code bench/alloc-check.py}, which CI runs and which fails a body that
@@ -47,17 +48,21 @@ import jdk.incubator.vector.VectorMask;
  *       five functions allocates 0.9 to 1.8 million bytes per op. The files of 20 November 2026
  *       hold this reading and the 128-bit one above ({@code exp-epyc7763-2026-11-20.txt}, and
  *       the same for {@code log}, {@code log10}, {@code log1p} and {@code expm1}, in {@code
- *       bench/results/}).
+ *       bench/results/}). {@code sinh}, {@code cosh}, {@code asin}, {@code atan} and {@code
+ *       acos} allocate 1.1 to 1.9 million there ({@code sinh-epyc7763-2026-11-21.txt}, {@code
+ *       cosh-epyc7763-2026-11-21.txt} and {@code asin-epyc7763-2026-11-22.txt}, and the same for
+ *       {@code atan} and {@code acos}); {@code atan2} has no 512-bit row.
  *   <li>{@code DoubleVector.SPECIES_MAX} is none of the fixed shapes. On mixed data (one input
  *       in 16 replaced by one that takes its own path in the C, as each benchmark class
  *       lists), the finish of {@code exp}, {@code expm1}, {@code log}, {@code log10} and
  *       {@code log1p} used to allocate 30432 to 36992 bytes per op there ({@code
  *       bench/results/max-finish-laptop-2026-11-20.txt}, the Xeon 8573C files of 21 November
  *       2026 for all five functions, the EPYC 7763 files of 20 November for {@code exp} and
- *       {@code log10}, and {@code exp-onediv-xeon8573c-2026-11-03.txt}, which read the old
- *       code). It writes out its first eight lanes with constant indices now, and every {@code
- *       *Max} row of {@code exp}, {@code expm1}, {@code log}, {@code log10}, {@code log1p},
- *       {@code sinh} and {@code cosh} reads under 0.1 bytes per op ({@code
+ *       {@code log10} and of 21 November for all five, and {@code
+ *       exp-onediv-xeon8573c-2026-11-03.txt}, which read the old code). It writes out its first
+ *       eight lanes with constant indices now, and every {@code *Max} row of {@code exp}, {@code
+ *       expm1}, {@code log}, {@code log10}, {@code log1p}, {@code sinh} and {@code cosh} reads
+ *       under 0.1 bytes per op ({@code
  *       bench/results/max-finish-alloc-free-laptop-2026-11-21.txt}, a laptop file and not a
  *       headline, read at 512 bits and as an AVX2 host at 256). Where it was timed, the change
  *       cost time on the fixed shapes: on the EPYC 7763 (one AVX2 host) the pair reads {@code
@@ -67,8 +72,13 @@ import jdk.incubator.vector.VectorMask;
  *       bench/results/exp-log10-pair-epyc7763-2026-11-21.txt} and {@code
  *       exp-log10-pair-rerun-epyc7763-2026-11-21.txt}); the cause is not known, and no AVX-512
  *       host and no other port was paired. {@code SPECIES_MAX} at 128 bits, and with more than
- *       eight lanes, was not read. No file has an {@code asin} row, and no {@code asin} timing
- *       exists.
+ *       eight lanes, was not read. On both hosts the {@code *Max} rows of today's {@code sinh}
+ *       and {@code cosh} ({@code bench/results/sinh-xeon8573c-2026-11-21.txt} and {@code
+ *       sinh-epyc7763-2026-11-21.txt}, and the same for {@code cosh}), of {@code asin}, {@code
+ *       atan} and {@code acos}, whose finishes were written in that shape from the start, and of
+ *       {@code atan2}, which finishes no lane per lane ({@code asin-xeon8573c-2026-11-22.txt}
+ *       and {@code asin-epyc7763-2026-11-22.txt}, and the same for {@code atan}, {@code acos}
+ *       and {@code atan2}), read under 0.05 bytes per op.
  *   <li>Not measured: any port's speed at 512 bits against 256 on the EPYC 9V74 draws that have
  *       AVX-512 ({@code HARDWARE.md} has only a datapath reading for them, and lists {@code
  *       MaxVectorSize=64}), any port's speed on Arm, and allocation on an Arm host with vectors

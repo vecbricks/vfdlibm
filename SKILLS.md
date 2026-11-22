@@ -736,7 +736,8 @@ stops the next port re-trying a settled question.
   hand on this version).
 - **What a pass over a function of two arguments costs** (laptop, 21 November 2026,
   `bench/results/pair-sweep-laptop-2026-11-21.txt`; it was taken before `atan2` was ported, so it is
-  two stand-ins run through `PairCostProbe`, not the port, and no timing of `atan2` exists). A
+  two stand-ins run through `PairCostProbe`, not the port, which it does not time; the port's
+  timings are `bench/results/atan2-xeon8573c-2026-11-22.txt` and `atan2-epyc7763-2026-11-22.txt`). A
   stripe of 2^24 high words at 256 bits took 0.9 s for the harness alone (`toy2`) and 1.8 s for an
   arm that calls `StrictMath.atan2` lane by lane, against 2.9 s and 3.6 s for the unary sweeps of
   exp and log1p, at 4 threads on 4 CPUs. Scaled to a whole pass (256 stripes), the x86 sweep jobs of
@@ -984,9 +985,16 @@ stops the next port re-trying a settled question.
   only on `|x| < 0.5*ln2`, so their cost follows the share of that range, which is 3.5% in
   Varka's baseline benchmark and 17% in Spark's unit tests (issue #32): at 8 lanes a vector
   holds one in 27% and 82% of the cases. `CoshKindsBench` has those two shares, and
-  `CoshBenchmark`'s common data 0.6% of them. No timing of the two arms exists yet: a laptop
-  run under load read no direction and was not kept. So the default is the plan's baseline
-  design, not a measurement, and a benchmark host's run of both classes decides it.
+  `CoshBenchmark`'s common data 0.6% of them. A laptop run under load read no direction and was
+  not kept. Each host has since run both classes once
+  (`bench/results/cosh-xeon8573c-2026-11-21.txt`, `cosh-epyc7763-2026-11-21.txt`,
+  `cosh-kinds-xeon8573c-2026-11-21.txt` and `cosh-kinds-epyc7763-2026-11-21.txt`), and no file
+  decides the arm: on `CoshBenchmark` the ratios between the arms are near 1.3x, waiting for a
+  re-run before a direction is written, or inside it, with no direction; on `CoshKindsBench` the
+  finish arm reads lower by more than 1.3x only on data with no small lane, and the arms read
+  within 1.3x of each other, with no direction, at 3.5% and 17% of small lanes, Varka's and
+  Spark's shares. So the default is still the plan's baseline design, not a measurement, and
+  stays provisional until a re-run and issue #30's rules decide it.
 - **Which exp faults reach cosh.** `exp.dropCorrection` and `exp.constantOffByOneUlp`, which
   change `expCore`'s lanes of `|x| >= 0.5 ln2`. `exp.thresholdMoved` moves the subnormal
   scale-back, which `expCore` leaves out, and `exp.dropKForcing` the lanes of the word of 0.5
@@ -1015,6 +1023,10 @@ stops the next port re-trying a settled question.
 - **One finish arm.** The rare lanes (`|x| >= 2^66`, the infinities and the NaNs) have results
   that are a constant or `x+x`, so a guarded arm that blends them is possible; none is built,
   because the tie-break rule of #30 sends a tie to the finish arm and no timing says otherwise.
+  The host files of 22 November (`bench/results/atan-xeon8573c-2026-11-22.txt` and
+  `atan-epyc7763-2026-11-22.txt`, one run each) time the one arm against the scalar loop, and
+  read every vector row at 0.02 B/op or less, but for the EPYC's 512-bit rows, which run in Java
+  there.
 - **Sizes of its faults, each of 2^22 uniform draws from its own interval.** `atan.dropLo`:
   855028 changed of 2^22 draws from `(-5, 5)`, none of those below 7/16. `atan.splitMoved`
   (19/16 moved to 2): 431802 changed of 2^22 draws from `[19/16, 2)`, none from the ranges
@@ -1061,9 +1073,11 @@ stops the next port re-trying a settled question.
   `bench/alloc-check.py` passed on `AsinBenchmark`'s rows (`finish256`, `finishPreferred` and
   `finishMax`, common and mixed data) and on `SqrtBenchmark`'s (`sqrtMax` has no row: the class
   has no `SPECIES_MAX` arm), at this laptop's flags and as an AVX2 host (`-XX:UseAVX=2
-  -XX:MaxVectorSize=32`); CI runs it. The readings are not committed as results
-  files, so no figure of them is quoted. That says nothing of 128 bits or of the masked form's
-  lowering; no timing is committed either, so the port claims no speed.
+  -XX:MaxVectorSize=32`); CI runs it. Those local readings are not committed, so no figure of
+  them is quoted. The host files of 22 November (`bench/results/asin-xeon8573c-2026-11-22.txt`
+  and `asin-epyc7763-2026-11-22.txt`, one run each) read every vector row at 0.02 B/op or less,
+  but for the EPYC's 512-bit rows, which run in Java there, and time the arm against the scalar
+  loop. None of it says anything of 128 bits or of the masked form's lowering.
 - **One arm, no tie to break.** The three ranges below 1 share `t`'s polynomials and the one
   division `p/q`, and the split range's second division is computed on every lane; the rare lanes
   (`|x| >= 1`, NaN) are finished per lane. There is no second body to compare, so the arm needs
@@ -1107,8 +1121,10 @@ stops the next port re-trying a settled question.
   midpoint, so most are not hard to round; the file keeps every line. All are positive, between
   0.0143 and 0.999999999999999.
 - **Allocation.** CI runs `bench/alloc-check.py` on `AcosBenchmark`'s rows (`finish256`,
-  `finishPreferred`, `finishMax`, common and mixed data). No reading of them is committed and no
-  timing exists, so nothing is claimed of either.
+  `finishPreferred`, `finishMax`, common and mixed data). The host files of 22 November
+  (`bench/results/acos-xeon8573c-2026-11-22.txt` and `acos-epyc7763-2026-11-22.txt`, one run
+  each) read every vector row at 0.02 B/op or less, but for the EPYC's 512-bit rows, which run
+  in Java there, and time the arm against the scalar loop.
 
 ## What the atan2 port taught
 
@@ -1127,9 +1143,11 @@ stops the next port re-trying a settled question.
   and the special blends follow inline (no second call), and the body then allocates nothing:
   `bench/alloc-check.py` passes on the `Atan2Benchmark` rows (`blended` and `guarded`, at 256 bits,
   the preferred species and `SPECIES_MAX`, common and mixed data) at this laptop's flags and as an
-  AVX2 host, and CI runs it. The readings are not committed as results files, so no figure of them
-  is quoted. No timing of `atan2` exists, so the two arms are not compared and the guarded one
-  is the default provisionally.
+  AVX2 host, and CI runs it. Those local readings are not committed, so no figure of them is
+  quoted. Each host has timed both arms once (`bench/results/atan2-xeon8573c-2026-11-22.txt` and
+  `atan2-epyc7763-2026-11-22.txt`): on the Xeon they read within 1.3x of each other at every
+  width, and on the EPYC 7763 near 1.3x or inside it, so neither file gives them a direction, and
+  the guarded one stays the default provisionally until a re-run and issue #30's rules decide it.
 - **A lane the core must not see.** A NaN, an infinity or a huge `t` in a lane the special blends
   overwrite would send the vector to atan's per-lane finish. The mask `t < 2^66` keeps them out
   (a NaN compares false), and a vector with no special lane never reaches the finish.

@@ -81,9 +81,15 @@ import jdk.incubator.vector.VectorSpecies;
  * the body.
  *
  * <p>{@link #cosh(DoubleVector, VectorMask)}, which {@code VFdlibm.cosh} calls, is the slice
- * arm, provisionally: no timing of the two arms exists yet, so the choice is the design's, not a
- * measurement's, and a benchmark host's run of {@code CoshBenchmark} and {@code CoshKindsBench}
- * will decide it ({@code SKILLS.md}). The default is chosen in {@code cosh(x, live)}; other
+ * arm, provisionally: the choice is the design's, not a measurement's. Each host has run {@code
+ * CoshBenchmark} and {@code CoshKindsBench} once ({@code
+ * bench/results/cosh-xeon8573c-2026-11-21.txt}, {@code cosh-epyc7763-2026-11-21.txt} and the
+ * two {@code cosh-kinds-} files of that day), and no file decides the arm. On {@code
+ * CoshBenchmark} the ratios between the arms are near 1.3x, waiting for a re-run before a
+ * direction is written, or inside it, with no direction. On {@code CoshKindsBench} the finish
+ * arm reads lower by more than 1.3x only on data with no small lane, and at 3.5% and 17% of
+ * small lanes the arms read within 1.3x of each other, with no direction ({@code SKILLS.md},
+ * issue #30). The default is chosen in {@code cosh(x, live)}; other
  * places say "the default arm".
  */
 final class Cosh {
