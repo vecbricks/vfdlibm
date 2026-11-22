@@ -82,10 +82,10 @@ import jdk.incubator.vector.VectorSpecies;
  * slower by median and 3.7% to 4.1% by best in two runs ({@code
  * bench/results/exp-log10-pair-epyc7763-2026-11-21.txt} and {@code
  * bench/results/exp-log10-pair-rerun-epyc7763-2026-11-21.txt}), the cause not known, and no
- * AVX-512 host paired. The choice waits for a second run of the
- * Xeon 8573C and a first of the other AVX-512 hosts ({@code HARDWARE.md}), a pair, and the rules
- * for a tie within 1.3x and for hosts that disagree (issue #30); the second arm is kept so the
- * choice can be re-measured.
+ * AVX-512 host paired. log10 calls the finish arm by the rules issue #30 set (a tie within 1.3x
+ * goes to the finish arm), provisionally until a host run revises it: a second run of the Xeon
+ * 8573C, a first of the other AVX-512 hosts ({@code HARDWARE.md}) or a pair; the second arm is
+ * kept so the choice can be re-measured.
  */
 final class Log10 {
 

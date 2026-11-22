@@ -144,7 +144,8 @@ five are a later, optional set; the large-argument reduction of the trigonometri
   runs one arm at every species). Every default stays provisional until a host run revises it (a
   second run of the 8573C, a first of the other AVX-512 hosts). Meanwhile `VFdlibm` calls the
   finish arm of `exp`, `log` and `log10`; the guarded arm of `expm1` and `log1p`, which
-  the rule would move to the finish arm once the 8573C's second run is in (issue #30); the slice
+  the rule would move to the finish arm if their arms are still within 1.3x on the 8573C's
+  second run (issue #30); the slice
   arm of `cosh`, provisionally, as the rule's exception
   (`bench/results/cosh-xeon8573c-2026-11-21.txt` and `cosh-epyc7763-2026-11-21.txt` read the
   finish arm lower on every row by ratios near 1.3x or inside it, and give no direction); and the

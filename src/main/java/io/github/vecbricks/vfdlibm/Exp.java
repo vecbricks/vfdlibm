@@ -80,8 +80,9 @@ import jdk.incubator.vector.VectorSpecies;
  * mixed data on both hosts ({@code PLAN.md}, section 5), and to which issue #30's rules send a
  * tie; the choice stays provisional until a host run revises it, a second run of the Xeon 8573C,
  * a first of the other AVX-512 hosts ({@code HARDWARE.md}) or a pair. The second arm is kept so
- * the choice can be re-measured, on other hosts and as the JDK changes. The folds above cut the common path C2 emits from 77 instructions with two
- * divisions to 52 with one at 512 bits on AVX-512, and from 107 to 64 at 256 bits under {@code
+ * the choice can be re-measured, on other hosts and as the JDK changes. The folds above cut the
+ * common path C2 emits from 77 instructions with two divisions to 52 with one at 512 bits on
+ * AVX-512, and from 107 to 64 at 256 bits under {@code
  * -XX:UseAVX=2} ({@code bench/asm/README.md}). The folded body was timed once as a pair against
  * its base on the Xeon Platinum 8573C ({@code
  * bench/results/exp-onediv-xeon8573c-2026-11-03.txt}): on common data its 256-bit, 512-bit,
