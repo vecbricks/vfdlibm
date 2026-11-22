@@ -3,7 +3,7 @@
 Lessons about benchmarking, the JIT and the Vector API that every port follows. Most were learned in
 Varka (github.com/vecbricks/varka, its `sql/varka/skills/`) and are rewritten here for a vector math
 library; the last sections are what the `exp`, `log`, `log1p`, `log10`, `expm1`, `sinh`, `cosh`,
-`asin`, `atan` and `acos` ports taught. Each entry says where its numbers come from. A new lesson
+`asin`, `atan`, `acos`, `atan2` and `hypot` ports taught. Each entry says where its numbers come from. A new lesson
 goes in the section it belongs to, as a short entry; a negative result belongs here too, since it
 stops the next port re-trying a settled question.
 
@@ -1307,3 +1307,37 @@ blend and 10 to 23 instructions. At 128 bits the bodies are 8 to 16 times longer
   guard reads `special & live`.
 - **The consumer of `dev/jar-check.sh`** calls `atan2` over every pair of its inputs and two NaNs of
   different bits, unmasked and under four masks, and compares by a copy of `PairBits.matches`.
+
+## What the hypot port taught
+
+- **Words and values in separate vectors, written as the C writes them.** e_hypot.c's 2^1022
+  scaling multiplies `a` and `b` and leaves `ha` and `hb` stale, and the splits read the stale
+  words (PROOFS.md, L16: refreshing them changes 42,876 of 1,048,576 subnormal-`b` pairs). Kept
+  as int lanes beside the values, with every `__HI(v) = word` written out (`I2L`, shift, or), the
+  port has that behaviour with no special case. Every compare, nesting and `k` update is the C's
+  own, so no exclusivity of the scalings is assumed and no lemma is needed beyond L13; line 110's
+  `k != 0` is a blend too, since multiplying every lane by `2^k` would be a departure needing a
+  lemma of its own.
+- **One arm, the finish, and it reached every finite lane on the first run.** The rare lanes are
+  an infinity or a NaN in either argument (`ha >= 0x7ff00000`); everything finite, the ratio
+  return, the zero `b` and the three scalings included, is in the vector. A blended non-finite arm
+  would rest on the hardware's NaN propagation for one-NaN lanes and has no timing to justify it,
+  and #30 sends a tie to the finish. The first run of the vector tests passed on every input.
+  `bench/alloc-check.py` passes on `HypotBenchmark`'s rows (`finish256`, `finishPreferred`,
+  `finishMax`, common and mixed data) at this laptop's flags and as an AVX2 host; those local
+  readings are not committed, so no figure of them is quoted, and no results file times hypot.
+- **The faults, sized on 2^22 draws each** (a throwaway program over `VFdlibm.hypot` at 256 bits,
+  once per fault; counts of pairs that differ from `StrictMath.hypot`; the unplanted port 0 on
+  each). `hypot.dropEarlyReturn`: 0 of Varka's range `[-10, 10)`, 1,779,887 of sampled bits,
+  1,620,600 of the fuzz's edges, 14,850 of the 40,401 special pairs. `hypot.refreshedWords`: 170,825
+  of subnormal-`b` pairs, 16,550 at the scalings, 24,077 of equal words, 0 of the special pairs.
+  `hypot.dropT2`: 2,096,152 of `[-10, 10)`, 3,096,883 of subnormal-`b` pairs. `hypot.swapByValue`
+  (line 60 by `|y| > |x|`): 0 of 4,194,304 equal-word pairs, 1,995 of sampled bits, 105,259 of the
+  edges and 2,316 of the special pairs, which are where both high words are zero (a zero beside a
+  subnormal whose high word is zero), so a swap by value at equal nonzero words changed no result
+  in those draws. The fault run's inputs hold the special pairs and the subnormal-`b` pairs.
+- **Hard cases, computed.** No published table holds hypot's; `dev/hypot-hard-cases.py` derives
+  8,400 pairs with exact integer arithmetic (near-midpoint families of both forms of the medium
+  path, exact triples with nearly equal legs, scaled into each range), and
+  `HardCasePairsTest` rechecks the claim on the committed file with `BigDecimal`. Whether
+  self-computed files are acceptable is the owner's question on #34, not answered yet.

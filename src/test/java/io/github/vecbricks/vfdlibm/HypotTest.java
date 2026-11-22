@@ -20,6 +20,7 @@
 package io.github.vecbricks.vfdlibm;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
@@ -30,11 +31,18 @@ import java.io.UncheckedIOException;
 import java.lang.management.ManagementFactory;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.SplittableRandom;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
+import java.util.function.Consumer;
+import jdk.incubator.vector.DoubleVector;
+import jdk.incubator.vector.VectorShape;
+import jdk.incubator.vector.VectorSpecies;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.function.Executable;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
 
@@ -50,6 +58,11 @@ import org.junit.jupiter.params.provider.EnumSource;
  * JitMode}), since which candidate a sum of two NaNs keeps varies with the tier; that run asserts
  * the results, and prints which candidate won in each mode without asserting it, since which one
  * is not specified.
+ *
+ * <p>The vector port, {@link VFdlibm#hypot}, is checked on the same inputs against {@code
+ * StrictMath.hypot} by the same comparison, at every width and at {@code SPECIES_MAX}, unmasked
+ * and masked, with vectors that mix every way out of the C and the rare lanes in every subset of
+ * lanes, the pairs of {@code hard-cases/hypot.txt}, and the C's stale words (PROOFS.md, L16).
  */
 class HypotTest {
 
@@ -246,16 +259,7 @@ class HypotTest {
   // ---------------------------------------------------------------------------------------------
 
   /** The high words e_hypot.c tests, as doubles of a zero low word and of two others each. */
-  private static final int[] WORDS = {
-    0x5f300000, 0x5f300001, 0x5f2fffff, 0x20b00000, 0x20afffff, 0x20b00001, 0x000fffff, 0x00100000,
-    0x00000000, 0x00000001, 0x3c00000, 0x3c00001, 0x3bfffff, 0x7fd00000, 0x7fefffff, 0x7ff00000,
-    0x3ff00000
-  };
-
-  /** The differences of the high words, {@code ha-hb}, at which line 63 decides, and zero. */
-  private static final int[] GAPS = {
-    0x3c00000, 0x3c00001, 0x3bfffff, -0x3c00000, -0x3c00001, -0x3bfffff, 0, 1, -1
-  };
+  private static final int[] WORDS = Nightly.HYPOT_WORDS;
 
   /** NaNs of both signs, quiet and signalling, several payloads; pairs differ in one bit too. */
   private static final long[] NANS = {
@@ -295,15 +299,12 @@ class HypotTest {
     return Inputs.cross(specials, specials);
   }
 
-  /** The fuzz's pair draws over e_hypot.c's words and points, a tenth at {@link #GAPS}. */
-  static final Fuzz.PairEdges EDGES = edges();
-
-  private static Fuzz.PairEdges edges() {
-    Fuzz.Edges edges = new Fuzz.Edges(WORDS, new int[0], false, new double[] {
-      0x1p500, 0x1p-500, 0x1p1022, 0x1p-1022, 0x1p60, 1.0, 0.0, Double.POSITIVE_INFINITY
-    });
-    return new Fuzz.PairEdges(edges, edges, Fuzz.PAIR_SPECIALS, GAPS);
-  }
+  /**
+   * The fuzz's pair draws over e_hypot.c's words and points, a tenth at its gaps: the nightly's
+   * own edges ({@link Nightly.PairFunction#HYPOT}), which list {@link #WORDS} and {@link
+   * Nightly#HYPOT_GAPS}.
+   */
+  static final Fuzz.PairEdges EDGES = Nightly.PairFunction.HYPOT.edges();
 
   static Inputs.Pairs fuzzPairs(long seed, int n) {
     SplittableRandom random = new SplittableRandom(seed);
@@ -797,6 +798,304 @@ class HypotTest {
         assertEquals(inf, Double.doubleToRawLongBits(StrictMath.hypot(i, n)));
         assertEquals(inf, Double.doubleToRawLongBits(StrictMath.hypot(n, i)));
       }
+    }
+  }
+
+  // ---------------------------------------------------------------------------------------------
+  // The vector port
+  // ---------------------------------------------------------------------------------------------
+
+  /** {@link VFdlibm#hypot} unmasked at {@code species} over the pairs {@code p}. */
+  private static void assertHypot(VectorSpecies<Double> species, Inputs.Pairs p) {
+    Oracle.assertPair("VFdlibm.hypot", species, MAGNITUDES, VFdlibm::hypot, StrictMath::hypot,
+        p.x(), p.y());
+  }
+
+  /** {@link VFdlibm#hypot} masked, under seeded random masks, all-true and all-false. */
+  private static void assertHypotMasked(VectorSpecies<Double> species, Inputs.Pairs p, long seed) {
+    Oracle.assertPairMasked("VFdlibm.hypot", species, MAGNITUDES, VFdlibm::hypot,
+        StrictMath::hypot, p.x(), p.y(), seed);
+  }
+
+  private static Inputs.Pairs hardCasePairs() {
+    return Inputs.hardCasePairs("hypot");
+  }
+
+  /** A smaller {@link #everything}, with the hard cases, for the masked forms. */
+  private static Inputs.Pairs everythingSmall(long seed) {
+    return concat(everything(seed, 1 << 12), hardCasePairs());
+  }
+
+  @ParameterizedTest
+  @EnumSource(VectorWidth.class)
+  void specialValues(VectorWidth width) {
+    assertHypot(width.species(),
+        concat(specialPairs(), nanPairs(9000L + width.ordinal(), 1 << 14)));
+  }
+
+  @ParameterizedTest
+  @EnumSource(VectorWidth.class)
+  void triples(VectorWidth width) {
+    assertHypot(width.species(), triplePairs());
+  }
+
+  /** The words and gaps the C tests, as the nightly's fuzz draws them. */
+  @ParameterizedTest
+  @EnumSource(VectorWidth.class)
+  void edges(VectorWidth width) {
+    assertHypot(width.species(), fuzzPairs(9100L + width.ordinal(), DRAWS));
+  }
+
+  @ParameterizedTest
+  @EnumSource(VectorWidth.class)
+  void scalings(VectorWidth width) {
+    assertHypot(width.species(), scalingPairs(9200L + width.ordinal(), DRAWS));
+  }
+
+  /** The 2^1022 scaling, which reads the words it left stale (PROOFS.md, L16). */
+  @ParameterizedTest
+  @EnumSource(VectorWidth.class)
+  void subnormalB(VectorWidth width) {
+    assertHypot(width.species(), subnormalPairs(9300L + width.ordinal(), DRAWS));
+  }
+
+  @ParameterizedTest
+  @EnumSource(VectorWidth.class)
+  void equalWordsAndTwiceB(VectorWidth width) {
+    assertHypot(width.species(), concat(equalWordPairs(9400L + width.ordinal(), DRAWS),
+        twiceBPairs(9450L + width.ordinal(), DRAWS)));
+  }
+
+  @ParameterizedTest
+  @EnumSource(VectorWidth.class)
+  void sampledAndDense(VectorWidth width) {
+    assertHypot(width.species(), densePairs(9500L + 8L * width.ordinal(), DRAWS));
+  }
+
+  @ParameterizedTest
+  @EnumSource(VectorWidth.class)
+  void publishedPairs(VectorWidth width) {
+    assertHypot(width.species(), hardCasePairs());
+  }
+
+  @ParameterizedTest
+  @EnumSource(VectorWidth.class)
+  void masked(VectorWidth width) {
+    assertHypotMasked(width.species(), everythingSmall(9600L), 9601L);
+  }
+
+  /** SPECIES_MAX, which {@link VectorWidth} does not run: its int species is another shape. */
+  @Test
+  void maxSpecies() {
+    Inputs.Pairs p = everythingSmall(9700L);
+    assertHypot(DoubleVector.SPECIES_MAX, p);
+    assertHypotMasked(DoubleVector.SPECIES_MAX, p, 9701L);
+  }
+
+  private static double bits(long b) {
+    return Double.longBitsToDouble(b);
+  }
+
+  /** Pairs the per-lane finish takes: an infinity or a NaN in either argument. */
+  private static final double[][] RARE_LANES = {
+    {Double.NaN, 1.0}, {1.0, Double.NaN}, {Double.POSITIVE_INFINITY, Double.NaN},
+    {Double.NaN, Double.NEGATIVE_INFINITY},
+    {bits(0xfff4_0000_0000_0456L), bits(0x7ff8_0000_0000_0123L)},
+    {Double.NEGATIVE_INFINITY, 1.0e-300}, {Double.POSITIVE_INFINITY, Double.POSITIVE_INFINITY},
+    {Double.NaN, 0x1p-1060}, {1.0e300, bits(0xfff0_0000_0000_0001L)}, {-0.0, Double.NaN},
+  };
+
+  /** Pairs the vector computes, one for each way out of the C ({@link Path}) and its forms. */
+  private static final double[][] GENERAL_LANES = {
+    {3.0, 4.0}, {5.0, -1.0}, {1.0, 0x1p-70}, {0x1p-70, -1.0}, {3.0, 0.0}, {0x1p-1060, -0.0},
+    {0x1p600, 0x1p580}, {-0x1.8p700, 0x1p690}, {0x1p-600, 0x1.4p-590}, {0x1p-1030, 0x1p-1040},
+    {0x1.8p-1060, 0x1p-1060}, {bits(0x3ff0_0000_0000_0001L), bits(0x3ff0_0000_ffff_ffffL)},
+    {bits(0x0008_0000_0000_0001L), 0x1p-1000}, {0x1.fffffffffffffp1023, 0x1p1000},
+  };
+
+  /**
+   * One vector for every subset of a vector's lanes ({@link ExpTest#rareLaneSubsets}), the
+   * subset's lanes rare and the others taking every way out of the C in turn, so that a vector
+   * holds rare lanes beside lanes of each scaling and form, in every position and mix.
+   */
+  static Inputs.Pairs everySubsetOfLanesRare(int lanes) {
+    long[] subsets = ExpTest.rareLaneSubsets(lanes);
+    double[] xs = new double[subsets.length * lanes];
+    double[] ys = new double[xs.length];
+    int rare = 0;
+    int general = 0;
+    for (int s = 0; s < subsets.length; s++) {
+      for (int lane = 0; lane < lanes; lane++) {
+        boolean isRare = (subsets[s] >>> lane & 1L) != 0;
+        double[] pair = isRare ? RARE_LANES[rare++ % RARE_LANES.length]
+            : GENERAL_LANES[general++ % GENERAL_LANES.length];
+        xs[s * lanes + lane] = pair[0];
+        ys[s * lanes + lane] = pair[1];
+      }
+    }
+    return new Inputs.Pairs(xs, ys);
+  }
+
+  @ParameterizedTest
+  @EnumSource(VectorWidth.class)
+  void everySubsetOfLanesRare(VectorWidth width) {
+    assertEverySubset(width.species());
+  }
+
+  @Test
+  void everySubsetOfLanesRareAtMaxSpecies() {
+    assertEverySubset(DoubleVector.SPECIES_MAX);
+  }
+
+  private static void assertEverySubset(VectorSpecies<Double> species) {
+    Inputs.Pairs p = everySubsetOfLanesRare(species.length());
+    assertHypot(species, p);
+    assertHypotMasked(species, p, 9800L);
+  }
+
+  /**
+   * L16's hinge (PROOFS.md): the C reads {@code ha} and {@code hb} stale after the 2^1022
+   * scaling, and that reading decides bits. On the subnormal-{@code b} pairs the C as written is
+   * {@code StrictMath} (the gate), the C with the words read again from the scaled values differs
+   * from it on some of them, and the port's vector lanes equal the C as written, bit for bit, at
+   * every width: so the port keeps the words stale, and a port that refreshed them would fail.
+   */
+  @ParameterizedTest
+  @EnumSource(VectorWidth.class)
+  void theStaleWordsAreRead(VectorWidth width) {
+    VectorSpecies<Double> species = width.species();
+    Inputs.Pairs p = subnormalPairs(9900L + width.ordinal(), 1 << 16);
+    long refreshedDiffers = 0;
+    int n = species.length();
+    for (int i = 0; i + n <= p.x().length; i += n) {
+      double[] got = VFdlibm.hypot(DoubleVector.fromArray(species, p.x(), i),
+          DoubleVector.fromArray(species, p.y(), i)).toArray();
+      for (int lane = 0; lane < n; lane++) {
+        double x = p.x()[i + lane];
+        double y = p.y()[i + lane];
+        assertEquals(Double.doubleToRawLongBits(cHypot(x, y)),
+            Double.doubleToRawLongBits(got[lane]),
+            "hypot(" + Oracle.hex(x) + ", " + Oracle.hex(y) + ")");
+        if (!PairBits.matches(MAGNITUDES, x, y, StrictMath.hypot(x, y),
+            cHypot(x, y, Variant.REFRESHED_WORDS, null))) {
+          refreshedDiffers++;
+        }
+      }
+    }
+    assertTrue(refreshedDiffers > 0, "no pair shows the refreshed words");
+  }
+
+  /**
+   * L16's witnesses (PROOFS.md): {@code x}, {@code y}, the C as written (which is {@code
+   * StrictMath.hypot}) and the C with the words of lines 80-84 read again, two of each form of
+   * the medium path.
+   */
+  static final long[][] STALE_WORD_WITNESSES = {
+    // w <= b (lines 101-108)
+    {0x000db0d196a90b9aL, 0x800d27338d43c3cfL, 0x0012fc39ebdadea2L, 0x0012fc39ebdadea3L},
+    {0x000e6d4294dc0a1eL, 0x000b85f92b97b424L, 0x001276c9661f63f5L, 0x001276c9661f63f6L},
+    // w > b (lines 96-99)
+    {0x80715ef1f174dc02L, 0x000c253f97a162e2L, 0x00715f35e084bb17L, 0x00715f35e084bb16L},
+    {0x80000000091e440eL, 0x0009982a438c0f4bL, 0x0009982a438c0f50L, 0x0009982a438c0f4fL},
+  };
+
+  /** L16's counter-example: at each witness the stale and the refreshed words differ. */
+  @Test
+  void staleWordWitnesses() {
+    for (long[] w : STALE_WORD_WITNESSES) {
+      double x = bits(w[0]);
+      double y = bits(w[1]);
+      String where = "hypot(" + Oracle.hex(x) + ", " + Oracle.hex(y) + ")";
+      long[] paths = new long[Path.values().length];
+      assertEquals(w[2], Double.doubleToRawLongBits(StrictMath.hypot(x, y)), where);
+      assertEquals(w[2], Double.doubleToRawLongBits(cHypot(x, y, Variant.AS_WRITTEN, paths)),
+          where);
+      assertEquals(w[3],
+          Double.doubleToRawLongBits(cHypot(x, y, Variant.REFRESHED_WORDS, null)), where);
+      assertTrue(paths[Path.SUBNORMAL_B.ordinal()] > 0, where + " takes the 2^1022 scaling");
+    }
+  }
+
+  /** L16's vector tie: each witness at every lane of a vector, the others general, every width. */
+  @ParameterizedTest
+  @EnumSource(VectorWidth.class)
+  void staleWordWitnessesInEveryLane(VectorWidth width) {
+    VectorSpecies<Double> species = width.species();
+    int n = species.length();
+    List<double[]> pairs = new ArrayList<>();
+    for (long[] w : STALE_WORD_WITNESSES) {
+      for (int at = 0; at < n; at++) {
+        for (int lane = 0; lane < n; lane++) {
+          pairs.add(lane == at ? new double[] {bits(w[0]), bits(w[1])}
+              : GENERAL_LANES[(at + lane) % GENERAL_LANES.length]);
+        }
+      }
+    }
+    double[] xs = new double[pairs.size()];
+    double[] ys = new double[xs.length];
+    for (int i = 0; i < xs.length; i++) {
+      xs[i] = pairs.get(i)[0];
+      ys[i] = pairs.get(i)[1];
+    }
+    assertHypot(species, new Inputs.Pairs(xs, ys));
+    assertHypotMasked(species, new Inputs.Pairs(xs, ys), 9850L + width.ordinal());
+  }
+
+  @Test
+  void maskedFormRejectsANullMask() {
+    DoubleVector v = DoubleVector.zero(DoubleVector.SPECIES_128);
+    assertThrows(NullPointerException.class, () -> VFdlibm.hypot(v, v, null));
+  }
+
+  /** The words and constants are e_hypot.c's, by the hexadecimal its source writes. */
+  @Test
+  void constantsAreTheSourcesBits() {
+    assertEquals(0x3c00000, Hypot.RATIO_WORD);
+    assertEquals(0x5f300000, Hypot.HA_BIG);
+    assertEquals(0x7ff00000, Hypot.HA_INF);
+    assertEquals(0x20b00000, Hypot.HB_SMALL);
+    assertEquals(0x000fffff, Hypot.HB_SUBNORMAL);
+    assertEquals(0x25800000, Hypot.SCALE_WORD);
+    assertEquals(0x00100000, Hypot.TWICE_WORD);
+    assertEquals(0x3ff00000, Hypot.ONE_WORD);
+    assertEquals(0x7fd0000000000000L, Double.doubleToRawLongBits(Hypot.TWO1022));
+    assertEquals(0x1p1022, Hypot.TWO1022);
+  }
+
+  // ---------------------------------------------------------------------------------------------
+  // Planted faults
+  // ---------------------------------------------------------------------------------------------
+
+  /**
+   * Each of hypot's faults, with a check that must fail while it is planted: the vector form over
+   * {@link #faultRunInputs()} at every width the host has. Each was sized on draws before it was
+   * wired; the sizes are in {@code SKILLS.md}, "What the hypot port taught".
+   */
+  static Map<String, Executable> faultCatchers() {
+    Map<String, Executable> catchers = new LinkedHashMap<>();
+    for (String fault : new String[] {
+        Hypot.DROP_EARLY_RETURN, Hypot.REFRESHED_WORDS, Hypot.DROP_T2, Hypot.SWAP_BY_VALUE}) {
+      catchers.put(fault, () -> forEachWidth(species ->
+          PlantedFaultTest.assertCaught(fault, () -> assertHypot(species, faultRunInputs()))));
+    }
+    return catchers;
+  }
+
+  private static Inputs.Pairs faultRunInputs() {
+    return concat(specialPairs(), scalingPairs(9950L, 1 << 14), subnormalPairs(9951L, 1 << 14),
+        equalWordPairs(9952L, 1 << 14), twiceBPairs(9953L, 1 << 14), densePairs(9954L, 1 << 12));
+  }
+
+  @ParameterizedTest
+  @EnumSource(VectorWidth.class)
+  void faultRunInputsPass(VectorWidth width) {
+    assertHypot(width.species(), faultRunInputs());
+  }
+
+  private static void forEachWidth(Consumer<VectorSpecies<Double>> check) {
+    int preferred = DoubleVector.SPECIES_PREFERRED.vectorBitSize();
+    for (int bits = 128; bits <= preferred; bits *= 2) {
+      check.accept(VectorSpecies.of(double.class, VectorShape.forBitSize(bits)));
     }
   }
 }

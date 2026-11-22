@@ -51,7 +51,9 @@ so is `acos` (`VFdlibm.acos`, from `e_acos.c`, built as asin is), and so is `ata
 (`VFdlibm.atan2`, from `e_atan2.c`, the first function of two arguments: the special lanes blended
 over the general path, which calls `atan`'s core, no lane finished per lane, and two arms, the
 blended one and the guarded one `VFdlibm` calls at every species, by the owner's decision of 22
-November; section 5 below gives the case).
+November; section 5 below gives the case), and so is `hypot` (`VFdlibm.hypot`, from `e_hypot.c`,
+every finite lane in the vector with the C's stale words after its `2^1022` scaling, one arm, and
+the lanes of an infinity or a NaN finished per lane).
 `log`, `log10` and `log1p` are done too (`VFdlibm.log`, from
 `e_log.c`, `VFdlibm.log10`, from `e_log10.c`, which computes through log's common path, and
 `VFdlibm.log1p`, from `s_log1p.c`), and so is `expm1` (`VFdlibm.expm1`, from `s_expm1.c`, whose
@@ -77,7 +79,10 @@ five are a later, optional set; the large-argument reduction of the trigonometri
     Lefevre and Muller's worst-case tables (ARITH 15, 2001) and Lefevre's list of round-to-nearest
     hard cases, one resource per function under `src/test/resources/.../hard-cases/` (so far `exp`,
     `expm1`, `log`, `log10`, `log1p`, `sinh`, `cosh`, `asin`, `atan` and `acos`), loaded with
-    `Inputs.hardCases("<function>")`. The inputs of Lefevre's list come out of
+    `Inputs.hardCases("<function>")`, and for a function of two arguments a file of pairs loaded
+    with `Inputs.hardCasePairs` (`atan2`, derived from atan's inputs, and `hypot`, computed by
+    `dev/hypot-hard-cases.py` with exact integer arithmetic, since no published table of hypot's
+    hard cases is known). The inputs of Lefevre's list come out of
     `dev/testlibm-extract.py`, which rechecks each line with 400-digit arithmetic against exact
     values it derives itself (`sinh`'s, `cosh`'s, `atan`'s, `asin`'s and `acos`'s files were
     written by it). A port that keeps fdlibm's
@@ -192,15 +197,17 @@ five are a later, optional set; the large-argument reduction of the trigonometri
   with a third arm that blends the rare paths only when a vector holds a rare lane; `Expm1Benchmark`
   has the same three arms for `expm1`, `SinhBenchmark` one for `sinh`, `CoshBenchmark` two for
   `cosh`, `AsinBenchmark` one for `asin`, `AtanBenchmark` one for `atan`, `AcosBenchmark` one for
-  `acos` and `Atan2Benchmark` two for `atan2` (the blended and the guarded arm, over two arrays).
-  Each of the eleven has rows at `SPECIES_MAX` (`*Max`), which the allocation check covers: the
+  `acos`, `Atan2Benchmark` two for `atan2` (the blended and the guarded arm, over two arrays) and
+  `HypotBenchmark` one for `hypot` (over two arrays; no results file reads it yet).
+  Each of the twelve has rows at `SPECIES_MAX` (`*Max`), which the allocation check covers: the
   finish of `exp`, `expm1`, `log`, `log10` and `log1p` boxed there on mixed data until its first
   eight lanes were written out (`bench/results/max-finish-laptop-2026-11-20.txt`, then
   `bench/results/max-finish-alloc-free-laptop-2026-11-21.txt`, a laptop reading of allocation only);
   no file reads the earlier finish of `sinh` or `cosh`, whose current rows the host files of 21
   November read (`bench/results/sinh-xeon8573c-2026-11-21.txt` and the like). `asin`, `atan` and
-  `acos` were written with the new finish from the start, and `atan2` finishes no lane per lane;
-  the host files of 22 November read their rows (`bench/results/asin-xeon8573c-2026-11-22.txt`
+  `acos` were written with the new finish from the start (as `hypot` was since), and `atan2`
+  finishes no lane per lane; the host files of 22 November read their rows
+  (`bench/results/asin-xeon8573c-2026-11-22.txt`
   and the like). `ExpKindsBench` runs
   exp's two arms on one kind of rare input at a time (a NaN, an overflow, an underflow, a subnormal
   result), to find which kind costs an arm its time on mixed data (#41); it is named apart so that

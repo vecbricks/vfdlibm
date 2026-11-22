@@ -438,10 +438,12 @@ public final class Consumer {
   /**
    * Checks f(y, x) and f(y, x, live), found by name, against the oracle, over every pair of the
    * inputs and of two NaNs of different bits. A lane where both arguments are NaN with different
-   * bits must be one of the arguments' bits with the quiet bit set (the oracle's too), which one
-   * is not specified; every other lane has the oracle's bits.
+   * bits must be one of the arguments' bits with the quiet bit set, and with the sign cleared
+   * too when magnitudes is true (hypot's candidates), the oracle's too, which one is not
+   * specified; every other lane has the oracle's bits.
    */
-  private static void checkPair(String name, DoubleBinaryOperator oracle) throws Exception {
+  private static void checkPair(String name, DoubleBinaryOperator oracle, boolean magnitudes)
+      throws Exception {
     Method plain = function(name, DoubleVector.class, DoubleVector.class);
     Method masked =
         function(name, DoubleVector.class, DoubleVector.class, VectorMask.class);
@@ -468,7 +470,7 @@ public final class Consumer {
       DoubleVector vx = DoubleVector.fromArray(SPECIES, x, 0);
       double[] got = ((DoubleVector) plain.invoke(null, vy, vx)).toArray();
       for (int i = 0; i < length; i++) {
-        samePair(name, y[i], x[i], got[i], oracle.applyAsDouble(y[i], x[i]));
+        samePair(name, y[i], x[i], got[i], oracle.applyAsDouble(y[i], x[i]), magnitudes);
       }
       for (int out = 0; out < 4; out++) {
         for (int i = 0; i < length; i++) {
@@ -479,7 +481,7 @@ public final class Consumer {
         for (int i = 0; i < length; i++) {
           if (live[i]) {
             samePair(name + " (masked)", y[i], x[i], gotMasked[i],
-                oracle.applyAsDouble(y[i], x[i]));
+                oracle.applyAsDouble(y[i], x[i]), magnitudes);
           }
         }
       }
@@ -487,7 +489,8 @@ public final class Consumer {
   }
 
   /** The rule of the pair comparison: see checkPair. A copy of the suite's PairBits.matches. */
-  private static void samePair(String name, double y, double x, double got, double expected) {
+  private static void samePair(String name, double y, double x, double got, double expected,
+      boolean magnitudes) {
     long yb = Double.doubleToRawLongBits(y);
     long xb = Double.doubleToRawLongBits(x);
     long gotBits = Double.doubleToRawLongBits(got);
@@ -495,9 +498,11 @@ public final class Consumer {
     boolean nans = (yb & 0x7fffffffffffffffL) > 0x7ff0000000000000L
         && (xb & 0x7fffffffffffffffL) > 0x7ff0000000000000L && yb != xb;
     long quiet = 0x0008000000000000L;
+    long keep = magnitudes ? 0x7fffffffffffffffL : -1L;
+    long first = (yb | quiet) & keep;
+    long second = (xb | quiet) & keep;
     boolean ok = nans
-        ? (gotBits == (yb | quiet) || gotBits == (xb | quiet))
-            && (wantBits == (yb | quiet) || wantBits == (xb | quiet))
+        ? (gotBits == first || gotBits == second) && (wantBits == first || wantBits == second)
         : gotBits == wantBits;
     lanes++;
     if (!ok) {
@@ -565,7 +570,8 @@ public final class Consumer {
     check("asin", StrictMath::asin);
     check("atan", StrictMath::atan);
     check("acos", StrictMath::acos);
-    checkPair("atan2", StrictMath::atan2);
+    checkPair("atan2", StrictMath::atan2, false);
+    checkPair("hypot", StrictMath::hypot, true);
     Module module = VFdlibm.class.getModule();
     String in = module.isNamed() ? module.getName() : "";
     System.out.printf("%d lanes at %d bits, %d wrong; the library is in %s%n", lanes,

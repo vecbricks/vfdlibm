@@ -1436,3 +1436,123 @@ special beside lanes the core computes.
 `atan2.infOrderSwapped` (`y` infinite wins over `x` infinite), `atan2.dropPiLo`, `atan2.zeroSignOfX`
 (`x < 0` by value for `y = +-0`, so `-0.0` is positive), `atan2.diagonalInf` (`pi_o_4` in every
 quadrant) and `atan2.noSignFlip`.
+
+## hypot (`Hypot.java`, from `e_hypot.c`)
+
+e_hypot.c reads `ha` and `hb`, the high words of `|x|` and `|y|` (lines 58-59), swaps the
+arguments where `hb > ha`, by the words only, so that with equal words `b` may be the larger
+(60), and writes the words back, clearing the signs (61-62). It returns `a+b` where `ha-hb >
+0x3c00000` (63). Above `2^500` (`ha > 0x5f300000`) it returns the infinity or NaN rule of lines
+66-70 for `ha >= 0x7ff00000` and otherwise takes `0x25800000` from both words, `k = 600` (73-75).
+Then, on `hb` as it now is, for `hb < 0x20b00000` (77): a subnormal or zero `b` (`hb <=
+0x000fffff`) returns `a` for `b = 0` (79) and otherwise multiplies `a` and `b` by `2^1022`, `k
+-= 1022`, leaving `ha` and `hb` as they were (80-84); any other `b` adds `0x25800000` to both
+words, `k -= 600` (86-90). With `w = a-b`, `w > b` takes `sqrt(t1*t1-(b*(-b)-t2*(a+t1)))` over
+`t1`, `a`'s high word with a zero low word (96-99), and the rest `sqrt(t1*y1-(w*(-w)-(t1*y2+t2*b)))`
+over `a = a+a`, `b`'s and `a`'s words split the same way (101-108). For `k != 0` the result is
+`t1*w` with `t1 = 1.0` and `k<<20` added to its high word (110-113).
+
+The port computes every finite lane in the vector by the C's operations in the C's order, with
+no fused multiply-add and no reassociation, and finishes the lanes of `ha >= 0x7ff00000` (an
+infinity or a NaN in either argument) per lane with `StrictMath.hypot`, which is the C. It
+**needs no lemma of its own** beyond L13's blend argument and (R4)'s `sqrt`; L16 below is a
+counter-example, not a fold: it shows that the stale words the C reads are not optional. Where
+its text is not the C's:
+
+- The swap is two blends of the arguments and two of the words, under the C's own compare `hb >
+  ha` of the int words, and `__HI(a) = ha` is the AND of `a`'s bits with `0x7fffffffffffffff`:
+  `ha` is `a`'s own high word with the sign bit cleared, so writing it back clears the sign bit
+  and changes nothing else, which is what the AND does.
+- Every other `__HI(v) = word` is the C's own operation on the bits: the int word widened by
+  `I2L` and shifted left by 32 (the shift drops the sign extension), or-ed with `v`'s low word;
+  `t = 0; __HI(t) = word` is the shifted word alone. Line 112's `__HI(t1) += (k<<20)` on `t1 =
+  1.0`, whose low word is zero, is the word `(k<<20) + 0x3ff00000` as an int lane, then shifted
+  the same way.
+- The words and the values are separate vectors, as in the C: the scalings by `2^-600` and
+  `2^600` change the words and write them back into the values, and the scaling by `2^1022`
+  multiplies the values and leaves the words, so lines 97, 103 and 106 read the stale words on
+  those lanes as the C does (L16).
+- Line 77's test is on `hb` after line 73's subtraction, line 78's is nested in it, and `k` is an
+  int lane added to as the C adds to it, so a lane that took both scalings would have both; the
+  port does not assume that none does.
+- Line 79's `(hb|__LO(b))==0` is the test that `b`'s 64 bits are zero, which is the same predicate
+  (`hb` being `b`'s high word there: the subnormal branch has not changed it), and-ed with the
+  subnormal branch's mask.
+- The two forms of the medium path are computed on every lane, their radicands blended by the
+  C's `w > b` and the one `VectorOperators.SQRT` taken of the blend: an operand blend (L13, H2),
+  so each lane takes the root of its own form's radicand, by (R4) the C's `sqrt`.
+- The returns before the medium path are blends over it from the last to the first: line 79's
+  `a` (the value at that line), then line 63's `a+b` of the unscaled `a` and `b`; the rare lanes
+  are written last, by the finish.
+
+**L13 for hypot.** H1 (selection) holds: every mask is the C's compare on the same int words (`hb
+> ha`, `ha-hb > 0x3c00000`, `ha > 0x5f300000`, `hb < 0x20b00000`, `hb <= 0x000fffff`, `k != 0`)
+or on the same doubles (`w > b`, `b`'s bits zero), nested as the C nests them. H2 (operands)
+holds for the operand blends (the swap, the scaled values and words, the radicand), and every
+operation is the C's in its order. H3 (totality) holds: IEEE operations, compares, int lane
+arithmetic and shifts, conversions and blends, with no integer division and no indexed load, so
+the values a discarded lane takes (an infinite `t1*t1` beside a huge `a`, a NaN radicand) are
+values and nothing else. H4 (select) holds: each blend is a `blend`. The lanes the rare mask
+holds are never read: each is overwritten by `StrictMath.hypot` on the lane's own arguments.
+
+**The lane of two NaNs** is finished per lane, so it is `StrictMath.hypot`'s own result, a
+candidate of `MAGNITUDES` (the contract of a function of two arguments, above). One NaN beside a
+finite value or an infinity is finished too, so its bits are the oracle's by construction.
+
+### L16. The stale words of the 2^1022 scaling cannot be refreshed (a counter-example, not a fold)
+
+**Statement.** After lines 80-84 multiply `a` and `b` by `2^1022`, the C keeps `ha` and `hb`, the
+words of the unscaled values, and lines 97, 103 and 106 split the scaled values at those stale
+words. Reading the words again from the scaled values, as a port that kept words and values
+together would, is not bit-identical.
+
+**Counter-example.** Four of the pairs found, `C` the C as written, which is `StrictMath.hypot` at
+each, and `refreshed` the same C with `ha = __HI(a)`, `hb = __HI(b)` after line 84; the first two
+take the form `w <= b`, the last two `w > b`:
+
+| `x` | `y` | `C` | `refreshed` |
+| :--- | :--- | :--- | :--- |
+| `0x000db0d1_96a90b9a` | `0x800d2733_8d43c3cf` | `0x0012fc39_ebdadea2` | `0x0012fc39_ebdadea3` |
+| `0x000e6d42_94dc0a1e` | `0x000b85f9_2b97b424` | `0x001276c9_661f63f5` | `0x001276c9_661f63f6` |
+| `0x80715ef1_f174dc02` | `0x000c253f_97a162e2` | `0x00715f35_e084bb17` | `0x00715f35_e084bb16` |
+| `0x80000000_091e440e` | `0x0009982a_438c0f4b` | `0x0009982a_438c0f50` | `0x0009982a_438c0f4f` |
+
+On those lanes the stale `t1` is the leading part of the unscaled `a`, about `2^-1022` times the
+scaled `a`, so `t2 = a-t1` is nearly all of `a`, and the sums of lines 99 and 108 round at other
+places than they would with the scaled words. How far either result is from the exact value is
+not measured here; that they are different doubles is the claim. Of 1,048,576 pairs of
+`HypotTest.subnormalPairs` (seed 42), 914,446 took the `2^1022` path and 42,876 differ (33,515 of the form `w > b`, 9,361 of `w <= b`), counted by a scratch
+program over `HypotTest.cHypot`, not committed. So the port keeps the words apart from the values
+and reads them stale, as the C does.
+
+**Test (scalar).** `HypotTest.staleWordWitnesses` asserts the four rows through `cHypot`, e_hypot.c
+in scalar Java checked against `StrictMath.hypot` (`scalarTranscriptionIsStrictMath`, in every JIT
+mode), and that each takes the `2^1022` path; it fails if the refreshed words gave the C's bits
+there. `theInputsSeeAChangedTranscription` requires the refreshed variant to differ on the gate's
+inputs. **Vector tie.** `HypotTest.staleWordWitnessesInEveryLane` puts each witness at every lane
+of a vector beside lanes of the other ways out of the C, at every width the host has, unmasked and
+masked; `theStaleWordsAreRead` requires the port's lanes to equal `cHypot` as written on 65,536
+subnormal-`b` pairs per width, and the refreshed variant to differ from `StrictMath` on some of
+them. **Planted fault.** `hypot.refreshedWords` (`Hypot.REFRESHED_WORDS`) reads the words again
+from the scaled values after line 84; `HypotTest.faultCatchers` requires the port to fail on the
+fault run's inputs with it planted, at every width.
+
+**Encoding.** None: the results are Java's evaluation of the transcription, and the count is a
+program's, so nothing here is machine-checked in `proofs/`.
+
+**What it rests on.** (R4) for `+ - * /` and `sqrt` (the operator's, tested by `SqrtTest`), L13,
+and the contract of a function of two arguments for the lane of two NaNs, which the finish takes.
+
+**Checks.** `HypotTest.constantsAreTheSourcesBits` (the words and `2^1022`), and `HypotTest`:
+`VFdlibm.hypot` against `StrictMath.hypot` by `PairBits.matches` at every width and
+`SPECIES_MAX`, unmasked and masked, on every pair of the special values (the words the C tests
+with low words 0, 1 and all ones, both signs, the zeros, the infinities, NaNs of both signs and
+several payloads); Pythagorean triples across the scalings; the fuzz's draws at the C's words and
+at the gaps of line 63; pairs at each scaling's word with the other within line 63's gap; a
+subnormal `b` beside `a` from subnormal up past the ratio; equal high words with either low word
+larger; `a` near `2b`, either side of `w > b`; NaNs beside NaNs, infinities and finite values;
+sampled bit patterns, Varka's baseline range and every exponent; the 8,400 pairs of
+`hard-cases/hypot.txt`; and every subset of a vector's lanes rare beside lanes of every way out
+of the C. The planted faults are `hypot.dropEarlyReturn` (line 63's return dropped),
+`hypot.refreshedWords` (L16), `hypot.dropT2` (line 99's `t2*(a+t1)` dropped) and
+`hypot.swapByValue` (line 60's swap by `|y| > |x|`, not by the words).
