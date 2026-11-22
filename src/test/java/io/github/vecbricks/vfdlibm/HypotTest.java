@@ -559,7 +559,7 @@ class HypotTest {
     long first = PairBits.candidate(MAGNITUDES, xb);
     long second = PairBits.candidate(MAGNITUDES, yb);
     if (first == second) {
-      into[2]++;
+      into[2] += result == first ? 1 : 0;
       return;
     }
     boolean xLarger = (int) ((yb & Long.MAX_VALUE) >>> 32) <= (int) ((xb & Long.MAX_VALUE) >>> 32);
@@ -674,8 +674,8 @@ class HypotTest {
   }
 
   /**
-   * How long a child JVM may take. At the suite's size the {@code -Xint} child, the slowest, took
-   * 2.8 s on the laptop under a load of 26, and the compiled ones under 1 s.
+   * How long a child JVM may take: a generous bound for a run of a few seconds, the {@code -Xint}
+   * one included.
    */
   static final int CHILD_SECONDS = 60;
 
@@ -699,7 +699,6 @@ class HypotTest {
     ProcessBuilder builder = new ProcessBuilder(command).redirectErrorStream(true);
     builder.environment().keySet().removeAll(
         List.of("JAVA_TOOL_OPTIONS", "JDK_JAVA_OPTIONS", "_JAVA_OPTIONS"));
-    long start = System.nanoTime();
     Process process = builder.start();
     try {
       CompletableFuture<Void> drained = CompletableFuture.runAsync(() -> {
@@ -719,8 +718,7 @@ class HypotTest {
       process.destroyForcibly();
     }
     String text = bytes.toString(StandardCharsets.UTF_8);
-    System.out.printf("hypot gate, %s, %.1f s:%n%s%n", mode,
-        (System.nanoTime() - start) / 1e9, text);
+    System.out.println("hypot gate, " + mode + ":\n" + text);
     assertEquals(0, process.exitValue(), mode + ":\n" + text);
     return text;
   }
@@ -753,7 +751,8 @@ class HypotTest {
    * mode's {@code StrictMath} returned, and that is not asserted, since it is not specified.
    *
    * <p>The children do not depend on the vector width, so they run only where the test JVM has no
-   * {@code -XX:} option, which is where {@code vfdlibm.test.jvmArgs} is empty: in ci.yml the rows
+   * width option ({@code -XX:MaxVectorSize}, {@code -XX:UseAVX}), which in ci.yml and by default
+   * is where {@code vfdlibm.test.jvmArgs} is empty: in ci.yml the rows
    * "x86 128+256 bits, 512 on AVX-512 runners" and "Arm 128 bits" (once per architecture), and a
    * plain {@code mvn -B verify}, {@code dev/release.sh}'s included. The other rows skip them.
    */
@@ -761,7 +760,8 @@ class HypotTest {
   @EnumSource(JitMode.class)
   void scalarTranscriptionIsStrictMathInEveryJitMode(JitMode mode) throws Exception {
     List<String> own = ManagementFactory.getRuntimeMXBean().getInputArguments();
-    assumeTrue(own.stream().noneMatch(a -> a.startsWith("-XX:")),
+    assumeTrue(own.stream().noneMatch(
+        a -> a.startsWith("-XX:MaxVectorSize=") || a.startsWith("-XX:UseAVX=")),
         "a row with width options: " + own);
     String text = runInJvm(mode, DRAWS >> 2, 3);
     String jvm = text.lines().filter(l -> l.startsWith("jvm: ")).findFirst().orElseThrow();
