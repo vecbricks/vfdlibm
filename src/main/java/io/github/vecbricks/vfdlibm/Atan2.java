@@ -62,10 +62,11 @@ import jdk.incubator.vector.VectorSpecies;
  * finish arm) does not pick between the two (the issue's corrected comment,
  * https://github.com/vecbricks/vfdlibm/issues/30#issuecomment-7085437272). On {@code
  * bench/results/atan2-xeon8573c-2026-11-22.txt} and {@code atan2-epyc7763-2026-11-22.txt}, one
- * run each, the guarded arm reads lower on the slower input at every species on the EPYC 7763
- * and at 256 bits on the Xeon 8573C; at 512 bits on the 8573C the rows are a tie, the blended arm
- * lower by 3.3% at the preferred species and 1.3% at {@code SPECIES_MAX}, inside the run's
- * spread, which waits for the 8573C's second run.
+ * run each, the guarded arm reads lower on the slower input at every species on the EPYC 7763;
+ * on the Xeon 8573C the two arms are a tie at every species (guarded lower by 1.3% at 256 bits,
+ * blended lower by 3.3% at the preferred species and 1.3% at {@code SPECIES_MAX}, all inside
+ * 1.3x), which waits for the 8573C's second run. Guarded is the default at every species by the
+ * owner's decision of 22 November.
  */
 final class Atan2 {
 
