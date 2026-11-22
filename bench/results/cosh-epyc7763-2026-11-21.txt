@@ -11,13 +11,14 @@
 # taken from JMH's "Result" blocks in the raw output.
 #
 # The code: Sinh.java and Cosh.java are the same at 5d6eb14 and 03ea082, the commits of the Xeon's
-# and the EPYC's runs, and so is the code they call, Expm1.expm1Core (sinh) and Exp.expCore
-# (cosh): between the commits Exp.java, Expm1.java and the benchmarks' Javadoc changed in comments
-# only, and the rest of the diff (Asin, Log, Log1p, Log10, VFdlibm, ExpKindsBench) is not called
-# by these benchmarks, so the two hosts time one code. Both commits hold 5a452fa (#100), so the
-# *Max rows time the finish that writes out its first eight lanes with constant indices. The JMH
-# options include -foe true, so a row that failed would have failed the run; every row of
-# CoshBenchmark has a Result block, which bench/record.py requires.
+# and the EPYC's runs, and so is the code they load, Expm1 (expm1Core and its constants, which
+# sinh and cosh use) and Exp (expCore, which cosh uses): between the commits Exp.java, Expm1.java
+# and the benchmarks' Javadoc changed in comments only, and the rest of the diff (Asin, Log,
+# Log1p, Log10, VFdlibm, ExpKindsBench) is not called by these benchmarks, so the two hosts time
+# one code. Both commits hold 5a452fa (#100), so the *Max rows time the finish that writes out its
+# first eight lanes with constant indices. The JMH options include -foe true, so a row that failed
+# would have failed the run; every row of CoshBenchmark has a Result block, which bench/record.py
+# requires.
 #
 # The run held 3 classes; this file has CoshBenchmark's blocks and rows of it.
 #
@@ -62,17 +63,18 @@
 #   slicePreferred 6,412 / 7,963; scalarStrictMath 14,040 / 13,822.
 # - Slice over finish, by minimums (common / mixed): at 256 bits 1.33 / 1.30; at the preferred
 #   species 1.35 / 1.29; at SPECIES_MAX 1.34 / 1.33. The finish arm has the lower minimum on all
-#   six rows, but four (1.33, 1.35, 1.34, 1.33) are only just past 1.3x and wait for a re-run
-#   before a direction is written down, and the other two (1.30 and 1.29) are on it and read no
-#   direction. No arm is decided here: which arm VFdlibm.cosh keeps is issue #30's, and the
-#   share of small lanes, which is all the arms differ in, is in the CoshKindsBench file.
+#   six rows, but four (1.33 to 1.35) are past 1.3x and wait for a re-run before a direction is
+#   written down, and the other two (1.30 and 1.29) are on it and read no direction. No arm is
+#   decided here: which arm VFdlibm.cosh keeps is issue #30's, and the share of small lanes,
+#   which is all the arms differ in, is in the CoshKindsBench file.
 # - Scalar StrictMath over each vector arm, by minimums (common / mixed): finish256 2.92 / 2.24;
 #   finishMax 2.89 / 2.24; finishPreferred 2.95 / 2.25; slice256 2.19 / 1.72; sliceMax 2.16 /
 #   1.69; slicePreferred 2.19 / 1.74. All are outside 1.3x, the vector arm lower.
 # - The 256-bit, preferred and Max rows are one width here, and read within 1.03 of each other
 #   for each arm on both inputs.
 # - Mixed over common data, each arm's minimum: finish 1.29 (256 bits), 1.27 (Max), 1.29
-#   (preferred); slice 1.25, 1.26, 1.24; scalar loop 0.98.
+#   (preferred); slice 1.25, 1.26, 1.24; scalar loop 0.98. These are near 1.3x for finish and
+#   want a re-run before they are quoted.
 # - No row's own maximum is more than 10% above its minimum (the 512-bit rows apart; the widest
 #   is slice256 mixed, 8,029 to 8,239, 2.6%). One run on one draw of the host.
 #
