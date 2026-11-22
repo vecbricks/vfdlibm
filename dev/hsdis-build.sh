@@ -27,7 +27,7 @@
 # capstone.h says 5 (apt install libcapstone-dev, Ubuntu 25.04 and later), and the build takes gcc
 # only; 6 renamed the Arm architecture this script names. Otherwise, or with --capstone-source,
 # Capstone's pinned release is fetched, checked against its SHA-256 and built with cmake under
-# target/hsdis/capstone, for x86 and Arm only, and linked in statically. Version 4 will not do:
+# target/hsdis/.hsdis-build, for x86 and Arm only, and linked in statically. Version 4 will not do:
 # Ubuntu 24.04's 4.0.2, which GitHub's ubuntu-latest has, printed an AVX-512 body of exp at 256 bits
 # with ".byte 0x62" and garbage after it, a "call" among the garbage (SKILLS.md, "The assembly
 # check").
@@ -117,6 +117,9 @@ command -v gcc > /dev/null || { echo "hsdis-build: gcc not found" >&2; exit 1; }
 [ -f "$java_home/include/jni.h" ] \
   || { echo "hsdis-build: no jni.h under $java_home/include" >&2; exit 1; }
 mkdir -p "$out"
+# Sources and builds go to a directory of the script's own, the only one it deletes, so --out can
+# name any directory.
+work="$out/.hsdis-build"
 
 # The system's Capstone if it is 5, else the pinned release built here.
 system_major=$(sed -n 's/^#define CS_API_MAJOR \([0-9]*\).*/\1/p' \
@@ -128,7 +131,7 @@ if [ -z "$capstone_source" ] && [ "${system_major:-0}" = 5 ]; then
 else
   echo "building Capstone $capstone (the system's: ${system_major:-none})"
   command -v cmake > /dev/null || { echo "hsdis-build: cmake not found" >&2; exit 1; }
-  cs="$out/capstone"
+  cs="$work/capstone"
   rm -rf "$cs"
   mkdir -p "$cs"
   curl -fsSL --retry 3 -o "$cs/capstone.tar.gz" \
@@ -147,7 +150,7 @@ else
   cs_link=("$cs/build/libcapstone.a")
 fi
 
-hsdis="$out/src"
+hsdis="$work/src"
 rm -rf "$hsdis"
 mkdir -p "$hsdis/capstone"
 if [ -n "$src" ]; then

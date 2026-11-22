@@ -120,6 +120,21 @@ final class AsmCheck {
         + " (build it with dev/hsdis-build.sh, or set " + HSDIS_DIR_ENV + ")");
   }
 
+  /**
+   * An hsdis in the running JDK's own library directories, or null: HotSpot loads one there before
+   * it looks on {@code LD_LIBRARY_PATH}, so the probe would read that one, not the one found.
+   */
+  static String hsdisInJdk() {
+    Path lib = Path.of(System.getProperty("java.home"), "lib");
+    for (Path dir : List.of(lib, lib.resolve("server"))) {
+      Path file = dir.resolve(libraryName());
+      if (Files.exists(file)) {
+        return file.toString();
+      }
+    }
+    return null;
+  }
+
   /** Whether {@link #REQUIRED_ENV} turns a skip into a failure. */
   static boolean required() {
     return "true".equals(System.getenv(REQUIRED_ENV));

@@ -74,7 +74,8 @@ jobs:
       # hsdis, which dev/hsdis-build.sh builds into target/hsdis from two pinned files of the JDK's
       # source and a pinned Capstone 5; it is a tool, never committed or shipped. The runner's
       # own Capstone, 4.0.2, decodes no AVX-512 body, so the script builds its own. The build is
-      # cached on the script, which pins every source, so a run fetches nothing once it is; a
+      # cached on the script, which pins every source, and the runner image, so a run fetches
+      # nothing once it is; a
       # cached one is still checked to load, and rebuilt if it does not. On the x86 rows
       # VFDLIBM_ASM_REQUIRED turns the check's skip for a missing or unloaded hsdis into a
       # failure, so a green row has read the code. The Arm row skips it: its rules are x86's.
@@ -84,7 +85,7 @@ jobs:
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: target/hsdis
-          key: hsdis-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('dev/hsdis-build.sh') }}
+          key: hsdis-${{ runner.os }}-${{ runner.arch }}-${{ env.ImageVersion }}-${{ hashFiles('dev/hsdis-build.sh') }}
       - name: Build hsdis for the assembly check
         if: matrix.asm
         env:

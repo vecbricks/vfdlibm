@@ -267,18 +267,19 @@ standard `C2-compiled nmethod` of each, from its entry point to its stubs, in In
 - **hsdis needs Capstone 5.** `dev/hsdis-build.sh` compiles the JDK's
   `src/utils/hsdis/capstone/hsdis-capstone.c` and `hsdis.h` (jdk-25-ga, fetched alone, SHA-256
   pinned, compiled and never read) against Capstone. Ubuntu 24.04's Capstone 4.0.2, GitHub's
-  ubuntu-latest, printed exp's 256-bit AVX-512 bodies with 19 to 43 undecoded `.byte` lines
-  each, an EVEX prefix it did not know followed by garbage with a `call` in it (read in an
-  ubuntu:24.04 container on the laptop). So the script uses the system's Capstone only at 5 and
-  otherwise builds the pinned 5.0.7 from source with cmake; in that container the census then
-  matched the laptop's to the instruction; and the check fails on
-  any `.byte` or `(bad)`.
+  ubuntu-latest, printed exp's 256-bit AVX-512 bodies with 19 to 43 undecoded `.byte` lines each, an
+  EVEX prefix it did not know followed by garbage with a `call` in it (read in an ubuntu:24.04
+  container on the laptop). So the script uses the system's Capstone only at 5 and otherwise builds
+  the pinned 5.0.7 from source with cmake; in that container the census then matched the laptop's to
+  the instruction; and the check fails on any `.byte` or `(bad)`.
 - **Skips say which.** Not Linux on x86-64; hsdis not found (the script's `target/hsdis`, which
   `mvn clean` deletes, or `$VFDLIBM_HSDIS_DIR`; a binutils hsdis such as `bench/asm`'s prints another
   format, which the rules were not written for); or found but not loaded, decided by the output
   holding no `[Disassembly]` instruction line, not by HotSpot's `Loading hsdis library failed`,
-  which it printed both with no library and with a file that was none. CI's x86 rows build hsdis and
-  set `VFDLIBM_ASM_REQUIRED=true`, which makes the last two fail instead; the Arm row skips.
+  which it printed both with no library and with a file that was none. An hsdis in the JDK's own
+  `lib` would be loaded first, so the check skips (fails, required) when one is there. CI's x86 rows
+  build hsdis and set `VFDLIBM_ASM_REQUIRED=true`, which makes the last two fail instead; the Arm
+  row skips.
 
 **The census of exp's arms, 22 November 2026, on the laptop** (AMD Ryzen AI 9 HX PRO 370, JDK
 25.0.5.1, hsdis on Capstone 5.0.7). Not a headline and no timing: counts of instructions only, one

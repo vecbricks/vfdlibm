@@ -101,6 +101,11 @@ class ExpAsmTest {
     if (!hsdis.found()) {
       skipOrFail(hsdis.why());
     }
+    String inJdk = AsmCheck.hsdisInJdk();
+    if (inJdk != null) {
+      skipOrFail("the JDK has an hsdis of its own, " + inJdk + ", which HotSpot loads before "
+          + hsdis.dir() + "'s; the rules read Capstone's output only");
+    }
     String output = AsmCheck.runProbe(ExpAsmProbe.class, hsdis.dir(),
         List.of("-Dvfdlibm.asm.width=" + width.name()));
     if (!AsmCheck.disassembled(output)) {
