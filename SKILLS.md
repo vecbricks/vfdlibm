@@ -1332,14 +1332,15 @@ blend and 10 to 23 instructions. At 128 bits the bodies are 8 to 16 times longer
   of subnormal-`b` pairs, 16,550 at the scalings, 24,077 of equal words, 0 of the special pairs.
   `hypot.dropT2`: 2,096,152 of `[-10, 10)`, 3,096,883 of subnormal-`b` pairs. `hypot.dropY2`
   (line 108's `t1*y2` dropped): 2,098,152 of `[-10, 10)`, 2,004,618 of equal words, 2,200,389 of
-  `a` near `2b`. The fault run's inputs hold the special pairs and the subnormal-`b` pairs.
-- **A swap by value is not a fault anyone can see.** Line 60 swapped by `|y| > |x|` instead of by
-  the high words was a candidate fault. In a review's scalar model it changed no finite result (0
-  of 9,216 finite special pairs and of 20,000,000 equal-word pairs), and in the vector it was caught
-  only because a NaN `y` beside a finite `x` then skips the swap, so `ha` stays finite and the rare
-  mask misses the lane: a fault of the finish, not of the swap. It was replaced by `dropY2`. That
-  the C's word compare and a value compare agree on finite lanes is a reading of those draws, not
-  a proof; the port keeps the C's compare.
+  `a` near `2b`. The fault run's inputs (`HypotTest.faultRunInputs`) hold the special pairs and
+  draws of the scalings, subnormal `b`, equal words, `a` near `2b` and the dense families.
+- **A swap by value was a fault of the finish, not of the swap.** Line 60 swapped by `|y| > |x|`
+  instead of by the high words was a candidate, sized as above at 0 of 4,194,304 equal-word draws,
+  1,995 of sampled bits and 2,316 of the special pairs. A review found that some of those hits
+  came from a NaN `y` beside a finite `x`: a NaN compares false, so nothing swaps, `ha` stays
+  finite and the rare mask misses the lane. So the fault tested the finish's mask more than the
+  swap, and was replaced by `dropY2`. Whether a finite lane shows it (two zero high words, where
+  the value swap picks the other form) was not measured; the port keeps the C's word compare.
 - **Hard cases, computed.** No published table holds hypot's; `dev/hypot-hard-cases.py` derives
   8,400 pairs with exact integer arithmetic (near-midpoint families of both forms of the medium
   path, exact triples with nearly equal legs, scaled into each range), and

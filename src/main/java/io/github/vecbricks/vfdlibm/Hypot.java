@@ -41,10 +41,9 @@ import jdk.incubator.vector.VectorSpecies;
  * {@code 2^-600} through their words (lines 65-76), and where {@code b < 2^-500} by {@code 2^600}
  * through their words (lines 86-90), or, where {@code b} is subnormal or zero, a zero {@code b}
  * returns {@code a} (line 79) and any other is scaled by {@code 2^1022} through a multiplication
- * (lines 80-84); then {@code
- * sqrt(t1*t1-(b*(-b)-t2*(a+t1)))} where {@code w = a-b > b} and {@code
- * sqrt(t1*y1-(w*(-w)-(t1*y2+t2*b)))} otherwise, over operands split at the high word (lines
- * 94-109), times {@code 2^k} where {@code k != 0} (lines 110-114).
+ * (lines 80-84); then {@code sqrt(t1*t1-(b*(-b)-t2*(a+t1)))} where {@code w = a-b > b} and
+ * {@code sqrt(t1*y1-(w*(-w)-(t1*y2+t2*b)))} otherwise, over operands split at the high word
+ * (lines 94-109), times {@code 2^k} where {@code k != 0} (lines 110-114).
  *
  * <p>The words stay apart from the values, as in the C. The 2^1022 scaling multiplies {@code a}
  * and {@code b} and leaves {@code ha} and {@code hb} as they were, and lines 97, 103 and 106 read
