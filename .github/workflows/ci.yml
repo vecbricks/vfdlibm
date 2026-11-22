@@ -7,6 +7,14 @@ on:
   # release.yml calls these jobs as its gates, since a tag does not start this workflow.
   workflow_call:
 
+# A push to a pull request cancels that pull request's run still going, whose head is no longer
+# the one to merge. Any other run is a group of its own (its run id), so a run on main and the
+# jobs release.yml calls always finish. When release.yml calls this workflow, github.workflow is
+# the caller's name, so its group never meets this workflow's own run of the same pull request.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   build:
     name: build (${{ matrix.name }})
