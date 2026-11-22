@@ -412,7 +412,7 @@ stops the next port re-trying a settled question.
   after the EPYC run, which is why that file has none. `VFdlibm.log` keeps the finish arm by the
   rules issue #30 set (a tie within 1.3x goes to the finish arm), provisionally until a host run
   revises it: a second Xeon run or a pair. The 8573C's mixed rows at 512 bits and the preferred
-  species read the blend lower by 1.29 to 1.30x, on rule 2's line, and wait for that second run
+  species read the blend lower by 1.29 to 1.30x, on the 1.3x line, and wait for that second run
   like the rest. Measure the finish only once it allocates nothing.
 
 - **Int words can live in long lanes, with an exact dk.** log first kept its words in int lanes
@@ -477,7 +477,8 @@ stops the next port re-trying a settled question.
   times it as of a1db6df; neither times it after the finish's first eight lanes written out with
   constant indices (issue #37). `VFdlibm.log1p` uses the guarded arm provisionally: by the rules
   issue #30 set, a tie within 1.3x goes to the finish arm, so rule 1 would move log1p to it if
-  its arms are still within 1.3x on the Xeon 8573C's second run; a first run of the other AVX-512
+  its 256-bit, 512-bit and preferred rows are still within 1.3x on the Xeon 8573C's second run; a
+  first run of the other AVX-512
   hosts or a pair may revise
   the choice. A port whose rare paths are
   cheap in vector form should measure this shape beside the other two.
@@ -619,7 +620,8 @@ stops the next port re-trying a settled question.
   guarded lowest on the preferred rows of both kinds of data; the file of 21 November has finish
   lowest there on common data. `VFdlibm.expm1` keeps the guarded arm provisionally: by the rules
   issue #30 set, a tie within 1.3x goes to the finish arm, so rule 1 would move expm1 to it if
-  its arms are still within 1.3x on the Xeon 8573C's second run; a first run of the other AVX-512
+  its 256-bit, 512-bit and preferred rows are still within 1.3x on the Xeon 8573C's second run; a
+  first run of the other AVX-512
   hosts or a pair may revise
   the choice. Both files time `Expm1`
   before its core entry (below) and before the finish's first eight lanes written out with
@@ -1161,7 +1163,8 @@ stops the next port re-trying a settled question.
   blends in every vector, guarded behind a test), so rule 1 of issue #30 does not pick between
   them ([the issue's corrected
   comment](https://github.com/vecbricks/vfdlibm/issues/30#issuecomment-7085437272)).
-  The guarded arm stays the default at every species: on those files it reads lower on the
+  The guarded arm stays the default at every species, by the owner's decision of 22 November. On
+  those files it reads lower on the
   slower input at every species on the EPYC 7763 and at 256 bits on the 8573C, and at 512 bits
   on the 8573C the rows are a tie (blended lower by 3.3% at the preferred species and 1.3% at
   `SPECIES_MAX`, inside the run's spread), which waits for the 8573C's second run.

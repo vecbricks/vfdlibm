@@ -94,7 +94,8 @@ import jdk.incubator.vector.VectorSpecies;
  * arm over the finish at 1.02 on common data and 1.07 to 1.08 on mixed data, against 1.13 to
  * 1.15 and 1.07 to 1.08 in the 20 November files, all within 1.3x, and no pair or re-run backs
  * the 1.02. The rules for a tie within 1.3x and for hosts that disagree are set (issue #30): a
- * tie goes to the finish arm, so rule 1 would move expm1 to the finish arm if its arms are still
+ * tie goes to the finish arm, so rule 1 would move expm1 to the finish arm if its 256-bit, 512-bit
+ * and preferred rows are still
  * within 1.3x on the Xeon 8573C's second run; until then the guarded arm stays, provisionally, and
  * a first run of the
  * other AVX-512 hosts ({@code HARDWARE.md}) or a pair may revise the choice; the other two arms

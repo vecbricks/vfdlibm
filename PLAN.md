@@ -50,7 +50,8 @@ ranges through one division on blended operands, the lanes from `2^66` up finish
 so is `acos` (`VFdlibm.acos`, from `e_acos.c`, built as asin is), and so is `atan2`
 (`VFdlibm.atan2`, from `e_atan2.c`, the first function of two arguments: the special lanes blended
 over the general path, which calls `atan`'s core, no lane finished per lane, and two arms, the
-blended one and the guarded one `VFdlibm` calls at every species, section 5 below says why).
+blended one and the guarded one `VFdlibm` calls at every species, by the owner's decision of 22
+November; section 5 below gives the case).
 `log`, `log10` and `log1p` are done too (`VFdlibm.log`, from
 `e_log.c`, `VFdlibm.log10`, from `e_log10.c`, which computes through log's common path, and
 `VFdlibm.log1p`, from `s_log1p.c`), and so is `expm1` (`VFdlibm.expm1`, from `s_expm1.c`, whose
@@ -144,11 +145,13 @@ five are a later, optional set; the large-argument reduction of the trigonometri
   runs one arm at every species). Every default stays provisional until a host run revises it (a
   second run of the 8573C, a first of the other AVX-512 hosts). Meanwhile `VFdlibm` calls the
   finish arm of `exp`, `log` and `log10`; the guarded arm of `expm1` and `log1p`, which
-  the rule would move to the finish arm if their arms are still within 1.3x on the 8573C's
+  the rule would move to the finish arm if their 256-bit, 512-bit and preferred rows are still
+  within 1.3x on the 8573C's
   second run (issue #30); the slice
   arm of `cosh`, provisionally, as the rule's exception
   (`bench/results/cosh-xeon8573c-2026-11-21.txt` and `cosh-epyc7763-2026-11-21.txt` read the
-  finish arm lower on every row by ratios near 1.3x or inside it, and give no direction); and the
+  finish arm lower on every row by ratios near 1.3x or inside it, and give no direction; it waits
+  for a second run of the EPYC 7763 too); and the
   guarded arm of `atan2` at every species. atan2 has no finish arm (both arms compute the special
   lanes in the vector; blended runs their blends in every vector, guarded behind a test), so rule
   1 does not pick between them ([issue #30's corrected
