@@ -1,13 +1,15 @@
 # vfdlibm
 
 fdlibm on the Java Vector API: math functions over `DoubleVector` lanes whose every lane is
-bit-identical to `java.lang.StrictMath`, but for a two-NaN lane of `atan2` (unreleased).
+bit-identical to `java.lang.StrictMath`, but for a two-NaN lane of `atan2`.
 
-**Status: 0.x.** `exp`, `expm1`, `log`, `log1p` and `log10` are ported and released:
-`io.github.vecbricks:vfdlibm` 0.1.0 is on Maven Central. Functions are added one at a time, as
+**Status: 0.x.** `exp`, `expm1`, `log`, `log1p`, `log10`, `sinh`, `cosh`, `asin`, `atan`, `acos`
+and `atan2` are ported and released in 0.2.0 (`exp`, `expm1`, `log`, `log1p` and `log10` in
+0.1.0), as `io.github.vecbricks:vfdlibm`. Functions are added one at a time, as
 [Varka](https://github.com/vecbricks/varka) needs them. A minor version may break the API and a
 patch may not; adding a function is a patch. Bit identity with `StrictMath` is the contract, and
-no version changes it (`CHANGELOG.md`), and no released function has a two-NaN lane to except.
+no version changes it (`CHANGELOG.md`); the one lane it excepts is a lane of two NaNs with
+different bits in `atan2`.
 
 ## Use
 
@@ -119,9 +121,9 @@ mvn -q clean compile org.apache.maven.plugins:maven-dependency-plugin:3.7.0:buil
 java --module-path "target/classes:$(cat cp.txt)" -m example/example.Main
 ```
 
-Each function takes a vector of any species of 128 bits or more. Released in 0.1.0: `exp`,
-`expm1`, `log`, `log10` and `log1p`. On `main`, unreleased: `sinh`, `cosh`, `asin`, `atan`, `acos`
-and `atan2(y, x)`, which takes two vectors. The system property `vfdlibm.fault` plants a
+Each function takes a vector of any species of 128 bits or more. Released in 0.2.0: `exp`,
+`expm1`, `log`, `log10`, `log1p`, `sinh`, `cosh`, `asin`, `atan`, `acos` and `atan2(y, x)`, which
+takes two vectors. The system property `vfdlibm.fault` plants a
 fault, for this project's tests only, and works in the shipped jar too: never set it, including
 through `JAVA_TOOL_OPTIONS`; a JVM that has it set prints a warning to `System.err` once. The
 property and the fault names are for this
@@ -143,7 +145,7 @@ Arm.
 
 ## Supported JDKs
 
-0.1.x supports **JDK 25 only**. The Vector API is incubating, and its API and C2's lowering of
+0.2.x supports **JDK 25 only**. The Vector API is incubating, and its API and C2's lowering of
 it move between JDK releases, so what a newer JDK does with these functions has not been
 measured here. The contract, bit identity with `StrictMath`, is tested on JDK 25 and on no
 other: every CI row, the nightly sweep and the benchmarks run Zulu 25. The example above is run

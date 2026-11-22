@@ -11,6 +11,8 @@ two NaNs with different bits in a function of two arguments (`AGENTS.md`, "Relea
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-11-22
+
 ### Added
 
 - `VFdlibm.sinh`, in the two forms `sinh(x)` and `sinh(x, live)`, over `DoubleVector` lanes of any
@@ -67,5 +69,6 @@ two NaNs with different bits in a function of two arguments (`AGENTS.md`, "Relea
   module `io.github.vecbricks.vfdlibm`. A client needs the incubating Vector API module
   (`--add-modules jdk.incubator.vector`) at compile time and at run time.
 
-[Unreleased]: https://github.com/vecbricks/vfdlibm/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/vecbricks/vfdlibm/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/vecbricks/vfdlibm/releases/tag/v0.2.0
 [0.1.0]: https://github.com/vecbricks/vfdlibm/releases/tag/v0.1.0
