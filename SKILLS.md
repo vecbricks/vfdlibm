@@ -1164,11 +1164,8 @@ stops the next port re-trying a settled question.
   blends in every vector, guarded behind a test), so rule 1 of issue #30 does not pick between
   them ([the issue's corrected
   comment](https://github.com/vecbricks/vfdlibm/issues/30#issuecomment-7085437272)).
-  The guarded arm stays the default at every species, by the owner's decision of 22 November. On
-  those files it reads lower on the slower input at every species on the EPYC 7763; on the 8573C
-  the two arms are a tie at every species (guarded lower by 1.3% at 256 bits, blended lower by
-  3.3% at the preferred species and 1.3% at `SPECIES_MAX`, all inside 1.3x), which waits for the
-  8573C's second run.
+  So guarded stays the default at every species by the owner's decision of 22 November until a
+  re-run of each host.
 - **A lane the core must not see.** A NaN, an infinity or a huge `t` in a lane the special blends
   overwrite would send the vector to atan's per-lane finish. The mask `t < 2^66` keeps them out
   (a NaN compares false), and a vector with no special lane never reaches the finish.

@@ -141,29 +141,22 @@ five are a later, optional set; the large-argument reduction of the trigonometri
   Which arm each function keeps follows the two rules issue #30 set on 21 November 2026: a tie
   within 1.3x on every host that has a file goes to the finish arm, except for `cosh`, whose
   per-lane set is not rare, so a host run decides its arm; and where hosts disagree, each species
-  keeps the arm its own rows choose by that rule. The `*Max` rows of the files committed so far
-  (`exp`, `expm1`, `log`, `log10` and `log1p`, of 20 and 21 November) time the finish that boxed at
-  `SPECIES_MAX` before issue #37, so they are left out of both rules; a new run's `*Max` rows time
-  today's finish. On the other rows no function needs rule 2 yet, so `VFdlibm` runs one arm at every
-  species; the nearest is `log`, whose 8573C mixed rows at 512 bits and the preferred species read
-  the blend lower by 1.29 to 1.30x, on the 1.3x line. Every default stays provisional until a host
-  run revises it (a second run of the 8573C, a first of the other AVX-512 hosts). Meanwhile
-  `VFdlibm` calls the finish arm of `exp`, `log` and `log10`; the guarded arm of `expm1` and
-  `log1p`, which rule 1 would move to the finish arm at the 8573C's second run unless the guarded
-  arm wins by more than 1.3x there (issue #30); the slice
-  arm of `cosh`, provisionally, as the rule's exception
-  (`bench/results/cosh-xeon8573c-2026-11-21.txt` and `cosh-epyc7763-2026-11-21.txt` read the
-  finish arm lower on every row by ratios near 1.3x or inside it, and give no direction; it waits
-  for a second run of the EPYC 7763 too); and the
-  guarded arm of `atan2` at every species. atan2 has no finish arm (both arms compute the special
-  lanes in the vector; blended runs their blends in every vector, guarded behind a test), so rule
-  1 does not pick between them ([issue #30's corrected
-  comment](https://github.com/vecbricks/vfdlibm/issues/30#issuecomment-7085437272)). On
-  `atan2-xeon8573c-2026-11-22.txt` and `atan2-epyc7763-2026-11-22.txt`, one run each, guarded
-  reads lower on the slower input at every species on the EPYC 7763; on the 8573C the two arms
-  are a tie at every species (guarded lower by 1.3% at 256 bits, blended lower by 3.3% at the
-  preferred species and 1.3% at `SPECIES_MAX`, all inside 1.3x), which waits for the 8573C's
-  second run. Guarded is the default at every species by the owner's decision of 22 November.
+  keeps the arm its own rows choose by that rule. The `*Max` rows of the host files of 3 to 21
+  November for `exp`, `expm1`, `log`, `log10` and `log1p` (`exp-onediv-xeon8573c-2026-11-03.txt` and
+  those of 20 and 21 November; `log1p-xeon8573c-2026-11-03.txt` and `expm1-xeon8573c-2026-11-04.txt`
+  have no `*Max` row) time the finish that boxed at `SPECIES_MAX` before issue #37, so they are left
+  out of both rules; a later run's `*Max` rows time today's finish. On the other rows no function
+  needs rule 2 yet, so `VFdlibm` runs one arm at every species. Every default stays provisional
+  until a host run revises it. Meanwhile `VFdlibm` calls the finish arm of `exp`, `log` and `log10`;
+  the guarded arm of `expm1` and `log1p`, by the owner's deferral of rule 1 until the 8573C's second
+  run (issue #30, 21 November); the slice arm of `cosh`, provisionally, as the rule's exception
+  (`bench/results/cosh-xeon8573c-2026-11-21.txt` and `cosh-epyc7763-2026-11-21.txt` read the finish
+  arm lower on every row by ratios near 1.3x or inside it, and give no direction); and the guarded
+  arm of `atan2`, which has no finish arm, so rule 1 does not pick between its two ([issue #30's
+  corrected comment](https://github.com/vecbricks/vfdlibm/issues/30#issuecomment-7085437272)).
+  Neither host's file gives the arms a direction (`atan2-xeon8573c-2026-11-22.txt`, inside 1.3x;
+  `atan2-epyc7763-2026-11-22.txt`, near 1.3x or inside it, one run), so guarded stays the default at
+  every species by the owner's decision of 22 November until a re-run of each host.
 
 ## 6. Rules
 
