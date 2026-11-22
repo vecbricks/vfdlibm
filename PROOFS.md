@@ -761,8 +761,8 @@ __HI(t) = W`. The tests of `k`, `k <= -2`, `k > 56`, `2 <= k < 20`, `k == 1`, `k
 
 **Proof.** For `2 <= k < 20`, `0x200000 >> k` is a positive int below `2^20`, so the arithmetic
 and the logical shift agree (JLS 15.19) and the difference lies in `(0x3fe00000, 0x3ff00000)`,
-inside 32 bits. For `20 <= k <= 56`, `0x3ff - k` lies in `[0x3c9, 0x3eb]` and its shift by 20 in
-`[0x3c900000, 0x3eb00000]`, below `2^31`, so no int overflows and the long is the int widened.
+inside 32 bits. For `20 <= k <= 56`, `0x3ff - k` lies in `[0x3c7, 0x3eb]` and its shift by 20 in
+`[0x3c700000, 0x3eb00000]`, below `2^31`, so no int overflows and the long is the int widened.
 `w << 32` keeps `w`'s low 32 bits as the high word and shifts the rest out, with zeros below, so
 the bits above `W` in `w` are irrelevant. `k` is an `int` widened, so each compare with an int
 constant has the int compare's answer. No IEEE property is used.
@@ -775,7 +775,9 @@ does not read that word, where they differ (H16 needed). **Vector tie.** Varka's
 raw bits, on 2^24 sampled inputs and the fixed vectors at each `k` form's edge.
 
 **Encoding.** None; the steps are integer ranges, checked exhaustively over every `k` the
-reduction gives, which L10 bounds by `|x| < 2^31 ln2` on the lanes kept.
+reduction gives on the lanes kept, `-56 <= k <= 1024` (`x <= o_threshold`, L10); the words are
+read only for `2 <= k <= 56`, so the range -1100 to 1100 covers every case. The test does not
+check H16 itself: that `Expm1`'s masks read each word only on its lanes is the code's text.
 
 ## log10 (`Log10.java`, from `e_log10.c`)
 
@@ -1392,6 +1394,3 @@ special beside lanes the core computes.
 `atan2.infOrderSwapped` (`y` infinite wins over `x` infinite), `atan2.dropPiLo`, `atan2.zeroSignOfX`
 (`x < 0` by value for `y = +-0`, so `-0.0` is positive), `atan2.diagonalInf` (`pi_o_4` in every
 quadrant) and `atan2.noSignFlip`.
-
-**Encoding.** None; the two steps are (R3), stated, as L1's `x - (+0) = x`, which
-`proofs/exp_zero_reduction.smt2` checks per binade for the nonzero case.
