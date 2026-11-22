@@ -12,9 +12,9 @@
 #   dev/nightly.sh sweep <function> <parts> <seed> [<species>...]
 #   dev/nightly.sh fuzz <function> <seconds> <seed> [<species>...]
 #
-# <function> is exp, expm1, log, log10, log1p, sinh, cosh, atan, asin or acos, or atan2 or hypot,
-# which take two arguments (NIGHTLY_ARGUMENT, below; hypot runs by hand, not in the night yet).
-# A sweep checks the high words of <parts>: comma-separated parts i/N of the 2^32, or stripe:s/S for the stripe Sweep.java's --stripe takes. A fuzz runs
+# <function> is exp, expm1, log, log10, log1p, sinh, cosh, atan, asin or acos, or atan2, which takes
+# two arguments (NIGHTLY_ARGUMENT, below). A sweep checks the high words of <parts>: comma-separated
+# parts i/N of the 2^32, or stripe:s/S for the stripe Sweep.java's --stripe takes. A fuzz runs
 # <seconds> at each species (Fuzz.java). <seed> is decimal or 0x hex. The species default to the
 # host's: 128, 256 and 512 bits up to the preferred species, and max (`Nightly species`), less the
 # one NIGHTLY_EXCEPT names (the nightly sweeps x86 at 128 bits, and Arm at max, by a separate
