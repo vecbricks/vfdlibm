@@ -1,0 +1,731 @@
+/*
+ * Licensed to the vecbricks contributors under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License. You may obtain a copy of the
+ * License at http://www.apache.org/licenses/LICENSE-2.0. Software distributed under the License
+ * is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either
+ * express or implied. See the License for the specific language governing permissions and
+ * limitations under the License.
+ *
+ * The method cHypot below transcribes fdlibm 5.3's e_hypot.c, which carries this notice:
+ *
+ * ====================================================
+ * Copyright (C) 1993 by Sun Microsystems, Inc. All rights reserved.
+ *
+ * Developed at SunSoft, a Sun Microsystems, Inc. business.
+ * Permission to use, copy, modify, and distribute this
+ * software is freely granted, provided that this notice
+ * is preserved.
+ * ====================================================
+ */
+package io.github.vecbricks.vfdlibm;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.UncheckedIOException;
+import java.lang.management.ManagementFactory;
+import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.SplittableRandom;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.TimeUnit;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
+
+/**
+ * The entry gate of the hypot port (issue 34): {@code e_hypot.c} in scalar Java, line by line,
+ * against {@code StrictMath.hypot} by {@link PairBits#matches} with hypot's declared candidates
+ * ({@link PairBits.Candidates#MAGNITUDES}), so raw bits on every lane but one of two NaNs with
+ * different bits. The inputs reach every return of the C and both sides of each of its tests: the
+ * ratio word {@code 0x3c00000} (2^60), the scalings at {@code 2^500}, {@code 2^-500} and the
+ * subnormal {@code b} (times 2^1022, with the words the C leaves stale), equal high words with
+ * either low word larger, {@code a} near {@code 2b}, the zeros, infinities beside NaNs, NaNs of
+ * every kind and sampled bits. The same check runs in a JVM of its own per JIT mode ({@link
+ * JitMode}), since which candidate a sum of two NaNs keeps varies with the tier.
+ */
+class HypotTest {
+
+  private static final PairBits.Candidates MAGNITUDES = PairBits.Candidates.MAGNITUDES;
+
+  // ---------------------------------------------------------------------------------------------
+  // The C in scalar Java
+  // ---------------------------------------------------------------------------------------------
+
+  /** The C as written, or with one change, to show that the inputs below see a change. */
+  enum Variant {
+    /** e_hypot.c line by line. */
+    AS_WRITTEN,
+    /** Lines 80-84 with {@code ha} and {@code hb} read again from the scaled {@code a}, {@code b}. */
+    REFRESHED_WORDS,
+    /** Line 63's early return of {@code a+b} dropped. */
+    NO_EARLY_RETURN
+  }
+
+  /** The way out of the C a lane took, counted by {@link #cHypot(double, double, Variant, long[])}. */
+  enum Path {
+    /** Line 63: the ratio exceeds 2^60. */
+    RATIO,
+    /** Lines 66-70: an infinity or a NaN. */
+    NON_FINITE,
+    /** Line 79: {@code b} is zero. */
+    ZERO_B,
+    /** Lines 73-75 then the medium path: scaled by 2^-600. */
+    SCALED_DOWN,
+    /** Lines 80-84 then the medium path: a subnormal {@code b}, times 2^1022. */
+    SUBNORMAL_B,
+    /** Lines 86-90 then the medium path: scaled by 2^600. */
+    SCALED_UP,
+    /** Lines 96-99: {@code w>b}. */
+    W_ABOVE_B,
+    /** Lines 101-108: {@code w<=b}. */
+    W_NOT_ABOVE_B,
+    /** Line 94 with equal high words and {@code b > a}: no swap, {@code w} negative. */
+    EQUAL_WORDS_B_LARGER
+  }
+
+  private static int hi(double d) {
+    return (int) (Double.doubleToRawLongBits(d) >>> 32);
+  }
+
+  private static int lo(double d) {
+    return (int) Double.doubleToRawLongBits(d);
+  }
+
+  /** {@code __HI(d) = word}: the high word replaced, the low word kept. */
+  private static double withHi(double d, int word) {
+    return Double.longBitsToDouble(
+        ((long) word << 32) | (Double.doubleToRawLongBits(d) & 0xffffffffL));
+  }
+
+  private static void took(long[] paths, Path path) {
+    if (paths != null) {
+      paths[path.ordinal()]++;
+    }
+  }
+
+  /** e_hypot.c in scalar Java, line by line. */
+  static double cHypot(double x, double y) {
+    return cHypot(x, y, Variant.AS_WRITTEN, null);
+  }
+
+  /**
+   * {@link #cHypot(double, double)} as {@code variant} says, counting into {@code paths} (by
+   * {@link Path#ordinal()}, when not null) the ways out the lane took. The line numbers are
+   * e_hypot.c's. The C's {@code sqrt} is {@code Math.sqrt}, the correctly rounded square root
+   * (PROOFS.md, R4); every radicand here is finite.
+   */
+  static double cHypot(double x, double y, Variant variant, long[] paths) {
+    double a;
+    double b;
+    double t1;
+    double t2;
+    double y1;
+    double y2;
+    double w;
+    int j;
+    int k;
+    int ha;
+    int hb;
+    ha = hi(x) & 0x7fffffff; // 58
+    hb = hi(y) & 0x7fffffff; // 59
+    if (hb > ha) { // 60
+      a = y;
+      b = x;
+      j = ha;
+      ha = hb;
+      hb = j;
+    } else {
+      a = x;
+      b = y;
+    }
+    a = withHi(a, ha); // 61
+    b = withHi(b, hb); // 62
+    if ((ha - hb) > 0x3c00000 && variant != Variant.NO_EARLY_RETURN) { // 63
+      took(paths, Path.RATIO);
+      return a + b;
+    }
+    k = 0; // 64
+    if (ha > 0x5f300000) { // 65
+      if (ha >= 0x7ff00000) { // 66
+        w = a + b; // 67
+        if (((ha & 0xfffff) | lo(a)) == 0) { // 68
+          w = a;
+        }
+        if (((hb ^ 0x7ff00000) | lo(b)) == 0) { // 69
+          w = b;
+        }
+        took(paths, Path.NON_FINITE);
+        return w; // 70
+      }
+      ha -= 0x25800000; // 73
+      hb -= 0x25800000;
+      k += 600;
+      a = withHi(a, ha); // 74
+      b = withHi(b, hb); // 75
+      took(paths, Path.SCALED_DOWN);
+    }
+    if (hb < 0x20b00000) { // 77
+      if (hb <= 0x000fffff) { // 78
+        if ((hb | lo(b)) == 0) { // 79
+          took(paths, Path.ZERO_B);
+          return a;
+        }
+        t1 = 0; // 80
+        t1 = withHi(t1, 0x7fd00000); // 81
+        b *= t1; // 82
+        a *= t1; // 83
+        k -= 1022; // 84
+        if (variant == Variant.REFRESHED_WORDS) {
+          ha = hi(a);
+          hb = hi(b);
+        }
+        took(paths, Path.SUBNORMAL_B);
+      } else {
+        ha += 0x25800000; // 86
+        hb += 0x25800000; // 87
+        k -= 600; // 88
+        a = withHi(a, ha); // 89
+        b = withHi(b, hb); // 90
+        took(paths, Path.SCALED_UP);
+      }
+    }
+    w = a - b; // 94
+    if (w < 0) {
+      took(paths, Path.EQUAL_WORDS_B_LARGER);
+    }
+    if (w > b) { // 95
+      t1 = 0; // 96
+      t1 = withHi(t1, ha); // 97
+      t2 = a - t1; // 98
+      w = Math.sqrt(t1 * t1 - (b * (-b) - t2 * (a + t1))); // 99
+      took(paths, Path.W_ABOVE_B);
+    } else {
+      a = a + a; // 101
+      y1 = 0; // 102
+      y1 = withHi(y1, hb); // 103
+      y2 = b - y1; // 104
+      t1 = 0; // 105
+      t1 = withHi(t1, ha + 0x00100000); // 106
+      t2 = a - t1; // 107
+      w = Math.sqrt(t1 * y1 - (w * (-w) - (t1 * y2 + t2 * b))); // 108
+      took(paths, Path.W_NOT_ABOVE_B);
+    }
+    if (k != 0) { // 110
+      t1 = 1.0; // 111
+      t1 = withHi(t1, hi(t1) + (k << 20)); // 112
+      return t1 * w; // 113
+    } else {
+      return w; // 114
+    }
+  }
+
+  // ---------------------------------------------------------------------------------------------
+  // Inputs
+  // ---------------------------------------------------------------------------------------------
+
+  /** The high words e_hypot.c tests, as doubles of a zero low word and of two others each. */
+  private static final int[] WORDS = {
+    0x5f300000, 0x5f300001, 0x5f2fffff, 0x20b00000, 0x20afffff, 0x20b00001, 0x000fffff, 0x00100000,
+    0x00000000, 0x00000001, 0x3c00000, 0x3c00001, 0x3bfffff, 0x7fd00000, 0x7fefffff, 0x7ff00000,
+    0x3ff00000
+  };
+
+  /** The differences of the high words, {@code ha-hb}, at which line 63 decides, and zero. */
+  private static final int[] GAPS = {
+    0x3c00000, 0x3c00001, 0x3bfffff, -0x3c00000, -0x3c00001, -0x3bfffff, 0, 1, -1
+  };
+
+  /** NaNs of both signs, quiet and signalling, several payloads; pairs differ in one bit too. */
+  private static final long[] NANS = {
+    0x7ff8_0000_0000_0000L, 0xfff8_0000_0000_0000L, 0x7ff8_0000_0000_0001L,
+    0xfff8_0000_0000_0001L, 0x7ff0_0000_0000_0001L, 0xfff0_0000_0000_0001L,
+    0x7ff8_0000_0001_0000L, 0x7ff0_0000_0001_0000L, 0x7fff_ffff_ffff_ffffL,
+    0xffff_ffff_ffff_ffffL, 0x7ff7_ffff_ffff_ffffL, 0xfff8_dead_beef_0001L,
+    0x7ff0_0001_0000_0000L, 0x7ff8_0001_0000_0000L
+  };
+
+  private static double fromWords(int high, long low, boolean negative) {
+    long hi = (high | (negative ? 0x80000000 : 0)) & 0xffffffffL;
+    return Double.longBitsToDouble(hi << 32 | (low & 0xffffffffL));
+  }
+
+  /** The special values and {@link #WORDS} at the low words 0, 1 and all ones, both signs. */
+  static double[] specials() {
+    double[] words = new double[WORDS.length * 6];
+    int at = 0;
+    for (int word : WORDS) {
+      for (long low : new long[] {0L, 1L, 0xffffffffL}) {
+        words[at++] = fromWords(word, low, false);
+        words[at++] = fromWords(word, low, true);
+      }
+    }
+    double[] nans = new double[NANS.length];
+    for (int i = 0; i < NANS.length; i++) {
+      nans[i] = Double.longBitsToDouble(NANS[i]);
+    }
+    return Inputs.concat(Inputs.specials(0x1p60, 0x1p500, 0x1p-500, 0x1p1022, 2.0, 3.0, 4.0),
+        words, nans);
+  }
+
+  /** Every pair of the special values. */
+  static Inputs.Pairs specialPairs() {
+    double[] specials = specials();
+    return Inputs.cross(specials, specials);
+  }
+
+  /** The fuzz's pair draws over e_hypot.c's words and points, a tenth at {@link #GAPS}. */
+  static final Fuzz.PairEdges EDGES = edges();
+
+  private static Fuzz.PairEdges edges() {
+    Fuzz.Edges edges = new Fuzz.Edges(WORDS, new int[0], false, new double[] {
+      0x1p500, 0x1p-500, 0x1p1022, 0x1p-1022, 0x1p60, 1.0, 0.0, Double.POSITIVE_INFINITY
+    });
+    return new Fuzz.PairEdges(edges, edges, Fuzz.PAIR_SPECIALS, GAPS);
+  }
+
+  static Inputs.Pairs fuzzPairs(long seed, int n) {
+    SplittableRandom random = new SplittableRandom(seed);
+    double[] pair = new double[2];
+    double[] xs = new double[n];
+    double[] ys = new double[n];
+    for (int i = 0; i < n; i++) {
+      Fuzz.drawPair(random, EDGES, pair);
+      xs[i] = pair[0];
+      ys[i] = pair[1];
+    }
+    return new Inputs.Pairs(xs, ys);
+  }
+
+  /** A low word as the fuzz draws one: 0, 1, all ones, all ones less one, or random. */
+  private static long lowWord(SplittableRandom random) {
+    return switch (random.nextInt(5)) {
+      case 0 -> 0L;
+      case 1 -> 1L;
+      case 2 -> 0xffffffffL;
+      case 3 -> 0xfffffffeL;
+      default -> random.nextLong() & 0xffffffffL;
+    };
+  }
+
+  /** The pair of high words {@code ha >= hb}, random signs and low words, in a random order. */
+  private static void put(SplittableRandom random, int ha, int hb, double[] xs, double[] ys,
+      int i) {
+    double a = fromWords(ha, lowWord(random), random.nextBoolean());
+    double b = fromWords(hb, lowWord(random), random.nextBoolean());
+    boolean swap = random.nextBoolean();
+    xs[i] = swap ? b : a;
+    ys[i] = swap ? a : b;
+  }
+
+  /**
+   * Pairs at each scaling's word with the other word within line 63's gap, so that the scaling is
+   * reached: {@code ha} within 2^16 words of {@code 0x5f300000}, {@code hb} within 2^16 of {@code
+   * 0x20b00000} and of {@code 0x00100000}, and {@code ha} up to {@code 2^20} words of the largest
+   * finite one; the other word is drawn at a gap from 0 to two words past {@code 0x3c00000}.
+   */
+  static Inputs.Pairs scalingPairs(long seed, int n) {
+    SplittableRandom random = new SplittableRandom(seed);
+    double[] xs = new double[n];
+    double[] ys = new double[n];
+    for (int i = 0; i < n; i++) {
+      int gap = random.nextInt(4) == 0 ? 0x3c00000 + random.nextInt(-2, 3)
+          : random.nextInt(0, 0x3c00003);
+      int near = random.nextInt(-(1 << 16), 1 << 16);
+      switch (random.nextInt(4)) {
+        case 0 -> put(random, 0x5f300000 + near, 0x5f300000 + near - gap, xs, ys, i);
+        case 1 -> {
+          int hb = 0x20b00000 + near;
+          put(random, hb + gap, hb, xs, ys, i);
+        }
+        case 2 -> {
+          int hb = Math.max(0, 0x00100000 + near);
+          put(random, hb + gap, hb, xs, ys, i);
+        }
+        default -> {
+          int ha = 0x7fefffff - random.nextInt(1 << 20);
+          put(random, ha, ha - gap, xs, ys, i);
+        }
+      }
+    }
+    return new Inputs.Pairs(xs, ys);
+  }
+
+  /**
+   * A subnormal {@code b} (or a zero, one draw in sixteen) beside an {@code a} from subnormal up to
+   * 2^70 times {@code b}'s scale: the 2^1022 path of lines 80-84, where the C reads the words it
+   * did not update, and line 63 on either side.
+   */
+  static Inputs.Pairs subnormalPairs(long seed, int n) {
+    SplittableRandom random = new SplittableRandom(seed);
+    double[] xs = new double[n];
+    double[] ys = new double[n];
+    for (int i = 0; i < n; i++) {
+      long mantissa = random.nextInt(16) == 0 ? 0L : random.nextLong() & 0x000fffffffffffffL;
+      double b = Double.longBitsToDouble(mantissa | (random.nextBoolean() ? Long.MIN_VALUE : 0L));
+      double a = random.nextInt(4) == 0
+          ? Double.longBitsToDouble(random.nextLong() & 0x000fffffffffffffL)
+          : Math.scalb(1.0 + random.nextDouble(), random.nextInt(-1074, -950));
+      a = random.nextBoolean() ? a : -a;
+      boolean swap = random.nextBoolean();
+      xs[i] = swap ? b : a;
+      ys[i] = swap ? a : b;
+    }
+    return new Inputs.Pairs(xs, ys);
+  }
+
+  /**
+   * Equal high words with random low words, so either may be the larger ({@code w} negative when
+   * {@code b} is): at random exponents, at each scaling's and among the subnormals.
+   */
+  static Inputs.Pairs equalWordPairs(long seed, int n) {
+    SplittableRandom random = new SplittableRandom(seed);
+    double[] xs = new double[n];
+    double[] ys = new double[n];
+    for (int i = 0; i < n; i++) {
+      int word = switch (random.nextInt(4)) {
+        case 0 -> WORDS[random.nextInt(WORDS.length - 1)];
+        case 1 -> random.nextInt(0, 0x00100000);
+        default -> random.nextInt(0, 0x7ff00000);
+      };
+      put(random, word, word, xs, ys, i);
+    }
+    return new Inputs.Pairs(xs, ys);
+  }
+
+  /**
+   * {@code a} near {@code 2b}, either side of line 95's {@code w>b}: {@code 2b} moved by up to 8
+   * ulps, at random exponents and at the scalings' words.
+   */
+  static Inputs.Pairs twiceBPairs(long seed, int n) {
+    SplittableRandom random = new SplittableRandom(seed);
+    double[] xs = new double[n];
+    double[] ys = new double[n];
+    for (int i = 0; i < n; i++) {
+      int exponent = switch (random.nextInt(4)) {
+        case 0 -> random.nextInt(495, 505);
+        case 1 -> random.nextInt(-505, -495);
+        default -> random.nextInt(-1060, 1022);
+      };
+      double b = Math.scalb(1.0 + random.nextDouble(), exponent);
+      double a = Double.longBitsToDouble(
+          Double.doubleToRawLongBits(2.0 * b) + random.nextInt(-8, 9));
+      a = random.nextBoolean() ? a : -a;
+      b = random.nextBoolean() ? b : -b;
+      boolean swap = random.nextBoolean();
+      xs[i] = swap ? b : a;
+      ys[i] = swap ? a : b;
+    }
+    return new Inputs.Pairs(xs, ys);
+  }
+
+  /**
+   * NaN beside NaN (random payloads, of random signs, and pairs one bit apart), beside both
+   * infinities (line 69: {@code hypot(inf, NaN)} is {@code +inf}) and beside finite values.
+   */
+  static Inputs.Pairs nanPairs(long seed, int n) {
+    SplittableRandom random = new SplittableRandom(seed);
+    double[] xs = new double[n];
+    double[] ys = new double[n];
+    for (int i = 0; i < n; i++) {
+      long nan = (random.nextLong() | 0x7ff0000000000000L) & (random.nextBoolean() ? -1L
+          : Long.MAX_VALUE);
+      if ((nan & 0x000fffffffffffffL) == 0) {
+        nan |= 1;
+      }
+      long other = switch (random.nextInt(6)) {
+        case 0, 1 -> {
+          long second = random.nextLong() | 0x7ff0000000000000L;
+          yield (second & 0x000fffffffffffffL) == 0 ? second | 1 : second;
+        }
+        case 2 -> {
+          long flipped = nan ^ (1L << random.nextInt(52));
+          yield (flipped & 0x000fffffffffffffL) == 0 ? flipped | 1 : flipped;
+        }
+        case 3 -> nan ^ Long.MIN_VALUE;
+        case 4 -> random.nextBoolean() ? 0x7ff0000000000000L : 0xfff0000000000000L;
+        default -> random.nextLong();
+      };
+      boolean swap = random.nextBoolean();
+      xs[i] = Double.longBitsToDouble(swap ? other : nan);
+      ys[i] = Double.longBitsToDouble(swap ? nan : other);
+    }
+    return new Inputs.Pairs(xs, ys);
+  }
+
+  /**
+   * Pythagorean triples {@code (m^2-n^2, 2mn)}, whose hypot {@code m^2+n^2} is exact, scaled by
+   * powers of two across each scaling and among the subnormals.
+   */
+  static Inputs.Pairs triplePairs() {
+    int[] scales = {-1074, -1060, -1022, -700, -600, -550, -500, -450, 0, 450, 500, 550, 600, 900,
+      960};
+    List<double[]> pairs = new ArrayList<>();
+    for (int m = 2; m <= 40; m++) {
+      for (int n = 1; n < m; n++) {
+        for (int scale : scales) {
+          double p = Math.scalb((double) (m * m - n * n), scale);
+          double q = Math.scalb((double) (2 * m * n), scale);
+          pairs.add(new double[] {p, q});
+          pairs.add(new double[] {-q, p});
+        }
+      }
+    }
+    double[] xs = new double[pairs.size()];
+    double[] ys = new double[xs.length];
+    for (int i = 0; i < xs.length; i++) {
+      xs[i] = pairs.get(i)[0];
+      ys[i] = pairs.get(i)[1];
+    }
+    return new Inputs.Pairs(xs, ys);
+  }
+
+  /** Random bits, uniform draws of Varka's baseline range, and every exponent. */
+  static Inputs.Pairs densePairs(long seed, int n) {
+    return Atan2Test.concatPairs(
+        new Inputs.Pairs(Inputs.sampled(seed, n), Inputs.sampled(seed + 1, n)),
+        new Inputs.Pairs(Inputs.uniform(seed + 2, n, -10.0, 10.0),
+            Inputs.uniform(seed + 3, n, -10.0, 10.0)),
+        new Inputs.Pairs(Inputs.magnitudes(seed + 4, n, -1074, 1023),
+            Inputs.magnitudes(seed + 5, n, -1074, 1023)));
+  }
+
+  /** The gate's inputs: {@code n} draws of each generator, the special pairs and the triples. */
+  static Inputs.Pairs everything(long seed, int n) {
+    return Atan2Test.concatPairs(specialPairs(), triplePairs(), fuzzPairs(seed, n),
+        scalingPairs(seed + 1, n), subnormalPairs(seed + 2, n), equalWordPairs(seed + 3, n),
+        twiceBPairs(seed + 4, n), nanPairs(seed + 5, n), densePairs(seed + 6, n));
+  }
+
+  /** The size of the generated parts in the suite: about a million and a half pairs in all. */
+  static final int DRAWS = 1 << 17;
+  static final long SEED = 0x4879_706fL;
+
+  // ---------------------------------------------------------------------------------------------
+  // The check, in this JVM or in one per JIT mode
+  // ---------------------------------------------------------------------------------------------
+
+  /** What one pass over the inputs found. */
+  record Tally(long checked, List<String> mismatches, long[] paths, NanTally strict,
+      NanTally transcribed) {}
+
+  /**
+   * On the lanes of two NaNs with different bits: how many results were the first argument's
+   * candidate, the second's, both (the two candidates coincide, as for NaNs that differ in sign or
+   * the quiet bit only), and of those that were one argument's, how many were the argument with
+   * the larger high word, which e_hypot.c makes its {@code a} (the first on equal words).
+   */
+  record NanTally(long first, long second, long both, long larger) {
+    String show() {
+      return "first " + first + ", second " + second + ", both " + both + ", larger word " + larger;
+    }
+  }
+
+  /** The candidates' counts of {@code result} over the two-NaN lanes, into {@code into[0..3]}. */
+  private static void count(long xb, long yb, long result, long[] into) {
+    long first = PairBits.candidate(MAGNITUDES, xb);
+    long second = PairBits.candidate(MAGNITUDES, yb);
+    if (first == second) {
+      into[2]++;
+      return;
+    }
+    boolean xLarger = (int) ((yb & Long.MAX_VALUE) >>> 32) <= (int) ((xb & Long.MAX_VALUE) >>> 32);
+    if (result == first) {
+      into[0]++;
+      into[3] += xLarger ? 1 : 0;
+    } else if (result == second) {
+      into[1]++;
+      into[3] += xLarger ? 0 : 1;
+    }
+  }
+
+  /** Every pair of {@code p}, the transcription against {@code StrictMath.hypot}. */
+  static Tally check(Inputs.Pairs p) {
+    long[] paths = new long[Path.values().length];
+    long[] strict = new long[4];
+    long[] transcribed = new long[4];
+    List<String> mismatches = new ArrayList<>();
+    for (int i = 0; i < p.x().length; i++) {
+      double x = p.x()[i];
+      double y = p.y()[i];
+      double want = StrictMath.hypot(x, y);
+      double got = cHypot(x, y, Variant.AS_WRITTEN, paths);
+      if (!PairBits.matches(MAGNITUDES, x, y, want, got) && mismatches.size() < 100) {
+        mismatches.add("hypot(" + Oracle.hex(x) + ", " + Oracle.hex(y) + "): StrictMath "
+            + PairBits.expected(MAGNITUDES, x, y, want) + ", transcription " + Oracle.hex(got));
+      }
+      long xb = Double.doubleToRawLongBits(x);
+      long yb = Double.doubleToRawLongBits(y);
+      if (PairBits.bothNaNWithDifferentBits(xb, yb)) {
+        count(xb, yb, Double.doubleToRawLongBits(want), strict);
+        count(xb, yb, Double.doubleToRawLongBits(got), transcribed);
+      }
+    }
+    return new Tally(p.x().length, mismatches, paths,
+        new NanTally(strict[0], strict[1], strict[2], strict[3]),
+        new NanTally(transcribed[0], transcribed[1], transcribed[2], transcribed[3]));
+  }
+
+  /** How many pairs of {@code p} the variant's result does not match {@code StrictMath} on. */
+  static long differing(Inputs.Pairs p, Variant variant) {
+    long n = 0;
+    for (int i = 0; i < p.x().length; i++) {
+      double x = p.x()[i];
+      double y = p.y()[i];
+      n += PairBits.matches(MAGNITUDES, x, y, StrictMath.hypot(x, y),
+          cHypot(x, y, variant, null)) ? 0 : 1;
+    }
+    return n;
+  }
+
+  /**
+   * The check in a JVM of its own: {@code [draws [passes]]}, by default {@link #DRAWS} and 3. It
+   * prints the JVM's arguments, each pass's count of pairs, mismatches (each with its bits, the
+   * first 100) and the candidates of the two-NaN lanes, then how many pairs each {@link Variant}
+   * changes, and exits 1 if any pass has a mismatch.
+   *
+   * <pre>
+   *   java -Xint --add-modules jdk.incubator.vector -cp target/classes:target/test-classes \
+   *     io.github.vecbricks.vfdlibm.HypotTest 0x100000 1
+   * </pre>
+   */
+  public static void main(String[] args) {
+    int draws = args.length > 0 ? Integer.decode(args[0]) : DRAWS;
+    int passes = args.length > 1 ? Integer.parseInt(args[1]) : 3;
+    System.out.println("jvm: " + ManagementFactory.getRuntimeMXBean().getInputArguments()
+        + " | " + System.getProperty("java.vm.info"));
+    Inputs.Pairs p = everything(SEED, draws);
+    boolean failed = false;
+    for (int pass = 1; pass <= passes; pass++) {
+      Tally t = check(p);
+      System.out.println("pass " + pass + ": checked " + t.checked() + ", mismatches "
+          + t.mismatches().size());
+      System.out.println("pass " + pass + ": StrictMath " + t.strict().show());
+      System.out.println("pass " + pass + ": transcription " + t.transcribed().show());
+      t.mismatches().forEach(m -> System.out.println("MISMATCH " + m));
+      failed |= !t.mismatches().isEmpty() || t.checked() == 0;
+    }
+    for (Variant variant : Variant.values()) {
+      if (variant != Variant.AS_WRITTEN) {
+        System.out.println("variant " + variant + ": differs on " + differing(p, variant));
+      }
+    }
+    System.out.println(failed ? "result: FAILED" : "result: ok");
+    System.exit(failed ? 1 : 0);
+  }
+
+  /** The JIT modes the gate runs the check in, each a JVM of its own. */
+  enum JitMode {
+    INTERPRETER("-Xint"),
+    C1_ONLY("-XX:TieredStopAtLevel=1"),
+    C2_ONLY("-XX:-TieredCompilation"),
+    TIERED(null);
+
+    final String flag;
+
+    JitMode(String flag) {
+      this.flag = flag;
+    }
+  }
+
+  /** The output of {@link #main} run in a JVM with {@code mode}'s flag; fails on a bad exit. */
+  static String runInJvm(JitMode mode, int draws, int passes)
+      throws IOException, InterruptedException {
+    List<String> command = new ArrayList<>();
+    command.add(java.nio.file.Path.of(System.getProperty("java.home"), "bin", "java").toString());
+    if (mode.flag != null) {
+      command.add(mode.flag);
+    }
+    command.addAll(List.of("--add-modules", "jdk.incubator.vector", "-cp",
+        System.getProperty("java.class.path"), HypotTest.class.getName(),
+        Integer.toString(draws), Integer.toString(passes)));
+    Process process = new ProcessBuilder(command).redirectErrorStream(true).start();
+    CompletableFuture<String> output = CompletableFuture.supplyAsync(() -> {
+      try (InputStream in = process.getInputStream()) {
+        ByteArrayOutputStream bytes = new ByteArrayOutputStream();
+        in.transferTo(bytes);
+        return bytes.toString(StandardCharsets.UTF_8);
+      } catch (IOException e) {
+        throw new UncheckedIOException(e);
+      }
+    });
+    if (!process.waitFor(10, TimeUnit.MINUTES)) {
+      process.destroyForcibly();
+      throw new AssertionError(mode + ": the JVM did not finish in 10 minutes");
+    }
+    String text = output.join();
+    System.out.println("hypot gate, " + mode + ":\n" + text);
+    assertEquals(0, process.exitValue(), mode + ":\n" + text);
+    return text;
+  }
+
+  // ---------------------------------------------------------------------------------------------
+  // The tests
+  // ---------------------------------------------------------------------------------------------
+
+  /**
+   * The gate: the transcription is {@code StrictMath.hypot} on every pair (a lane of two NaNs
+   * with different bits by {@link PairBits}, where both results must be a candidate), and the
+   * pairs take every way out of the C.
+   */
+  @Test
+  void scalarTranscriptionIsStrictMath() {
+    Tally t = check(everything(SEED, DRAWS));
+    assertTrue(t.mismatches().isEmpty(), String.join("\n", t.mismatches()));
+    for (Path path : Path.values()) {
+      assertTrue(t.paths()[path.ordinal()] > 0, path + " is never taken");
+    }
+    NanTally s = t.strict();
+    assertTrue(s.first() > 0 || s.second() > 0, "no two-NaN lane of distinct candidates");
+  }
+
+  /**
+   * The same check in a JVM per JIT mode, where {@code StrictMath} and the transcription each run
+   * in that mode's tiers: every pass of every mode passes, and each JVM had the mode's flag.
+   */
+  @ParameterizedTest
+  @EnumSource(JitMode.class)
+  void scalarTranscriptionIsStrictMathInEveryJitMode(JitMode mode) throws Exception {
+    String text = runInJvm(mode, DRAWS >> 2, 3);
+    String jvm = text.lines().filter(l -> l.startsWith("jvm: ")).findFirst().orElseThrow();
+    if (mode.flag != null) {
+      assertTrue(jvm.contains(mode.flag), jvm);
+    } else {
+      assertTrue(!jvm.contains("-Xint") && !jvm.contains("Tiered"), jvm);
+    }
+    if (mode == JitMode.INTERPRETER) {
+      assertTrue(jvm.contains("interpreted mode"), jvm);
+    }
+    assertTrue(text.contains("result: ok"), text);
+  }
+
+  /**
+   * The inputs see the transcription changed: with the words of lines 80-84 refreshed, or
+   * without line 63's return, the variant differs from {@code StrictMath} on some pair, so the
+   * gate's no-mismatch result is not that of inputs too weak to tell.
+   */
+  @ParameterizedTest
+  @EnumSource(value = Variant.class, names = "AS_WRITTEN", mode = EnumSource.Mode.EXCLUDE)
+  void theInputsSeeAChangedTranscription(Variant variant) {
+    assertTrue(differing(everything(SEED + 1, DRAWS >> 3), variant) > 0, variant.name());
+  }
+
+  /** Line 69: an infinity beside a NaN is {@code +inf}, either order and either sign. */
+  @Test
+  void anInfinityBesideANaNIsPositiveInfinity() {
+    long inf = Double.doubleToRawLongBits(Double.POSITIVE_INFINITY);
+    for (long nan : NANS) {
+      for (double i : new double[] {Double.POSITIVE_INFINITY, Double.NEGATIVE_INFINITY}) {
+        double n = Double.longBitsToDouble(nan);
+        assertEquals(inf, Double.doubleToRawLongBits(cHypot(i, n)));
+        assertEquals(inf, Double.doubleToRawLongBits(cHypot(n, i)));
+        assertEquals(inf, Double.doubleToRawLongBits(StrictMath.hypot(i, n)));
+        assertEquals(inf, Double.doubleToRawLongBits(StrictMath.hypot(n, i)));
+      }
+    }
+  }
+}
