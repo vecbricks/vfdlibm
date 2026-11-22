@@ -52,6 +52,12 @@ vfdlibm ports fdlibm's double functions to the Java Vector API, each lane bit-id
   `PairBits` for two arguments), `Inputs` makes the inputs, `VectorWidth` runs a test at 128, 256
   and 512 bits and the preferred species, and `PlantedFaultTest` requires each fault planted through
   `Faults` (in the main sources) to be caught by its check. `HarnessSelfTest` tests them.
+- The assembly check: `ExpAsmTest` reads the C2 code of exp's arms through hsdis and asserts
+  the width, no fused multiply-add and no call but uncommon traps (`AsmCheckSelfTest` shows
+  each rule failing). `dev/hsdis-build.sh` builds hsdis into `target/hsdis`; it is OpenJDK's
+  GPL source compiled as a tool, never committed or shipped. Without it the check skips and
+  says why; CI's x86 rows build it and set `VFDLIBM_ASM_REQUIRED=true`, so there a skip fails.
+  See `SKILLS.md`, "The assembly check".
 - A width wider than the host's vectors is skipped. To see an AVX2 host's skips on an AVX-512
   one: `mvn -B test -Dvfdlibm.test.jvmArgs=-XX:MaxVectorSize=32`. That keeps AVX-512's
   instructions at 256 bits, though: to make C2 compile as on an AVX2 host such as the EPYC

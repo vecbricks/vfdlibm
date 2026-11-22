@@ -226,6 +226,114 @@ stops the next port re-trying a settled question.
   against 256-bit ones on three; EPYC 9V45 (Zen 5) 1.99. GitHub's x86 runners draw from all of
   these. `HARDWARE.md` holds the table, with sources, and vfdlibm's runs extend it.
 
+## The assembly check
+
+`ExpAsmTest` reads the machine code C2 emits for each of exp's vector arms and asserts on it
+(issue #139; the idea is Varka's assembly suite, the code vfdlibm's own). `ExpAsmProbe` runs in a
+JVM of its own per `VectorWidth` the host has, under `-Xbatch` and the row's `-XX` options, with
+vfdlibm forced inline and `-XX:CompileCommand=print` on its loops; `AsmCheck` parses the last
+standard `C2-compiled nmethod` of each, from its entry point to its stubs, in Intel syntax.
+`AsmCheckSelfTest` shows each rule failing on crafted disassembly. To run it here:
+`dev/hsdis-build.sh`, then `mvn -q test -Dtest='ExpAsmTest,AsmCheckSelfTest'`.
+
+- **The rules.** Every byte decoded; packed-double arithmetic (`v(add|sub|mul|div)pd`) present
+  and on the width's registers only (`xmm`, `ymm`, `zmm`), no scalar `*sd` arithmetic; no fused
+  multiply-add of any form (`vfmadd*`, `vfmsub*`, `vfnmadd*`, `vfnmsub*`, `vfmaddsub*`,
+  `vfmsubadd*`); no call but `{runtime_call UncommonTrapBlob}` and `{runtime_call
+  Stub::method_entry_barrier}`; no inlined frame of `StrictMath` or `FdLibm`. Narrower registers
+  elsewhere are allowed: a 512-bit body keeps its int lanes in a `ymm`. Counts are not asserted
+  (Varka: a register-allocation roll moves them with nothing wrong).
+- **Common data makes the call rule exact.** On `[-20, 20]` no lane is rare, so C2 compiles the
+  per-lane finish as an uncommon trap, a deoptimizing exit the common path never takes; any other
+  call anywhere in the method fails. The same data keep `StrictMath`'s code out of the dump (no
+  rare lane, no call to compile), which the licence rule needs; the last rule is a backstop, since
+  HotSpot names inlined frames only at calls, traps and safepoints.
+- **At 128 bits on x86 the call rule is not asserted.** Every arm calls the Vector API's Java
+  fallback, 60 to 132 calls per method (the census below), as "At two 64-bit lanes x86 C2 lowers
+  no mask" predicts. Width and FMA are asserted there; the width is the child's species, so the
+  preferred species of the `MaxVectorSize=16` row counts as 128 bits.
+- **Print the caller's loop, not exp's methods.** Without the forced inline, `Exp`'s shared
+  three-argument body compiles as a method of its own whose `arm` is no constant; it takes and
+  returns heap vectors, calls `blend` and `convert` unintrinsified and allocates (`C2 Runtime
+  new_instance`, `new_array`), and the public `VFdlibm.exp` is a `{static_call}` into it. With the
+  forced inline, whether any `Exp` method gets a C2 compile of its own depends on timing (one run
+  printed only `expBlended`). So the probe's loops, in `ExpBenchmark`'s shape, are what is read.
+- **`expRare` before `expCore`, or it boxes.** The first run of the check failed the `core` arm at
+  256 and 512 bits: a loop calling `Exp.expCore(x)` and then `Exp.expRare(x)` on one vector has a
+  `{static_call}` to `expRare` and to `AbstractMask.intoArray`, which `PrintInlining` shows refused
+  for `NodeCountInliningCutoff` once `expCore` is inlined. In `ExpBenchmark`'s order, `expRare`
+  first, both inline and the rules pass. "Two port bodies in one loop do not fit" above is the
+  same budget; here one body and a small one fit only in that order.
+- **hsdis needs Capstone 5.** `dev/hsdis-build.sh` compiles the JDK's
+  `src/utils/hsdis/capstone/hsdis-capstone.c` and `hsdis.h` (jdk-25-ga, fetched alone, SHA-256
+  pinned, compiled and never read) against Capstone. Ubuntu 24.04's Capstone 4.0.2, GitHub's
+  ubuntu-latest, printed exp's 256-bit AVX-512 bodies with 19 to 43 undecoded `.byte` lines
+  each, an EVEX prefix it did not know followed by garbage with a `call` in it (read in an
+  ubuntu:24.04 container on the laptop). So the script uses the system's Capstone only at 5 or
+  later and otherwise builds the pinned 5.0.7 from source with cmake, five seconds in that
+  container, whose census then matched the laptop's to the instruction; and the check fails on
+  any `.byte` or `(bad)`.
+- **Skips say which.** Not x86-64; hsdis not found (the script's `target/hsdis`, `~/hsdis` or
+  `$VFDLIBM_HSDIS_DIR`); or found but not loaded, decided by the output holding no
+  `[Disassembly]` instruction line, not by HotSpot's `Loading hsdis library failed`, which it
+  printed both with no library and with a file that was none. CI's x86 rows build hsdis and set `VFDLIBM_ASM_REQUIRED=true`, which makes
+  the last two fail instead; the Arm row skips.
+
+**The census of exp's arms, 22 November 2026, on the laptop** (AMD Ryzen AI 9 HX PRO 370, JDK
+25.0.5.1, hsdis on Capstone 5.0.7). Not a headline and no timing: counts of instructions only, one
+run, the same in a second. Each is the whole nmethod of the probe's loop, prologue and
+out-of-line paths included, so the constant broadcasts C2 hoists before the loop count, and
+from 256 bits up the stack accesses are the stack bang and the uncommon traps' saves, not
+spills; `bench/asm/README.md` counts the hot loop alone. The columns: all instructions, packed-double arithmetic, `vdivpd`, blends, broadcasts,
+compares (`vpcmp*`, `vcmp*`), mask-register operations (`k*`), conversions (`vcvt*`, `vpmov*`),
+operands on `[rsp`, calls, FMA. The preferred species read the same as its fixed width (512 bits
+on the host's flags, 256 as an AVX2 host). The rows come from the test's output: `grep '^| exp '`.
+
+On the host's own flags (AVX-512, `MaxVectorSize=64`):
+
+| bits | arm | insns | pd | div | blend | bcast | cmp | k | cvt | stack | calls | fma |
+| ---: | :--- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 128 | finish | 1195 | 24 | 1 | 0 | 9 | 3 | 2 | 19 | 351 | 60 | 0 |
+| 128 | finishMasked | 1366 | 24 | 1 | 0 | 9 | 3 | 2 | 19 | 421 | 71 | 0 |
+| 128 | blended | 2289 | 26 | 1 | 0 | 14 | 3 | 2 | 20 | 535 | 126 | 0 |
+| 128 | blendedMasked | 2469 | 26 | 1 | 0 | 14 | 3 | 2 | 20 | 682 | 132 | 0 |
+| 128 | core | 1872 | 24 | 1 | 0 | 14 | 6 | 4 | 24 | 555 | 91 | 0 |
+| 256 | finish | 137 | 24 | 1 | 2 | 17 | 7 | 5 | 4 | 8 | 3 | 0 |
+| 256 | finishMasked | 159 | 24 | 1 | 3 | 17 | 7 | 6 | 4 | 10 | 3 | 0 |
+| 256 | blended | 145 | 26 | 1 | 8 | 24 | 12 | 4 | 4 | 2 | 2 | 0 |
+| 256 | blendedMasked | 157 | 26 | 1 | 9 | 24 | 12 | 4 | 4 | 3 | 2 | 0 |
+| 256 | core | 133 | 24 | 1 | 2 | 17 | 7 | 3 | 4 | 3 | 2 | 0 |
+| 512 | finish | 140 | 24 | 1 | 2 | 17 | 7 | 5 | 4 | 8 | 3 | 0 |
+| 512 | finishMasked | 155 | 24 | 1 | 3 | 17 | 7 | 7 | 4 | 10 | 3 | 0 |
+| 512 | blended | 145 | 26 | 1 | 8 | 24 | 12 | 4 | 4 | 2 | 2 | 0 |
+| 512 | blendedMasked | 155 | 26 | 1 | 9 | 24 | 12 | 4 | 4 | 3 | 2 | 0 |
+| 512 | core | 134 | 24 | 1 | 2 | 17 | 7 | 3 | 4 | 3 | 2 | 0 |
+
+As an AVX2 host (`-XX:UseAVX=2 -XX:MaxVectorSize=32`):
+
+| bits | arm | insns | pd | div | blend | bcast | cmp | k | cvt | stack | calls | fma |
+| ---: | :--- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 128 | finish | 1147 | 24 | 1 | 2 | 9 | 4 | 0 | 18 | 295 | 60 | 0 |
+| 128 | finishMasked | 1321 | 24 | 1 | 2 | 9 | 4 | 0 | 18 | 374 | 71 | 0 |
+| 128 | blended | 2313 | 26 | 1 | 2 | 14 | 4 | 0 | 19 | 573 | 126 | 0 |
+| 128 | blendedMasked | 2272 | 26 | 1 | 2 | 14 | 4 | 0 | 19 | 505 | 132 | 0 |
+| 128 | core | 1745 | 24 | 1 | 4 | 14 | 8 | 0 | 22 | 438 | 91 | 0 |
+| 256 | finish | 144 | 24 | 1 | 5 | 17 | 8 | 0 | 3 | 8 | 3 | 0 |
+| 256 | finishMasked | 167 | 24 | 1 | 6 | 17 | 8 | 0 | 4 | 10 | 3 | 0 |
+| 256 | blended | 152 | 26 | 1 | 10 | 25 | 13 | 0 | 3 | 2 | 2 | 0 |
+| 256 | blendedMasked | 167 | 26 | 1 | 11 | 25 | 13 | 0 | 4 | 5 | 2 | 0 |
+| 256 | core | 140 | 24 | 1 | 5 | 17 | 8 | 0 | 3 | 3 | 2 | 0 |
+
+What it reads: no FMA in any arm at any width under either flag set. From 256 bits up every arm is
+one copy of the body (24 packed-double operations, one `vdivpd`; the blended arm's two more are
+its filter's `x + x` and the subnormal scale's product) and calls only its traps and the entry
+barrier: three for the finish arms (the finish's trap, the loop's range check, the barrier), two
+for the others. The blended arm has 6 more blends than the finish on AVX-512 and 5 more on AVX2, and 7 to 8
+more broadcasts, its filter's constants. AVX2 has no mask registers, so its masks are vector
+compares and `vblendvps`, 2 to 3 more blends per arm than AVX-512's `vpblendmq`. Masking adds one
+blend and 10 to 23 instructions. At 128 bits the bodies are 8 to 16 times longer: the Java
+fallback.
+
 ## Where headline numbers come from: four named hosts
 
 - **Headline numbers are measured on four named CPUs**, each drawn from GitHub's standard

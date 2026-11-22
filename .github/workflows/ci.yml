@@ -34,6 +34,7 @@ jobs:
             jvm-args: ""
             # The one row that also runs the jar check's self-test.
             jar-self-test: true
+            asm: true
           # x86 compiled as an AVX2 host, the headline EPYC 7763, whatever runner is drawn:
           # UseAVX=2 caps vectors at 256 bits and takes AVX-512's instructions away, so the
           # preferred species is 256 bits on every draw, and an operation C2 lowers only with
@@ -41,11 +42,13 @@ jobs:
           - name: x86 as AVX2, 128+256 bits
             os: ubuntu-latest
             jvm-args: -XX:UseAVX=2 -XX:MaxVectorSize=32
+            asm: true
           # x86 with vectors capped at 16 bytes: every case runs at 128 bits (the preferred
           # species is 128 bits too), and the 256- and 512-bit cases are skipped.
           - name: x86 128 bits
             os: ubuntu-latest
             jvm-args: -XX:MaxVectorSize=16
+            asm: true
           # Arm: GitHub's Arm runners have 128-bit vectors, so the 128-bit and preferred cases
           # run there and the 256- and 512-bit cases are skipped.
           - name: Arm 128 bits
@@ -67,7 +70,18 @@ jobs:
           key: m2-${{ runner.os }}-${{ runner.arch }}-java25-build-${{ hashFiles('**/pom.xml') }}
           restore-keys: |
             m2-${{ runner.os }}-${{ runner.arch }}-java25-build-
+      # The assembly check (ExpAsmTest; SKILLS.md, "The assembly check") reads C2's code through
+      # hsdis, which dev/hsdis-build.sh builds into target/hsdis from two pinned files of the JDK's
+      # source and a pinned Capstone 5, in seconds; it is a tool, never committed or shipped. The
+      # runner's own Capstone, 4.0.2, decodes no AVX-512 body, so the script builds its own. On
+      # the x86 rows VFDLIBM_ASM_REQUIRED turns the check's skip for a missing or unloaded hsdis
+      # into a failure, so a green row has read the code. The Arm row skips it: its rules are x86's.
+      - name: Build hsdis for the assembly check
+        if: matrix.asm
+        run: dev/hsdis-build.sh
       - name: Build and test
+        env:
+          VFDLIBM_ASM_REQUIRED: ${{ matrix.asm }}
         run: >-
           mvn -B --no-transfer-progress verify
           "-Dvfdlibm.test.jvmArgs=${{ matrix.jvm-args }}"
