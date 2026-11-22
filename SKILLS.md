@@ -245,9 +245,11 @@ standard `C2-compiled nmethod` of each, from its entry point to its stubs, in In
   (Varka: a register-allocation roll moves them with nothing wrong).
 - **Common data makes the call rule exact.** On `[-20, 20]` no lane is rare, so C2 compiles the
   per-lane finish as an uncommon trap, a deoptimizing exit the common path never takes; any other
-  call anywhere in the method fails. The same data keep `StrictMath`'s code out of the dump (no
-  rare lane, no call to compile), which the licence rule needs; the last rule is a backstop, since
-  HotSpot names inlined frames only at calls, traps and safepoints.
+  call anywhere in the method fails. The same data keep `StrictMath`'s code out of the C2 body
+  that is read (no rare lane, no call to compile), which the licence rule needs; the last rule is a
+  backstop, since HotSpot names inlined frames only at calls, traps and safepoints. The output
+  also holds each loop's C1 compile, which is not read: it keeps the finish, and with it a call to
+  `StrictMath.exp`, a call and not that method's code.
 - **At 128 bits on x86 the call rule is not asserted.** Every arm calls the Vector API's Java
   fallback, 60 to 132 calls per method (the census below), as "At two 64-bit lanes x86 C2 lowers
   no mask" predicts. Width and FMA are asserted there; the width is the child's species, so the
@@ -272,14 +274,14 @@ standard `C2-compiled nmethod` of each, from its entry point to its stubs, in In
   container on the laptop). So the script uses the system's Capstone only at 5 and otherwise builds
   the pinned 5.0.7 from source with cmake; in that container the census then matched the laptop's to
   the instruction; and the check fails on any `.byte` or `(bad)`.
-- **Skips say which.** Not Linux on x86-64; hsdis not found (the script's `target/hsdis`, which
-  `mvn clean` deletes, or `$VFDLIBM_HSDIS_DIR`; a binutils hsdis such as `bench/asm`'s prints another
-  format, which the rules were not written for); or found but not loaded, decided by the output
-  holding no `[Disassembly]` instruction line, not by HotSpot's `Loading hsdis library failed`,
-  which it printed both with no library and with a file that was none. An hsdis in the JDK's own
-  `lib` would be loaded first, so the check skips (fails, required) when one is there. CI's x86 rows
-  build hsdis and set `VFDLIBM_ASM_REQUIRED=true`, which makes the last three fail instead; the Arm
-  row skips.
+- **Skips say which.** Not Linux on x86-64 (a skip even when required); hsdis not found (the
+  script's `target/hsdis`, which `mvn clean` deletes, or `$VFDLIBM_HSDIS_DIR`; a binutils hsdis such
+  as `bench/asm`'s prints another format, which the rules were not written for); or found but not
+  loaded, decided by the output holding no `[Disassembly]` instruction line, not by HotSpot's
+  `Loading hsdis library failed`, which it printed both with no library and with a file that was
+  none. An hsdis in the JDK's own `lib` would be loaded first, so the check skips (fails, required)
+  when one is there. CI's x86 rows build hsdis and set `VFDLIBM_ASM_REQUIRED=true`, which makes the
+  last three fail instead; the Arm row skips.
 
 **The census of exp's arms, 22 November 2026, on the laptop** (AMD Ryzen AI 9 HX PRO 370, JDK
 25.0.5.1, hsdis on Capstone 5.0.7). Not a headline and no timing: counts of instructions only, one

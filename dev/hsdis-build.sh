@@ -105,7 +105,8 @@ EOF
   # An instruction line inside [Disassembly]: an address, a tab-separated mnemonic that a hex
   # word cannot be (HotSpot's raw dump also has the 0x<address>: shape).
   if awk '/^\[Disassembly\]/ { inside = 1 } /^\[\/Disassembly\]/ { inside = 0 }
-          inside && /^ *0x[0-9a-f]+: +(push|pushq|sub|subq|mov|movl|movq|ret|retq|stp|ldr|add)[ \t]/ { found = 1 }
+          inside && /^ *0x[0-9a-f]+: +(push|pushq|sub|subq|mov|movl|movq)[ \t]/ { found = 1 }
+          inside && /^ *0x[0-9a-f]+: +(ret|retq|stp|ldr|add)[ \t]/ { found = 1 }
           END { exit found ? 0 : 1 }' "$work/out.txt"; then
     rm -rf "$work"
     return 0

@@ -47,11 +47,13 @@ class ExpAsmTest {
 
   private static final String PROBE = ExpAsmProbe.class.getName();
   /**
-   * The probe's methods, one per arm. Named here, not read from the probe, whose initialization
-   * reads the child's width property.
+   * The probe's arms: its static methods but {@code main}, read by reflection, which does not run
+   * the probe's static initializer (it reads the child's width property).
    */
-  static final List<String> ARMS =
-      List.of("finish", "finishMasked", "blended", "blendedMasked", "core");
+  static final List<String> ARMS = java.util.Arrays.stream(ExpAsmProbe.class.getDeclaredMethods())
+      .filter(m -> java.lang.reflect.Modifier.isStatic(m.getModifiers()) && !m.isSynthetic()
+          && !m.getName().equals("main"))
+      .map(java.lang.reflect.Method::getName).sorted().toList();
 
   @ParameterizedTest
   @EnumSource(VectorWidth.class)
@@ -60,6 +62,7 @@ class ExpAsmTest {
     String output = probe(width);
     assertTrue(output.contains("asm-probe start: width " + width + ", " + bits + " bits"),
         "the probe ran another species than " + width + " at " + bits + " bits");
+    assertEquals(5, ARMS.size(), "the probe's arms: " + ARMS);
     boolean callsChecked = bits > 128;
     List<String> violations = new ArrayList<>();
     // The census, as Markdown rows: `grep '^| exp '` on the test's output gives SKILLS.md's table.
@@ -96,6 +99,7 @@ class ExpAsmTest {
    * no hsdis that HotSpot loads.
    */
   static String probe(VectorWidth width) throws IOException, InterruptedException {
+    // Not a failure even when required: the rules are x86's, and CI requires the x86 rows only.
     if (AsmCheck.libraryName() == null) {
       abort("the assembly check reads Linux x86-64 code only; this host is "
           + System.getProperty("os.name") + " " + System.getProperty("os.arch"));
