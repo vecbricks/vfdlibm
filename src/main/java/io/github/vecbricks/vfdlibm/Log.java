@@ -76,11 +76,12 @@ import jdk.incubator.vector.VectorSpecies;
  * widths, its preferred species being 256 bits. On the EPYC's 256-bit and preferred rows the
  * finish read 0.017 B/op or less in JMH's table. Both host files time this class after the
  * departures of {@code PROOFS.md}'s L6 to L9 and before the finish's first eight lanes were
- * written out with constant indices (issue #37). The choice waits for a second run of the Xeon
- * 8573C and a first of the other AVX-512 hosts ({@code HARDWARE.md}), a pair ({@code
- * bench/pair.sh}), and the rules for a tie within 1.3x and for hosts that disagree (issue #30);
- * the second arm is kept so it can be re-measured, on other hosts and as the JDK changes. The
- * laptop's runs measured the body before those departures.
+ * written out with constant indices (issue #37). The rules for a tie within 1.3x and for hosts
+ * that disagree are set (issue #30): a tie goes to the finish arm, which log keeps, and the choice
+ * stays provisional until a host run revises it, a second run of the Xeon 8573C, a first of the
+ * other AVX-512 hosts ({@code HARDWARE.md}) or a pair ({@code bench/pair.sh}); the second arm
+ * is kept so it can be re-measured, on other hosts and as the JDK changes. The laptop's runs
+ * measured the body before those departures.
  *
  * <p>{@link #logCore} is the common path alone, with no rare lanes and no finish: {@code Log10}
  * computes its {@code __ieee754_log} through it, the only entry it uses.

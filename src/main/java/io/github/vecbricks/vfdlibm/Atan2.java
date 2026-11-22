@@ -58,10 +58,12 @@ import jdk.incubator.vector.VectorSpecies;
  * leaves those lanes out, so that no infinity or NaN of theirs reaches its finish. Two arms
  * share the body below: {@code blended} computes the special lanes' blends in every vector,
  * {@code guarded} only in a vector with a live special lane, which is the one {@code VFdlibm}
- * calls, provisionally. Each host has timed the two arms once ({@code
- * bench/results/atan2-xeon8573c-2026-11-22.txt} and {@code atan2-epyc7763-2026-11-22.txt}):
- * neither file gives them a direction, the Xeon's ratios being inside 1.3x and the EPYC 7763's
- * near it or inside it, so the default stays until a re-run and issue #30's rules decide it.
+ * calls, at every species. atan2 has no finish arm, so rule 1 of issue #30 (a tie goes to the
+ * finish arm) does not pick between the two (the issue's corrected comment,
+ * https://github.com/vecbricks/vfdlibm/issues/30#issuecomment-7085437272). Neither host's file
+ * gives the arms a direction ({@code bench/results/atan2-xeon8573c-2026-11-22.txt}, inside 1.3x;
+ * {@code atan2-epyc7763-2026-11-22.txt}, near 1.3x or inside it, one run), so guarded stays the
+ * default at every species by the owner's decision of 22 November until a re-run of each host.
  */
 final class Atan2 {
 
