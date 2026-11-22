@@ -189,11 +189,11 @@ fdlibm's own sequence of operations, lane by lane. That is this library.
   finish that boxed before issue #37); and where hosts disagree, each species keeps its own
   arm (no function needs that yet, so each runs one arm at every species). `atan2` has no finish
   arm, so the rule does not pick between its two: its guarded arm is the default at every species,
-  and the 8573C's rows, a tie at every species, wait for its second run. Every default stays provisional
-  until a host run revises it, such as a second run of the 8573C or a first of the other AVX-512
-  hosts (`HARDWARE.md`, the EPYC 9V45 when drawn), and for `cosh` a second run of the EPYC 7763 too;
-  `PLAN.md` section 5 gives each function's case. The laptop's numbers do not agree at every
-  width.
+  and the 8573C's rows, a tie at every species, wait for its second run. Every default stays
+  provisional until a host run revises it, such as a second run of the 8573C or a first of the
+  other AVX-512 hosts (`HARDWARE.md`, the EPYC 9V45 when drawn), and for `cosh` a second run of
+  the EPYC 7763 too; `PLAN.md` section 5 gives each function's case. The laptop's numbers do not
+  agree at every width.
 
 ## Testing
 
