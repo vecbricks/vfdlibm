@@ -41,12 +41,14 @@ import org.junit.jupiter.params.provider.EnumSource;
  * The entry gate of the hypot port (issue 34): {@code e_hypot.c} in scalar Java, line by line,
  * against {@code StrictMath.hypot} by {@link PairBits#matches} with hypot's declared candidates
  * ({@link PairBits.Candidates#MAGNITUDES}), so raw bits on every lane but one of two NaNs with
- * different bits. The inputs reach every return of the C and both sides of each of its tests: the
+ * different bits. The inputs reach every way out of the C ({@link Path}, each asserted taken): the
  * ratio word {@code 0x3c00000} (2^60), the scalings at {@code 2^500}, {@code 2^-500} and the
  * subnormal {@code b} (times 2^1022, with the words the C leaves stale), equal high words with
  * either low word larger, {@code a} near {@code 2b}, the zeros, infinities beside NaNs, NaNs of
  * every kind and sampled bits. The same check runs in a JVM of its own per JIT mode ({@link
- * JitMode}), since which candidate a sum of two NaNs keeps varies with the tier.
+ * JitMode}), since which candidate a sum of two NaNs keeps varies with the tier; that run asserts
+ * the results, and prints which candidate won in each mode without asserting it, since which one
+ * is not specified.
  */
 class HypotTest {
 
@@ -343,7 +345,7 @@ class HypotTest {
           put(random, hb + gap, hb, xs, ys, i);
         }
         case 2 -> {
-          int hb = Math.max(0, 0x00100000 + near);
+          int hb = 0x00100000 + near;
           put(random, hb + gap, hb, xs, ys, i);
         }
         default -> {
@@ -357,7 +359,7 @@ class HypotTest {
 
   /**
    * A subnormal {@code b} (or a zero, one draw in sixteen) beside an {@code a} from subnormal up to
-   * 2^70 times {@code b}'s scale: the 2^1022 path of lines 80-84, where the C reads the words it
+   * 2^73 times {@code b}'s scale: the 2^1022 path of lines 80-84, where the C reads the words it
    * did not update, and line 63 on either side.
    */
   static Inputs.Pairs subnormalPairs(long seed, int n) {
@@ -388,7 +390,7 @@ class HypotTest {
     double[] ys = new double[n];
     for (int i = 0; i < n; i++) {
       int word = switch (random.nextInt(4)) {
-        case 0 -> WORDS[random.nextInt(WORDS.length - 1)];
+        case 0 -> Math.min(WORDS[random.nextInt(WORDS.length)], 0x7fefffff);
         case 1 -> random.nextInt(0, 0x00100000);
         default -> random.nextInt(0, 0x7ff00000);
       };
@@ -486,7 +488,7 @@ class HypotTest {
 
   /** Random bits, uniform draws of Varka's baseline range, and every exponent. */
   static Inputs.Pairs densePairs(long seed, int n) {
-    return Atan2Test.concatPairs(
+    return concat(
         new Inputs.Pairs(Inputs.sampled(seed, n), Inputs.sampled(seed + 1, n)),
         new Inputs.Pairs(Inputs.uniform(seed + 2, n, -10.0, 10.0),
             Inputs.uniform(seed + 3, n, -10.0, 10.0)),
@@ -496,12 +498,23 @@ class HypotTest {
 
   /** The gate's inputs: {@code n} draws of each generator, the special pairs and the triples. */
   static Inputs.Pairs everything(long seed, int n) {
-    return Atan2Test.concatPairs(specialPairs(), triplePairs(), fuzzPairs(seed, n),
+    return concat(specialPairs(), triplePairs(), fuzzPairs(seed, n),
         scalingPairs(seed + 1, n), subnormalPairs(seed + 2, n), equalWordPairs(seed + 3, n),
         twiceBPairs(seed + 4, n), nanPairs(seed + 5, n), densePairs(seed + 6, n));
   }
 
-  /** The size of the generated parts in the suite: about a million and a half pairs in all. */
+  /** The pairs one after another. */
+  private static Inputs.Pairs concat(Inputs.Pairs... parts) {
+    double[][] xs = new double[parts.length][];
+    double[][] ys = new double[parts.length][];
+    for (int i = 0; i < parts.length; i++) {
+      xs[i] = parts[i].x();
+      ys[i] = parts[i].y();
+    }
+    return new Inputs.Pairs(Inputs.concat(xs), Inputs.concat(ys));
+  }
+
+  /** The size of the generated parts in the suite: about 1.25 million pairs in all. */
   static final int DRAWS = 1 << 17;
   static final long SEED = 0x4879_706fL;
 
@@ -509,8 +522,8 @@ class HypotTest {
   // The check, in this JVM or in one per JIT mode
   // ---------------------------------------------------------------------------------------------
 
-  /** What one pass over the inputs found. */
-  record Tally(long checked, List<String> mismatches, long[] paths, NanTally strict,
+  /** What one pass over the inputs found: every mismatch counted, the first 100 kept. */
+  record Tally(long checked, long mismatched, List<String> mismatches, long[] paths, NanTally strict,
       NanTally transcribed) {}
 
   /**
@@ -549,12 +562,13 @@ class HypotTest {
     long[] strict = new long[4];
     long[] transcribed = new long[4];
     List<String> mismatches = new ArrayList<>();
+    long mismatched = 0;
     for (int i = 0; i < p.x().length; i++) {
       double x = p.x()[i];
       double y = p.y()[i];
       double want = StrictMath.hypot(x, y);
       double got = cHypot(x, y, Variant.AS_WRITTEN, paths);
-      if (!PairBits.matches(MAGNITUDES, x, y, want, got) && mismatches.size() < 100) {
+      if (!PairBits.matches(MAGNITUDES, x, y, want, got) && mismatched++ < 100) {
         mismatches.add("hypot(" + Oracle.hex(x) + ", " + Oracle.hex(y) + "): StrictMath "
             + PairBits.expected(MAGNITUDES, x, y, want) + ", transcription " + Oracle.hex(got));
       }
@@ -565,7 +579,7 @@ class HypotTest {
         count(xb, yb, Double.doubleToRawLongBits(got), transcribed);
       }
     }
-    return new Tally(p.x().length, mismatches, paths,
+    return new Tally(p.x().length, mismatched, mismatches, paths,
         new NanTally(strict[0], strict[1], strict[2], strict[3]),
         new NanTally(transcribed[0], transcribed[1], transcribed[2], transcribed[3]));
   }
@@ -583,14 +597,14 @@ class HypotTest {
   }
 
   /**
-   * The check in a JVM of its own: {@code [draws [passes]]}, by default {@link #DRAWS} and 3. It
-   * prints the JVM's arguments, each pass's count of pairs, mismatches (each with its bits, the
-   * first 100) and the candidates of the two-NaN lanes, then how many pairs each {@link Variant}
-   * changes, and exits 1 if any pass has a mismatch.
+   * The check in a JVM of its own: {@code [draws [passes [variants]]]}, by default {@link #DRAWS}
+   * and 3. It prints the JVM's arguments, each pass's count of pairs, mismatches (the first 100
+   * with their bits) and the candidates of the two-NaN lanes, then, given {@code variants}, how
+   * many pairs each {@link Variant} changes, and exits 1 if any pass has a mismatch.
    *
    * <pre>
    *   java -Xint --add-modules jdk.incubator.vector -cp target/classes:target/test-classes \
-   *     io.github.vecbricks.vfdlibm.HypotTest 0x100000 1
+   *     io.github.vecbricks.vfdlibm.HypotTest 0x100000 1 variants
    * </pre>
    */
   public static void main(String[] args) {
@@ -603,14 +617,14 @@ class HypotTest {
     for (int pass = 1; pass <= passes; pass++) {
       Tally t = check(p);
       System.out.println("pass " + pass + ": checked " + t.checked() + ", mismatches "
-          + t.mismatches().size());
+          + t.mismatched());
       System.out.println("pass " + pass + ": StrictMath " + t.strict().show());
       System.out.println("pass " + pass + ": transcription " + t.transcribed().show());
       t.mismatches().forEach(m -> System.out.println("MISMATCH " + m));
-      failed |= !t.mismatches().isEmpty() || t.checked() == 0;
+      failed |= t.mismatched() > 0 || t.checked() == 0;
     }
     for (Variant variant : Variant.values()) {
-      if (variant != Variant.AS_WRITTEN) {
+      if (args.length > 2 && args[2].equals("variants") && variant != Variant.AS_WRITTEN) {
         System.out.println("variant " + variant + ": differs on " + differing(p, variant));
       }
     }
@@ -640,7 +654,7 @@ class HypotTest {
     if (mode.flag != null) {
       command.add(mode.flag);
     }
-    command.addAll(List.of("--add-modules", "jdk.incubator.vector", "-cp",
+    command.addAll(List.of("-Xmx256m", "--add-modules", "jdk.incubator.vector", "-cp",
         System.getProperty("java.class.path"), HypotTest.class.getName(),
         Integer.toString(draws), Integer.toString(passes)));
     Process process = new ProcessBuilder(command).redirectErrorStream(true).start();
@@ -675,7 +689,7 @@ class HypotTest {
   @Test
   void scalarTranscriptionIsStrictMath() {
     Tally t = check(everything(SEED, DRAWS));
-    assertTrue(t.mismatches().isEmpty(), String.join("\n", t.mismatches()));
+    assertEquals(0, t.mismatched(), String.join("\n", t.mismatches()));
     for (Path path : Path.values()) {
       assertTrue(t.paths()[path.ordinal()] > 0, path + " is never taken");
     }
@@ -685,7 +699,9 @@ class HypotTest {
 
   /**
    * The same check in a JVM per JIT mode, where {@code StrictMath} and the transcription each run
-   * in that mode's tiers: every pass of every mode passes, and each JVM had the mode's flag.
+   * in that mode's tiers: every pass of every mode passes, and each JVM had the mode's flag. That
+   * C1 or C2 compiled either method is not checked; the output shows which candidate each mode's
+   * {@code StrictMath} returned, and that is not asserted, since it is not specified.
    */
   @ParameterizedTest
   @EnumSource(JitMode.class)
