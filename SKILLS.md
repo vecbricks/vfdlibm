@@ -274,21 +274,22 @@ standard `C2-compiled nmethod` of each, from its entry point to its stubs, in In
   matched the laptop's to the instruction; and the check fails on
   any `.byte` or `(bad)`.
 - **Skips say which.** Not Linux on x86-64; hsdis not found (the script's `target/hsdis`, which
-  `mvn clean` deletes, or `$VFDLIBM_HSDIS_DIR`; a binutils hsdis such as `bench/asm`'s prints
-  another format, which the rules were not written for); or found but not loaded, decided by the output holding no
-  `[Disassembly]` instruction line, not by HotSpot's `Loading hsdis library failed`, which it
-  printed both with no library and with a file that was none. CI's x86 rows build hsdis and set `VFDLIBM_ASM_REQUIRED=true`, which makes
-  the last two fail instead; the Arm row skips.
+  `mvn clean` deletes, or `$VFDLIBM_HSDIS_DIR`; a binutils hsdis such as `bench/asm`'s prints another
+  format, which the rules were not written for); or found but not loaded, decided by the output
+  holding no `[Disassembly]` instruction line, not by HotSpot's `Loading hsdis library failed`,
+  which it printed both with no library and with a file that was none. CI's x86 rows build hsdis and
+  set `VFDLIBM_ASM_REQUIRED=true`, which makes the last two fail instead; the Arm row skips.
 
 **The census of exp's arms, 22 November 2026, on the laptop** (AMD Ryzen AI 9 HX PRO 370, JDK
 25.0.5.1, hsdis on Capstone 5.0.7). Not a headline and no timing: counts of instructions only, one
-run, the same in a second. Each is the whole nmethod of the probe's loop, prologue and
-out-of-line paths included, so the constant broadcasts C2 hoists before the loop count, and
-from 256 bits up the stack accesses are the stack bang and the uncommon traps' saves, not
-spills; `bench/asm/README.md` counts the hot loop alone. The columns: all instructions, packed-double arithmetic, `vdivpd`, blends, broadcasts,
-compares (`vpcmp*`, `vcmp*`), mask-register operations (`k*`), conversions (`vcvt*`, `vpmov*`),
-operands on `[rsp`, calls, FMA. The preferred species read the same as its fixed width (512 bits
-on the host's flags, 256 as an AVX2 host). The rows come from the test's output: `grep '^| exp '`.
+run, the same in a second. Each is the whole nmethod of the probe's loop, prologue and out-of-line
+paths included, so the constant broadcasts C2 hoists before the loop count, and from 256 bits up the
+stack accesses are the stack bang and the uncommon traps' saves, not spills; `bench/asm/README.md`
+counts the hot loop alone. The columns: all instructions, packed-double arithmetic, `vdivpd`,
+blends, broadcasts, compares (`vpcmp*`, `vcmp*`), mask-register operations (`k*`), conversions
+(`vcvt*`, `vpmov*`), operands on `[rsp`, calls, FMA. The preferred species read the same as its
+fixed width (512 bits on the host's flags, 256 as an AVX2 host). The rows are the test's output
+(`grep '^| exp '`), less its function and width columns, under shorter headers.
 
 On the host's own flags (AVX-512, `MaxVectorSize=64`):
 
@@ -326,14 +327,13 @@ As an AVX2 host (`-XX:UseAVX=2 -XX:MaxVectorSize=32`):
 | 256 | core | 140 | 24 | 1 | 5 | 17 | 8 | 0 | 3 | 3 | 2 | 0 |
 
 What it reads: no FMA in any arm at any width under either flag set. From 256 bits up every arm is
-one copy of the body (24 packed-double operations, one `vdivpd`; the blended arm's two more are
-its filter's `x + x` and the subnormal scale's product) and calls only its traps and the entry
-barrier: three for the finish arms (the finish's trap, the loop's range check, the barrier), two
-for the others. The blended arm has 6 more blends than the finish on AVX-512 and 5 more on AVX2, and 7 to 8
+one copy of the body (24 packed-double operations, one `vdivpd`; the blended arm's two more are its
+filter's `x + x` and the subnormal scale's product) and calls only its traps and the entry barrier:
+three for the finish arms (the finish's trap, the loop's range check, the barrier), two for the
+others. The blended arm has 6 more blends than the finish on AVX-512 and 5 more on AVX2, and 7 to 8
 more broadcasts, its filter's constants. AVX2 has no mask registers, so its masks are vector
 compares and `vblendvps`, 2 to 3 more blends per arm than AVX-512's `vpblendmq`. Masking adds one
-blend and 10 to 23 instructions. At 128 bits the bodies are 8 to 16 times longer: the Java
-fallback.
+blend and 10 to 23 instructions. At 128 bits the bodies are 8 to 16 times longer: the Java fallback.
 
 ## Where headline numbers come from: four named hosts
 

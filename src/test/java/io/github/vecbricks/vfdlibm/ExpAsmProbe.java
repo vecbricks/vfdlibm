@@ -78,8 +78,9 @@ final class ExpAsmProbe {
   }
 
   /**
-   * Prints a start line with the species, warms each arm in turn and prints a done line. A
-   * species other than the one named fails, since the test would then check the wrong width.
+   * Prints a start line with the width and the species' bits, which {@link ExpAsmTest} compares
+   * with its own so that it never checks another width, warms each arm in turn and prints a done
+   * line.
    */
   public static void main(String[] args) {
     System.out.println("asm-probe start: width " + WIDTH + ", " + S.vectorBitSize() + " bits");

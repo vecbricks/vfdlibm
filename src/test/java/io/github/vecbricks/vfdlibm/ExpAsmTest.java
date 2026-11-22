@@ -38,9 +38,9 @@ import org.junit.jupiter.params.provider.EnumSource;
  * Vector API's Java fallback. Its width and FMA rules are asserted. The width is the child's
  * species, so the preferred species at 128 bits ({@code -XX:MaxVectorSize=16}) is treated alike.
  *
- * <p>Skipped, with the reason, on a host that is not Linux on x86-64, when no hsdis is found ({@link
- * AsmCheck#findHsdis}), and when one is found but HotSpot printed no disassembly with it; with
- * {@code VFDLIBM_ASM_REQUIRED=true}, as CI's x86 rows set, the last two fail instead.
+ * <p>Skipped, with the reason, on a host that is not Linux on x86-64, when no hsdis is found
+ * ({@link AsmCheck#findHsdis}), and when one is found but HotSpot printed no disassembly with it;
+ * with {@code VFDLIBM_ASM_REQUIRED=true}, as CI's x86 rows set, the last two fail instead.
  */
 class ExpAsmTest {
 

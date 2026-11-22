@@ -24,18 +24,20 @@
 # hsdis-<arch>.so on LD_LIBRARY_PATH; no JDK is built.
 #
 # The disassembler behind them is Capstone (BSD), version 5. The system's is used when its
-# capstone.h says 5 (apt install libcapstone-dev, Ubuntu 25.04 and later), and the build takes
-# gcc only; 6 renamed the Arm architecture this script names. Otherwise, or with --capstone-source, Capstone's pinned release is
-# fetched, checked against its SHA-256 and built with cmake under target/hsdis/capstone, for this
-# host's architecture only, and linked in statically. Version 4 will not do: Ubuntu 24.04's
-# 4.0.2, which GitHub's ubuntu-latest has, printed an AVX-512 body of exp at 256 bits with
-# ".byte 0x62" and garbage after it, a "call" among the garbage (SKILLS.md, "The assembly check").
+# capstone.h says 5 (apt install libcapstone-dev, Ubuntu 25.04 and later), and the build takes gcc
+# only; 6 renamed the Arm architecture this script names. Otherwise, or with --capstone-source,
+# Capstone's pinned release is fetched, checked against its SHA-256 and built with cmake under
+# target/hsdis/capstone, for x86 and Arm only, and linked in statically. Version 4 will not do:
+# Ubuntu 24.04's 4.0.2, which GitHub's ubuntu-latest has, printed an AVX-512 body of exp at 256 bits
+# with ".byte 0x62" and garbage after it, a "call" among the garbage (SKILLS.md, "The assembly
+# check").
 #
-# The library goes to target/hsdis/hsdis-amd64.so on x86-64 and target/hsdis/hsdis-aarch64.so on
-# Arm (or --out <dir>); mvn clean deletes it, and the check then skips until it is built again. Then the check runs: a JVM with LD_LIBRARY_PATH=<dir> prints one compiled
-# method of a two-line class of this script's own, and the build passes only if the output holds
-# a [Disassembly] section with an instruction line in it. Without a disassembler HotSpot prints
-# raw hex instead and does not fail, so the exit status of that JVM would prove nothing.
+# The library goes to target/hsdis/hsdis-amd64.so on x86-64 and target/hsdis/hsdis-aarch64.so on Arm
+# (or --out <dir>); mvn clean deletes it, and the check then skips until it is built again. Then the
+# check runs: a JVM with LD_LIBRARY_PATH=<dir> prints one compiled method of a two-line class of
+# this script's own, and the build passes only if the output holds a [Disassembly] section with an
+# instruction line in it. Without a disassembler HotSpot prints raw hex instead and does not fail,
+# so the exit status of that JVM would prove nothing.
 set -euo pipefail
 usage() { sed -n '/^# Builds hsdis/,/^[^#]/p' "$0" | sed '$d'; exit "${1:-2}"; }
 
@@ -54,10 +56,10 @@ capstone_source=""
 while [ "$#" -gt 0 ]; do
   case "$1" in
     -h|--help) usage 0 ;;
-    --src) src="$2"; shift 2 ;;
-    --out) out="$2"; shift 2 ;;
+    --src) [ "$#" -ge 2 ] || usage; src="$2"; shift 2 ;;
+    --out) [ "$#" -ge 2 ] || usage; out="$2"; shift 2 ;;
     --capstone-source) capstone_source=yes; shift ;;
-    --check) check_only="$2"; shift 2 ;;
+    --check) [ "$#" -ge 2 ] || usage; check_only="$2"; shift 2 ;;
     *) usage ;;
   esac
 done
