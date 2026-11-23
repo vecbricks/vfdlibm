@@ -469,6 +469,10 @@ On the host's own flags (AVX-512, `MaxVectorSize=64`), 256 and 512 bits:
 | hypot | 256 | finishMasked | 236 | 23 | 0 | 1 | 22 | 14 | 9 | 21 | 8 | 22 | 3 | 0 |
 | hypot | 512 | finish | 202 | 23 | 0 | 1 | 21 | 14 | 9 | 10 | 8 | 15 | 3 | 0 |
 | hypot | 512 | finishMasked | 245 | 23 | 0 | 1 | 22 | 14 | 9 | 11 | 8 | 17 | 3 | 0 |
+| pow | 256 | finish | 343 | 88 | 2 | 0 | 9 | 48 | 16 | 31 | 9 | 22 | 3 | 0 |
+| pow | 256 | finishMasked | 369 | 88 | 2 | 0 | 10 | 48 | 16 | 40 | 9 | 31 | 3 | 0 |
+| pow | 512 | finish | 334 | 88 | 2 | 0 | 9 | 48 | 16 | 29 | 9 | 22 | 3 | 0 |
+| pow | 512 | finishMasked | 383 | 88 | 2 | 0 | 10 | 48 | 16 | 32 | 9 | 27 | 3 | 0 |
 
 As an AVX2 host (`-XX:UseAVX=2 -XX:MaxVectorSize=32`), 256 bits:
 
@@ -515,6 +519,8 @@ As an AVX2 host (`-XX:UseAVX=2 -XX:MaxVectorSize=32`), 256 bits:
 | atan2 | 256 | guardedMasked | 527 | 41 | 2 | 0 | 37 | 52 | 23 | 0 | 13 | 88 | 4 | 0 |
 | hypot | 256 | finish | 256 | 23 | 0 | 1 | 22 | 24 | 13 | 0 | 14 | 33 | 3 | 0 |
 | hypot | 256 | finishMasked | 301 | 23 | 0 | 1 | 23 | 24 | 13 | 0 | 14 | 36 | 3 | 0 |
+| pow | 256 | finish | 379 | 88 | 2 | 0 | 10 | 71 | 22 | 0 | 9 | 12 | 3 | 0 |
+| pow | 256 | finishMasked | 429 | 88 | 2 | 0 | 11 | 71 | 22 | 0 | 10 | 23 | 3 | 0 |
 
 At 128 bits, the ranges over each function's arms (all instructions, packed-double arithmetic,
 calls, operands on `[rsp`, FMA), on the host's own flags:
@@ -564,18 +570,20 @@ With `-XX:MaxVectorSize=16`:
 | acos | 2 | 1591 to 1701 | 49 | 78 to 89 | 474 to 510 | 0 |
 | atan2 | 4 | 8098 to 10228 | 41 to 42 | 360 to 444 | 3094 to 4197 | 0 |
 | hypot | 2 | 4081 to 4176 | 23 | 217 to 226 | 1285 to 1295 | 0 |
+| pow | 2 | 4576 to 4669 | 88 | 228 to 241 | 1342 to 1428 | 0 |
 
-What it reads: no FMA and no scalar double arithmetic in any arm at any width under any of the
-three flag sets. From 256 bits up each arm is one copy of its body and calls only its uncommon
-traps and the entry barrier: 2 calls for the blended arms of log, log10, log1p and expm1 and for
-expm1's core, 4 for atan2's guarded arm, 3 for every other. asin, acos and hypot take their
-square root as one `vsqrtpd`. Masking adds one blend and 10 to 59 instructions on AVX-512, 17 to
-66 on AVX2, which has no mask registers (its `k` column is 0). At 128 bits every arm runs the
-Java fallback, 60 to 444 calls per method, as for exp. acos's 49 packed-double operations at 128
-bits against 42 above are seven more `vsqrtpd`, 8 against 1: around the fallback's allocations
-of boxed vectors C2 computes `sqrt(z)` again at its uses, each from the same register, instead
-of keeping the one result (read in acos's 128-bit `finish` compile, by mnemonic); the other
-operations count the same at both widths.
+What it reads: no FMA and no scalar double arithmetic in any arm at any width under any of the three
+flag sets. pow's arms came in a later run (23 November 2026, the same laptop, CI's widths per row),
+so its 128-bit row is under `MaxVectorSize=16` only. From 256 bits up each arm is one copy of its
+body and calls only its uncommon traps and the entry barrier: 2 calls for the blended arms of log,
+log10, log1p and expm1 and for expm1's core, 4 for atan2's guarded arm, 3 for every other. asin,
+acos and hypot take their square root as one `vsqrtpd`. Masking adds one blend and 10 to 59
+instructions on AVX-512, 17 to 66 on AVX2, which has no mask registers (its `k` column is 0). At 128
+bits every arm runs the Java fallback, 60 to 444 calls per method, as for exp. acos's 49
+packed-double operations at 128 bits against 42 above are seven more `vsqrtpd`, 8 against 1: around
+the fallback's allocations of boxed vectors C2 computes `sqrt(z)` again at its uses, each from the
+same register, instead of keeping the one result (read in acos's 128-bit `finish` compile, by
+mnemonic); the other operations count the same at both widths.
 
 ## Where headline numbers come from: four named hosts
 
@@ -1613,29 +1621,30 @@ operations count the same at both widths.
 
 ## What the pow port taught
 
-- **The common path alone, prototyped first.** By the owner's decisions of 23 November 2026 on
-  issue 34, the first body computes e_pow.c's common path only (a positive normal `x` that is not
-  1, a finite `y` of `iy <= 0x41e00000` that is not 0, +-1, 2 or 0.5, `z` inside lines 266 and
-  272, a normal result) and finishes every other lane per lane by `StrictMath.pow`; the guard is
-  `PROOFS.md`'s L18. Before any test, its body (two divisions, six low-word clears, int-lane
-  shifts by per-lane counts and `I2D`) was run through `bench/alloc-check.py` and read with #153's
-  assembly check overlaid (not committed here): at 256 and 512 bits on the laptop's AVX-512 flags
-  and at 256 bits as an AVX2 host, each loop was one copy of the body with two `vdivpd`, no FMA
-  and no call but the traps and the entry barrier. `--why` named no refused call of `Pow` or
-  `Lanes`, but `NodeCountInliningCutoff` refused the benchmark methods themselves and
-  `Blackhole::consume`: the graph is past the cutoff with pow's body alone, so nothing more fits
-  beside it. No results file holds these readings, so no figure of them is quoted.
-- **`StrictMath.pow` allocates, which the allocation check cannot tell from a box.** On JDK
-  25.0.5.1 the scalar `StrictMath.pow` loop of `PowBenchmark` allocates, and in a standalone probe
-  only the calls that reach the oracle's main path did (a negative `x` with an integer `y`, a
-  subnormal `x`, overflow, underflow, a subnormal result), and not a common-path call there, so
-  the allocation depends on how the JIT compiled the oracle; its cause is not read. The vector
-  rows on `mixed` data allocate what the finish's calls on those lanes do: with those kinds left
-  out of the data every row passed, and a scratch row calling `StrictMath.pow` on the same lanes
-  alone allocated as much as the finish rows, at the laptop's flags and as an AVX2 host (local
-  readings, not committed). So `bench/alloc-check.py` fails pow's `mixed` rows though the body
-  does not box; what the benchmark's `mixed` data should hold, and how the check treats it, is
-  the owner's decision.
+- **The common path alone, prototyped first.** By the owner's decisions of 23 November 2026 on issue
+  34, the first body computes e_pow.c's common path only (a positive normal `x` that is not 1, a
+  finite `y` of `iy <= 0x41e00000` that is not 0, +-1, 2 or 0.5, `z` inside lines 266 and 272, a
+  normal result) and finishes every other lane per lane by `StrictMath.pow`; the guard is
+  `PROOFS.md`'s L18. Before any test, its body (two divisions, six low-word clears, int-lane shifts
+  by per-lane counts and `I2D`) was run through `bench/alloc-check.py` and read with the assembly
+  check: at 256 and 512 bits on the laptop's AVX-512 flags and at 256 bits as an AVX2 host, each
+  loop is one copy of the body with two `vdivpd`, no FMA and no call but the traps and the entry
+  barrier (`AsmTest` holds pow's arms, and the census above has their rows). `--why` named no
+  refused call of `Pow` or `Lanes`, but `NodeCountInliningCutoff` refused the benchmark methods
+  themselves and `Blackhole::consume`: the graph is past the cutoff with pow's body alone, so
+  nothing more fits beside it.
+- **`StrictMath.pow` allocates, which the allocation check cannot tell from a box.** On JDK 25.0.5.1
+  the scalar `StrictMath.pow` loop of `PowBenchmark` allocates, and in a standalone probe only the
+  calls that reach the oracle's main path did (a negative `x` with an integer `y`, a subnormal `x`,
+  overflow, underflow, a subnormal result), and not a common-path call there, so the allocation
+  depends on how the JIT compiled the oracle; its cause is not read. The vector rows on `mixed` data
+  allocate what the finish's calls on those lanes do: with those kinds left out of the data every
+  row passed, and a scratch row calling `StrictMath.pow` on the same lanes alone allocated as much
+  as the finish rows, at the laptop's flags and as an AVX2 host (local readings, not committed). So
+  `bench/alloc-check.py` fails pow's `mixed` rows though the body does not box. By the owner's
+  decision of 23 November 2026 (issue 34) the check compares such rows with an oracle baseline:
+  `PowBenchmark.rareOracle` calls `StrictMath.pow` on the lanes the finish takes, over the same
+  arrays, and no timing is claimed of it.
 - **Which guard parts are hinges.** Run through the common path alone, every part of the guard but
   two changes results on pairs it alone keeps out (`PROOFS.md`, L18, with the counts): a `|y|` past
   2^31 beside `x` within 2^-40 of 1 only rarely (42 of 5,952 pairs), where the C's short log and the
@@ -1650,7 +1659,13 @@ operations count the same at both widths.
   `pow.dropT2` (line 261's `y*t2` dropped): 4,194,304 of Varka's range, 1,329,994 of the target
   pairs, 8,669 of the special pairs. The fault run's inputs (`PowTest.faultRunInputs`) hold the
   special pairs, integer and target pairs, the pairs of each guard part and dense draws.
-- **Hard cases: none.** Lefevre's lines hold one argument, and no published table of pow's hard
-  cases is known here; #34's question on self-computed files was answered for hypot only, so no
-  `hard-cases/pow.txt` is written. The gate's exact powers (`integer ** integer` up to 2^53) and the
-  pairs either side of `MIN_NORMAL` are in the suite.
+- **Hard cases, computed** (the owner's decision of 23 November 2026, issue 34). No published table
+  holds pow's, so `dev/pow-hard-cases.py` derives `hard-cases/pow.txt` with exact integer
+  arithmetic: exact results (integer powers below 2^53 scaled into each binade, and powers of two
+  with integer, quarter and eighth exponents down to 2^-1074), exact ties (odd 54-bit powers, and
+  odd multiples of 2^-1075 among the subnormals), results within 2^-28 ulp of a midpoint, and the
+  doubles either side of the overflow, smallest-normal and zero thresholds. `HardCasePairsTest`
+  rechecks each pair's claim with `BigInteger` arithmetic. The near family stops at 2^-28 and not
+  hypot's 2^-40: from `x = 2^52 + d` the distance is `|C(e,2) d^2 - (2j+1) 2^51| / 2^52` to leading
+  order, and the squares are too sparse modulo 2^51 for it to come nearer (about 2^-30 at best over
+  20,000 steps); a nearer family needs another construction.

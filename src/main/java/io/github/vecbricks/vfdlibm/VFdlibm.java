@@ -35,8 +35,9 @@ import jdk.incubator.vector.VectorMask;
  * arm; {@code hypot} and {@code pow} have one arm, the finish. No file under {@code
  * bench/results/} reads {@code hypot} or {@code pow} yet: every file the list below cites predates
  * them, and of the list only the allocation check that CI runs covers them. On its mixed data
- * that check fails {@code pow}'s rows without a box: {@code StrictMath.pow}, which finishes the
- * rare lanes, allocates on some of them itself ({@code SKILLS.md}, "What the pow port taught").
+ * {@code StrictMath.pow}, which finishes {@code pow}'s rare lanes, allocates on some of them
+ * itself, so that check reads {@code pow}'s rows against an oracle baseline ({@code SKILLS.md},
+ * "What the pow port taught").
  *
  * <ul>
  *   <li>Covered by {@code bench/alloc-check.py}, which CI runs and which fails a body that
