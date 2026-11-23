@@ -49,7 +49,7 @@ when the logs are gone.
 | `pool.py` | `fetch`, `table` and `cost` |
 | `nightly-2026-11-03-to-2026-11-19.tsv` | the 664 recording jobs of the nightly's first 17 nights, runs 41612916834 to 44505887053: 332 x86 and 332 Arm, every one with a reading |
 | `nightly-cost-2026-11-03-to-2026-11-19.tsv` | every job of those nights, its times and runs |
-| `nightly-2026-11-22.tsv`, `nightly-cost-2026-11-22.tsv` | the same of 22 November: the scheduled night of eleven functions, run 44994568244 (`SKILLS.md`'s entry on twelve functions reads it), and a dispatch of six, run 44999281363; 184 recording jobs, every one with a reading |
+| `nightly-2026-11-22.tsv`, `nightly-cost-2026-11-22.tsv` | the same of 22 November: the scheduled night of eleven functions, run 44994568244 (`SKILLS.md`'s entries on twelve and on thirteen functions read it), and a dispatch of six, run 44999281363; 184 recording jobs, every one with a reading |
 | `nightly-2026-11-23.tsv`, `nightly-cost-2026-11-23.tsv` | the same of 23 November: the scheduled night of eleven functions, run 45131086418 (`SKILLS.md`'s entry on thirteen functions reads it); 88 recording jobs, every one with a reading |
 
 The columns: `date`, `run`, `job` and `name` say which job; `cpu` is `/proc/cpuinfo`'s model
