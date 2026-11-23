@@ -44,8 +44,30 @@ Several plain runs of one host, a run and its re-run (AGENTS.md asks for one whe
 on a ratio under about 1.3x), go in one file: the first run's file as above, then for each
 later run that has the file's class a line "# Run N of M of this file: ..." and that run's
 header, table and raw section. The file's name has the first run's date. Runs of two hosts or
-CPUs are refused, since a file is of one CPU; so is a pair among them, whose re-run is a file
-of its own. A class that a later run lacks, or that the first run lacks, is named in a note.
+CPUs are refused, since a file is of one CPU, and so are runs with other JMH options or vector
+settings; so is a pair among them, whose re-run is a file of its own. A class that a later run
+lacks, or that the first run lacks, is named in a note.
+
+A later run at another commit than the first run's joins the file only if the JDK and the
+command are the same and so is the code under the file's benchmark, but for comments and
+whitespace. Otherwise it is refused: another JDK or command refuses the write; other code leaves
+the run out of that class's file, in a note that names the files that differ (it is a first run
+of new code, a file of its own), a run that so joins no file refuses the write, and check
+refuses a file that holds such a run.
+The code under a benchmark class is its file in src/jmh/java and, transitively, every file of
+src/main/java, src/jmh/java and src/test/java that declares at its top level a type whose name
+is a word of that code (comments dropped, literals emptied), taken at both commits: the files
+must be the same set, each the same once its comments are dropped and its whitespace is
+dropped where no two tokens could join across it, literals kept verbatim. A \\u escape that
+could open or close a comment or a literal is refused, not decoded. pom.xml must be the same as
+XML but for the project's own version, project.build.outputTimestamp, the executions whose id
+starts with fault- and the profile release. src/main/resources, src/jmh/resources, every file
+under src/main/java and src/jmh/java that is not Java source, and module-info.java and
+package-info.java there, must be the same too, and src/test/resources if a test class is under
+the benchmark. git reads the files at both commits, in this script's clone, which must hold
+both commits; one it lacks is fetched from origin (a network call), and if that fails the runs
+are refused. A line "# Code:" under the run's line says which commits and files were
+compared, and check computes it again.
 
 `check` reads a results file's header lines, tables and raw section and compares them with what
 `write` makes from the artifact, and fails if they differ or if a marker line is still there.
@@ -507,17 +529,23 @@ def joined_files(directories, name=None):
                           " a pair's" % d)
         header = dict((k, v) for k, v in plain_header(lines))
         # The host's key, and the CPU as the workflow's check reads it, ignoring case.
-        # What makes it one measurement again: the host's key and CPU (case aside), the
-        # commit, the JMH options and the JVM's vector settings; and the run itself differs.
+        # What makes it one measurement again: the host's key and CPU (case aside), the JMH
+        # options and the JVM's vector settings; and the run itself differs. At another commit
+        # than the first run's, the JDK too, and the code (code_note).
         seen.append(((header.get("Host") or "?").split()[0], (header.get("CPU") or "").lower(),
-                     (header.get("Commit") or "").split(" ")[0], " ".join(
-                         (header.get("JMH") or "").split()), header.get("Vector"),
-                     header.get("Run") or lines[0]))  # an older run: its title, with its time
-    runs = [x[-1] for x in seen]
-    if len({x[:-1] for x in seen}) > 1 or len(set(runs)) < len(runs):
+                     " ".join((header.get("JMH") or "").split()), header.get("Vector"),
+                     header.get("Run") or lines[0],  # an older run: its title, with its time
+                     (header.get("Commit") or "").split(" ")[0],
+                     (" ".join((header.get("JDK") or "").split()),
+                      " ".join((header.get("Command") or "").split()))))
+    runs = [x[4] for x in seen]
+    if len({x[:4] for x in seen}) > 1 or len(set(runs)) < len(runs) or any(
+            x[5] != seen[0][5] and x[6] != seen[0][6] for x in seen):
         raise Problem("several runs go in one file only if they are different runs of one host"
-                      " and CPU, at one commit, with the same JMH options and vector settings;"
-                      " these are %s" % "; ".join(" ".join(map(str, x)) for x in seen))
+                      " and CPU, with the same JMH options and vector settings, and, at"
+                      " different commits, the same JDK and command; these are %s"
+                      % "; ".join(" ".join(map(str, x)) for x in seen))
+    commits = [x[5] for x in seen]
     # A later run joins the file of its class, whatever the files are named; a class that a
     # run lacks, or that only a later run has, is said and never joined to another's.
     blocks = {file_name: [] for file_name in first}
@@ -534,6 +562,7 @@ def joined_files(directories, name=None):
         if not set(later) & set(of_class):
             raise Problem("run %d has none of the first run's classes (%s), so it joins no file"
                           % (n, "; ".join(", ".join(sorted(c)) for c in of_class)))
+        joined, refused = 0, []
         for cls, block in later.items():
             if cls in of_class:
                 # The later run's lines from its header on, without the places for
@@ -541,14 +570,330 @@ def joined_files(directories, name=None):
                 title = block[0]
                 block = [l for l in block[block.index(header_block(block)[0]):]
                          if MARKER not in l]
-                blocks[of_class[cls]].append([title, "#"] + [
+                # The note numbers the run by its place in this file, as RUN_LINE does.
+                try:
+                    note = code_note(len(blocks[of_class[cls]]) + 2, commits[0],
+                                     commits[n - 1], cls)
+                except CodeDiffers as e:
+                    NOTES.append("the run given %s is not in %s: %s"
+                                 % (ordinal(n), of_class[cls], e))
+                    refused.append(str(e))
+                    continue
+                joined += 1
+                blocks[of_class[cls]].append(note + [title, "#"] + [
                     l for i, l in enumerate(block) if not (l == "#" and block[i - 1] == "#")])
+        if not joined:
+            # A run that joins no file is refused, as one that shares no class is.
+            raise CodeDiffers("the run given %s joins no file: %s"
+                              % (ordinal(n), "; ".join(refused)))
     out = {}
     for file_name, lines in first.items():
         out[file_name] = list(lines)
         for k, block in enumerate(blocks[file_name], 2):
             out[file_name] += ["#", RUN_LINE % (k, 1 + len(blocks[file_name]))] + block
     return out
+
+
+# The code at two commits: a run and its re-run at different commits share a file only if the
+# code under the benchmark is the same but for comments and whitespace.
+
+# The clone whose git holds the runs' commits: this script's checkout (the self-test's own).
+REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+# The source roots a benchmark's closure is taken from, and the files that must be the same.
+ROOTS = ("src/main/java", "src/jmh/java", "src/test/java")
+POM_NS = "{http://maven.apache.org/POM/4.0.0}"
+# A character that, written as a \u escape, could open or close a comment or a literal.
+HIDING = set("/*\"'\\\n\r{}")
+UNICODE = re.compile(r"\\+u+([0-9A-Fa-f]{4})")
+# Characters that join with a neighbour of their kind into another token, so that a space
+# between two of them is kept: words, and the characters of Java's operators.
+OPERATOR = set("+-*/%=<>!&|^~:.?")
+DECLARATION = re.compile(r"\b(?:class|interface|enum|record)\s+([A-Za-z_$][\w$]*)")
+IDENTIFIER = re.compile(r"[A-Za-z_$][\w$]*")
+CODE_RULE = ("{seed} and every type it names in %s and %s, transitively, and any"
+             " module-info.java and package-info.java of src/main/java and src/jmh/java, without"
+             " comments and with whitespace dropped only where no two tokens could join,"
+             " literals verbatim; pom.xml as XML without the project's version,"
+             " project.build.outputTimestamp, the fault-* executions and the release profile;"
+             " and byte for byte src/main/resources, src/jmh/resources, the other files of"
+             " src/main/java and src/jmh/java, and src/test/resources if a test class is under"
+             " the benchmark" % (", ".join(ROOTS[:-1]), ROOTS[-1]))
+
+
+def char_kind(c):
+    if c.isalnum() or c in "_$":
+        return "word"
+    return "operator" if c in OPERATOR else "other"
+
+
+def java_code(text, what):
+    """A Java source without its comments, as two strings: the code with each run of
+    whitespace dropped where no token could join across it (a space kept between two word
+    characters and between two operator characters), the literals verbatim; and the same with
+    each literal emptied, which names the types the code uses. A \\u escape that could hide a
+    comment or a literal's end is refused, since Java reads it before it reads either."""
+    for m in UNICODE.finditer(text):
+        slashes = len(m.group(0)) - len(m.group(0).lstrip("\\"))
+        if slashes % 2 == 1 and chr(int(m.group(1), 16)) in HIDING:
+            raise Problem("%s: the escape %s is a character that may open or close a comment"
+                          " or a literal; bench/record.py does not decode escapes, and refuses"
+                          % (what, m.group(0)))
+    pieces, i, n = [], 0, len(text)  # (kind, text): "code" or "literal"
+
+    def ends(start, close):
+        # The index past a literal's closing quote, a backslash escaping the next character.
+        j = start
+        while j < n:
+            if text[j] == "\\":
+                j += 2
+            elif text.startswith(close, j):
+                return j + len(close)
+            elif close != '"""' and text[j] in "\n\r":
+                break
+            else:
+                j += 1
+        raise Problem("%s: a literal opened at character %d is not closed" % (what, start))
+
+    while i < n:
+        if text.startswith("//", i):
+            # Java ends a line at CR, LF or both.
+            i = min([k for k in (text.find("\n", i), text.find("\r", i)) if k >= 0] or [n])
+            pieces.append(("code", " "))
+        elif text.startswith("/*", i):
+            j = text.find("*/", i + 2)
+            if j < 0:
+                raise Problem("%s: a comment opened at character %d is not closed" % (what, i))
+            i = j + 2
+            pieces.append(("code", " "))
+        elif text.startswith('"""', i):
+            j = ends(i + 3, '"""')
+            pieces.append(("literal", text[i:j]))
+            i = j
+        elif text[i] in "\"'":
+            j = ends(i + 1, text[i])
+            pieces.append(("literal", text[i:j]))
+            i = j
+        else:
+            pieces.append(("code", text[i]))
+            i += 1
+    out, names, last, space = [], [], "", False
+    for kind, piece in pieces:
+        if kind == "code" and piece.isspace():
+            space = True
+            continue
+        first = piece[0] if kind == "code" else '"'
+        if space and last and char_kind(last) == char_kind(first) != "other":
+            out.append(" ")
+            names.append(" ")
+        out.append(piece)
+        names.append(piece if kind == "code" else ' "" ')
+        last, space = (piece[-1] if kind == "code" else '"'), False
+    return "".join(out), "".join(names)
+
+
+def top_level_types(names):
+    """The types a source declares at its top level, from its code with the literals emptied:
+    a nested type is named through its outer type, which brings that type's file in."""
+    depth, found = 0, []
+    for m in re.finditer(r"[{}]|" + DECLARATION.pattern, names):
+        if m.group(0) == "{":
+            depth += 1
+        elif m.group(0) == "}":
+            depth -= 1
+        elif depth == 0:
+            found.append(m.group(1))
+    return found
+
+
+FETCH_TIMEOUT = 120  # seconds
+
+
+def git(*args, check=True, timeout=None):
+    """git in REPO, never asking for credentials on a terminal or reading stdin."""
+    env = dict(os.environ, GIT_TERMINAL_PROMPT="0")
+    try:
+        done = subprocess.run(["git", "-C", REPO] + list(args), capture_output=True, env=env,
+                              stdin=subprocess.DEVNULL, timeout=timeout)
+    except subprocess.TimeoutExpired:
+        if check:
+            raise Problem("git %s took more than %d seconds" % (" ".join(args), timeout))
+        return subprocess.CompletedProcess(args, 124, b"", b"timed out")
+    if check and done.returncode != 0:
+        raise Problem("git %s failed: %s" % (" ".join(args),
+                                             done.stderr.decode("utf-8", "replace").strip()))
+    return done
+
+
+def have_commit(sha):
+    """The commit is in the clone, fetched from origin if it is not."""
+    if not re.fullmatch(r"[0-9a-f]{7,40}", sha or ""):
+        raise Problem("a run's Commit line names no commit: '%s'" % sha)
+    if git("cat-file", "-e", sha + "^{commit}", check=False).returncode != 0:
+        git("fetch", "--quiet", "origin", sha, check=False, timeout=FETCH_TIMEOUT)
+        if git("cat-file", "-e", sha + "^{commit}", check=False).returncode != 0:
+            raise Problem("commit %s is not in the clone at %s, nor can it be fetched from"
+                          " origin: the code of the runs cannot be compared" % (sha, REPO))
+
+
+RESOURCES = ("src/main/resources", "src/jmh/resources", "src/test/resources")
+
+
+def tree(sha):
+    """{path: bytes} of the files under ROOTS and RESOURCES, and pom.xml, at a commit."""
+    entries = [e for e in git("ls-tree", "-r", "-z", sha, "--", *ROOTS, *RESOURCES, "pom.xml"
+                              ).stdout.decode("utf-8").split("\0") if e]
+    paths = []
+    for entry in entries:
+        meta, _, path = entry.partition("\t")
+        if meta.split()[1] != "blob":
+            raise Problem("%s at %s is a %s, not a file: bench/record.py compares files only"
+                          % (path, sha[:7], meta.split()[1]))
+        paths.append(path)
+    done = subprocess.run(["git", "-C", REPO, "cat-file", "--batch"], capture_output=True,
+                          input="".join("%s:%s\n" % (sha, p) for p in paths).encode("utf-8"))
+    if done.returncode != 0:
+        raise Problem("git cat-file --batch failed at %s: %s"
+                      % (sha[:7], done.stderr.decode("utf-8", "replace").strip()))
+    out, data = {}, done.stdout
+    for path in paths:
+        head, _, data = data.partition(b"\n")
+        parts = head.split()
+        if len(parts) != 3 or parts[1] != b"blob":
+            raise Problem("git cat-file gave '%s' for %s at %s"
+                          % (head.decode("utf-8", "replace"), path, sha[:7]))
+        size = int(parts[2])
+        out[path], data = data[:size], data[size + 1:]
+    return out
+
+
+def pom_shape(data, what):
+    """pom.xml without what no benchmark runs: the project's own version, the property
+    project.build.outputTimestamp, each execution whose id starts with fault- and the profile
+    release, read as XML (its comments dropped) and written canonically without whitespace."""
+    import xml.etree.ElementTree as ET
+    try:
+        root = ET.fromstring(data)
+    except ET.ParseError as e:
+        raise Problem("%s is not XML: %s" % (what, e))
+    for parent in list(root.iter()):
+        for child in list(parent):
+            tag = child.tag.replace(POM_NS, "")
+            ident = (child.findtext(POM_NS + "id") or "").strip()
+            if ((parent is root and tag == "version")
+                    or (parent.tag == POM_NS + "properties"
+                        and tag == "project.build.outputTimestamp")
+                    or (tag == "execution" and ident.startswith("fault-"))
+                    or (tag == "profile" and ident == "release")):
+                parent.remove(child)
+    return ET.canonicalize(ET.tostring(root, encoding="unicode"), strip_text=True)
+
+
+CODE_CACHE = {}
+
+
+class CodeDiffers(Problem):
+    """The code under a benchmark is not the same at two commits."""
+
+
+def always_compared(path):
+    """A file compared whatever the closure: a module's or a package's declarations, and
+    anything but Java source under src/main/java or src/jmh/java, which the build may copy."""
+    if path.startswith(("src/main/java/", "src/jmh/java/")):
+        return not path.endswith(".java") or os.path.basename(path) in (
+            "module-info.java", "package-info.java")
+    return path.startswith(("src/main/resources/", "src/jmh/resources/"))
+
+
+def code_compared(first, later, classes):
+    """The files under the benchmark classes compared between two commits, sorted: their
+    closures (each class's src/jmh/java file and every type its code names, transitively) at
+    both commits, pom.xml, and the resources the closure could read. Refuses, naming them, if
+    any differs but for comments and whitespace (pom.xml: but for pom_shape's parts)."""
+    key = (first, later, tuple(sorted(classes)))
+    if key in CODE_CACHE:
+        return CODE_CACHE[key]
+    trees, code, closure, unread = {}, {}, set(), {}
+    for sha in (first, later):
+        have_commit(sha)
+        trees[sha] = tree(sha)
+        declares = {}
+        for path, data in trees[sha].items():
+            if path.endswith(".java") and path.startswith(ROOTS):
+                what = "%s at %s" % (path, sha[:7])
+                try:
+                    code[sha, path] = java_code(data.decode("utf-8"), what)
+                    names = top_level_types(code[sha, path][1])
+                except (Problem, UnicodeDecodeError) as e:
+                    # A file this script cannot read is refused only if the closure needs it;
+                    # until then it declares every name it holds, so that it is not missed
+                    # (a word of its prose may count, which can only refuse more).
+                    unread[sha, path] = ("%s is not UTF-8" % what) if isinstance(
+                        e, UnicodeDecodeError) else str(e)
+                    names = DECLARATION.findall(data.decode("utf-8", "replace"))
+                for name in names:
+                    declares.setdefault(name, set()).add(path)
+        todo = set()
+        for cls in classes:
+            seeds = {p for p in declares.get(cls, ()) if p.startswith("src/jmh/java/")}
+            if not seeds:
+                raise Problem("no file of src/jmh/java declares %s at %s" % (cls, sha[:7]))
+            todo |= seeds
+        mine = set()
+        while todo:
+            path = todo.pop()
+            if (sha, path) in unread:
+                raise CodeDiffers(unread[sha, path])
+            mine.add(path)
+            for name in set(IDENTIFIER.findall(code[sha, path][1])):
+                todo |= declares.get(name, set()) - mine
+        closure |= mine
+    compared = sorted(closure) + ["pom.xml"]
+    compared += sorted({p for t in trees.values() for p in t if always_compared(p)
+                        or (p.startswith("src/test/resources/")
+                            and any(c.startswith("src/test/") for c in closure))} - closure)
+    differ = []
+    for path in compared:
+        a, b = (trees[sha].get(path) for sha in (first, later))
+        if a is None or b is None:
+            differ.append("%s (only at %s)" % (path, (first if b is None else later)[:7]))
+        elif path == "pom.xml":
+            if pom_shape(a, "pom.xml at " + first[:7]) != pom_shape(b, "pom.xml at "
+                                                                     + later[:7]):
+                differ.append(path)
+        elif (first, path) in unread or (later, path) in unread:
+            differ.append("%s (not read: %s)" % (path, unread.get((first, path))
+                                                 or unread.get((later, path))))
+        elif (first, path) in code and (later, path) in code:
+            if code[first, path][0] != code[later, path][0]:
+                differ.append(path)
+        elif a != b:
+            differ.append(path)
+    if differ:
+        raise CodeDiffers("the runs are at %s and %s, and the code under %s differs between"
+                          " them in more than comments, so they do not go in one file (the"
+                          " later run is a first run of new code, a file of its own): %s"
+                          % (first[:7], later[:7], ", ".join(sorted(classes)),
+                             ", ".join(differ)))
+    CODE_CACHE[key] = compared
+    return compared
+
+
+def code_note(n, first, later, classes):
+    """The lines under run n's RUN_LINE that say its code is the first run's, which check
+    recomputes; none if the two runs are at one commit."""
+    if first == later:
+        return []
+    by_dir = {}
+    for path in code_compared(first, later, classes):
+        by_dir.setdefault(os.path.dirname(path), []).append(os.path.basename(path))
+    files = "; ".join(("%s: %s" % (d, ", ".join(names))) if d else ", ".join(names)
+                      for d, names in sorted(by_dir.items()))
+    text = ("Run 1 is at %s and run %d at %s, and bench/record.py found the code under the"
+            " benchmark the same at both: it compared %s. The files compared: %s."
+            % (first[:7], n, later[:7],
+               CODE_RULE.format(seed=" and ".join("%s.java" % c for c in sorted(classes))),
+               files))
+    return header_lines([["Code", text]])
 
 
 # Checking a file.
@@ -602,13 +947,19 @@ def check(path, directories):
         directories = [d for d in directories
                        if any(classes_of(v) == mine for v in files_of(
                            d, "x" if artifact_lines(d)[1] else None, False).values())]
+        # Nor is one whose code under the file's class is not the first run's (write noted it).
+        directories = directories[:1] + [d for d in directories[1:]
+                                         if not code_differs(directories[0], d, mine)]
     if len(starts) != len(directories):
         return ["the file holds %d run%s (a later one starts at a '# Run N of M of this file:'"
                 " line), and %d artifact%s given"
                 % (len(starts), "" if len(starts) == 1 else "s", len(directories),
                    " was" if len(directories) == 1 else "s were")]
     if len(directories) > 1:
-        joined_files(directories)  # refuses runs that do not belong in one file
+        try:
+            joined_files(directories)  # refuses runs that do not belong in one file
+        except CodeDiffers:
+            pass  # a run of other code: check_note says so, as a difference
         del NOTES[:]
     diffs, of_first = [], None
     for n, (start, end, d) in enumerate(zip(starts, starts[1:] + [len(actual)], directories), 1):
@@ -622,9 +973,46 @@ def check(path, directories):
                                      ", ".join(sorted(of_first))))
         while part and part[-1] in ("", "#"):
             part.pop()
-        found = check_run(path, part, d, n == 1)
+        found = check_note(part, n, directories[0], d) if n > 1 else []
+        found += check_run(path, part, d, n == 1)
         diffs += [("run %d: " % n if len(starts) > 1 else "") + x for x in found]
     return diffs
+
+
+def commit_of(directory):
+    lines = artifact_lines(directory)[0]
+    return (dict((k, v) for k, v in plain_header(lines)).get("Commit") or "").split(" ")[0]
+
+
+def ordinal(n):
+    return {1: "first", 2: "second", 3: "third"}.get(n, "%dth" % n)
+
+
+def code_differs(first, directory, classes):
+    try:
+        code_note(2, commit_of(first), commit_of(directory), classes)
+        return False
+    except CodeDiffers:
+        return True
+
+
+def check_note(part, n, first, directory):
+    """A later run's lines between its RUN_LINE and its title: the code note, recomputed from
+    git at the two runs' commits, its words compared; nothing if they are at one commit."""
+    # The code is compared first: a re-run of other code is refused whatever the file holds.
+    try:
+        want = " ".join(" ".join(code_note(n, commit_of(first), commit_of(directory),
+                                           classes_of(part))).split())
+    except CodeDiffers as e:
+        return [str(e)]
+    title = artifact_lines(directory)[0][0]
+    if title not in part:
+        return []  # check_run says the title is missing
+    have = " ".join(" ".join(part[1:part.index(title)]).split())
+    if have != want:
+        return ["the lines between the run's first line and its title are '%s'; bench/record.py"
+                " gives '%s'" % (have, want)]
+    return []
 
 
 def check_run(path, actual, directory, first):
@@ -768,7 +1156,312 @@ def fake_pair(directory):
         f.write("\n".join(lines))
 
 
+FAKE_POM = """<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0">
+  <modelVersion>4.0.0</modelVersion>
+  <artifactId>vfdlibm</artifactId>
+  <version>0.1.1-SNAPSHOT</version>
+  <!-- a comment -->
+  <properties>
+    <project.build.outputTimestamp>2026-11-20T22:37:56Z</project.build.outputTimestamp>
+    <jmh.version>1.37</jmh.version>
+  </properties>
+  <build><plugins><plugin>
+    <artifactId>maven-surefire-plugin</artifactId>
+    <executions>
+      <execution><id>default-test</id></execution>
+      <execution><id>fault-exp.dropCorrection</id></execution>
+    </executions>
+  </plugin></plugins></build>
+  <profiles>
+    <profile><id>release</id><build><plugins><plugin>
+      <artifactId>maven-gpg-plugin</artifactId><version>3.2.7</version>
+    </plugin></plugins></build></profile>
+    <profile><id>jmh</id></profile>
+  </profiles>
+</project>
+"""
+
+
+def selftest_code(repo):
+    """The code note's parts: the comment stripper, pom.xml's shape, the closure of a benchmark
+    at two commits of a scratch clone, and a run and a re-run joined at different commits."""
+    def same(a, b):
+        return java_code(a, "a")[0] == java_code(b, "b")[0]
+
+    def refused(text, words):
+        try:
+            java_code(text, "x.java")
+            raise AssertionError("not refused: %r" % text)
+        except Problem as e:
+            assert words in str(e), e
+
+    # Comments go, of either kind, and a comment between two words still parts them.
+    assert same("int a = 1; // one\n/* two */ int b;", "int a = 1;\nint b;")
+    assert same("/** Javadoc {@link Exp} */\nclass A {}", "class A {}")
+    assert not same("a/**/b", "ab") and same("a/**/b", "a b")
+    # Whitespace goes where no token joins across it, and stays where one would.
+    assert same("f(a,\n      b)", "f(a, b)") and same("x = a+b;", "x = a + b ;")
+    assert not same("y = - -x;", "y = --x;") and not same("int x;", "intx;")
+    # A code change is a change.
+    assert not same("x = 1;", "x = 2;") and not same("f(a, b)", "f(b, a)")
+    # A comment marker in a string, a char or a text block is the literal's, not a comment.
+    assert java_code('s = "// not a comment";', "s")[0] == 's="// not a comment";'
+    assert not same('s = "/* a */";', 's = "/* b */";')
+    assert not same('s = "a // b";', 's = "a";')
+    assert same('s = "a\\"//b"; // c', 's = "a\\"//b";')
+    assert same("c = '\"'; // \"", "c = '\"';") and same("c = '\\''; /* ' */", "c = '\\'';")
+    assert same("c = '/'; d = '*';", "c='/';d='*';")
+    block = 's = """\n    /* in the block */ "q" \\""" // still in it\n    """; // a comment'
+    assert java_code(block, "t")[0] == block[:block.rindex(";") + 1].replace("s = ", "s=")
+    assert not same(block, block.replace("in the block", "in a block"))
+    # Whitespace inside a literal is the literal's.
+    assert not same('s = "a  b";', 's = "a b";')
+    # A \u escape that could open or close a comment or a literal is refused, not decoded.
+    refused("int a; \\u002f\\u002f hidden\nint b;", "escape \\u002f")
+    refused('s = "\\u0022";', "escape \\u0022")
+    refused("// \\u000a int b;", "escape \\u000a")
+    assert same('s = "\\u0041";', 's = "\\u0041";')
+    assert java_code('s = "\\\\u002f";', "e")[0] == 's="\\\\u002f";'  # an escaped backslash
+    refused("class A { \\u007d class B {}", "escape \\u007d")  # a brace sets what is top level
+    # A line comment ends at CR as at LF, so code after it on the next line is code.
+    assert not same("int a; // c\rint b = 1;", "int a; // c\rint b = 2;")
+    assert same("int a; // c\r\nint b;", "int a;\nint b;")
+    refused("int a; /* open", "comment opened")
+    refused('s = "open\n";', "literal opened")
+    # The top-level types, not the nested ones, and not a name in a literal.
+    names = java_code('class A { static class B {} String s = "class C"; }\nenum D {}', "n")[1]
+    assert top_level_types(names) == ["A", "D"], top_level_types(names)
+    # pom.xml: its version, timestamp, fault executions and release profile, and comments and
+    # whitespace, are not what a benchmark runs; anything else is.
+    base = pom_shape(FAKE_POM.encode(), "pom")
+    for old, new in (("0.1.1-SNAPSHOT", "0.2.1-SNAPSHOT"),
+                     ("2026-11-20T22:37:56Z", "2026-11-22T11:50:06Z"),
+                     ("<version>3.2.7", "<version>3.2.8"),
+                     ("a comment", "another comment"),
+                     ("</executions>", "<execution><id>fault-atan.dropLo</id></execution>"
+                                       "</executions>"),
+                     ("<jmh.version>", "\n\n    <jmh.version>")):
+        assert pom_shape(FAKE_POM.replace(old, new).encode(), "pom") == base, (old, new)
+    for old, new in (("<jmh.version>1.37", "<jmh.version>1.38"),
+                     ("<id>default-test</id>", "<id>default-test</id><phase>none</phase>"),
+                     ("<id>jmh</id>", "<id>jmh</id><activation/>")):
+        assert pom_shape(FAKE_POM.replace(old, new).encode(), "pom") != base, (old, new)
+
+    # A scratch clone: commits of a benchmark, the classes it names, and one it does not.
+    def commit(files, message):
+        for path, text in files.items():
+            os.makedirs(os.path.join(repo, os.path.dirname(path)), exist_ok=True)
+            with open(os.path.join(repo, path), "w", encoding="utf-8") as f:
+                f.write(text)
+        cfg = ["-c", "user.name=t", "-c", "user.email=t@example.invalid",
+               "-c", "commit.gpgsign=false", "-c", "core.hooksPath=/dev/null"]
+        subprocess.run(["git", "-C", repo] + cfg + ["add", "-A"], check=True)
+        subprocess.run(["git", "-C", repo] + cfg + ["commit", "-q", "-m", message], check=True)
+        return git("rev-parse", "HEAD").stdout.decode().strip()
+
+    main, jmh = "src/main/java/p/", "src/jmh/java/p/"
+    files = {"pom.xml": FAKE_POM,
+             jmh + "ExpBenchmark.java": "package p;\n/** Not {@link Other}. */\n"
+                                        "public class ExpBenchmark {\n"
+                                        "  @State public static class S {}\n"
+                                        "  double f(double x) { return Exp.exp(x); }\n}\n",
+             jmh + "Log1pBenchmark.java": "package p;\npublic class Log1pBenchmark {\n"
+                                          "  double f(double x) { return Log1p.log1p(x); }\n}\n",
+             main + "Exp.java": "package p;\nfinal class Exp {\n  // the core\n"
+                                "  static double exp(double x) { return Lanes.one() * x; }\n}\n",
+             main + "Lanes.java": "package p;\nfinal class Lanes {\n"
+                                  "  static double one() { return 1.0; }\n}\n",
+             main + "Log1p.java": "package p;\nfinal class Log1p {\n"
+                                  "  static double log1p(double x) { return x; }\n}\n",
+             main + "Other.java": "package p;\nfinal class Other { int s = 1; }\n",
+             "src/test/resources/p/hard.txt": "1\n"}
+    subprocess.run(["git", "init", "-q", repo], check=True)
+    c1 = commit(files, "first")
+    c2 = commit({main + "Exp.java": files[main + "Exp.java"].replace(
+                     "// the core", "/* the core,\n     reworded */"),
+                 main + "Other.java": "package p;\nfinal class Other { int s = 2; }\n",
+                 "src/test/resources/p/hard.txt": "2\n",
+                 "pom.xml": FAKE_POM.replace("0.1.1", "0.2.1")}, "comments")
+    assert code_compared(c1, c2, ["ExpBenchmark"]) == [
+        jmh + "ExpBenchmark.java", main + "Exp.java", main + "Lanes.java", "pom.xml"]
+    c3 = commit({main + "Lanes.java": files[main + "Lanes.java"].replace("1.0", "2.0")}, "code")
+    for later, words in ((c3, "differs between them in more than comments"),
+                         (c3, ": src/main/java/p/Lanes.java")):
+        try:
+            code_compared(c1, later, ["ExpBenchmark"])
+            raise AssertionError("a code change")
+        except Problem as e:
+            assert words in str(e), e
+    assert code_compared(c1, c3, ["Log1pBenchmark"])  # Lanes is not under Log1pBenchmark
+    c4 = commit({main + "Lanes.java": files[main + "Lanes.java"],
+                 main + "Exp.java": files[main + "Exp.java"].replace("Lanes.one()",
+                                                                     "Helper.one()"),
+                 main + "Helper.java": "package p;\nfinal class Helper {\n"
+                                       "  static double one() { return 1.0; }\n}\n"}, "new file")
+    try:
+        code_compared(c1, c4, ["ExpBenchmark"])
+        raise AssertionError("a new file under the benchmark")
+    except Problem as e:
+        assert "Helper.java (only at %s)" % c4[:7] in str(e) and "Exp.java" in str(e), e
+    # A file outside the closure that cannot be read refuses nothing, and one in it does; a
+    # module's declarations are compared whatever the closure.
+    c5 = commit({main + "Lanes.java": files[main + "Lanes.java"],
+                 main + "Exp.java": files[main + "Exp.java"],
+                 "src/test/java/p/Odd.java": 'final class Odd { String s = "\\u0022"; }\n'},
+                "unread")
+    assert code_compared(c1, c5, ["ExpBenchmark"])[-1] == "pom.xml"
+    c6 = commit({"src/test/java/p/Odd.java": 'final class Odd { String s = "\\u0022"; }\n'
+                                            "final class Lanes2 {}\n",
+                 main + "Exp.java": files[main + "Exp.java"].replace("Lanes.one()",
+                                                                     "Odd.one()")}, "read")
+    try:
+        code_compared(c1, c6, ["ExpBenchmark"])
+        raise AssertionError("an unreadable file under the benchmark")
+    except Problem as e:
+        assert "Odd.java at %s" % c6[:7] in str(e) and "escape" in str(e), e
+    c7 = commit({main + "Exp.java": files[main + "Exp.java"],
+                 main + "module-info.java": "module p { requires jdk.incubator.vector; }\n"},
+                "module")
+    try:
+        code_compared(c1, c7, ["ExpBenchmark"])
+        raise AssertionError("a new module-info.java")
+    except CodeDiffers as e:
+        assert "module-info.java (only at %s)" % c7[:7] in str(e), e
+    # A file in the closure at one commit that cannot be read at the other is a difference.
+    c8 = commit({main + "Exp.java": files[main + "Exp.java"].replace("Lanes.one()", "1.0"),
+                 main + "Lanes.java": 'final class Lanes { String s = "\\u0022"; }\n'}, "gone")
+    try:
+        code_compared(c1, c8, ["ExpBenchmark"])
+        raise AssertionError("a file not read at one commit")
+    except CodeDiffers as e:
+        assert "Lanes.java (not read: " in str(e), e
+    note = code_note(2, c1, c2, {"ExpBenchmark"})
+    assert note[0].startswith("# Code:        Run 1 is at %s and run 2 at %s" % (c1[:7], c2[:7]))
+    assert all(len(l) <= WIDTH for l in note) and "src/main/java/p: Exp.java, Lanes.java" in \
+        " ".join(" ".join(l[1:] for l in note).split()), note
+    assert code_note(2, c1, c1, {"ExpBenchmark"}) == []
+    # git never reads this script's stdin nor asks for a password; a fetch from an origin that
+    # cannot answer fails with the clone's message.
+    assert git("cat-file", "--batch", timeout=10).stdout == b""
+    git("remote", "add", "origin", os.path.join(repo, "no-such-origin"))
+    try:
+        have_commit("e" * 40)
+        raise AssertionError("a commit no origin has")
+    except Problem as e:
+        assert "nor can it be fetched from origin" in str(e), e
+    git("remote", "remove", "origin")
+
+    # A run and its re-run at those commits go in one file, under a note that check
+    # recomputes; at a commit whose code differs they are refused, naming the files.
+    with tempfile.TemporaryDirectory() as d, tempfile.TemporaryDirectory() as again:
+        def artifact(directory, sha, run, change=lambda t: t):
+            fake_plain(directory)
+            path = os.path.join(directory, "bench-results.txt")
+            with open(path, encoding="utf-8") as f:
+                text = f.read().replace("0123456789abcdef0123456789abcdef01234567", sha)
+            with open(path, "w", encoding="utf-8") as f:
+                f.write(change(text.replace("(main)", "(main)\n# Run:         " + run)))
+
+        artifact(d, c1, "r1")
+        artifact(again, c2, "r2", lambda t: t.replace("2026-11-20", "2026-11-21"))
+        both = joined_files([d, again])
+        two = both["exp-xeon8573c-2026-11-20.txt"]
+        at = two.index(RUN_LINE % (2, 2))
+        assert two[at + 1:at + 1 + len(note)] == note, two[at:at + 12]
+        assert two[at + 1 + len(note)].endswith("2026-11-21 01:02 UTC")
+
+        def written(lines, change=lambda l: l):
+            path = os.path.join(d, "exp-xeon8573c-2026-11-20.txt")
+            with open(path, "w", encoding="ascii") as f:
+                f.write("\n".join(["# A title"] + [change(l) for l in lines[1:]
+                                                   if MARKER not in l]) + "\n")
+            return path
+
+        assert check(written(two), [d, again]) == []
+        log1p = both["log1p-xeon8573c-2026-11-20.txt"]
+        assert check(written(log1p), [d, again]) == []
+        # The note is the machine's: a word changed in it, or the note gone, is found.
+        found = check(written(two, lambda l: l.replace("Lanes.java", "Lanes2.java")), [d, again])
+        assert len(found) == 1 and "between the run's first line and its title" in found[0], found
+        found = check(written([l for l in two if l not in note[1:]]), [d, again])
+        assert len(found) == 1 and "between the run's first line and its title" in found[0], found
+        # Run at c3, whose Lanes.java differs in code under ExpBenchmark only: write leaves it
+        # out of exp's file, naming the file, and still joins it to log1p's; check refuses it.
+        artifact(again, c3, "r2")
+        del NOTES[:]
+        mixed = joined_files([d, again])
+        assert mixed["exp-xeon8573c-2026-11-20.txt"] == files_of(d)[
+            "exp-xeon8573c-2026-11-20.txt"]
+        assert RUN_LINE % (2, 2) in mixed["log1p-xeon8573c-2026-11-20.txt"]
+        assert len(NOTES) == 1 and NOTES[0].startswith(
+            "the run given second is not in exp-xeon8573c-2026-11-20.txt") and \
+            "src/main/java/p/Lanes.java" in NOTES[0], NOTES
+        del NOTES[:]
+        assert check(written(mixed["log1p-xeon8573c-2026-11-20.txt"]), [d, again]) == []
+        assert check(written(mixed["exp-xeon8573c-2026-11-20.txt"]), [d, again]) == []
+        found = check(written(two), [d, again])
+        assert any("run 2: " in x and "src/main/java/p/Lanes.java" in x for x in found), found
+        # A re-run that joins no file, since its code differs under each class it shares, is
+        # refused by write, as one that shares no class is.
+        with tempfile.TemporaryDirectory() as only:
+            artifact(only, c3, "r-only")
+            path = os.path.join(only, "bench-results.txt")
+            with open(path, encoding="utf-8") as f:
+                text = f.read()
+            cut = text.index("# JMH version: 1.37\n# Benchmark: %sLog1p" % PACKAGE)
+            with open(path, "w", encoding="utf-8") as f:
+                f.write("\n".join(l for l in (text[:cut] + text[text.index("# Run complete."):]
+                                              ).split("\n") if "Log1pBenchmark" not in l))
+            try:
+                joined_files([d, only])
+                raise AssertionError("a re-run that joins no file")
+            except CodeDiffers as e:
+                assert "joins no file" in str(e) and "Lanes.java" in str(e), e
+            del NOTES[:]
+        # A middle run that lacks the class: the note numbers the run by its place in the file,
+        # and the file checks against all three runs.
+        with tempfile.TemporaryDirectory() as middle:
+            artifact(middle, c1, "r-mid")
+            path = os.path.join(middle, "bench-results.txt")
+            with open(path, encoding="utf-8") as f:
+                text = f.read()
+            cut = text.index("# JMH version: 1.37\n# Benchmark: %sExpBenchmark" % PACKAGE)
+            end = text.index("# JMH version: 1.37\n# Benchmark: %sLog1p" % PACKAGE)
+            with open(path, "w", encoding="utf-8") as f:
+                f.write("\n".join(l for l in (text[:cut] + text[end:]).split("\n")
+                                  if "ExpBenchmark" not in l))
+            artifact(again, c2, "r2", lambda t: t.replace("2026-11-20", "2026-11-21"))
+            three = joined_files([d, middle, again])["exp-xeon8573c-2026-11-20.txt"]
+            del NOTES[:]
+            assert three == two, [l for l in three if l not in two]
+            assert check(written(three), [d, middle, again]) == []
+        # At different commits the JDK and the command must be the same too.
+        for old, new in (("# Load:", "# JDK:         25.0.6\n# Load:"),
+                         ("exec:exec", "exec:exec -Dother")):
+            artifact(again, c2, "r2", lambda t: t.replace(old, new))
+            try:
+                joined_files([d, again])
+                raise AssertionError("another JDK or command at another commit")
+            except Problem as e:
+                assert "the same JDK and command" in str(e), e
+
+
 def selftest():
+    global REPO
+    saved = REPO
+    with tempfile.TemporaryDirectory() as repo:
+        # A clone of the self-test's own, never this checkout: CI's is one commit deep.
+        REPO = os.path.join(repo, "clone")
+        try:
+            selftest_code(REPO)
+            CODE_CACHE.clear()
+            return selftest_files()
+        finally:
+            REPO = saved
+
+
+def selftest_files():
     def written(directory, lines, change=lambda l: l, name="exp-xeon8573c-2026-11-20.txt",
                 title="# A title of its own"):
         # A file as it would be committed: the markers gone, the title written.
@@ -896,14 +1589,14 @@ def selftest():
             # The file of a class the re-run lacks checks with both artifacts given.
             assert check(written(d, narrow["log1p-xeon8573c-2026-11-20.txt"]), [d, again]) == []
             assert check(written(d, narrow["exp-xeon8573c-2026-11-20.txt"]), [d, again]) == []
-            # A re-run at another commit, or one that joins no file, is refused.
+            # A re-run at a commit the clone does not have cannot have its code compared.
             with open(os.path.join(again, "bench-results.txt"), "w", encoding="utf-8") as f:
                 f.write(rerun.replace("0123456789abcdef", "ffffffffffffffff"))
             try:
                 joined_files([d, again])
                 raise AssertionError("another commit")
             except Problem as e:
-                assert "one commit" in str(e), e
+                assert "is not in the clone" in str(e), e
             # A run from before the workflow wrote a Host line still checks, by its content.
             with open(os.path.join(again, "bench-results.txt"), "w", encoding="utf-8") as f:
                 f.write(rerun.replace("# Host:        xeon8573c (expected CPU 'INTEL(R) XEON(R)"
