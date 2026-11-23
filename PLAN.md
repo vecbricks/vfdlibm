@@ -83,12 +83,14 @@ five are a later, optional set; the large-argument reduction of the trigonometri
     hard cases, one resource per function under `src/test/resources/.../hard-cases/` (so far `exp`,
     `expm1`, `log`, `log10`, `log1p`, `sinh`, `cosh`, `asin`, `atan` and `acos`), loaded with
     `Inputs.hardCases("<function>")`, and for a function of two arguments a file of pairs loaded
-    with `Inputs.hardCasePairs` (`atan2`, derived from atan's inputs, `hypot`, computed by
-    `dev/hypot-hard-cases.py` with exact integer arithmetic, since no published table of hypot's
-    hard cases is known, and `pow`, self-computed the same way by `dev/pow-hard-cases.py`
-    (exact results, ties, results near a midpoint and the doubles beside the result's
-    thresholds), while a published binary64 pow list, CORE-MATH's `src/binary64/pow/pow.wc`
-    (MIT), is evaluated as a follow-up, issue #144). The
+    with `Inputs.hardCasePairs` (`atan2`, derived from atan's inputs; `hypot`, computed by
+    `dev/hypot-hard-cases.py` with exact integer arithmetic, and `pow`, self-computed the same way
+    by `dev/pow-hard-cases.py` (exact results, ties, results near a midpoint and the doubles
+    beside the result's thresholds); and beside each of those two a second file from CORE-MATH's
+    published lists (MIT), `hypot-coremath` and `pow-coremath`, which `dev/coremath-hard-cases.py`
+    takes by line number from `src/binary64/hypot/hypot.wc` and `src/binary64/pow/pow.wc` at a
+    pinned commit and hash: their ties, the pairs nearest a midpoint or a double, and pow's exact
+    results, issue #144). The
     inputs of Lefevre's list come out of `dev/testlibm-extract.py`, which rechecks each line with
     400-digit arithmetic against exact values it derives itself (`sinh`'s, `cosh`'s, `atan`'s,
     `asin`'s and `acos`'s files were written by it). A port that keeps fdlibm's

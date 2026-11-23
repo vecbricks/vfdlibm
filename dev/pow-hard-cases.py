@@ -9,12 +9,12 @@
 """The pairs of src/test/resources/.../hard-cases/pow.txt, computed with exact integer arithmetic.
 
 V. Lefevre's testlibm-data has tags of functions of one argument only. A published binary64 pow
-list does exist, CORE-MATH's src/binary64/pow/pow.wc (MIT), and is being evaluated as a follow-up
-(issue 144); these pairs are self-computed, derived here with no outside data. Every
-pair's y is an integer, or x is a power of two and x**y one too, so x**y is an exact rational
-and every claim below is checked on it with integers alone (no floating-point arithmetic decides
-anything; floats only name the doubles, and each is converted back and compared). A double is
-held as M * 2^k with M and k integers. The families:
+list does exist, CORE-MATH's src/binary64/pow/pow.wc (MIT), from which dev/coremath-hard-cases.py
+takes hard-cases/pow-coremath.txt (issue 144); these pairs are self-computed beside it, derived
+here with no outside data. Every pair's y is an integer, or x is a power of two and x**y one too,
+so x**y is an exact rational and every claim below is checked on it with integers alone (no
+floating-point arithmetic decides anything; floats only name the doubles, and each is converted
+back and compared). A double is held as M * 2^k with M and k integers. The families:
 
   exact    x**y is a double: b**e for an integer b from 3 to 40 and e >= 3 with b**e below 2^53,
            x = b * 2^k scaled so that the result lands at each of the binades TARGETS; and
@@ -26,7 +26,7 @@ held as M * 2^k with M and k integers. The families:
   near     x**y within 2^-28 ulp of a midpoint and not on it: x = 2^52 + d for e from 3 to 9,
            d from the leading terms of (2^52 + d)**e for a tail of (2j + 1)/2 ulp, kept when the
            exact distance is below 2^-28; scaled as above. The bound is 2^-28 and not hypot's
-           2^-40: the distance is |C(e,2) d^2 - (2j+1) 2^51| / 2^52 to leading order, and the
+           2^-50: the distance is |C(e,2) d^2 - (2j+1) 2^51| / 2^52 to leading order, and the
            squares are too sparse modulo 2^51 for it to come nearer (the best of 20,000 steps of
            j read about 2^-30), so a nearer family would need another construction.
   bound    x and its neighbour on either side of a rounding threshold of the result: 2^1024 -
