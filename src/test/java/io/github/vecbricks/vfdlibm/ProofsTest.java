@@ -1035,4 +1035,139 @@ class ProofsTest {
     Oracle.assertUnary("l15 expm1Blended", width.species(), x -> Expm1.expm1Blended(x, null),
         StrictMath::expm1, l15EveryK());
   }
+
+  // L17: log10's words in long lanes, as Varka emits them.
+
+  /** The C's k of e_log10.c's lines 80 and 84, hx the signed high word (line 81's if scaled). */
+  private static int l17CK(int hx, int scaled) {
+    return (hx >> 20) - 1023 - 54 * scaled;
+  }
+
+  /**
+   * L17 (a), (b): a loop over every exponent field, 0 to 0x7ff, scaled and not, which is every
+   * value K takes: the long K, I and y against the C's int k, i and I2D, K in [-1077, 1024]; a
+   * scaled subnormal's field is 3 to 54; and a loop over every significand word for both I:
+   * the long new high word against the C's, below 2^31.
+   */
+  @Test
+  void l17LongWordsAreLog10sInts() {
+    for (int field = 0; field <= 0x7ff; field++) {
+      for (int scaled = 0; scaled < 2; scaled++) {
+        int chx = field << 20;
+        long hx = Integer.toUnsignedLong(chx);
+        long k = (hx >>> 20) - 1023 - 54 * scaled;
+        int ck = l17CK(chx, scaled);
+        String at = "field " + field + ", scaled " + scaled;
+        assertTrue(k >= -1077 && k <= 1024, at);
+        assertEquals((long) ck, k, at);
+        long i = k >>> 63;
+        int ci = (int) (((long) ck & 0x80000000L) >>> 31);
+        assertEquals((long) ci, i, at);
+        double y = Double.longBitsToDouble(k + i + Log.DK_MAGIC_BITS) - Log.DK_MAGIC;
+        assertEquals(bits((double) (ck + ci)), bits(y), at);
+      }
+    }
+    // A scaled lane is a subnormal times 2^54: its field is 3 (2^-1020) to 54 (below 2^-968).
+    assertEquals(3, (int) (bits(Double.MIN_VALUE * Log10.TWO54) >>> 52));
+    assertEquals(54, (int) (bits(Math.nextDown(Double.MIN_NORMAL) * Log10.TWO54) >>> 52));
+    // The exponent field is masked away in both words, so the significand and I are all that
+    // the new high word reads.
+    for (int m = 0; m <= 0xfffff; m++) {
+      for (int ci = 0; ci < 2; ci++) {
+        long i = ci;
+        long word = (m & 0x000fffffL) | ((0x3ffL - i) << 20);
+        int cword = (m & 0x000fffff) | ((0x3ff - ci) << 20);
+        if (word != (long) cword || word < 0 || word >= 1L << 31) {
+          assertEquals((long) cword, word, "m " + m + ", i " + i);
+          assertTrue(word >= 0 && word < 1L << 31, "word " + Long.toHexString(word));
+        }
+      }
+    }
+  }
+
+  /**
+   * L17 (c): the signed long compares on the raw bits are the C's {@code hx >= 0x7ff00000} and
+   * {@code hx < 0}, on every high word within 2^16 of the words where an answer changes or the
+   * int wraps (0, 0x7ff00000, 0x7fffffff and 0x80000000), with five low words each, and on
+   * 2^20 sampled patterns.
+   */
+  @Test
+  void l17RareComparesAreTheCs() {
+    long nonFinite = Lanes.fromHiBits(Log10.HX_NON_FINITE) - 1;
+    long[] los = {0L, 1L, 0x7fff_ffffL, 0x8000_0000L, 0xffff_ffffL};
+    SplittableRandom random = new SplittableRandom(1702L);
+    int checked = 0;
+    for (int edge : new int[] {0, Log10.HX_NON_FINITE, Integer.MAX_VALUE, Integer.MIN_VALUE}) {
+      for (int d = -(1 << 16); d <= 1 << 16; d++) {
+        int h = edge + d;
+        for (long lo : los) {
+          long b = ((long) h << 32) | lo;
+          assertEquals(h >= Log10.HX_NON_FINITE, b > nonFinite, Long.toHexString(b));
+          assertEquals(h < 0, b < 0, Long.toHexString(b));
+          checked++;
+        }
+      }
+    }
+    for (int n = 0; n < 1 << 20; n++) {
+      long b = random.nextLong();
+      int h = (int) (b >> 32);
+      assertEquals(h >= Log10.HX_NON_FINITE, b > nonFinite, Long.toHexString(b));
+      assertEquals(h < 0, b < 0, Long.toHexString(b));
+    }
+    assertEquals(4 * ((1 << 17) + 1) * los.length, checked);
+  }
+
+  /**
+   * L17's H18, a witness and the oracle's own check, not a hinge test: StrictMath.log10 answers
+   * every lane with the sign bit set with a NaN, or -inf for -0, as the C's early returns do. On
+   * every one of those lanes the long K is not the C's k (the long field holds the sign bit, so
+   * K is at least 1025, while the C's k is at most -1024), which shows H18 is needed; that holds
+   * for every input, so it is not asserted. H18 is checked by l17NegativeLanesAreBlendedOver and
+   * Varka's suite.
+   */
+  @Test
+  void l17NegativeLanesAreAnsweredEarly() {
+    for (double x : l17SignSet()) {
+      double got = StrictMath.log10(x);
+      assertTrue(x == 0.0 ? bits(got) == bits(Double.NEGATIVE_INFINITY) : Double.isNaN(got),
+          Oracle.hex(x));
+    }
+  }
+
+  /**
+   * Patterns with the sign bit set: one at every exponent field, the specials, 2^16 sampled
+   * patterns and 2^12 subnormals, each with its sign set.
+   */
+  private static double[] l17SignSet() {
+    double[] xs = Inputs.concat(Inputs.specials(), Inputs.sampled(1700L, 1 << 16),
+        Inputs.uniform(1701L, 1 << 12, 0.0, Double.MIN_NORMAL));
+    double[] out = new double[0x800 + xs.length];
+    for (int field = 0; field <= 0x7ff; field++) {
+      long significand = field * 0x9e3779b97f4aL & 0xf_ffff_ffff_ffffL;
+      out[field] = Double.longBitsToDouble(Long.MIN_VALUE | ((long) field << 52) | significand);
+    }
+    for (int j = 0; j < xs.length; j++) {
+      out[0x800 + j] = Double.longBitsToDouble(bits(xs[j]) | Long.MIN_VALUE);
+    }
+    return out;
+  }
+
+  /**
+   * L17's H18 on Log10's own masks: Log10.log10Blended, whose blends Varka's kernel emits in the
+   * same order, against StrictMath by raw bits on the sign-set patterns, each beside its
+   * positive twin so that a vector mixes rare and kept lanes. A kernel that kept a sign-set
+   * lane's general form, its rare blend dropped or placed before the general one, fails here.
+   */
+  @ParameterizedTest
+  @EnumSource(VectorWidth.class)
+  void l17NegativeLanesAreBlendedOver(VectorWidth width) {
+    double[] signSet = l17SignSet();
+    double[] xs = new double[2 * signSet.length];
+    for (int j = 0; j < signSet.length; j++) {
+      xs[2 * j] = signSet[j];
+      xs[2 * j + 1] = Math.abs(signSet[j]);
+    }
+    Oracle.assertUnary("l17 log10Blended", width.species(), x -> Log10.log10Blended(x, null),
+        StrictMath::log10, xs);
+  }
 }
