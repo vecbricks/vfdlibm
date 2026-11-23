@@ -502,14 +502,20 @@ class HypotTest {
     return new Inputs.Pairs(xs, ys);
   }
 
-  /** Random bits, uniform draws of Varka's baseline range, and every exponent. */
+  /**
+   * Random bits, uniform draws of Varka's baseline range, every normal exponent, and subnormals:
+   * on both sides, and as the smaller argument beside a normal one.
+   */
   static Inputs.Pairs densePairs(long seed, int n) {
     return concat(
         new Inputs.Pairs(Inputs.sampled(seed, n), Inputs.sampled(seed + 1, n)),
         new Inputs.Pairs(Inputs.uniform(seed + 2, n, -10.0, 10.0),
             Inputs.uniform(seed + 3, n, -10.0, 10.0)),
-        new Inputs.Pairs(Inputs.magnitudes(seed + 4, n, -1074, 1023),
-            Inputs.magnitudes(seed + 5, n, -1074, 1023)));
+        new Inputs.Pairs(Inputs.magnitudes(seed + 4, n, -1022, 1023),
+            Inputs.magnitudes(seed + 5, n, -1022, 1023)),
+        new Inputs.Pairs(Inputs.subnormals(seed + 6, n / 4), Inputs.subnormals(seed + 7, n / 4)),
+        new Inputs.Pairs(Inputs.magnitudes(seed + 8, n / 4, -1022, -900),
+            Inputs.subnormals(seed + 9, n / 4)));
   }
 
   /** The gate's inputs: {@code n} draws of each generator, the special pairs and the triples. */
