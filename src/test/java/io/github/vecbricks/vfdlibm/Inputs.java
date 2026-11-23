@@ -211,7 +211,9 @@ final class Inputs {
    * file says {@link #PAIR_HEADER} before its first input, and each input is the raw bits of the
    * first and of the second argument ({@code x} and {@code y} of {@link Pairs}), as {@code 0x}
    * and sixteen hex digits each, one pair a line. For {@code atan2(y, x)} the first column is
-   * {@code y}.
+   * {@code y}. A function may have a second file, named for its source: {@code "hypot-coremath"}
+   * and {@code "pow-coremath"} read the pairs {@code dev/coremath-hard-cases.py} takes from
+   * CORE-MATH's lists.
    */
   static Pairs hardCasePairs(String function) {
     String resource = "hard-cases/" + function + ".txt";

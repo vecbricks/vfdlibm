@@ -59,8 +59,9 @@ import org.junit.jupiter.params.provider.EnumSource;
  * <p>The vector port, {@link VFdlibm#pow}, is checked against {@code StrictMath.pow} by {@link
  * PairBits#matches} at every {@link VectorWidth} the host has and at {@code SPECIES_MAX}, unmasked
  * and masked (a lane that is not live keeps {@code x}), on the gate's inputs and on {@code
- * hard-cases/pow.txt}; against the transcription {@link #cPow} on every lane, and against the
- * common path transcribed alone ({@link #commonPath}) on every lane the guard admits. L19's ties
+ * hard-cases/pow.txt} and {@code hard-cases/pow-coremath.txt}; against the transcription {@link
+ * #cPow} on every lane, and against the common path transcribed alone ({@link #commonPath}) on
+ * every lane the guard admits. L19's ties
  * ({@code PROOFS.md}) are the scalar check that an admitted lane takes only the common path's ways
  * out of the C, the test that each part of the guard is a hinge or named redundant, and the
  * guard's boundaries through the vector; L20's is the same comparison with {@link #commonPath},
@@ -1613,9 +1614,26 @@ class PowTest {
     assertPow(width.species(), hardCasePairs());
   }
 
+  /** The pairs taken from CORE-MATH's list by {@code dev/coremath-hard-cases.py}. */
+  private static Inputs.Pairs coreMathPairs() {
+    return Inputs.hardCasePairs("pow-coremath");
+  }
+
+  /**
+   * {@code hard-cases/pow-coremath.txt}: results near a midpoint or a double by the source's
+   * count of bits, exact results and ties, from CORE-MATH's list ({@link HardCasePairsTest}
+   * checks the exact results and ties, and the others' count).
+   */
+  @ParameterizedTest
+  @EnumSource(VectorWidth.class)
+  void coreMathListPairs(VectorWidth width) {
+    assertPow(width.species(), coreMathPairs());
+  }
+
   /** A smaller {@link #everything}, with the boundaries and hard cases, for the masked forms. */
   private static Inputs.Pairs everythingSmall(long seed) {
-    return concat(everything(seed, 1 << 12), guardBoundaryPairs(), hardCasePairs());
+    return concat(everything(seed, 1 << 12), guardBoundaryPairs(), hardCasePairs(),
+        coreMathPairs());
   }
 
   @ParameterizedTest

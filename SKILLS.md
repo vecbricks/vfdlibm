@@ -1681,14 +1681,24 @@ mnemonic); the other operations count the same at both widths.
   finite and the rare mask misses the lane. So the fault tested the finish's mask more than the
   swap, and was replaced by `dropY2`. Whether a finite lane shows it (two zero high words, where
   the value swap picks the other form) was not measured; the port keeps the C's word compare.
-- **Hard cases, computed.** No published table holds hypot's; `dev/hypot-hard-cases.py` derives
-  8,400 pairs with exact integer arithmetic (near-midpoint families of both forms of the medium
-  path, exact triples with nearly equal legs, scaled into each range), and
+- **Hard cases, computed.** `dev/hypot-hard-cases.py` derives 8,400 pairs with exact integer
+  arithmetic (near-midpoint families of both forms of the medium path, each within 2^-50 ulp of
+  a midpoint, exact triples with nearly equal legs, scaled into each range), and
   `HardCasePairsTest` rechecks the claim on the committed file with `BigDecimal`. The owner
   accepted self-computed files for hypot on 23 November 2026
   ([issue 34](https://github.com/vecbricks/vfdlibm/issues/34#issuecomment-7088116761)) and asked
   for one for pow the same day
   ([issue 34](https://github.com/vecbricks/vfdlibm/issues/34#issuecomment-7100457001)).
+- **Hard cases, published** (issue 144). A published list does exist, CORE-MATH's
+  `src/binary64/hypot/hypot.wc` (MIT): `hard-cases/hypot-coremath.txt` holds 20 of its pairs,
+  each in its eight forms (both orders, four sign combinations, as CORE-MATH's check expands
+  them), which `dev/coremath-hard-cases.py` takes by line number at a pinned commit and sha256: the
+  RNDN and RNDZ worst cases (within 2^-105 ulp of a midpoint and of a double), eight exact ties,
+  and the ten pairs of its large section within 2^-60 ulp of a midpoint. `HardCasePairsTest`
+  rechecks each with `BigInteger` arithmetic, by its place in the file. The whole list (33,202
+  exactly parsed lines, 265,616 inputs with signs and orders) matched `StrictMath` at every width
+  when it was evaluated, so the file is a selection, not a fix. The list is no harder for fdlibm
+  than any input: it is hard for correct rounding, and `e_hypot.c` does not round correctly.
 
 ## What the pow port taught
 
@@ -1731,13 +1741,32 @@ mnemonic); the other operations count the same at both widths.
   pairs, 8,669 of the special pairs. The fault run's inputs (`PowTest.faultRunInputs`) hold the
   special pairs, integer and target pairs, the pairs of each guard part and dense draws.
 - **Hard cases, computed** (the owner's decision of 23 November 2026, issue 34). A published
-  binary64 pow list exists, CORE-MATH's `src/binary64/pow/pow.wc` (MIT), and is being evaluated as a
-  follow-up (#144); this file is self-computed: `dev/pow-hard-cases.py` derives `hard-cases/pow.txt`
-  with exact integer arithmetic: exact results (integer powers below 2^53 scaled into each binade,
+  binary64 pow list exists, CORE-MATH's `src/binary64/pow/pow.wc` (MIT), from which the next
+  entry's file is taken; this file is self-computed: `dev/pow-hard-cases.py` derives
+  `hard-cases/pow.txt` with exact integer arithmetic: exact results (integer powers below 2^53
+  scaled into each binade,
   and powers of two with integer, quarter and eighth exponents down to 2^-1074), exact ties (odd
   54-bit powers, and odd multiples of 2^-1075 among the subnormals), results within 2^-28 ulp of a
   midpoint, and the doubles either side of the overflow, smallest-normal and zero thresholds.
   `HardCasePairsTest` rechecks each pair's claim with `BigInteger` arithmetic. The near family stops
-  at 2^-28 and not hypot's 2^-40: from `x = 2^52 + d` the distance is `|C(e,2) d^2 - (2j+1) 2^51| /
+  at 2^-28 and not hypot's 2^-50: from `x = 2^52 + d` the distance is `|C(e,2) d^2 - (2j+1) 2^51| /
   2^52` to leading order, and the squares are too sparse modulo 2^51 for it to come nearer (about
   2^-30 at best over 20,000 steps); a nearer family needs another construction.
+- **Hard cases, published** (issue 144). `hard-cases/pow-coremath.txt` holds 848 pairs of
+  CORE-MATH's `pow.wc`, which `dev/coremath-hard-cases.py` takes by line number at a pinned commit
+  and sha256: the list's first section of worst cases, Gombala's targeted-search cases of 110 or
+  more identical bits after the round bit and his near-rational ones of 100 or more (the source's
+  `# N`), the 278 exact results and ties at `y = 3/2`, and three of the 7,396 midpoint cases
+  for each of their 41 values of `y` (the first and last of its run, results near 2^-1022 or
+  2^1024, and the one nearest 1); 32 lines that repeat an earlier pair are not written again.
+  The subnormal sections are left out: by decision A on issue 34 a subnormal result is finished
+  per lane by `StrictMath.pow`, so those lanes would compare `StrictMath` with itself; they come
+  back when a widening moves subnormal results into the vector. `HardCasePairsTest` rechecks
+  the exact results and ties with `BigInteger` arithmetic (`c^(2^k) = |x|^p` for `y = p / 2^k`);
+  the near pairs' `# N` is the source's claim,
+  which needs `x**y` to well over 100 bits to recheck, so only their count and a SHA-256 of
+  their lines are pinned. The whole
+  list (1,000,874 exactly parsed lines) matched `StrictMath` at every width when it was
+  evaluated, so the file is a selection, not a fix; its 2,305 lines that do not spell exactly
+  one double (strtod would round them) matched too, read as strtod rounds them, and none is in
+  the file.
