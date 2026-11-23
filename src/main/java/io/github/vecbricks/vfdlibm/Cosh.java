@@ -81,17 +81,16 @@ import jdk.incubator.vector.VectorSpecies;
  * the body.
  *
  * <p>{@link #cosh(DoubleVector, VectorMask)}, which {@code VFdlibm.cosh} calls, is the slice
- * arm, provisionally: the choice is the design's, not a measurement's. Each host has run {@code
- * CoshBenchmark} and {@code CoshKindsBench} once ({@code
- * bench/results/cosh-xeon8573c-2026-11-21.txt}, {@code cosh-epyc7763-2026-11-21.txt} and the
- * two {@code cosh-kinds-} files of that day), and no file decides the arm. On {@code
- * CoshBenchmark} the finish arm reads lower on every row, slice over finish 1.24 to 1.35 on the
- * Xeon 8573C and 1.29 to 1.35 on the EPYC 7763, ratios near 1.3x or inside it that give no
- * direction until a re-run. On {@code CoshKindsBench} the finish arm reads lower by more than
- * 1.3x only on data with no small lane, and at 3.5% and 17% of small lanes the arms read within
- * 1.3x of each other, with no direction ({@code SKILLS.md}). cosh is the named exception to
- * issue #30's tie rule, since its per-lane set is not rare: a host run decides its arm, and the
- * slice default stays provisional until one does. The default is chosen in {@code cosh(x,
+ * arm, provisionally: the choice is the design's, not a measurement's. On {@code CoshBenchmark} the
+ * EPYC 7763's run and re-run ({@code bench/results/cosh-epyc7763-2026-11-21.txt}) both read the
+ * finish arm lower outside 1.3x on common data and agree, a direction on common data, and give no
+ * direction on mixed data; the Xeon 8573C has one run ({@code cosh-xeon8573c-2026-11-21.txt}),
+ * whose ratios give no direction until a re-run. On {@code CoshKindsBench} ({@code
+ * cosh-kinds-epyc7763-2026-11-21.txt}, two runs, and {@code cosh-kinds-xeon8573c-2026-11-21.txt},
+ * one) the arms read within 1.3x of each other at 3.5% and 17% of small lanes, with no direction
+ * ({@code SKILLS.md}). cosh is the named exception to issue #30's tie rule, since its per-lane set
+ * is not rare: a host run decides its arm, which is the owner's call, and the slice default stays
+ * provisional until then. The default is chosen in {@code cosh(x,
  * live)}; other places say "the default arm".
  */
 final class Cosh {

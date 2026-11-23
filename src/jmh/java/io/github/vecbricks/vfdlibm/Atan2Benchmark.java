@@ -31,8 +31,8 @@ import org.openjdk.jmh.annotations.Warmup;
  * at 256 bits, at the host's preferred species and at {@code SPECIES_MAX}. 128 bits is left out:
  * on x86 C2 lowers no mask at two 64-bit lanes, so every 128-bit arm boxes (SKILLS.md). {@code
  * bench/alloc-check.py} reads it for what the bodies allocate, and
- * bench/results/atan2-xeon8573c-2026-11-22.txt and atan2-epyc7763-2026-11-22.txt time it, one
- * run on each host, which gives the two arms no direction.
+ * bench/results/atan2-xeon8573c-2026-11-22.txt and atan2-epyc7763-2026-11-22.txt time it, a run and
+ * a re-run on each host, which give the two arms no direction.
  *
  * <p>{@code inputs} picks the data: {@code common} draws {@code y} and {@code x} from {@code
  * (-4, 4)}, where no lane is special (NaN, zero, infinite), none has {@code x = 1.0} and none
