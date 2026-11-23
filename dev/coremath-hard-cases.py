@@ -25,9 +25,9 @@ The two files are not committed. Fetch them at the commit below and run, from th
 
 The script refuses a file whose sha256 is not the one below, so a later version of the lists,
 whose line numbers would differ, is never read by these numbers. Every selected line must be a
-data line of two fields, each spelling exactly one double (hex or decimal, `inf` or `nan`): a
-spelling that strtod would round is refused, as is a line of the filtered ranges without its
-source's `# N` annotation, and the run stops with status 1 and writes nothing. Each double is
+data line of two fields, each spelling exactly one double (hex, decimal without an exponent,
+`inf` or `nan`; any other spelling is refused): a spelling that strtod would round is refused,
+as is a line of the filtered ranges without its source's `# N` annotation, and the run stops with status 1 and writes nothing. Each double is
 built from an integer mantissa and exponent, never by a rounding conversion, and Python's
 float.fromhex only cross-checks it. A selected line whose pair an earlier selected line already
 gave is not written again; the header lists each with the line it repeats. The output is
@@ -269,9 +269,11 @@ def header(name, rel, count, digest, notice, ranges, pairs, per_range, repeats):
         claim = [
             "Each pair is hard for correct rounding: pow's exact result is a double or a midpoint"
             " between two doubles (the last two ranges, whose y is a multiple of 1/16, which"
-            " HardCasePairsTest rechecks with BigInteger arithmetic of its own), or lies near"
-            " one, by N identical bits after the round bit, N the source's `# N` annotation"
-            " (the first three ranges). That annotation is the source's claim: the test checks"
+            " HardCasePairsTest rechecks with BigInteger arithmetic of its own), or, in the first"
+            " three ranges, it is one of the source's worst cases, near a midpoint or a double"
+            " by N identical bits after the round bit, N the line's `# N` or `# -m N` annotation"
+            " (the first pair, the source's line 25, carries none: the source lists it among"
+            " its worst cases and says no more). That is the source's claim: the test checks"
             " those pairs' parse and count only, since rechecking N needs x**y to well over 100"
             " bits after the round bit.",
         ]

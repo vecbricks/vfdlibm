@@ -322,13 +322,16 @@ class HardCasePairsTest {
     return s.minus(c.pow(2)).abs().compareTo(t.times(c.scale(1).minus(t))) < 0;
   }
 
-  /** The double {@code r > 0} and its three neighbours on each side, none below zero. */
+  /**
+   * The double {@code r > 0} and its three neighbours on each side, none below zero or above
+   * {@code Double.MAX_VALUE} (a repeated end gives an empty gap, which no claim meets).
+   */
   private static double[] around(double r) {
     double[] d = new double[7];
     d[3] = r;
     for (int k = 1; k <= 3; k++) {
       d[3 - k] = Math.max(0.0, Math.nextDown(d[4 - k]));
-      d[3 + k] = Math.nextUp(d[2 + k]);
+      d[3 + k] = Math.min(Double.MAX_VALUE, Math.nextUp(d[2 + k]));
     }
     return d;
   }
@@ -409,8 +412,9 @@ class HardCasePairsTest {
    * and ties, then the range of ties.
    */
   private static final int[] POW_CM_SECTIONS = {52, 289, 106, 278, 123};
+  /** The exact results and the ties of the 3/2 range; every pair of the last range is a tie. */
   private static final int POW_CM_EXACT = 139;
-  private static final int POW_CM_TIES = 139 + 123;
+  private static final int POW_CM_TIES = 139;
 
   /**
    * Whether {@code c^(2^k) = X^p}, that is {@code c = X^(p / 2^k)} for {@code c} positive: for a
@@ -431,7 +435,9 @@ class HardCasePairsTest {
    * and that they parse as pairs are checked. In the last two ranges {@code y = p / 2^k}, {@code
    * k <= 4}, and the exact {@code |x|**y} is checked with {@code BigInteger} arithmetic to be a
    * double or a midpoint between two doubles beside {@code StrictMath.pow}'s result: the 3/2
-   * range holds 139 of each, the last range 123 ties. No pair repeats.
+   * range holds 139 of each, and every pair of the last range is a tie. The first three
+   * ranges' sizes are pinned only as their sum, since nothing in a pair tells them apart. No pair
+   * repeats.
    */
   @Test
   void thePowCoreMathFileIsOfNearCasesExactResultsAndTies() {
@@ -450,9 +456,8 @@ class HardCasePairsTest {
       if (i < rational) {
         continue;
       }
-      if (i < rational + POW_CM_SECTIONS[3]) {
-        assertEquals(1.5, y, where);
-      }
+      boolean threeHalves = i < rational + POW_CM_SECTIONS[3];
+      assertTrue(!threeHalves || y == 1.5, where + ": y is not 3/2 in the 3/2 range");
       // y = p * 2^-k with p odd and k > 0, or an integer p (k = 0)
       long[] mk = mantissaAndExponent(Double.doubleToRawLongBits(y) & Long.MAX_VALUE);
       assertTrue(mk[0] != 0, where + ": y is zero");
@@ -480,11 +485,11 @@ class HardCasePairsTest {
       for (Dyadic[] mg : midpointsAround(r)) {
         isTie |= mg[0].signum() > 0 && isPower(mg[0], ax, p, k);
       }
-      if (isExact) {
+      if (threeHalves && isExact) {
         exact++;
       } else {
-        assertTrue(isTie, where + ": neither exact nor a tie");
-        ties++;
+        assertTrue(isTie && !isExact, where + ": not a tie");
+        ties += threeHalves ? 1 : 0;
       }
     }
     assertEquals(POW_CM_EXACT, exact, "exact");
