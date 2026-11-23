@@ -1147,9 +1147,10 @@ band, so its finish is the C's; the same model's words without line 126's two bl
 bits H20 quotes, one ulp off `StrictMath`'s, and `2^-25`'s are equal. **Vector tie, here.**
 `ProofsTest.l18Line126WitnessesThroughEveryArm` runs the witnesses, their neighbours and `2^-25`,
 each at every lane position among line-126 lanes, through every arm of `Log1p` at every width,
-unmasked and masked, against `StrictMath.log1p` by raw bits. With `Log1p`'s `hu = 1` blend on line 126's lanes
-dropped by hand (and reverted), it failed at every width, 48 of its 448 inputs differing in the
-public arm, the first one checked.
+unmasked and masked, against `StrictMath.log1p` by raw bits. With `Log1p`'s `hu = 1` blend on
+line 126's lanes dropped by hand (and reverted), it failed at every width, 48 of its 448 inputs
+differing in the public arm, the first one checked.
+
 `ProofsTest.l18EarlyLanesAreAnsweredEarly` (H19): every lane of a set with `!(x > -1)` (one pattern
 at every exponent field from `0x3ff` up with the sign set, `-1` and its neighbours below, the
 specials and sampled patterns that are not above -1, the NaNs of both signs) meets the C's
