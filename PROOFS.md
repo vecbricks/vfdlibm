@@ -1015,27 +1015,27 @@ field from 0 to `0x7ff`, which by step 2 is every value `HU >>> 20` takes (the w
 only through its field and its significand word), checks `K` and `K + 1` against the C's int `k`,
 and `K` and `K + 1` in `[-53, 1024]` from field `0x3ca` (below `0x7ff` for `K + 1`); it checks that
 `1.0 + nextUp(-1.0)` has field `0x3ca`, the smallest `u`, and that field `0x7ff` reaches line 146
-only for a NaN; on 2^17 sampled and edge lanes above -1 (from `nextUp(-1)` to `+inf`), it computes
-`u` as the C does and checks that its sign is clear, `HU` is `hu` and `K` after line 146 is the C's
-`k`, in `[-53, 1024]`; and a loop over every significand word from 0 to `0xfffff` checks the long
-`hu & 0x000fffff`, the compare with `0x6a09e`, both ORed words, the quarter word and the rebuilt
-bits of `u` against the C's ints. `ProofsTest.l18EarlyLanesAreAnsweredEarly` (H19): every lane of a
-set with `!(x > -1)` (one pattern at every exponent field from `0x3ff` up with the sign set, `-1`
-and its neighbours below, the specials and sampled patterns that are not above -1, the NaNs of both
-signs) meets the C's early-return test of line 114 or line 128, so it fails if such a lane reached
-the reduction, and `StrictMath.log1p` answers it `-inf` at `-1` and a NaN elsewhere; and on every
-non-NaN lane of the set below -1, `HU` is not the C's `hu` widened, which shows H19 is needed.
-**Vector tie, here.** `ProofsTest.l18EarlyLanesAreBlendedOver` checks H19 on `Log1p`'s own masks,
-whose blends Varka's kernel emits in the same order: `Log1p.log1pBlended`, at every width, against
-`StrictMath.log1p` by raw bits on that set, each lane beside a kept twin above -1, so that a vector
-mixes early and kept lanes. With the `x <= -1` blend dropped by hand from `Log1p.log1p` (and
-reverted), it failed at every width, 17447 of its 34946 inputs differing. **Vector tie, in Varka.**
-Where L18's own claim, the kernel, is checked: Varka's `VarkaMathPortSuite` (vecbricks/varka, the
-pull request that adds `VarkaMathPort.log1p`, branch `varka-345e-log1p-r`) runs the emitted
-`VarkaMathPort.log1p` against `VFdlibm.log1p` and `Log1p.log1pBlended` by raw bits, on 2^24 sampled
-inputs and the fixed vectors of s_log1p.c's words and L12's witnesses, and holds its two signed
-compares to (a)'s definitions. That Varka's kernel uses these compares and long words is not checked
-here.
+only for a NaN; on the lanes above -1 among 2^17 sampled inputs and nine edges (from `nextUp(-1)` to
+`+inf`), it computes `u` as the C does and checks that its sign is clear, `HU` is `hu` and `K` after
+line 146 is the C's `k`, in `[-53, 1024]`; and a loop over every significand word from 0 to
+`0xfffff` checks the long `hu & 0x000fffff`, the compare with `0x6a09e`, both ORed words, the
+quarter word and the rebuilt bits of `u` against the C's ints.
+`ProofsTest.l18EarlyLanesAreAnsweredEarly` (H19): every lane of a set with `!(x > -1)` (one pattern
+at every exponent field from `0x3ff` up with the sign set, `-1` and its neighbours below, the
+specials and sampled patterns that are not above -1, the NaNs of both signs) meets the C's
+early-return test of line 114 or line 128, so it fails if such a lane reached the reduction, and
+`StrictMath.log1p` answers it `-inf` at `-1` and a NaN elsewhere; and on every non-NaN lane of the
+set below -1, `HU` is not the C's `hu` widened, which shows H19 is needed. **Vector tie, here.**
+`ProofsTest.l18EarlyLanesAreBlendedOver` checks H19 on `Log1p`'s own masks, whose blends Varka's
+kernel emits in the same order: `Log1p.log1pBlended`, at every width, against `StrictMath.log1p` by
+raw bits on that set, each lane beside a kept twin above -1, so that a vector mixes early and kept
+lanes. With the `x <= -1` blend dropped by hand from `Log1p.log1p` (and reverted), it failed at
+every width, 17447 of its 34946 inputs differing. **Vector tie, in Varka.** Where L18's own claim,
+the kernel, is checked: Varka's `VarkaMathPortSuite` (vecbricks/varka, the pull request that adds
+`VarkaMathPort.log1p`, branch `varka-345e-log1p-r`) runs the emitted `VarkaMathPort.log1p` against
+`VFdlibm.log1p` and `Log1p.log1pBlended` by raw bits, on 2^24 sampled inputs and the fixed vectors
+of s_log1p.c's words and L12's witnesses, and holds its two signed compares to (a)'s definitions.
+That Varka's kernel uses these compares and long words is not checked here.
 
 **Encoding.** None, no machine-checked file: (b) is an integer identity checked by the Java loops
 above over every exponent field and every significand word, with the bound on `K` from step 2
