@@ -160,6 +160,11 @@ port teaches.
   otherwise refuses: then the later run is a first run of new code, in a file of its own.
 - When a change moves committed numbers, measure again and commit the new file, then requote
   every document from it, rather than patching quoted figures one by one.
+- The README's speedup table is generated, never edited, and describes the release its marker
+  names (`<!-- speedup-table: v<version> -->`): `bench/readme-table.py --write` puts it between
+  its markers, from the newest results file per function and host that times that tag's code,
+  and CI's `--check` fails when it differs. Code on `main` does not move it; a pull request that
+  adds a results file runs `--write`, and the release pull request moves it (step 1 below).
 
 ## Papers are transcribed, not paraphrased from memory
 
@@ -220,7 +225,17 @@ and pass `dev/jar-check.sh --release`. The steps:
 1. In a pull request, move the `Unreleased` lines under a `## [<version>]` heading of
    `CHANGELOG.md`, add its `[<version>]:` link line, and update `README.md`: its status
    paragraph and the sentence "Released in ...: ..." name the release's functions, and the
-   sentence "On `main`, unreleased: ..." goes when nothing is left on `main` only.
+   sentence "On `main`, unreleased: ..." goes when nothing is left on `main` only. The same pull
+   request regenerates the README's speedup table for the coming tag, after a benchmark pass on
+   both hosts against the release candidate (its files committed first): `bench/readme-table.py
+   --write --tag v<version>`. Until the tag exists the script compares the files with HEAD's code
+   and requires HEAD's pom version to be `<version>` or `<version>-SNAPSHOT` (a minor's release
+   pull request sets the pom to `<version>-SNAPSHOT` for it) and `CHANGELOG.md` to have the
+   heading `## [<version>]`; once `dev/release.sh` has tagged,
+   with the tag's, which gives the same table, since the release commit's version, `<scm><tag>`
+   and `project.build.outputTimestamp` are left out of the comparison. Between the merge of
+   this pull request and the tag, `main` takes no change to code under a benchmark or to
+   `pom.xml`, which would move the table and fail its check.
 2. On an up-to-date `main`, `dev/release.sh <version>` checks the tree, sets the pom's version
    (from any `-SNAPSHOT`, so a minor is released the same way),
    its `<scm><tag>` and `project.build.outputTimestamp` (so that the jars are reproducible), runs
@@ -235,7 +250,11 @@ and pass `dev/jar-check.sh --release`. The steps:
    the tag is `v<version>`, the pom says `<version>` and the tagged commit is on `main`
    (`dev/release-version.sh`), and builds the release's jars as a release would; ci.yml's jobs
    and the proofs under both solvers run on it too. Wait for it and for CI to be green: nothing
-   is uploaded yet, and a red tag is dropped by deleting it on origin and here.
+   is uploaded yet, and a red tag is dropped by deleting it on origin and here. While it is
+   dropped, `main` is past the release (its pom at the next `-SNAPSHOT`), and the README's
+   speedup table is checked against the "Release <version>" commit in `main`'s history, with a
+   note; tag the fixed release again, or set the table's marker back to the previous release
+   (`bench/readme-table.py --write --tag v<previous>`).
 4. `git checkout v<version> && mvn -B -Prelease clean deploy` builds the sources and Javadoc
    jars, signs them with the owner's key and uploads them to Central's portal; publish the
    deployment there, then `git checkout main`. The jars `dev/release.sh` checked and the jars

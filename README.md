@@ -13,6 +13,38 @@ may break the API and a patch may not; adding a function is a patch. Bit identit
 `StrictMath` is the contract, and no version changes it (`CHANGELOG.md`); the one lane it excepts
 is a lane of two NaNs with different bits in `atan2`, `hypot` or `pow`.
 
+**Speedup over `StrictMath`** of the latest release, per host, from the committed results
+files:
+
+<!-- speedup-table: v0.2.0 -->
+
+| Function | xeon8573c (AVX-512): common / mixed | epyc7763 (AVX2): common / mixed |
+|---|---|---|
+| `exp` | older code | older code |
+| `expm1` | 3.82x / 3.39x | 1.85x / 1.65x |
+| `log` | 4.12x / 2.38x | older code |
+| `log10` | 4.64x / 2.82x | older code |
+| `log1p` | 3.61x / 3.28x | 1.88x / 1.64x |
+| `sinh` | 3.57x / 2.71x | 2.12x / 1.69x |
+| `cosh` | 3.34x / 1.88x | 2.15x / 1.70x |
+| `asin` | 2.31x / 2.10x | 2.09x / 1.52x |
+| `atan` | 3.54x / 2.30x | 1.77x / 1.52x |
+| `acos` | 2.21x / 1.90x | 1.99x / 1.36x (one run, near 1.3x) |
+| `atan2` | 2.72x / 2.08x | 1.72x / 1.55x |
+
+For vfdlibm 0.2.0 (tag v0.2.0). Each figure is `StrictMath` called once per lane (the
+`scalarStrictMath` row) over the function's default arm at the host's preferred species (its
+`<arm>Preferred` row), by minimum ns/op within one run; where a file holds a run and its re-run, the
+lower of the two runs' ratios is shown; from one run, a ratio under 1.4x is marked, and one under
+1.3x says "re-run needed". `common`: no lane takes a rare path; `mixed`: rare lanes run. The
+preferred species is 512 bits on xeon8573c, 256 bits on epyc7763. "older code" and "newer code": the
+files of that function and host time code older or newer than the release's; "not measured": there
+is no file. The figures come from the newest file per function and host under
+[`bench/results/`](bench/results/) that times the release's code; `bench/readme-table.py --write`
+makes this table, and CI checks it.
+
+<!-- end of speedup-table -->
+
 ## Use
 
 A client that depends on the released jar, from Maven Central. Its `pom.xml`:
