@@ -8,8 +8,8 @@ and each hinge condition, with the range where it holds and why the lanes are in
 property it rests on, the proof, and the test that checks its hinges; that test fails if a hinge
 were false. The code carries a pointer to the lemma. A port with no departure of its own (log10,
 log1p) has a section saying so; log10's names the lemmas it rests on through `log` and holds
-L17, on Varka's form of it, and log1p's holds a counter-example, a statement and not a proof of a
-fold.
+L17, on Varka's form of it, and log1p's holds L12, a counter-example (a statement and not a proof
+of a fold), and L18, on Varka's form of it.
 
 The tests are of two kinds, and each lemma names both. Hinge tests in `ProofsTest` mostly check a
 lemma's hypotheses on scalar Java, where each operation is the same single rounding as a vector
@@ -1096,24 +1096,33 @@ the C's.
 above and the int range's ends, the two long compares against the C's int compares on every high
 word within `2^16` of that word, with five low words each, and on 2^20 sampled patterns against
 every one of those words. `ProofsTest.l18LongWordsAreLog1psInts` (b): a loop over every exponent
-field from 0 to `0x7ff`, which by step 2 is every value `HU >>> 20` takes (the words depend on `HU`
-only through its field and its significand word), checks `K` and `K + 1` against the C's int `k`,
-and `K` and `K + 1` in `[-53, 1024]` from field `0x3ca` (below `0x7ff` for `K + 1`); it checks that
-`1.0 + nextUp(-1.0)` has field `0x3ca`, the smallest `u`, and that field `0x7ff` reaches line 146
-only for a NaN; on the lanes above -1 among 2^17 sampled inputs and nine edges (from `nextUp(-1)` to
-`+inf`), it computes `u` as the C does and checks that its sign is clear, `HU` is `hu` and `K` after
-line 146 is the C's `k`, in `[-53, 1024]`; and a loop over every significand word from 0 to
-`0xfffff` checks the long `hu & 0x000fffff`, the compare with `0x6a09e`, both ORed words, the
-quarter word and the rebuilt bits of `u` against the C's ints.
+field from 0 to `0x7ff` with the sign bit clear and set, read from `u`'s raw bits by a logical
+shift as the kernel reads them, checks that `HU` and `K` are the C's `hu` and `k` exactly when the
+sign is clear, so a reading that matched the C on a sign-set word (one H19 keeps out) fails there;
+with the logical shift replaced by hand by an arithmetic one (and reverted), it failed at the first
+sign-set word, `0x800`. With the sign clear, which by step 2 is every value `HU >>> 20` takes on a
+kept lane (the words depend on `HU` only through its field and its significand word), it checks
+`K + 1` against the C's, and `K` and `K + 1` in `[-53, 1024]` from field `0x3ca` (below `0x7ff`
+for `K + 1`); it checks that `1.0 + nextUp(-1.0)` has field `0x3ca`, the smallest `u`, and that
+field `0x7ff` reaches line 146 only for a NaN; on the lanes above -1 among 2^17 sampled inputs and
+nine edges (from `nextUp(-1)` to `+inf`), it computes `u` as the C does and checks that its sign
+is clear, `HU` is `hu` and `K` after line 146 is the C's `k`, in `[-53, 1024]`; and a loop over
+every significand word from 0 to `0xfffff` checks the long `hu & 0x000fffff`, the compare with
+`0x6a09e`, both ORed words, the quarter word and the rebuilt bits of `u` against the C's ints, an
+integer identity, since the mask drops the sign.
 `ProofsTest.l18EarlyLanesAreAnsweredEarly` (H19): every lane of a set with `!(x > -1)` (one pattern
 at every exponent field from `0x3ff` up with the sign set, `-1` and its neighbours below, the
 specials and sampled patterns that are not above -1, the NaNs of both signs) meets the C's
-early-return test of line 114 or line 128, so it fails if such a lane reached the reduction, and
-`StrictMath.log1p` answers it `-inf` at `-1` and a NaN elsewhere; and on every non-NaN lane of the
-set below -1, `HU` is not the C's `hu` widened, which shows H19 is needed. **Vector tie, here.**
+early-return test of line 114 or line 128, and `StrictMath.log1p` answers it `-inf` at `-1` and a
+NaN elsewhere; and on every non-NaN lane of the set below -1, `HU` is not the C's `hu` widened,
+which shows H19 is needed. It is a witness for H19 and the oracle's own check, not a hinge test:
+it runs s_log1p.c's scalar tests and `StrictMath` on inputs not above -1 by construction, so it
+checks the C, not that a kernel keeps words only on lanes above -1. The checks of H19 are
+`l18EarlyLanesAreBlendedOver` below and Varka's suite. **Vector tie, here.**
 `ProofsTest.l18EarlyLanesAreBlendedOver` checks H19 on `Log1p`'s own masks, whose blends Varka's
 kernel emits in the same order: `Log1p.log1pBlended`, at every width, against `StrictMath.log1p` by
-raw bits on that set, each lane beside a kept twin above -1, so that a vector mixes early and kept
+raw bits on that set, each lane beside a kept twin above -1 (its magnitude, or 0.25 for a NaN or
+`-inf`, whose magnitude `+inf` is answered early too), so that a vector mixes early and kept
 lanes. With the `x <= -1` blend dropped by hand from `Log1p.log1p` (and reverted), it failed at
 every width, 17447 of its 34946 inputs differing. **Vector tie, in Varka.** Where L18's own claim,
 the kernel, is checked: Varka's `VarkaMathPortSuite` (vecbricks/varka, the pull request that adds

@@ -1217,23 +1217,34 @@ class ProofsTest {
   }
 
   /**
-   * L18 (b): a loop over every exponent field, 0 to 0x7ff, which is every value HU >>> 20 takes
-   * on a lane whose u has its sign clear: the long K and K + 1 against the C's int k, and K in
-   * [-53, 1024] from field 0x3ca, the smallest u's (checked); and a loop over every significand
-   * word: the long masked word, its compare with 0x6a09e, both ORed words, the quarter word and
-   * u's rebuilt bits against the C's ints.
+   * L18 (b): a loop over every sign bit and exponent field of u's raw bits, 0 to 0xfff: the long
+   * HU and K equal the C's hu and k exactly when the sign is clear (so a sign-set word, which H19
+   * keeps out, fails), and with it clear K + 1 is the C's and K lies in [-53, 1024] from field
+   * 0x3ca, the smallest u's (checked); and a loop over every significand word, an integer
+   * identity since the mask drops the sign: the long masked word, its compare with 0x6a09e, both
+   * ORed words, the quarter word and u's rebuilt bits against the C's ints.
    */
   @Test
   void l18LongWordsAreLog1psInts() {
     assertEquals(0x3ca, (int) (bits(1.0 + Math.nextUp(-1.0)) >>> 52));
-    for (int field = 0; field <= 0x7ff; field++) {
-      int chu = field << 20;
-      long hu = Integer.toUnsignedLong(chu);
+    // Every sign bit and exponent field of u's raw bits, read as the kernel reads them (a logical
+    // shift of the long bits) and as the C does (the signed int high word). The long words are the
+    // C's exactly when the sign is clear, so a sign-set word read as the C's fails here.
+    for (int top = 0; top <= 0xfff; top++) {
+      long b = ((long) top << 52) | 0x5555_aaaaL;
+      long hu = b >>> 32;
+      int chu = (int) (b >> 32);
       long k = (hu >>> 20) - 1023;
       int ck = (chu >> 20) - 1023;
-      String at = "field " + field;
-      assertEquals((long) chu, hu, at);
-      assertEquals((long) ck, k, at);
+      boolean signClear = top < 0x800;
+      String at = "sign and field " + Integer.toHexString(top);
+      assertEquals(signClear, hu == (long) chu, at);
+      assertEquals(signClear, k == (long) ck, at);
+      assertEquals(signClear, hu < 1L << 31, at);
+      if (!signClear) {
+        continue;
+      }
+      int field = top;
       assertEquals((long) (ck + 1), k + 1, at);
       if (field >= 0x3ca) {
         assertTrue(k >= -53 && k <= 1024, at);
@@ -1359,7 +1370,8 @@ class ProofsTest {
   /**
    * L18's H19 on Log1p's own masks: Log1p.log1pBlended, whose blends Varka's kernel emits in the
    * same order, against StrictMath by raw bits on the early set, each lane beside a kept twin
-   * above -1 (its magnitude, or 0.25 for a NaN), so that a vector mixes early and kept lanes. A
+   * above -1 (its magnitude, or 0.25 for a NaN or -inf, whose magnitude +inf is answered early
+   * too), so that a vector mixes early and kept lanes. A
    * kernel that kept an early lane's general form, its blend dropped or placed before the
    * general one, fails here.
    */
@@ -1370,7 +1382,7 @@ class ProofsTest {
     double[] xs = new double[2 * early.length];
     for (int j = 0; j < early.length; j++) {
       xs[2 * j] = early[j];
-      xs[2 * j + 1] = Double.isNaN(early[j]) ? 0.25 : Math.abs(early[j]);
+      xs[2 * j + 1] = Double.isFinite(early[j]) ? Math.abs(early[j]) : 0.25;
     }
     Oracle.assertUnary("l18 log1pBlended", width.species(), x -> Log1p.log1pBlended(x, null),
         StrictMath::log1p, xs);
