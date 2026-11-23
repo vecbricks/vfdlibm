@@ -37,8 +37,8 @@ where a file holds a run and its re-run, each row's minimum is the lower of the 
 lane takes a rare path; `mixed`: rare lanes run. The preferred species is 512 bits on xeon8573c, 256
 bits on epyc7763. A cell says "older code" when the code under the benchmark has changed since every
 file of that function and host, and "not measured" when there is no file. The figures come from
-[`bench/results/`](bench/results/), the newest file per function and host, and this table from
-`bench/readme-table.py`.
+[`bench/results/`](bench/results/), the newest file per function and host that times this commit's
+code, and this table from `bench/readme-table.py`.
 
 <!-- End of the generated speedup table. -->
 

@@ -24,7 +24,8 @@ The file of a function and host is bench/results/<function>-<host>-<date>.txt wh
 class is <Function>Benchmark (so -kinds, -pair, -onediv and laptop files are not read), the
 newest one whose every run times the code of this checkout's HEAD for that benchmark, by
 bench/record.py's rule (code_compared: the benchmark's closure the same but for comments and
-whitespace, pom.xml but for its version and the parts no benchmark runs). A cell with no such
+whitespace, pom.xml but for its version and the parts no benchmark runs; here <scm><tag>
+too, which a release commit sets). A cell with no such
 file says "not measured" if the function and host have no file at all and "older code" if they
 have files and the code under the benchmark has changed since each of them (or a file, from
 before the workflow wrote one, has no Commit line to compare); a file without the rows says
@@ -79,6 +80,20 @@ NOT_MEASURED = "not measured"
 OLDER = "older code"
 
 
+RECORD_POM_SHAPE = record.pom_shape
+
+
+def pom_shape(data, what):
+    """record.pom_shape without <scm><tag>, which dev/release.sh sets to v<version> in the
+    release commit and back to HEAD after it: no benchmark runs it, and a release's own CI
+    would otherwise find every file older than its code."""
+    return RECORD_POM_SHAPE(re.sub(rb"(<scm>.*?<tag>)[^<]*(</tag>)", rb"\1\2", data,
+                                   flags=re.S), what)
+
+
+record.pom_shape = pom_shape  # what code_compared calls, in this process only
+
+
 class Mismatch(record.Problem):
     """DEFAULT_ARMS and the code disagree."""
 
@@ -123,15 +138,15 @@ def arms(root, names):
         # Every method of <Function>.java that is one call of the private body with a constant.
         delegates = dict(re.findall(
             r"static DoubleVector (\w+)\([^)]*\)\{return %s\([^;]*,([A-Z]+)\);\}" % name, main))
-        entry = re.search(r"static DoubleVector %s\([^)]*VectorMask<Double>live\)\{" % name,
-                          main)
+        entry = re.search(r"static DoubleVector %s\([^)]*VectorMask<Double>live\)\{"
+                          r"(?:return %s\([^;]*,([A-Z]+)\);\})?" % (name, name), main)
         if not entry:
             wrong.append("%s.java has no %s(..., VectorMask<Double> live)" % (cls, name))
             continue
         vector_arms = sorted(set(re.findall(r"public double\[\](\w+)Preferred\(\)", bench))
                              - {"scalarStrictMath"})
-        if name in delegates:
-            found = arm_of_constant(delegates[name])
+        if entry.group(1):
+            found = arm_of_constant(entry.group(1))
         elif len(vector_arms) == 1:
             found = vector_arms[0]  # one arm, computed in place: the benchmark's only one
         else:
@@ -147,8 +162,8 @@ def arms(root, names):
             wrong.append("%sBenchmark has no %sPreferred()" % (cls, want))
             continue
         calls = set(re.findall(r"\b(?:%s|VFdlibm)\.(\w+)\(" % cls, body.group(1)))
-        right = {m for m in calls if m == name or (name in delegates
-                                                   and delegates.get(m) == delegates[name])}
+        right = {m for m in calls if m == name or (entry.group(1)
+                                                   and delegates.get(m) == entry.group(1))}
         if not right or calls - right:
             wrong.append("%sBenchmark.%sPreferred calls %s, not %s's %s arm"
                          % (cls, want, ", ".join(sorted(calls)) or "nothing", name, want))
@@ -246,13 +261,15 @@ def table(root):
             text = NOT_MEASURED if (name, host) not in found else OLDER
             for path in found.get((name, host), []):
                 lines = read(root, path).split("\n")
+                if not any(l.startswith("# Commit:") for l in lines):
+                    # A file from before the workflow wrote a Commit line times code no one
+                    # can compare with HEAD's: it is read as older code, and not parsed.
+                    continue
                 if record.classes_of(lines) != {cls}:
                     raise record.Problem("%s is named for %s and times %s" % (
                         path, name, ", ".join(sorted(record.classes_of(lines))) or "nothing"))
                 runs = runs_of([l.rstrip() for l in lines])
                 commits = [(h.get("Commit") or "").split(" ")[0] for h, _ in runs]
-                # A file from before the workflow wrote a Commit line times code no one can
-                # compare with HEAD's: it is read as older code.
                 if all(commits) and all(same_code(c, head, cls) for c in commits):
                     for h, _ in runs:
                         widths.setdefault(host, {}).setdefault(width_of(h, path), path)
@@ -276,8 +293,8 @@ def table(root):
             " `mixed`: rare lanes run. The preferred species is %s. A cell says \"older code\""
             " when the code under the benchmark has changed since every file of that function"
             " and host, and \"not measured\" when there is no file. The figures come from"
-            " [`bench/results/`](bench/results/), the newest file per function and host, and"
-            " this table from `bench/readme-table.py`." % (width_text or "not measured"),
+            " [`bench/results/`](bench/results/), the newest file per function and host that"
+            " times this commit's code, and this table from `bench/readme-table.py`." % (width_text or "not measured"),
                          width=100, break_long_words=False, break_on_hyphens=False)
     return [BEGIN, "", head_row, rule] + rows + [""] + note.split("\n") + ["", END]
 
@@ -300,9 +317,16 @@ def check(root, readme):
 
 
 def write(root, readme):
+    record.REPO = root
+    dirty = record.git("status", "--porcelain", "--", *record.ROOTS, *record.RESOURCES,
+                       "pom.xml").stdout.decode().strip()
+    if dirty:
+        raise record.Problem("the code is compared at HEAD, and these files differ from it:"
+                             " commit them first\n" + dirty)
     before, _, after = between(read(root, readme))
+    text = "\n".join(before + table(root) + after)  # all of it, before the file is truncated
     with open(os.path.join(root, readme), "w", encoding="utf-8", newline="\n") as f:
-        f.write("\n".join(before + table(root) + after))
+        f.write(text)
 
 
 # The self-test: a scratch repository with two functions, their code and results files.
@@ -435,7 +459,8 @@ def selftest_in(repo):
 
     saved_arms = dict(DEFAULT_ARMS)
     subprocess.run(["git", "init", "-q", repo], check=True)
-    c1 = commit({"pom.xml": record.FAKE_POM, main + "VFdlibm.java": VFDLIBM,
+    c1 = commit({"pom.xml": record.FAKE_POM.replace(
+                     "</project>", "  <scm><tag>HEAD</tag></scm>\n</project>"), main + "VFdlibm.java": VFDLIBM,
                  main + "Exp.java": EXP, jmh + "ExpBenchmark.java": EXP_BENCH,
                  main + "Atan.java": ATAN, jmh + "AtanBenchmark.java": ATAN_BENCH,
                  main + "Hypot.java": HYPOT, jmh + "HypotBenchmark.java": HYPOT_BENCH,
@@ -454,6 +479,7 @@ def selftest_in(repo):
                 (c1, 64, mins("finishPreferred", 1.0, 1.0))]),
             res + "exp-laptop-2026-11-21.txt": results_file("ExpBenchmark", [
                 (c1, 32, mins("finishPreferred", 1.0, 1.0))]),
+            res + "exp-epyc7763-2026-11-21.txt": "# An early file: no Commit line, no table\n",
             res + "exp-somehost-2026-11-21.txt": results_file("ExpBenchmark", [
                 (c1, 32, mins("finishPreferred", 1.0, 1.0))]),
             # atan: a file that lacks the arm's mixed row.
@@ -477,6 +503,24 @@ def selftest_in(repo):
     assert check(repo, "README.md") == []
     text = read(repo, "README.md")
     assert text.startswith("# r\n\nStatus.\n\n" + BEGIN) and text.endswith(END + "\n\n## Use\n")
+    # --write refuses while the code differs from HEAD's, at which it is compared, and an error
+    # leaves the README as it was.
+    with open(os.path.join(repo, main + "Exp.java"), "a", encoding="utf-8") as f:
+        f.write("// not committed\n")
+    try:
+        write(repo, "README.md")
+        raise AssertionError("--write with code not committed")
+    except record.Problem as e:
+        assert "commit them first" in str(e) and "Exp.java" in str(e), e
+    subprocess.run(["git", "-C", repo, "checkout", "-q", "--", main + "Exp.java"], check=True)
+    DEFAULT_ARMS["exp"] = "blended"
+    try:
+        write(repo, "README.md")
+        raise AssertionError("--write with DEFAULT_ARMS wrong")
+    except Mismatch:
+        assert read(repo, "README.md") == text
+    finally:
+        DEFAULT_ARMS["exp"] = "finish"
     for old, new in (("4.50x", "4.60x"), ("| `hypot`", "| `hypotx`")):
         with open(os.path.join(repo, "README.md"), "w", encoding="utf-8") as f:
             f.write(text.replace(old, new))
@@ -513,6 +557,16 @@ def selftest_in(repo):
     commit({res + "exp-xeon8573c-2026-11-23.txt": results_file("ExpBenchmark", [
         (c4, 64, mins("finishPreferred", 450.0, 550.0))])}, "new run")
     assert body()[2] == "| `exp` | 2.22x / 2.00x | not measured | older code |"
+    # The release commit's <scm><tag> changes no cell; another JMH changes them all.
+    pom = read(repo, "pom.xml")
+    assert pom.count("<tag>HEAD</tag>") == 1
+    commit({"pom.xml": pom.replace("<tag>HEAD</tag>", "<tag>v0.2.0</tag>")}, "release")
+    assert body()[2] == "| `exp` | 2.22x / 2.00x | not measured | older code |", body()
+    commit({"pom.xml": pom.replace("<jmh.version>1.37", "<jmh.version>1.38")}, "jmh")
+    assert body()[2:] == ["| `exp` | older code | not measured | older code |",
+                          "| `atan` | not measured | older code | older code |",
+                          "| `hypot` | not measured | not measured | not measured |"], body()
+    commit({"pom.xml": pom}, "back")
 
     # Two runs at commits of different code: the file is not read (record.py would have
     # refused to join them).
