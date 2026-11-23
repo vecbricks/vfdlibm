@@ -145,7 +145,9 @@ port teaches.
   of those parts is copied by hand: before the file is committed,
   `bench/record.py check <file> --run <run id>` must pass. A run and its re-run on one host go
   in one file, with `--run <run id>` given once per run, in order, to `write` and to `check`;
-  a pair's re-run is a file of its own.
+  a pair's re-run is a file of its own. `record.py` joins runs at different commits only when
+  the code under the benchmarks is the same but for comments (the rule is in its header), and
+  otherwise refuses: then the later run is a first run of new code, in a file of its own.
 - When a change moves committed numbers, measure again and commit the new file, then requote
   every document from it, rather than patching quoted figures one by one.
 
