@@ -503,8 +503,8 @@ class HypotTest {
   }
 
   /**
-   * Random bits, uniform draws of Varka's baseline range, every normal exponent, and subnormals:
-   * on both sides, and as the smaller argument beside a normal one.
+   * Random bits, uniform draws of Varka's baseline range, every normal exponent, huge magnitudes
+   * near overflow, and subnormals: on both sides, and beside a small normal in either argument.
    */
   static Inputs.Pairs densePairs(long seed, int n) {
     return concat(
@@ -514,8 +514,12 @@ class HypotTest {
         new Inputs.Pairs(Inputs.magnitudes(seed + 4, n, -1022, 1023),
             Inputs.magnitudes(seed + 5, n, -1022, 1023)),
         new Inputs.Pairs(Inputs.subnormals(seed + 6, n / 4), Inputs.subnormals(seed + 7, n / 4)),
-        new Inputs.Pairs(Inputs.magnitudes(seed + 8, n / 4, -1022, -900),
-            Inputs.subnormals(seed + 9, n / 4)));
+        new Inputs.Pairs(Inputs.magnitudes(seed + 8, n / 8, -1022, -900),
+            Inputs.subnormals(seed + 9, n / 8)),
+        new Inputs.Pairs(Inputs.subnormals(seed + 10, n / 8),
+            Inputs.magnitudes(seed + 11, n / 8, -1022, -900)),
+        new Inputs.Pairs(Inputs.magnitudes(seed + 12, n / 8, 900, 1023),
+            Inputs.magnitudes(seed + 13, n / 8, -1022, 1023)));
   }
 
   /** The gate's inputs: {@code n} draws of each generator, the special pairs and the triples. */
@@ -875,7 +879,7 @@ class HypotTest {
   @ParameterizedTest
   @EnumSource(VectorWidth.class)
   void sampledAndDense(VectorWidth width) {
-    assertHypot(width.species(), densePairs(9500L + 8L * width.ordinal(), DRAWS));
+    assertHypot(width.species(), densePairs(9500L + 16L * width.ordinal(), DRAWS));
   }
 
   @ParameterizedTest

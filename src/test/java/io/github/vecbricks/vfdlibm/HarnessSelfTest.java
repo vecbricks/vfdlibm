@@ -381,9 +381,15 @@ class HarnessSelfTest {
 
   @Test
   void subnormalsAreSubnormalAndNonzero() {
+    int belowTwoToMinus1060 = 0;
     for (double x : Inputs.subnormals(11L, 4096)) {
       assertTrue(x != 0.0 && Math.abs(x) < Double.MIN_NORMAL, "drew " + x);
+      if (Math.abs(x) < 0x1p-1060) {
+        belowTwoToMinus1060++;
+      }
     }
+    // The leading bit is spread over 52 positions, so about 14 of 52 binades lie below 2^-1060.
+    assertTrue(belowTwoToMinus1060 > 4096 / 8, "only " + belowTwoToMinus1060 + " below 2^-1060");
   }
 
   @Test
