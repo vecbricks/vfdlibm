@@ -1,0 +1,48 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1100 720" role="img" aria-labelledby="t3 d3" font-family="Inter, 'IBM Plex Sans', 'Segoe UI', system-ui, sans-serif">
+  <title id="t3">Same call, different NaN</title>
+  <desc id="d3">StrictMath.atan2 called two million times on two NaNs with different payloads. Under -Xint every call returned the first argument's NaN: 2,000,000 first, 0 second. Under the default JIT tiers 1,983,613 calls returned the first and 16,387 the second. One run each on a laptop, JDK 25.0.5.1 on x86-64.</desc>
+  <defs>
+    <style>
+      .ti { font-size: 34px; font-weight: 700; fill: #1d1d1f; }
+      .su { font-size: 21px; fill: #6b6b6b; }
+      .band { fill: #ececec; }
+      .bt { font-size: 17px; font-weight: 600; letter-spacing: 2px; fill: #555; }
+      .h { font-size: 24px; font-weight: 700; fill: #1d1d1f; }
+      .s { font-size: 20px; fill: #333; }
+      .m { font-family: 'JetBrains Mono', 'IBM Plex Mono', ui-monospace, monospace; font-size: 19px; fill: #1d1d1f; }
+      .n { font-family: 'JetBrains Mono', 'IBM Plex Mono', ui-monospace, monospace; font-size: 20px; font-weight: 700; }
+      .cap { font-size: 18px; fill: #6b6b6b; }
+    </style>
+  </defs>
+  <rect x="1" y="1" width="1098" height="718" rx="22" fill="#fbfbfa" stroke="#d6d6d6" stroke-width="2"/>
+  <text x="50" y="66" class="ti">Same call, different NaN</text>
+  <text x="50" y="102" class="su">StrictMath.atan2(NaN#1, NaN#2), two million times: which NaN comes back?</text>
+
+  <rect x="50" y="132" width="1000" height="60" rx="12" fill="#f2f2f2" stroke="#bdbdbd"/>
+  <text x="74" y="170" class="m">NaN#1 = 0x7ff8000000000001   NaN#2 = 0x7ff8000000000002</text>
+
+  <rect x="30" y="218" width="1040" height="38" rx="8" class="band"/>
+  <text x="50" y="244" class="bt">① java -Xint NanTier.java   (THE INTERPRETER ONLY)</text>
+
+  <!-- bar: total width 1000 for 2,000,000 -->
+  <rect x="50" y="280" width="1000" height="56" rx="10" fill="#e8f0fb" stroke="#4a7fd0" stroke-width="2"/>
+  <text x="74" y="316" class="s">first</text>
+  <text x="1030" y="316" text-anchor="end" class="n" fill="#2f63b3">2,000,000</text>
+  <text x="50" y="372" class="s">second: <tspan class="n" fill="#1d1d1f">0</tspan></text>
+
+  <rect x="30" y="408" width="1040" height="38" rx="8" class="band"/>
+  <text x="50" y="434" class="bt">② java NanTier.java   (THE DEFAULT JIT TIERS)</text>
+
+  <!-- 1,983,613 / 2,000,000 * 1000 = 991.8; 16,387 -> 8.2 -->
+  <rect x="50" y="470" width="992" height="56" rx="10" fill="#e8f0fb" stroke="#4a7fd0" stroke-width="2"/>
+  <rect x="1042" y="470" width="8" height="56" fill="#e08a2e"/>
+  <text x="74" y="506" class="s">first</text>
+  <text x="1020" y="506" text-anchor="end" class="n" fill="#2f63b3">1,983,613</text>
+  <text x="50" y="562" class="s">second: <tspan class="n" fill="#c4541f">16,387</tspan></text>
+  <text x="1050" y="562" text-anchor="end" class="s">other: <tspan class="n" fill="#1d1d1f">0</tspan></text>
+
+  <rect x="50" y="598" width="560" height="56" rx="28" fill="#e08a2e"/>
+  <text x="330" y="634" text-anchor="middle" font-size="22" font-weight="700" fill="#fff">StrictMath disagrees with itself here</text>
+
+  <text x="50" y="690" class="cap">One run each on my laptop, JDK 25.0.5.1 on x86-64; your counts will differ. Bars to scale.</text>
+</svg>

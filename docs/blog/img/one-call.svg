@@ -1,0 +1,75 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1100 960" role="img" aria-labelledby="t1 d1" font-family="Inter, 'IBM Plex Sans', 'Segoe UI', system-ui, sans-serif">
+  <title id="t1">How one lane gets StrictMath's bits</title>
+  <desc id="d1">fdlibm's own compares on each lane's high word split the lanes of a vector in two. A common lane is computed by the vector body, fdlibm's C operation by operation, on all lanes at once. A rare lane is computed again, one lane at a time, by StrictMath, and that result is written over the lane. Either way the lane holds StrictMath's bits. The one exception is a lane of two different NaNs in atan2, hypot or pow.</desc>
+  <defs>
+    <marker id="a1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="9" markerHeight="9" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#333"/>
+    </marker>
+    <style>
+      .ti { font-size: 34px; font-weight: 700; fill: #1d1d1f; }
+      .su { font-size: 21px; fill: #6b6b6b; }
+      .h { font-size: 25px; font-weight: 700; fill: #1d1d1f; }
+      .s { font-size: 20px; fill: #333; }
+      .g { font-size: 20px; fill: #6b6b6b; }
+      .m { font-family: 'JetBrains Mono', 'IBM Plex Mono', ui-monospace, monospace; font-size: 18px; fill: #333; }
+      .cap { font-size: 18px; fill: #6b6b6b; }
+      .ar { stroke: #333; stroke-width: 2; fill: none; marker-end: url(#a1); }
+      .badge { font-size: 20px; font-weight: 700; fill: #fff; }
+    </style>
+  </defs>
+  <rect x="1" y="1" width="1098" height="958" rx="22" fill="#fbfbfa" stroke="#d6d6d6" stroke-width="2"/>
+  <text x="50" y="66" class="ti">How one lane gets StrictMath's bits</text>
+  <text x="50" y="102" class="su">Inside VFdlibm.exp(x): fdlibm's own compares send each lane one of two ways.</text>
+
+  <!-- the source: the guard -->
+  <rect x="250" y="134" width="600" height="112" rx="14" fill="#f3ecd9" stroke="#b8a67a" stroke-width="2"/>
+  <text x="550" y="176" text-anchor="middle" class="h">One lane of a DoubleVector</text>
+  <text x="550" y="208" text-anchor="middle" class="s">the guard reads its high word with the C's</text>
+  <text x="550" y="232" text-anchor="middle" class="s">own branch tests, all lanes at once</text>
+
+  <path d="M420,248 L300,316" class="ar"/>
+  <text x="250" y="290" class="m">common</text>
+  <path d="M680,248 L800,316" class="ar"/>
+  <text x="786" y="290" class="m">rare</text>
+
+  <!-- the two questions -->
+  <rect x="50" y="320" width="480" height="96" rx="14" fill="#ffffff" stroke="#c9c9c9" stroke-width="2"/>
+  <circle cx="92" cy="368" r="20" fill="#d9622b"/><text x="92" y="375" text-anchor="middle" class="badge">A</text>
+  <text x="126" y="360" class="h">On fdlibm's common path</text>
+  <text x="126" y="392" class="g">the argument's ordinary range</text>
+
+  <rect x="570" y="320" width="480" height="96" rx="14" fill="#ffffff" stroke="#c9c9c9" stroke-width="2"/>
+  <circle cx="612" cy="368" r="20" fill="#d9622b"/><text x="612" y="375" text-anchor="middle" class="badge">B</text>
+  <text x="646" y="360" class="h">On a rare path</text>
+  <text x="646" y="392" class="g">range edges, infinities, NaNs</text>
+
+  <path d="M290,418 L290,466" class="ar"/>
+  <path d="M810,418 L810,466" class="ar"/>
+
+  <!-- the outcomes -->
+  <rect x="50" y="470" width="480" height="128" rx="14" fill="#fdf0e3" stroke="#e08a2e" stroke-width="2"/>
+  <text x="74" y="510" class="h">The vector body</text>
+  <text x="74" y="542" class="m">fdlibm's C, operation by</text>
+  <text x="74" y="568" class="m">operation, on every lane</text>
+
+  <rect x="570" y="470" width="480" height="128" rx="14" fill="#e8f0fb" stroke="#4a7fd0" stroke-width="2" stroke-dasharray="9 6"/>
+  <text x="594" y="510" class="h">The per-lane finish</text>
+  <text x="594" y="542" class="m">StrictMath.exp(x[i])</text>
+  <text x="594" y="568" class="m">one rare lane at a time</text>
+
+  <!-- under each branch -->
+  <text x="74" y="642" class="g">+ − × ÷ √ and bit operations only:</text>
+  <text x="74" y="670" class="g">no fused multiply-add, no reordering</text>
+  <text x="74" y="708" font-size="22" font-weight="700" fill="#c4541f">The C's own roundings, in its order</text>
+
+  <text x="594" y="642" class="g">the vector computed it too; the finish</text>
+  <text x="594" y="670" class="g">writes StrictMath's result over it</text>
+  <text x="594" y="708" font-size="22" font-weight="700" fill="#2f63b3">StrictMath's result, by construction</text>
+
+  <rect x="250" y="748" width="600" height="64" rx="32" fill="#e08a2e"/>
+  <text x="550" y="788" text-anchor="middle" font-size="23" font-weight="700" fill="#fff">Each lane = StrictMath's, by raw bits</text>
+
+  <text x="50" y="858" class="s"><tspan font-weight="700" fill="#1d1d1f">One exception:</tspan> a lane of two different NaNs in atan2, hypot or pow.</text>
+  <text x="50" y="906" class="cap">Arms differ by function: some compute a rare branch in the vector too, and atan2 finishes no lane</text>
+  <text x="50" y="930" class="cap">per lane. Where a port computes differently from the C, a lemma in PROOFS.md argues the same double.</text>
+</svg>

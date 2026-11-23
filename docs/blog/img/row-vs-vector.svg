@@ -1,0 +1,83 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1100 860" role="img" aria-labelledby="t2 d2" font-family="Inter, 'IBM Plex Sans', 'Segoe UI', system-ui, sans-serif">
+  <title id="t2">One double per call, or one vector per call</title>
+  <desc id="d2">Spark's generated code calls StrictMath.exp once per row, one double at a time. A vectorized kernel calls VFdlibm.exp once per vector of four or eight doubles. Both give the same bits; Spark itself does not call vfdlibm.</desc>
+  <defs>
+    <marker id="a2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="9" markerHeight="9" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#333"/>
+    </marker>
+    <style>
+      .ti { font-size: 34px; font-weight: 700; fill: #1d1d1f; }
+      .su { font-size: 21px; fill: #6b6b6b; }
+      .band { fill: #ececec; }
+      .bt { font-size: 17px; font-weight: 600; letter-spacing: 2px; fill: #555; }
+      .h { font-size: 24px; font-weight: 700; fill: #1d1d1f; }
+      .s { font-size: 20px; fill: #333; }
+      .m { font-family: 'JetBrains Mono', 'IBM Plex Mono', ui-monospace, monospace; font-size: 18px; fill: #333; }
+      .lane { font-family: 'JetBrains Mono', 'IBM Plex Mono', ui-monospace, monospace; font-size: 17px; fill: #1d1d1f; }
+      .cap { font-size: 18px; fill: #6b6b6b; }
+      .ar { stroke: #333; stroke-width: 2; fill: none; marker-end: url(#a2); }
+    </style>
+  </defs>
+  <rect x="1" y="1" width="1098" height="858" rx="22" fill="#fbfbfa" stroke="#d6d6d6" stroke-width="2"/>
+  <text x="50" y="66" class="ti">One double per call, or one vector per call</text>
+  <text x="50" y="102" class="su">The same exp over a column: Spark's generated code, and a vectorized kernel.</text>
+
+  <rect x="30" y="130" width="1040" height="38" rx="8" class="band"/>
+  <text x="50" y="156" class="bt">① SPARK'S GENERATED CODE, ROW BY ROW</text>
+
+  <!-- rows -->
+  <g>
+    <rect x="60" y="196" width="230" height="44" rx="8" fill="#f2f2f2" stroke="#bdbdbd"/><text x="80" y="225" class="lane">row 0:  x0</text>
+    <rect x="60" y="250" width="230" height="44" rx="8" fill="#f2f2f2" stroke="#bdbdbd"/><text x="80" y="279" class="lane">row 1:  x1</text>
+    <rect x="60" y="304" width="230" height="44" rx="8" fill="#f2f2f2" stroke="#bdbdbd"/><text x="80" y="333" class="lane">row 2:  x2</text>
+    <text x="80" y="378" class="lane">…</text>
+  </g>
+  <path d="M292,218 L420,218" class="ar"/>
+  <path d="M292,272 L420,272" class="ar"/>
+  <path d="M292,326 L420,326" class="ar"/>
+
+  <rect x="424" y="196" width="380" height="152" rx="14" fill="#e8f0fb" stroke="#4a7fd0" stroke-width="2"/>
+  <text x="446" y="234" class="h">java.lang.StrictMath</text>
+  <text x="446" y="270" class="m">StrictMath.exp(x), once a row</text>
+  <text x="446" y="304" class="s">fdlibm's C in scalar Java:</text>
+  <text x="446" y="330" class="s">one double in, one double out</text>
+
+  <path d="M806,272 L900,272" class="ar"/>
+  <rect x="904" y="244" width="150" height="56" rx="28" fill="#4a7fd0"/>
+  <text x="979" y="279" text-anchor="middle" font-size="20" font-weight="700" fill="#fff">1 result</text>
+
+  <rect x="30" y="420" width="1040" height="38" rx="8" class="band"/>
+  <text x="50" y="446" class="bt">② A VECTORIZED KERNEL WITH VFDLIBM</text>
+
+  <!-- vector -->
+  <rect x="60" y="490" width="300" height="196" rx="14" fill="#e8f0fb" stroke="#4a7fd0" stroke-width="2"/>
+  <text x="80" y="526" class="h">DoubleVector</text>
+  <g class="lane">
+    <rect x="80" y="542" width="60" height="38" rx="6" fill="#fff" stroke="#4a7fd0"/><text x="94" y="567">x0</text>
+    <rect x="148" y="542" width="60" height="38" rx="6" fill="#fff" stroke="#4a7fd0"/><text x="162" y="567">x1</text>
+    <rect x="216" y="542" width="60" height="38" rx="6" fill="#fff" stroke="#4a7fd0"/><text x="230" y="567">x2</text>
+    <rect x="284" y="542" width="60" height="38" rx="6" fill="#fff" stroke="#4a7fd0"/><text x="298" y="567">x3</text>
+    <rect x="80" y="588" width="60" height="38" rx="6" fill="#fff" stroke="#4a7fd0" stroke-dasharray="5 4"/><text x="94" y="613">x4</text>
+    <rect x="148" y="588" width="60" height="38" rx="6" fill="#fff" stroke="#4a7fd0" stroke-dasharray="5 4"/><text x="162" y="613">x5</text>
+    <rect x="216" y="588" width="60" height="38" rx="6" fill="#fff" stroke="#4a7fd0" stroke-dasharray="5 4"/><text x="230" y="613">x6</text>
+    <rect x="284" y="588" width="60" height="38" rx="6" fill="#fff" stroke="#4a7fd0" stroke-dasharray="5 4"/><text x="298" y="613">x7</text>
+  </g>
+  <text x="80" y="664" class="s">4 lanes at 256 bits, 8 at 512</text>
+
+  <path d="M362,588 L420,588" class="ar"/>
+
+  <rect x="424" y="512" width="380" height="152" rx="14" fill="#fdf0e3" stroke="#e08a2e" stroke-width="2"/>
+  <text x="446" y="550" class="h">vfdlibm</text>
+  <text x="446" y="586" class="m">VFdlibm.exp(v), once a vector</text>
+  <text x="446" y="620" class="s">fdlibm's C on every lane,</text>
+  <text x="446" y="646" class="s">in vector instructions</text>
+
+  <path d="M806,588 L900,588" class="ar"/>
+  <rect x="904" y="560" width="150" height="56" rx="28" fill="#e08a2e"/>
+  <text x="979" y="595" text-anchor="middle" font-size="20" font-weight="700" fill="#fff">4 or 8</text>
+
+  <text x="50" y="752" font-size="20" font-weight="700" fill="#1d1d1f">Same bits either way.</text>
+  <text x="270" y="752" class="s">Each result equals StrictMath.exp's on that input.</text>
+  <text x="50" y="808" class="cap">vfdlibm is a library; Spark itself does not call it. How much faster a vector call is comes from</text>
+  <text x="50" y="832" class="cap">the committed benchmark files, with the body inlined, not from this figure.</text>
+</svg>
