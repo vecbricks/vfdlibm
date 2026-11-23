@@ -378,7 +378,10 @@ as exp's are, with one column more, `vsqrtpd` (sqrt), which the width rule count
 arithmetic since this run. The rows are the test's output (`grep '^| <function> '`), less its width
 column. exp's rows of the same run matched its census above in every column but the instruction
 count, which moved by 1 to 13 on four masked arms. Every arm below passed every rule, at every
-width, under all three flag sets.
+width, under all three flag sets. cosh's `default` arms, `VFdlibm.cosh`, came in a later run
+with CI's widths per row, so the 128-bit ranges hold them under `MaxVectorSize=16` only (6 arms
+there, 4 under the other two); they read as the slice arm, which `VFdlibm.cosh` calls today, to
+within 5 instructions at 256 and 512 bits.
 
 On the host's own flags (AVX-512, `MaxVectorSize=64`), 256 and 512 bits:
 
@@ -430,10 +433,14 @@ On the host's own flags (AVX-512, `MaxVectorSize=64`), 256 and 512 bits:
 | sinh | 256 | finishMasked | 259 | 52 | 2 | 0 | 13 | 30 | 16 | 29 | 7 | 24 | 3 | 0 |
 | sinh | 512 | finish | 240 | 52 | 2 | 0 | 12 | 30 | 16 | 26 | 7 | 22 | 3 | 0 |
 | sinh | 512 | finishMasked | 259 | 52 | 2 | 0 | 13 | 30 | 16 | 28 | 7 | 24 | 3 | 0 |
+| cosh | 256 | default | 202 | 56 | 3 | 0 | 8 | 30 | 10 | 11 | 5 | 12 | 3 | 0 |
+| cosh | 256 | defaultMasked | 221 | 56 | 3 | 0 | 9 | 30 | 10 | 13 | 5 | 14 | 3 | 0 |
 | cosh | 256 | finish | 160 | 27 | 2 | 0 | 3 | 20 | 8 | 10 | 5 | 10 | 3 | 0 |
 | cosh | 256 | finishMasked | 182 | 27 | 2 | 0 | 4 | 20 | 8 | 14 | 5 | 14 | 3 | 0 |
 | cosh | 256 | slice | 207 | 56 | 3 | 0 | 8 | 30 | 10 | 11 | 5 | 12 | 3 | 0 |
 | cosh | 256 | sliceMasked | 221 | 56 | 3 | 0 | 9 | 30 | 10 | 13 | 5 | 14 | 3 | 0 |
+| cosh | 512 | default | 205 | 56 | 3 | 0 | 8 | 30 | 10 | 11 | 5 | 12 | 3 | 0 |
+| cosh | 512 | defaultMasked | 226 | 56 | 3 | 0 | 9 | 30 | 10 | 17 | 5 | 19 | 3 | 0 |
 | cosh | 512 | finish | 158 | 27 | 2 | 0 | 3 | 20 | 8 | 12 | 5 | 12 | 3 | 0 |
 | cosh | 512 | finishMasked | 177 | 27 | 2 | 0 | 4 | 20 | 8 | 14 | 5 | 14 | 3 | 0 |
 | cosh | 512 | slice | 205 | 56 | 3 | 0 | 8 | 30 | 10 | 11 | 5 | 12 | 3 | 0 |
@@ -490,6 +497,8 @@ As an AVX2 host (`-XX:UseAVX=2 -XX:MaxVectorSize=32`), 256 bits:
 | log1p | 256 | guardedMasked | 283 | 36 | 2 | 0 | 13 | 32 | 16 | 0 | 8 | 32 | 3 | 0 |
 | sinh | 256 | finish | 282 | 52 | 2 | 0 | 15 | 44 | 23 | 0 | 14 | 24 | 3 | 0 |
 | sinh | 256 | finishMasked | 303 | 52 | 2 | 0 | 16 | 44 | 23 | 0 | 15 | 28 | 3 | 0 |
+| cosh | 256 | default | 220 | 56 | 3 | 0 | 11 | 36 | 12 | 0 | 8 | 10 | 3 | 0 |
+| cosh | 256 | defaultMasked | 239 | 56 | 3 | 0 | 12 | 36 | 12 | 0 | 9 | 15 | 3 | 0 |
 | cosh | 256 | finish | 168 | 27 | 2 | 0 | 6 | 20 | 10 | 0 | 6 | 8 | 3 | 0 |
 | cosh | 256 | finishMasked | 187 | 27 | 2 | 0 | 7 | 20 | 10 | 0 | 7 | 10 | 3 | 0 |
 | cosh | 256 | slice | 220 | 56 | 3 | 0 | 11 | 36 | 12 | 0 | 8 | 10 | 3 | 0 |
@@ -549,7 +558,7 @@ With `-XX:MaxVectorSize=16`:
 | log10 | 4 | 1965 to 3075 | 47 to 51 | 88 to 151 | 684 to 907 | 0 |
 | log1p | 6 | 3737 to 5352 | 36 to 48 | 166 to 243 | 1334 to 2009 | 0 |
 | sinh | 2 | 6854 to 7375 | 52 | 255 to 264 | 2896 to 3368 | 0 |
-| cosh | 4 | 2224 to 3520 | 27 to 56 | 99 to 152 | 724 to 1220 | 0 |
+| cosh | 6 | 2224 to 3520 | 27 to 56 | 99 to 152 | 724 to 1220 | 0 |
 | asin | 2 | 1624 to 1790 | 44 | 86 to 95 | 468 to 555 | 0 |
 | atan | 2 | 3387 to 3673 | 37 | 163 to 172 | 1115 to 1297 | 0 |
 | acos | 2 | 1591 to 1701 | 49 | 78 to 89 | 474 to 510 | 0 |
