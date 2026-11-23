@@ -13,6 +13,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.math.BigDecimal;
+import java.math.BigInteger;
 import java.math.MathContext;
 import java.util.HashSet;
 import java.util.Set;
@@ -25,7 +26,10 @@ import org.junit.jupiter.api.Test;
  * exactly. The extractor checks the data; this checks that the committed file has the shape the
  * extractor gives, in the order it gives it, so a hand edit shows. And the claim of {@code
  * hard-cases/hypot.txt}, which {@code dev/hypot-hard-cases.py} computes: every pair's exact
- * {@code sqrt(x*x + y*y)} is a double or lies within {@code 2^-40} ulp of a midpoint.
+ * {@code sqrt(x*x + y*y)} is a double or lies within {@code 2^-40} ulp of a midpoint. And the
+ * claim of {@code hard-cases/pow.txt}, which {@code dev/pow-hard-cases.py} computes: every pair's
+ * exact {@code |x|**y} is a double, a midpoint, within {@code 2^-28} ulp of one, or beside a
+ * rounding threshold of the result, checked here with {@code BigInteger} arithmetic of its own.
  */
 class HardCasePairsTest {
 
@@ -118,6 +122,140 @@ class HardCasePairsTest {
     }
     // the exact family: 40 bases at 14 scales, in both orders
     assertEquals(40 * 14 * 2, exact);
+  }
+
+  /** The counts of each claim in {@code hard-cases/pow.txt}, as its header says. */
+  private static final int POW_EXACT = 3091;
+  private static final int POW_TIES = 899;
+  private static final int POW_NEAR = 66;
+  private static final int POW_BOUND = 112;
+  private static final int POW_NEAR_BITS = 28;
+
+  /**
+   * The rounding thresholds of pow's result, each {@code {P, q}} for {@code P * 2^q}: {@code
+   * 2^1024 - 2^970} (at and above it the result is infinite), {@code 2^-1022 - 2^-1075} (the
+   * midpoint of the largest subnormal and the smallest normal) and {@code 2^-1075} (half the
+   * smallest subnormal).
+   */
+  private static final long[][] POW_THRESHOLDS = {
+    {(1L << 54) - 1, 970}, {(1L << 53) - 1, -1075}, {1, -1075}
+  };
+
+  /** A positive finite double's raw bits as {@code {M, k}}, its value {@code M * 2^k}. */
+  private static long[] mantissaAndExponent(long bits) {
+    long e = bits >>> 52;
+    long f = bits & ((1L << 52) - 1);
+    assertTrue(e < 0x7ff, "not finite: " + Long.toHexString(bits));
+    return e == 0 ? new long[] {f, -1074} : new long[] {f | 1L << 52, e - 1075};
+  }
+
+  /** The sign of {@code |x|**n - P * 2^q}, for the double of raw bits {@code bits} and n != 0. */
+  private static int powerAgainst(long bits, int n, long p, long q) {
+    long[] mk = mantissaAndExponent(bits);
+    BigInteger m = BigInteger.valueOf(mk[0]).pow(Math.abs(n));
+    long shift = mk[1] * n;
+    BigInteger left;
+    BigInteger right;
+    long e;
+    if (n > 0) {
+      // M^n * 2^(k n) against P * 2^q
+      left = m;
+      right = BigInteger.valueOf(p);
+      e = shift - q;
+    } else {
+      // 1 / (M^|n| * 2^(k |n|)) against P * 2^q, that is 1 against P * M^|n| * 2^(q - k n)
+      left = BigInteger.ONE;
+      right = BigInteger.valueOf(p).multiply(m);
+      e = -(q - shift);
+    }
+    if (e >= 0) {
+      left = left.shiftLeft((int) e);
+    } else {
+      right = right.shiftLeft((int) -e);
+    }
+    return left.compareTo(right);
+  }
+
+  /**
+   * Every pair of {@code hard-cases/pow.txt} is what its header says, checked in the header's
+   * order on the exact {@code |x|**y}: a power of two {@code x} whose power is a power of two in
+   * the doubles' range is exact; for a positive integer {@code y}, the result's place on the grid
+   * of the doubles at it (its spacing {@code 2^(top-52)}, or {@code 2^-1074} below the normals)
+   * makes it exact, a tie or near (within {@code 2^-28} ulp of a midpoint); otherwise, for any
+   * integer {@code y}, one of the thresholds lies between the results at {@code x}'s two
+   * neighbouring doubles. Each claim's count is the header's, and no pair repeats.
+   */
+  @Test
+  void thePowFileIsOfExactTiesNearMidpointsAndThresholds() {
+    Inputs.Pairs pairs = Inputs.hardCasePairs("pow");
+    int n = pairs.x().length;
+    assertEquals(POW_EXACT + POW_TIES + POW_NEAR + POW_BOUND, n);
+    Set<String> seen = new HashSet<>();
+    int exact = 0;
+    int ties = 0;
+    int near = 0;
+    int bound = 0;
+    for (int i = 0; i < n; i++) {
+      double x = pairs.x()[i];
+      double y = pairs.y()[i];
+      String where = "pair " + i + ": " + Oracle.hex(x) + ", " + Oracle.hex(y);
+      assertTrue(seen.add(Oracle.hex(x) + " " + Oracle.hex(y)), where + " is a repeat");
+      long bits = Double.doubleToRawLongBits(x) & Long.MAX_VALUE;
+      long[] mk = mantissaAndExponent(bits);
+      if (Long.bitCount(mk[0]) == 1) {
+        long a = mk[1] + 63 - Long.numberOfLeadingZeros(mk[0]);
+        BigDecimal t = new BigDecimal(y).multiply(BigDecimal.valueOf(a));
+        if (t.signum() == 0 || t.stripTrailingZeros().scale() <= 0) {
+          long power = t.longValueExact();
+          if (power >= -1074 && power <= 1023) {
+            exact++;
+            continue;
+          }
+        }
+      }
+      assertEquals(Math.rint(y), y, where + ": y is no integer and x**y no power of two");
+      assertTrue(Math.abs(y) <= 1100, where);
+      int e = (int) y;
+      if (e > 0) {
+        BigInteger value = BigInteger.valueOf(mk[0]).pow(e);
+        long s = mk[1] * e;
+        long top = value.bitLength() - 1 + s;
+        if (top <= 1023) {
+          long ulp = Math.max(top - 52, -1074);
+          if (s >= ulp) {
+            exact++;
+            continue;
+          }
+          int width = (int) (ulp - s);
+          BigInteger tail = value.and(BigInteger.ONE.shiftLeft(width).subtract(BigInteger.ONE));
+          BigInteger half = BigInteger.ONE.shiftLeft(width - 1);
+          if (tail.signum() == 0) {
+            exact++;
+            continue;
+          }
+          if (tail.equals(half)) {
+            ties++;
+            continue;
+          }
+          if (tail.subtract(half).abs().shiftLeft(POW_NEAR_BITS)
+              .compareTo(BigInteger.ONE.shiftLeft(width)) < 0) {
+            near++;
+            continue;
+          }
+        }
+      }
+      boolean straddles = false;
+      for (long[] threshold : POW_THRESHOLDS) {
+        straddles |= powerAgainst(bits - 1, e, threshold[0], threshold[1])
+            != powerAgainst(bits + 1, e, threshold[0], threshold[1]);
+      }
+      assertTrue(straddles, where + ": no claim holds");
+      bound++;
+    }
+    assertEquals(POW_EXACT, exact, "exact");
+    assertEquals(POW_TIES, ties, "ties");
+    assertEquals(POW_NEAR, near, "near");
+    assertEquals(POW_BOUND, bound, "beside a threshold");
   }
 
   @Test

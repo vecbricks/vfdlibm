@@ -52,7 +52,11 @@ over the general path, which calls `atan`'s core, no lane finished per lane, and
 blended one and the guarded one `VFdlibm` calls at every species, by the owner's decision of 22
 November; section 5 below gives the case), and so is `hypot` (`VFdlibm.hypot`, from `e_hypot.c`,
 every finite lane in the vector with the C's stale words after its `2^1022` scaling, one arm, and
-the lanes of an infinity or a NaN finished per lane).
+the lanes of an infinity or a NaN finished per lane), and so is `pow` (`VFdlibm.pow`, from
+`e_pow.c`, the last of the thirteen: its common path in the vector, a positive normal `x` that is
+not 1 and a finite `y` of `iy <= 0x41e00000` that is not 0, +-1, 2 or 0.5, with a normal result,
+and every other lane finished per lane, by the owner's decisions of 23 November 2026 on issue 34;
+`PROOFS.md`, L19 and L20). So all thirteen are ported.
 `log`, `log10` and `log1p` are done too (`VFdlibm.log`, from
 `e_log.c`, `VFdlibm.log10`, from `e_log10.c`, which computes through log's common path, and
 `VFdlibm.log1p`, from `s_log1p.c`), and so is `expm1` (`VFdlibm.expm1`, from `s_expm1.c`, whose
@@ -79,12 +83,15 @@ five are a later, optional set; the large-argument reduction of the trigonometri
     hard cases, one resource per function under `src/test/resources/.../hard-cases/` (so far `exp`,
     `expm1`, `log`, `log10`, `log1p`, `sinh`, `cosh`, `asin`, `atan` and `acos`), loaded with
     `Inputs.hardCases("<function>")`, and for a function of two arguments a file of pairs loaded
-    with `Inputs.hardCasePairs` (`atan2`, derived from atan's inputs, and `hypot`, computed by
+    with `Inputs.hardCasePairs` (`atan2`, derived from atan's inputs, `hypot`, computed by
     `dev/hypot-hard-cases.py` with exact integer arithmetic, since no published table of hypot's
-    hard cases is known). The inputs of Lefevre's list come out of
-    `dev/testlibm-extract.py`, which rechecks each line with 400-digit arithmetic against exact
-    values it derives itself (`sinh`'s, `cosh`'s, `atan`'s, `asin`'s and `acos`'s files were
-    written by it). A port that keeps fdlibm's
+    hard cases is known, and `pow`, self-computed the same way by `dev/pow-hard-cases.py`
+    (exact results, ties, results near a midpoint and the doubles beside the result's
+    thresholds), while a published binary64 pow list, CORE-MATH's `src/binary64/pow/pow.wc`
+    (MIT), is evaluated as a follow-up, issue #144). The
+    inputs of Lefevre's list come out of `dev/testlibm-extract.py`, which rechecks each line with
+    400-digit arithmetic against exact values it derives itself (`sinh`'s, `cosh`'s, `atan`'s,
+    `asin`'s and `acos`'s files were written by it). A port that keeps fdlibm's
     operations, or departs from them only where `PROOFS.md` proves the result equal, matches
     `StrictMath` on them by construction; they sit where a dropped correction term or a
     reassociated sum, an error far below one ulp, is most likely to change the returned double.
@@ -101,11 +108,11 @@ five are a later, optional set; the large-argument reduction of the trigonometri
   -XX:MaxVectorSize=32`, 128 and 256 bits on every draw), on x86 with `-XX:MaxVectorSize=16`
   (all of it at 128 bits) and on Arm (128 bits).
 - **Nightly:** `.github/workflows/nightly.yml` sweeps every high word of exp, expm1, log, log10,
-  log1p, sinh, cosh, atan, asin, acos, atan2 and hypot (atan2 and hypot, of two arguments, one
-  argument at a time) with three low words each (every branch fdlibm decides on the high word) at
-  every width but 128 bits on x86, where a rotating 1/32 slice a night covers it in 32 nights, and
-  at 128 bits on Arm every night; it fuzzes from a fresh seed at every width, and runs every proof
-  under both solvers; a failure opens an issue labelled `nightly-failure` with the mismatching
+  log1p, sinh, cosh, atan, asin, acos, atan2, hypot and pow (atan2, hypot and pow, of two arguments,
+  one argument at a time) with three low words each (every branch fdlibm decides on the high word)
+  at every width but 128 bits on x86, where a rotating 1/32 slice a night covers it in 32 nights,
+  and at 128 bits on Arm every night; it fuzzes from a fresh seed at every width, and runs every
+  proof under both solvers; a failure opens an issue labelled `nightly-failure` with the mismatching
   inputs, ready for a `hard-cases` file (`SKILLS.md`), and a dispatch that plants a fault, to test
   that alert, opens one labelled `nightly-fault-test`.
 - **Masked forms:** a masked form is checked under seeded random masks, all-true and all-false;
@@ -122,7 +129,8 @@ five are a later, optional set; the large-argument reduction of the trigonometri
   vector form never trades exactness for speed. Whether a given branch is blended or finished per
   lane is decided by measurement and recorded in the function's pull request. A rare path that is
   only a few vector operations can instead be computed and blended only for a vector that holds a
-  rare lane, behind one `anyTrue`, as `log1p` does. The readings are in `SKILLS.md`, port by port.
+  rare lane, behind one `anyTrue`, as the guarded arms of `log1p` and `expm1` do. The readings
+  are in `SKILLS.md`, port by port.
   For `exp` the per-lane finish allocates nothing at 256 bits, 512 bits and `SPECIES_MAX` of up to
   eight lanes in the laptop reading `bench/results/max-finish-alloc-free-laptop-2026-11-21.txt`
   (allocation only, no timing; it boxed at `SPECIES_MAX` before its first eight lanes were written
@@ -151,10 +159,13 @@ five are a later, optional set; the large-argument reduction of the trigonometri
   have no `*Max` row) time the finish that boxed at `SPECIES_MAX` before issue #37, so they are left
   out of both rules; a later run's `*Max` rows time today's finish. On the other rows no function
   needs rule 2 yet, so `VFdlibm` runs one arm at every species. Every default stays provisional
-  until a host run revises it. Meanwhile `VFdlibm` calls the finish arm of `exp`, `log` and `log10`;
-  the guarded arm of `expm1` and `log1p`, by the owner's deferral of rule 1 (issue #30, 21 November)
-  until a second run, on the 8573C, of the code the 22 November files time (those files are the
-  first run of it); the slice arm of `cosh`, provisionally, as the rule's exception, whose arm a
+  until a host run revises it. Meanwhile `VFdlibm` calls the finish arm of `exp`, `log`, `log10`,
+  `expm1` and `log1p`, the last two by rule 1 since the 8573C's second run of their code, which the
+  owner's deferral of 21 November waited for: by minimums neither other arm is lower than the
+  finish by more than 1.3x at any species, in both runs of `expm1-xeon8573c-2026-11-22.txt` and
+  `log1p-xeon8573c-2026-11-22.txt` and of `expm1-epyc7763-2026-11-23.txt` and
+  `log1p-epyc7763-2026-11-23.txt`, a tie, with the guarded arm lower inside 1.3x on some mixed rows;
+  the slice arm of `cosh`, provisionally, as the rule's exception, whose arm a
   host run decides ([issue #30's
   comment](https://github.com/vecbricks/vfdlibm/issues/30#issuecomment-7091848602); its readings are
   under the list); and the guarded arm of `atan2`, which has no finish arm, so rule 1 does not pick
@@ -206,8 +217,9 @@ five are a later, optional set; the large-argument reduction of the trigonometri
   has the same three arms for `expm1`, `SinhBenchmark` one for `sinh`, `CoshBenchmark` two for
   `cosh`, `AsinBenchmark` one for `asin`, `AtanBenchmark` one for `atan`, `AcosBenchmark` one for
   `acos`, `Atan2Benchmark` two for `atan2` (the blended and the guarded arm, over two arrays) and
-  `HypotBenchmark` one for `hypot` (over two arrays; no results file reads it yet).
-  Each of the twelve has rows at `SPECIES_MAX` (`*Max`), which the allocation check covers: the
+  `HypotBenchmark` one for `hypot` (over two arrays; no results file reads it yet), and
+  `PowBenchmark` one for `pow` (the same; no results file reads it either).
+  Each of the thirteen has rows at `SPECIES_MAX` (`*Max`), which the allocation check covers: the
   finish of `exp`, `expm1`, `log`, `log10` and `log1p` boxed there on mixed data until its first
   eight lanes were written out (`bench/results/max-finish-laptop-2026-11-20.txt`, then
   `bench/results/max-finish-alloc-free-laptop-2026-11-21.txt`, a laptop reading of allocation only);

@@ -65,23 +65,21 @@ import jdk.incubator.vector.VectorSpecies;
  * numbers, not headlines: under {@code UseAVX=2} at 256 bits the finish is about 1.2x ahead of
  * the blend on ordinary data and level with it, about 1.05x, when one input in 16 is rare, and
  * with AVX-512 at 512 bits on that mixed data the blend wins, by 1.36x in both runs. The host
- * files read, by minimums, the blended arm over the finish arm. At 256 bits, the one width both
- * hosts run natively, every ratio is within 1.3x, so no direction is read: 1.22 to 1.24 on
- * ordinary data and 1.02 to 1.03 on mixed data on the AMD EPYC 7763 ({@code
- * bench/results/log-epyc7763-2026-11-20.txt}, two runs), 1.24 and 0.97 on the Xeon Platinum
- * 8573C ({@code bench/results/log-xeon8573c-2026-11-21.txt}, one run). At the Xeon's preferred
- * species and at 512 bits the blend is 1.32 and 1.32 times the finish on ordinary data, a little
- * past 1.3x, and the finish is 1.30 and 1.29 times the blend on mixed data, on the line, in one
- * run, so no direction is read before a re-run; the EPYC has no native counterpart of these
- * widths, its preferred species being 256 bits. On the EPYC's 256-bit and preferred rows the
- * finish read 0.017 B/op or less in JMH's table. Both host files time this class after the
- * departures of {@code PROOFS.md}'s L6 to L9 and before the finish's first eight lanes were
- * written out with constant indices (issue #37). The rules for a tie within 1.3x and for hosts
- * that disagree are set (issue #30): a tie goes to the finish arm, which log keeps, and the choice
- * stays provisional until a host run revises it, a second run of the Xeon 8573C, a first of the
- * other AVX-512 hosts ({@code HARDWARE.md}) or a pair ({@code bench/pair.sh}); the second arm
- * is kept so it can be re-measured, on other hosts and as the JDK changes. The laptop's runs
- * measured the body before those departures.
+ * files read, by minimums, the blended arm over the finish arm. On the Xeon Platinum 8573C
+ * ({@code bench/results/log-xeon8573c-2026-11-22.txt}, a run and a re-run, the code as it is now)
+ * no width gives a direction: at 256 bits 1.29 and 1.30 on ordinary data and 0.97 on mixed data;
+ * at 512 bits, its preferred species, 1.28 to 1.36 on ordinary data, the preferred row of the
+ * re-run inside 1.3x, and on mixed data the finish 1.13 to 1.17 times the blend. On the AMD EPYC
+ * 7763 ({@code bench/results/log-epyc7763-2026-11-20.txt}, two runs) at 256 bits, its native
+ * width and its preferred species, the ratio is 1.22 to 1.24 on ordinary data and 1.02 to 1.03 on
+ * mixed data, within 1.3x, and the finish read 0.017 B/op or less in JMH's table; that file times
+ * this class before the finish's first eight lanes were written out with constant indices (issue
+ * #37). Both host files time it after the departures of {@code PROOFS.md}'s L6 to L9. The rules
+ * for a tie within 1.3x and for hosts that disagree are set (issue #30): a tie goes to the finish
+ * arm, which log keeps, and the choice stays provisional until a host run revises it, a first of
+ * the other AVX-512 hosts ({@code HARDWARE.md}), an EPYC run of the code as it is now or a pair
+ * ({@code bench/pair.sh}); the second arm is kept so it can be re-measured, on other hosts and as
+ * the JDK changes. The laptop's runs measured the body before those departures.
  *
  * <p>{@link #logCore} is the common path alone, with no rare lanes and no finish: {@code Log10}
  * computes its {@code __ieee754_log} through it, the only entry it uses.

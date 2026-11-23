@@ -3,9 +3,9 @@
 Lessons about benchmarking, the JIT and the Vector API that every port follows. Most were learned in
 Varka (github.com/vecbricks/varka, its `sql/varka/skills/`) and are rewritten here for a vector math
 library; the last sections are what the `exp`, `log`, `log1p`, `log10`, `expm1`, `sinh`, `cosh`,
-`asin`, `atan`, `acos`, `atan2` and `hypot` ports taught. Each entry says where its numbers come from. A new lesson
-goes in the section it belongs to, as a short entry; a negative result belongs here too, since it
-stops the next port re-trying a settled question.
+`asin`, `atan`, `acos`, `atan2`, `hypot` and `pow` ports taught. Each entry says where its numbers
+come from. A new lesson goes in the section it belongs to, as a short entry; a negative result
+belongs here too, since it stops the next port re-trying a settled question.
 
 ## Benchmarking with JMH
 
@@ -208,7 +208,13 @@ stops the next port re-trying a settled question.
   The cause is not known: the re-run's file names the eight tests that replace a bit walk and
   code placement, and decides neither. Only exp and log10 were paired, on that one host: no
   AVX-512 host and no other port
-  (`expm1`, `log`, `log1p`, `sinh`, `cosh`) has a pair, so the other ports' cost is unread.
+  (`expm1`, `log`, `log1p`, `sinh`, `cosh`) has a pair, so the other ports' cost is unread. The
+  host files of today's finish read its `*Max` rows on mixed data as allocation-free too: the Xeon
+  Platinum 8573C's of 22 November for expm1, log, log10 and log1p (`expm1-xeon8573c-2026-11-22.txt`
+  and its three siblings, a run and a re-run) and the EPYC 7763's of 23 November for expm1 and
+  log1p (`expm1-epyc7763-2026-11-23.txt`, `log1p-epyc7763-2026-11-23.txt`, a run and a re-run
+  too), every `finishMax` row
+  under 0.05 B/op.
 - **At two 64-bit lanes x86 C2 lowers no mask.** Compare to mask, blend, mask cast, mask
   broadcast, logic and test are `not supported` at `vlen=2` for double and long masks, and fine
   at four lanes. So on x86 every 128-bit double port that branches through masks runs per lane
@@ -253,8 +259,8 @@ failing on crafted disassembly. To run it here: `dev/hsdis-build.sh`, then `mvn 
 agree.
 
 - **The arms.** Each port's benchmark arms, unmasked and masked, and the cores the benchmarks call:
-  exp (finish, blended, core), expm1 (guarded, blended, finish, core), log and log10 (finish,
-  blended), log1p (guarded, blended, finish), sinh, asin, atan, acos and hypot (finish), cosh
+  exp (finish, blended, core), expm1 (finish, guarded, blended, core), log and log10 (finish,
+  blended), log1p (finish, guarded, blended), sinh, asin, atan, acos and hypot (finish), cosh
   (slice and finish by name, and `VFdlibm.cosh`, the default, as `default`) and atan2 (guarded,
   blended); the default arm goes through `VFdlibm`, the others through the port's class.
 - **The rules.** Every byte decoded; packed-double arithmetic (`v(add|sub|mul|div|sqrt)pd`)
@@ -482,6 +488,10 @@ On the host's own flags (AVX-512, `MaxVectorSize=64`), 256 and 512 bits:
 | hypot | 256 | finishMasked | 236 | 23 | 0 | 1 | 22 | 14 | 9 | 21 | 8 | 22 | 3 | 0 |
 | hypot | 512 | finish | 202 | 23 | 0 | 1 | 21 | 14 | 9 | 10 | 8 | 15 | 3 | 0 |
 | hypot | 512 | finishMasked | 245 | 23 | 0 | 1 | 22 | 14 | 9 | 11 | 8 | 17 | 3 | 0 |
+| pow | 256 | finish | 343 | 88 | 2 | 0 | 9 | 48 | 16 | 31 | 9 | 22 | 3 | 0 |
+| pow | 256 | finishMasked | 369 | 88 | 2 | 0 | 10 | 48 | 16 | 40 | 9 | 31 | 3 | 0 |
+| pow | 512 | finish | 334 | 88 | 2 | 0 | 9 | 48 | 16 | 29 | 9 | 22 | 3 | 0 |
+| pow | 512 | finishMasked | 383 | 88 | 2 | 0 | 10 | 48 | 16 | 32 | 9 | 27 | 3 | 0 |
 
 As an AVX2 host (`-XX:UseAVX=2 -XX:MaxVectorSize=32`), 256 bits:
 
@@ -528,6 +538,8 @@ As an AVX2 host (`-XX:UseAVX=2 -XX:MaxVectorSize=32`), 256 bits:
 | atan2 | 256 | guardedMasked | 527 | 41 | 2 | 0 | 37 | 52 | 23 | 0 | 13 | 88 | 4 | 0 |
 | hypot | 256 | finish | 256 | 23 | 0 | 1 | 22 | 24 | 13 | 0 | 14 | 33 | 3 | 0 |
 | hypot | 256 | finishMasked | 301 | 23 | 0 | 1 | 23 | 24 | 13 | 0 | 14 | 36 | 3 | 0 |
+| pow | 256 | finish | 379 | 88 | 2 | 0 | 10 | 71 | 22 | 0 | 9 | 12 | 3 | 0 |
+| pow | 256 | finishMasked | 429 | 88 | 2 | 0 | 11 | 71 | 22 | 0 | 10 | 23 | 3 | 0 |
 
 At 128 bits, the ranges over each function's arms (all instructions, packed-double arithmetic,
 calls, operands on `[rsp`, FMA), on the host's own flags:
@@ -577,18 +589,20 @@ With `-XX:MaxVectorSize=16`:
 | acos | 2 | 1591 to 1701 | 49 | 78 to 89 | 474 to 510 | 0 |
 | atan2 | 4 | 8098 to 10228 | 41 to 42 | 360 to 444 | 3094 to 4197 | 0 |
 | hypot | 2 | 4081 to 4176 | 23 | 217 to 226 | 1285 to 1295 | 0 |
+| pow | 2 | 4576 to 4669 | 88 | 228 to 241 | 1342 to 1428 | 0 |
 
-What it reads: no FMA and no scalar double arithmetic in any arm at any width under any of the
-three flag sets. From 256 bits up each arm is one copy of its body and calls only its uncommon
-traps and the entry barrier: 2 calls for the blended arms of log, log10, log1p and expm1 and for
-expm1's core, 4 for atan2's guarded arm, 3 for every other. asin, acos and hypot take their
-square root as one `vsqrtpd`. Masking adds one blend and 10 to 59 instructions on AVX-512, 17 to
-66 on AVX2, which has no mask registers (its `k` column is 0). At 128 bits every arm runs the
-Java fallback, 60 to 444 calls per method, as for exp. acos's 49 packed-double operations at 128
-bits against 42 above are seven more `vsqrtpd`, 8 against 1: around the fallback's allocations
-of boxed vectors C2 computes `sqrt(z)` again at its uses, each from the same register, instead
-of keeping the one result (read in acos's 128-bit `finish` compile, by mnemonic); the other
-operations count the same at both widths.
+What it reads: no FMA and no scalar double arithmetic in any arm at any width under any of the three
+flag sets. pow's arms came in a later run (23 November 2026, the same laptop, CI's widths per row),
+so its 128-bit row is under `MaxVectorSize=16` only. From 256 bits up each arm is one copy of its
+body and calls only its uncommon traps and the entry barrier: 2 calls for the blended arms of log,
+log10, log1p and expm1 and for expm1's core, 4 for atan2's guarded arm, 3 for every other. asin,
+acos and hypot take their square root as one `vsqrtpd`. Masking adds one blend and 10 to 59
+instructions on AVX-512, 17 to 66 on AVX2, which has no mask registers (its `k` column is 0). At 128
+bits every arm runs the Java fallback, 60 to 444 calls per method, as for exp. acos's 49
+packed-double operations at 128 bits against 42 above are seven more `vsqrtpd`, 8 against 1: around
+the fallback's allocations of boxed vectors C2 computes `sqrt(z)` again at its uses, each from the
+same register, instead of keeping the one result (read in acos's 128-bit `finish` compile, by
+mnemonic); the other operations count the same at both widths.
 
 ## Where headline numbers come from: four named hosts
 
@@ -775,11 +789,15 @@ operations count the same at both widths.
   512-bit rows run in the Java fallback), so the files show no disagreement between the hosts at
   equal width. Both files time the `log` of a5683c3 and a1db6df, before the finish's first eight
   lanes written out with constant indices (issue #37); `LogBenchmark` gained its `finishMax` row
-  after the EPYC run, which is why that file has none. `VFdlibm.log` keeps the finish arm by the
-  rules issue #30 set (a tie within 1.3x goes to the finish arm), provisionally until a host run
-  revises it: a second Xeon run or a pair. The 8573C's mixed rows at 512 bits and the preferred
-  species read the blend lower by 1.29 to 1.30x, on the 1.3x line, and wait for that second run
-  like the rest. Measure the finish only once it allocates nothing.
+  after the EPYC run, which is why that file has none. The Xeon's file of today's `log`
+  (`bench/results/log-xeon8573c-2026-11-22.txt`, a run and a re-run) reads no direction between
+  the arms: blended over finish at 256 bits is 1.29 and 1.30 on common data and 0.97 on mixed
+  data; at 512 bits, which its preferred species is, 1.28 to 1.36 on common data, the preferred row
+  of the re-run inside 1.3x, and on mixed data the finish 1.13 to 1.17 times the blend, inside the
+  line the 21 November file sat on. `VFdlibm.log` keeps the finish arm by the rules issue #30 set
+  (a tie within 1.3x goes to the finish arm), provisionally until a host run revises it: an EPYC
+  run of today's code, a first of the other AVX-512 hosts or a pair. Measure the finish only once
+  it allocates nothing.
 
 - **Int words can live in long lanes, with an exact dk.** log first kept its words in int lanes
   for the `I2D`; moving them to the long lanes of the bits drops `L2I`, `I2L`, `I2D` and the
@@ -826,27 +844,28 @@ operations count the same at both widths.
   2952), and the blend's minimums are 3189 to 3264
   (`bench/results/log1p-laptop-avx2-2026-11-02.txt`). The laptop's AVX-512 build was measured the
   same way at 256 and 512 bits (`bench/results/log1p-laptop-2026-11-02.txt`). In both files the arms
-  are within 1.3x of each other on every row, and no direction is read. The host files read the
-  three arms by minimums at 256 bits, the preferred species and, on the Xeon, 512 bits. On the EPYC
-  7763 (`bench/results/log1p-epyc7763-2026-11-20.txt`, two runs) blended over finish is 1.20 on
-  common data and 1.07 to 1.08 on mixed data, and guarded over finish 1.00 to 1.04 on common data
-  and 0.99 to 1.02 on mixed data. On the Xeon Platinum 8573C
-  (`bench/results/log1p-xeon8573c-2026-11-21.txt`, one run) blended over finish is 1.13 to 1.17 on
-  common data and 0.99 to 1.01 on mixed data, and guarded over finish 0.99 to 1.03 on common data
-  and 0.91 to 0.96 on mixed data. Every arm is within 1.3x of the others on every one of those rows,
-  so no direction is read on either host, and the lowest minimum moves between finish and guarded
-  from row to row (on the Xeon: finish at 256 and 512 bits and guarded at the preferred species on
-  common data, guarded at all three on mixed data); the Xeon file of 3 November
-  (`bench/results/log1p-xeon8573c-2026-11-03.txt`, one run, at another commit and on a draw whose
-  datapath read higher, `HARDWARE.md`) had guarded lowest on every row. The EPYC file times `Log1p`
-  as of a5683c3, before a fault constant and a mask local were added; the Xeon file of 21 November
-  times it as of a1db6df; neither times it after the finish's first eight lanes written out with
-  constant indices (issue #37). `VFdlibm.log1p` uses the guarded arm provisionally: by the rules
-  issue #30 set, a tie within 1.3x goes to the finish arm, so rule 1 would move log1p to it at the
-  Xeon 8573C's second run unless the guarded arm wins by more than 1.3x there (the `*Max` rows of
-  the files committed so far time the finish that boxed before issue #37 and are left out); a first
-  run of the other AVX-512 hosts or a pair may revise the choice. A port whose rare paths are
-  cheap in vector form should measure this shape beside the other two.
+  are within 1.3x of each other on every row, and no direction is read. The host files of today's
+  `Log1p` read the three arms by minimums at 256 bits, the preferred species and `SPECIES_MAX`,
+  and on the Xeon 512 bits. On the Xeon Platinum 8573C
+  (`bench/results/log1p-xeon8573c-2026-11-22.txt`, a run and a re-run) guarded over finish is 0.96
+  to 1.02 on common data and 0.85 to 0.93 on mixed data, and blended over finish 1.13 to 1.22 and
+  0.93 to 1.00; on the EPYC 7763 (`bench/results/log1p-epyc7763-2026-11-23.txt`, a run and a
+  re-run) guarded over finish is 0.98 to 1.03 and 0.92 to 0.95, and blended over finish 1.19 to
+  1.20 and 0.99 to 1.00. Every arm is within 1.3x of the finish on every one of those rows in every
+  run, so no direction is read, and the guarded arm reads lower on mixed data on both hosts, inside
+  1.3x. By issue #30's rule 1 (a
+  tie within 1.3x on every host that has a file goes to the finish arm) `VFdlibm.log1p` runs the
+  finish arm since then: the owner had deferred the rule for log1p until the 8573C's second run,
+  and neither file reads the guarded arm lower by more than 1.3x at any species. That is a tie,
+  not a speed-up; a first run of the other AVX-512 hosts or a pair may revise the choice. The
+  earlier host files time the code before the finish's first eight lanes were written out with
+  constant indices (issue #37), and read the arms within 1.3x too: the EPYC 7763's
+  (`log1p-epyc7763-2026-11-20.txt`, two runs, `Log1p` as of a5683c3, before a fault constant and a
+  mask local were added), the Xeon's of 21 November (`log1p-xeon8573c-2026-11-21.txt`, one run,
+  as of a1db6df) and of 3 November (`log1p-xeon8573c-2026-11-03.txt`, one run, at another commit
+  and on a draw whose datapath read higher, `HARDWARE.md`); the last of them alone had guarded
+  lowest on every row.
+  A port whose rare paths are cheap in vector form should measure this shape beside the other two.
 - **The in-body finish allocates nothing in log1p too.** log1p's finish was first a call,
   `finishPerLane(x, result, rare)`, and boxed: 52,928 B/op on mixed data at 256 bits under
   `UseAVX=2`, 2.0x slower than the guarded arm there (the superseded runs kept at the end of
@@ -925,10 +944,12 @@ operations count the same at both widths.
   of a5683c3 and a1db6df, before the finish's first eight lanes written out with constant indices
   (issue #37); the pair of that change (the exp entry above) reads log10's mixed finish rows 2.6%
   to 4.0% slower by median and 3.7% to 4.1% by best on the EPYC 7763, the cause not known.
-  `VFdlibm.log10` calls the finish arm by the rules issue #30 set (a tie within 1.3x goes to the
-  finish arm; its `*Max` rows, where the blend reads lower on mixed data, time the finish that boxed
-  before issue #37 and are left out), provisionally until a host run revises it: a second run of the
-  Xeon 8573C, a first of the other AVX-512 hosts or a pair.
+  The Xeon's file of today's `Log10` (`bench/results/log10-xeon8573c-2026-11-22.txt`, a run and a
+  re-run, with `*Max` rows of today's finish) reads blended over finish 1.15 to 1.26 on common data
+  and 0.89 to 1.01 on mixed data, all inside 1.3x in both runs: no direction. `VFdlibm.log10` calls
+  the finish arm by the rules issue #30 set (a tie within 1.3x goes to the finish arm),
+  provisionally until a host run revises it: an EPYC run of today's code, a first of the other
+  AVX-512 hosts or a pair.
 
 ## What the expm1 port taught
 
@@ -984,22 +1005,35 @@ operations count the same at both widths.
   arm has the lowest minimum on mixed data (finish on the EPYC, guarded on the Xeon). The Xeon file
   of 4 November (`bench/results/expm1-xeon8573c-2026-11-04.txt`, one run, at another commit) had
   guarded lowest on the preferred rows of both kinds of data; the file of 21 November has finish
-  lowest there on common data. `VFdlibm.expm1` keeps the guarded arm provisionally: by the rules
-  issue #30 set, a tie within 1.3x goes to the finish arm, so rule 1 would move expm1 to it at the
-  Xeon 8573C's second run unless the guarded arm wins by more than 1.3x there (the `*Max` rows of
-  the files committed so far time the finish that boxed before issue #37 and are left out); a first
-  run of the other AVX-512 hosts or a pair may revise the choice. Both files time `Expm1`
+  lowest there on common data. Both files time `Expm1`
   before its core entry (below) and before the finish's first eight lanes written out with
   constant indices (issue #37), and `Expm1.java` changed between their two commits too (a fault
   constant and a local in the k conversion, as for `Exp`), so the cross-host comparison rests on
   two code versions, and the EPYC file below on a third. The EPYC 7763's run of 21 November at 9b9cc7b
-  (`bench/results/expm1-epyc7763-2026-11-21.txt`, one run) is the only one with core rows
+  (`bench/results/expm1-epyc7763-2026-11-21.txt`, one run) was the first with core rows
   (`expm1Core`, no arm of `VFdlibm`); it still times the finish before the eight lanes, and reads
   blended over finish 1.19, guarded over finish 1.02 on common data and 1.07 to 1.08 on mixed
   data, all within 1.3x, so no direction either. Its guarded arm reads about 12% lower on common
   data than in the 20 November runs, which no pair or re-run backs and the file does not
   attribute to the code. The EPYC files' 512-bit rows run in the Java fallback and measure no
   expm1.
+- **expm1 on the benchmark hosts, 22 and 23 November 2026: the finish arm by rule 1.** The files
+  of today's `Expm1`, after the finish's first eight lanes were written out, read the three arms
+  by minimums at 256 bits, the preferred species and `SPECIES_MAX`, and on the Xeon 512 bits. On
+  the Xeon Platinum 8573C (`bench/results/expm1-xeon8573c-2026-11-22.txt`, a run and a re-run)
+  guarded over finish is 0.93 to 1.07 on common data and 0.84 to 0.92 on mixed data, and blended
+  over finish 1.08 to 1.18 and 0.90 to 1.00; on the EPYC 7763
+  (`bench/results/expm1-epyc7763-2026-11-23.txt`, a run and a re-run) guarded over finish is 1.02
+  to 1.03 and 1.04, and blended over finish 1.18 to 1.20 and 1.14, the finish lowest on every row
+  there. Every arm is within 1.3x of the finish on every one of those rows in every run, so no
+  direction is read, and the hosts differ in which arm is lowest on mixed data (guarded on the
+  Xeon, finish on the EPYC). By
+  issue #30's rule 1 (a tie within 1.3x on every host that has a file goes to the finish arm)
+  `VFdlibm.expm1` runs the finish arm since then: the owner had deferred the rule for expm1 until
+  the 8573C's second run, and neither file reads the guarded arm lower by more than 1.3x at any
+  species. That is a tie, not a speed-up; a first run of the other AVX-512 hosts or a pair may
+  revise the choice. Both files have core rows: finish over core is 0.99 to 1.08 on the Xeon and
+  1.17 to 1.23 on the EPYC on common data, inside 1.3x.
 - **Lefevre's direction bit is the 54th bit of the exact |result|.** testlibm-data's last field
   agreed with that for all 7578 `em1` lines (3836 ones, 3742 zeros), not with "the exact
   result is above the rounded one", which splits about evenly.
@@ -1269,6 +1303,35 @@ operations count the same at both widths.
     measurement, read as above. The plan job at the defaults makes 24 sweep entries, 48 for Arm and
     24 for the fuzz; 16 shards make 192 sweep entries (224 with `both`), and 32 shards of all twelve
     (384) are refused.
+  - **Thirteen functions: an estimate from the eleven's two nights (23 November 2026).** pow joins
+    the list as a third function of two arguments (`pairs`), swept one argument a night by
+    `alternate`, the same argument as atan2's and hypot's every night (one rotation for all three).
+    No night has run hypot or pow yet; the two scheduled nights of eleven are the readings,
+    `bench/pool/pool.py cost` on `bench/pool/nightly-cost-2026-11-22.tsv` (run 44994568244: 720
+    runner-minutes, a span of 57.8 minutes) and `nightly-cost-2026-11-23.tsv` (run 45131086418: 724
+    and 66.2; sweep 211, fuzz 305, Arm 208), and atan2 cost 87 runner-minutes on each, summed from
+    its jobs' rows (the most of any function on 22 November; on 23 November expm1 cost 88.2 to
+    atan2's 87.0). **How pow's cost is estimated:** as hypot's was, at atan2's, the costliest
+    function of two arguments measured and within a runner-minute of the costliest of all, since
+    pow's own sweep is not measured on a runner; pow has one arm (atan2 has two) but finishes its
+    rare lanes, a negative `x` among them, by `StrictMath.pow` lane by lane, so its sweep may cost
+    more than hypot's, and the bounds below cover that. hypot and pow add 16 jobs (4 sweep, 4 fuzz,
+    8 Arm), about 174 runner-minutes at atan2's cost, 894 and 898 a night. For the span, each
+    night's jobs are replayed in the order they started (jobs that started in the same second by
+    name; that order moves a figure by up to half a minute) on 6, 8 and 5 slots, with copies of
+    atan2's jobs appended in the same order, once for hypot and once for pow, and the model's
+    increase is added to the night's measured span (the model reads 46 to 47 minutes a kind where
+    the nights took 49 to 66, the gaps between jobs not modelled): with hypot's and pow's jobs at
+    atan2's durations, Arm, the kind that ended last both nights, gains 8.7 and 8.4 minutes (the
+    fuzz 8.7 and 8.5, the sweep 3.1 and 2.2), a span of about 66.5 and 74.6; with them at each
+    kind's longest job, Arm gains 20.4 and 19.9, about 78 and 86; and with pow's sweep at twice
+    atan2's on x86 and on Arm, the sweep gains 20.2 and 19.3, ending at about 77 both nights, and
+    Arm 11.8 and 11.5. So the estimate is about 66 to 75 minutes, under the budget's 90, with its
+    bounds at 86, near it. It is an estimate on two nights, with hypot's and pow's costs assumed,
+    not a reading; the first nights with thirteen are the measurement, and if their median passes 90
+    the levers below are the answer. The plan job at the defaults makes 26 sweep entries, 52 for Arm
+    and 26 for the fuzz; 16 shards make 208 sweep entries, and 256 with `both`, exactly the cap, so
+    a fourteenth function is refused there; 32 shards of all thirteen (416) are refused.
   - **Slots 6, 8 and 5, and the 20 jobs (21 November 2026).** The matrices' `max-parallel` is 6
     for the sweep, 8 for the fuzz and 5 for Arm: 19, and the proofs job makes 20, all of the free
     plan's jobs while the matrices are full. The plan job runs before them and the fault-caught
@@ -1290,11 +1353,11 @@ operations count the same at both widths.
     of them on x86, and sweeps every high word every second night; `slice-nights` 64 saves 26;
     `arm-shards` 2 saves 14 and buys nothing, since a job's setup is half a minute, so the slots
     and not the shards bound the span. Which of these to give up first is the owner's.
-  - **Not in it.** A cost of atan2's pair sweep: 13 times 72 assumes functions of one argument,
-    and atan2 joined with no night of its own run, so its place in the arithmetic is an
-    assumption (one function's worth at the defaults), not a reading. One night has read it since
-    (87 runner-minutes, the entry on twelve functions), and the 13-function figures here are not
-    requoted from it.
+  - **Not in it.** A cost of atan2's pair sweep: 13 times 72 assumes functions of one argument, and
+    atan2 joined with no night of its own run, so its place in the arithmetic is an assumption (one
+    function's worth at the defaults), not a reading. Two nights have read it since (87
+    runner-minutes each, the entries on twelve and on thirteen functions), and the 13-function
+    figures here are not requoted from it.
 - **When a night fails,** the `alert` job (the only one with `issues: write`) opens an issue
   labelled `nightly-failure`, or comments on the open one, with the run's link, the seed, each
   job's result, the dispatch inputs that replay the run (seed, `nights`, `shards`, `arm-shards`,
@@ -1621,5 +1684,60 @@ operations count the same at both widths.
 - **Hard cases, computed.** No published table holds hypot's; `dev/hypot-hard-cases.py` derives
   8,400 pairs with exact integer arithmetic (near-midpoint families of both forms of the medium
   path, exact triples with nearly equal legs, scaled into each range), and
-  `HardCasePairsTest` rechecks the claim on the committed file with `BigDecimal`. Whether
-  self-computed files are acceptable is the owner's question on #34, not answered yet.
+  `HardCasePairsTest` rechecks the claim on the committed file with `BigDecimal`. The owner
+  accepted self-computed files for hypot on 23 November 2026
+  ([issue 34](https://github.com/vecbricks/vfdlibm/issues/34#issuecomment-7088116761)) and asked
+  for one for pow the same day
+  ([issue 34](https://github.com/vecbricks/vfdlibm/issues/34#issuecomment-7100457001)).
+
+## What the pow port taught
+
+- **The common path alone, prototyped first.** By the owner's decisions of 23 November 2026 on issue
+  34, the first body computes e_pow.c's common path only (a positive normal `x` that is not 1, a
+  finite `y` of `iy <= 0x41e00000` that is not 0, +-1, 2 or 0.5, `z` inside lines 266 and 272, a
+  normal result) and finishes every other lane per lane by `StrictMath.pow`; the guard is
+  `PROOFS.md`'s L19. Before any test, its body (two divisions, six low-word clears, int-lane shifts
+  by per-lane counts and `I2D`) was run through `bench/alloc-check.py` and read with the assembly
+  check: at 256 and 512 bits on the laptop's AVX-512 flags and at 256 bits as an AVX2 host, each
+  loop is one copy of the body with two `vdivpd`, no FMA and no call but the traps and the entry
+  barrier (`AsmTest` holds pow's arms, and the census above has their rows). `--why` named no
+  refused call of `Pow` or `Lanes`, but `NodeCountInliningCutoff` refused the benchmark methods
+  themselves and `Blackhole::consume`: the graph is past the cutoff with pow's body alone, so
+  nothing more fits beside it.
+- **`StrictMath.pow` allocates, which the allocation check cannot tell from a box.** On JDK 25.0.5.1
+  the scalar `StrictMath.pow` loop of `PowBenchmark` allocates, and in a standalone probe only the
+  calls that reach the oracle's main path did (a negative `x` with an integer `y`, a subnormal `x`,
+  overflow, underflow, a subnormal result), and not a common-path call there, so the allocation
+  depends on how the JIT compiled the oracle; its cause is not read. pow's finish calls the oracle
+  on exactly those lanes of the `mixed` data, so a threshold on the finish rows alone cannot tell
+  those calls from a box. By the owner's decision of 23 November 2026 (issue 34) the check compares
+  such rows with an oracle baseline: `PowBenchmark.rareOracle` calls `StrictMath.pow` on the lanes
+  the finish takes, over the same arrays, and no timing is claimed of it. Its reading, at the
+  laptop's flags and as an AVX2 host: every arm reads what `rareOracle` reads, about 1,824 B/op on
+  `mixed` data, 19 lanes at 96 bytes a call (`bench/results/pow-alloc-laptop-2026-11-23.txt`, an
+  allocation reading, no timing and no headline).
+- **Which guard parts are hinges.** Run through the common path alone, every part of the guard but
+  two changes results on pairs it alone keeps out (`PROOFS.md`, L19, with the counts): a `|y|` past
+  2^31 beside `x` within 2^-40 of 1 only rarely (42 of 5,952 pairs), where the C's short log and the
+  main log mostly agree. `x = 1` and a zero `y` give the C's 1.0 through the common path, and stay
+  in the guard because the C returns early there.
+- **The faults, sized on 2^22 draws each** (a throwaway program over `Pow.pow` at 256 bits, once per
+  fault; counts of pairs that differ from `StrictMath.pow`; the unplanted port 0 on each).
+  `pow.guardAdmitsNegativeX` (the guard tests `ix` for `hx`): 0 of Varka's range, 4,194,304 of
+  negative `x` in `[-1e6, -1e-6)`, 398,271 of `PowTest.integerPairs`, 1,047,567 of sampled bits,
+  15,420 of the 88,804 special pairs. `pow.guardMissesSubnormal` (line 306's test dropped): 0 of
+  Varka's range, 1,190,254 of `PowTest.targetPairs`, 34 of sampled bits, 158 of the special pairs.
+  `pow.dropT2` (line 261's `y*t2` dropped): 4,194,304 of Varka's range, 1,329,994 of the target
+  pairs, 8,669 of the special pairs. The fault run's inputs (`PowTest.faultRunInputs`) hold the
+  special pairs, integer and target pairs, the pairs of each guard part and dense draws.
+- **Hard cases, computed** (the owner's decision of 23 November 2026, issue 34). A published
+  binary64 pow list exists, CORE-MATH's `src/binary64/pow/pow.wc` (MIT), and is being evaluated as a
+  follow-up (#144); this file is self-computed: `dev/pow-hard-cases.py` derives `hard-cases/pow.txt`
+  with exact integer arithmetic: exact results (integer powers below 2^53 scaled into each binade,
+  and powers of two with integer, quarter and eighth exponents down to 2^-1074), exact ties (odd
+  54-bit powers, and odd multiples of 2^-1075 among the subnormals), results within 2^-28 ulp of a
+  midpoint, and the doubles either side of the overflow, smallest-normal and zero thresholds.
+  `HardCasePairsTest` rechecks each pair's claim with `BigInteger` arithmetic. The near family stops
+  at 2^-28 and not hypot's 2^-40: from `x = 2^52 + d` the distance is `|C(e,2) d^2 - (2j+1) 2^51| /
+  2^52` to leading order, and the squares are too sparse modulo 2^51 for it to come nearer (about
+  2^-30 at best over 20,000 steps); a nearer family needs another construction.

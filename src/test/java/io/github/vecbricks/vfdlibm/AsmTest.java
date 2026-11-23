@@ -78,6 +78,7 @@ class AsmTest {
     arms.put("acos", List.of("finish", "finishMasked"));
     arms.put("atan2", List.of("blended", "blendedMasked", "guarded", "guardedMasked"));
     arms.put("hypot", List.of("finish", "finishMasked"));
+    arms.put("pow", List.of("finish", "finishMasked"));
     return arms;
   }
 
