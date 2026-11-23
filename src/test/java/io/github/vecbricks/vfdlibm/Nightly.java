@@ -225,6 +225,18 @@ final class Nightly {
    */
   record Arm2(String name, BinaryOperator<DoubleVector> all, Oracle.MaskedBinary masked) {}
 
+  /** The high words e_hypot.c tests (lines 63-90): hypot's edges, and HypotTest's specials. */
+  static final int[] HYPOT_WORDS = {
+    0x5f300000, 0x5f300001, 0x5f2fffff, 0x20b00000, 0x20afffff, 0x20b00001, 0x000fffff, 0x00100000,
+    0x00000000, 0x00000001, 0x3c00000, 0x3c00001, 0x3bfffff, 0x7fd00000, 0x7fefffff, 0x7ff00000,
+    0x3ff00000
+  };
+
+  /** The differences of the high words, {@code ha-hb}, at which line 63 decides, and zero. */
+  static final int[] HYPOT_GAPS = {
+    0x3c00000, 0x3c00001, 0x3bfffff, -0x3c00000, -0x3c00001, -0x3bfffff, 0, 1, -1
+  };
+
   /**
    * A function of two arguments: its oracle, what its result may be on a lane of two NaNs with
    * different bits ({@link PairBits}; no default), every arm and where its branches are (for the
@@ -268,11 +280,30 @@ final class Nightly {
             new int[] {61 << 20, (61 << 20) - 1, -60 << 20, (-60 << 20) - 1}));
 
     /**
+     * hypot: its one arm (the finish arm {@code VFdlibm} calls), the candidates of a lane of two
+     * NaNs (the magnitudes: e_hypot.c adds the absolute values), and where its branches are: the
+     * high words e_hypot.c tests (the scalings at {@code 2^500}, {@code 2^-500} and the subnormal
+     * {@code b}, the ratio word, the infinities) and the differences of the two words at which
+     * line 63's {@code ha-hb > 0x3c00000} decides, of either sign, since either argument may be
+     * the larger.
+     */
+    static final PairFunction HYPOT = hypot();
+
+    private static PairFunction hypot() {
+      Fuzz.Edges edges = new Fuzz.Edges(HYPOT_WORDS, new int[0], false, new double[] {
+        0x1p500, 0x1p-500, 0x1p1022, 0x1p-1022, 0x1p60, 1.0, 0.0, Double.POSITIVE_INFINITY
+      });
+      return new PairFunction("hypot", StrictMath::hypot, PairBits.Candidates.MAGNITUDES,
+          List.of(new Arm2("VFdlibm.hypot", VFdlibm::hypot, VFdlibm::hypot)),
+          new Fuzz.PairEdges(edges, edges, Fuzz.PAIR_SPECIALS, HYPOT_GAPS));
+    }
+
+    /**
      * The functions of two arguments by name, in the order they are listed. A port registers its
      * function here, in {@code Nightly}; a test adds a stand-in and removes it again. A function
      * in this list is not in the nightly's {@code all} until nightly.yml says so.
      */
-    static final List<PairFunction> KNOWN = new CopyOnWriteArrayList<>(List.of(ATAN2));
+    static final List<PairFunction> KNOWN = new CopyOnWriteArrayList<>(List.of(ATAN2, HYPOT));
 
     @Override
     public int arity() {

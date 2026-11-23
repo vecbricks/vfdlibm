@@ -11,6 +11,16 @@ two NaNs with different bits in a function of two arguments (`AGENTS.md`, "Relea
 
 ## [Unreleased]
 
+### Added
+
+- `VFdlibm.hypot`, in the two forms `hypot(x, y)` and `hypot(x, y, live)`, over `DoubleVector`
+  lanes of any species of 128 bits or more; a lane that is not live is `x`'s. Every lane is
+  bit-identical to `StrictMath.hypot`, NaN payloads and signed zeros included, except a lane where
+  both arguments are NaN with different bits: it is one of the two arguments' bits with the quiet
+  bit set and the sign cleared, and which one is not specified, since `StrictMath`'s own choice
+  varies by JIT tier. Lanes with an infinity or a NaN in either argument are finished per lane by
+  `StrictMath.hypot`.
+
 ## [0.2.0] - 2026-11-22
 
 ### Added
