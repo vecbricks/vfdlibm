@@ -74,20 +74,20 @@ import jdk.incubator.vector.VectorSpecies;
  * <p>Both are exact. {@code VFdlibm.log10} uses the first, as {@code VFdlibm.log} does,
  * provisionally. By minimums at 256 bits, the preferred species and, on the Xeon, 512 bits, the
  * blended arm over the finish arm is 1.24 to 1.28 on common data and 1.06 to 1.13 on mixed data
- * on the AMD EPYC 7763 ({@code bench/results/log10-epyc7763-2026-11-20.txt}, two runs), and 1.18
- * to 1.25 on common data and 0.92 to 0.98 on mixed data on the Xeon Platinum 8573C ({@code
- * bench/results/log10-xeon8573c-2026-11-21.txt}, one run). Every one of those ratios is within
- * 1.3x, so no direction is read; the files time this class before the finish's first eight lanes
- * were written out with constant indices (issue #37), which the pair on the EPYC 7763 reads as
+ * on the AMD EPYC 7763 ({@code bench/results/log10-epyc7763-2026-11-20.txt}, two runs), and,
+ * with {@code SPECIES_MAX} too, 1.15 to 1.26 on common data and 0.89 to 1.01 on mixed data on the
+ * Xeon Platinum 8573C ({@code bench/results/log10-xeon8573c-2026-11-22.txt}, a run and a re-run).
+ * Every one of those ratios is within 1.3x, so no direction is read. The Xeon file times this
+ * class as it is now; the EPYC file times it before the finish's first eight lanes were written
+ * out with constant indices (issue #37), which the pair on the EPYC 7763 reads as
  * not free: its mixed finish rows ({@code finish256}, {@code finishPreferred}) 2.6% to 4.0%
  * slower by median and 3.7% to 4.1% by best in two runs ({@code
  * bench/results/exp-log10-pair-epyc7763-2026-11-21.txt} and {@code
  * bench/results/exp-log10-pair-rerun-epyc7763-2026-11-21.txt}), the cause not known, and no
  * AVX-512 host paired. log10 calls the finish arm by the rules issue #30 set (a tie within 1.3x
- * goes to the finish arm; its {@code *Max} rows, where the blend reads lower on mixed data, time
- * the finish that boxed before issue #37 and are left out), provisionally until a host run revises
- * it: a second run of the Xeon 8573C, a first of the other AVX-512 hosts ({@code HARDWARE.md}) or a
- * pair; the second arm is kept so the choice can be re-measured.
+ * goes to the finish arm), provisionally until a host run revises it: an EPYC run of the code as
+ * it is now, a first of the other AVX-512 hosts ({@code HARDWARE.md}) or a pair; the second arm is
+ * kept so the choice can be re-measured.
  */
 final class Log10 {
 

@@ -35,7 +35,7 @@ be the whole string ("The Arm host" below).
 
 | machine | host key and CPU string | vector flags | JVM | lane-ops/ns at 128 / 256 / 512 | control | 512:256 | source |
 |---|---|---|---|---|---|---|---|
-| Intel Xeon Platinum 8573C | `xeon8573c`, `INTEL(R) XEON(R) PLATINUM 8573C` | full `avx512` set | `UseAVX=3`, `MaxVectorSize=64` | two readings: 34.5-35.7 / 68.8-70.8 / 93.7-96.3 (nineteen files, 3 to 22 November 2026); 41.5 / 82.7 / 113.0 (one file, 3 November) | 1.98 to 2.00 in the files; 2.00 to 2.03 in Varka's runs | 1.36 to 1.37 in the files; 1.34 to 1.36 in Varka's runs | Varka, `VARKA-62.md` 11.9, 4 runs (the control and 512:256 ranges of Varka's runs); the files named under "The 8573C's two readings" below; the string from vecbricks/varka's fork runs 41465323581, 41255932044 and 41241977271 (the owner's fork of apache/spark) |
+| Intel Xeon Platinum 8573C | `xeon8573c`, `INTEL(R) XEON(R) PLATINUM 8573C` | full `avx512` set | `UseAVX=3`, `MaxVectorSize=64` | two readings: 34.5-35.8 / 68.8-70.8 / 93.7-96.8 (nineteen files, dated 3 to 22 November 2026, from runs up to 23 November); 41.5 / 82.7 / 113.0 (one file, 3 November) | 1.98 to 2.00 in the files; 2.00 to 2.03 in Varka's runs | 1.36 to 1.37 in the files; 1.34 to 1.36 in Varka's runs | Varka, `VARKA-62.md` 11.9, 4 runs (the control and 512:256 ranges of Varka's runs); the files named under "The 8573C's two readings" below; the string from vecbricks/varka's fork runs 41465323581, 41255932044 and 41241977271 (the owner's fork of apache/spark) |
 | Intel Xeon 6973P-C (Granite Rapids) | `xeon6973p`, `Intel(R) Xeon(R) 6973P-C` | full `avx512` set | `UseAVX=3`, `MaxVectorSize=64` | see source | 2.00 to 2.01 | 1.33 to 1.35 | Varka, `VARKA-62.md` 11.9, 2 runs; the string from vfdlibm run 41442062308 |
 | AMD EPYC 9V45 (Zen 5) | `epyc9v45`, `AMD EPYC 9V45 96-Core Processor` | full `avx512` set | `UseAVX=3`, `MaxVectorSize=64` | see source | 2.04 | 1.99 | Varka, `VARKA-62.md` 11.9, 1 run; the string from Varka's fork runs 41486339971, 41446843041 and 41329377429 |
 | AMD EPYC 7763 (Zen 3) | `epyc7763`, `AMD EPYC 7763 64-Core Processor` | `avx2`, no `avx512` | `UseAVX=2`, `MaxVectorSize=32` | 45.0-46.5 / 90.0-92.6 / 90.0-92.6 | 1.99 to 2.01 | 1.00 | Varka, `VARKA-62.md` 11.9, 8 runs; the lane rates, a range, from 16 Varka fork runs, 31 October to 2 November 2026 (41236071283 to 41460150392); the string from `bench/results/exp-epyc7763-2026-11-02.txt` and `log-epyc7763-2026-11-02.txt`; `exp-epyc7763-2026-11-20.txt` reads 46.2 / 92.2 / 92.5 (control 2.00, 512:256 1.00) in its first run and 46.3 / 92.4 / 92.4 in its second, inside the range |
@@ -74,15 +74,17 @@ it, none is claimed, and whether the ports' arms should differ on Arm waits for 
 
 ### The 8573C's two readings
 
-Nineteen of the twenty files of this host read 34.5 to 35.7 lane-ops/ns at 128 bits, 68.8 to 70.8 at
-256 and 93.7 to 96.3 at 512: `exp-onediv-xeon8573c-2026-11-03.txt` (34.7 / 68.8 / 94.1, control
+Nineteen of the twenty files of this host read 34.5 to 35.8 lane-ops/ns at 128 bits, 68.8 to 70.8 at
+256 and 93.7 to 96.8 at 512: `exp-onediv-xeon8573c-2026-11-03.txt` (34.7 / 68.8 / 94.1, control
 1.98, 512:256 1.37), `expm1-xeon8573c-2026-11-04.txt` (34.8 / 69.2 / 94.1, 1.99, 1.36), the nine
 files of 21 November, from two runs: `exp-xeon8573c-2026-11-21.txt` and its five siblings (34.5 /
 69.1 / 93.7, 2.00, 1.36) and `sinh-`, `cosh-` and `cosh-kinds-xeon8573c-2026-11-21.txt` (34.9 / 69.9
-/ 94.8, 2.00, 1.36), and the eight of 22 November, from two runs: `asin-xeon8573c-2026-11-22.txt`
-and its three siblings (35.7 / 70.8 / 96.3, 1.98, 1.36), and run 45082534869's `expm1-`, `log-`,
+/ 94.8, 2.00, 1.36), and the eight of 22 November, from three runs: `asin-xeon8573c-2026-11-22.txt`
+and its three siblings (35.7 / 70.8 / 96.3, 1.98, 1.36), run 45082534869's `expm1-`, `log-`,
 `log10-` and `log1p-xeon8573c-2026-11-22.txt` with the second run in
-`atan2-xeon8573c-2026-11-22.txt` (34.6 / 69.1 / 93.8, 2.00, 1.36). `log1p-xeon8573c-2026-11-03.txt`,
+`atan2-xeon8573c-2026-11-22.txt` (34.6 / 69.1 / 93.8, 2.00, 1.36), and run 45125529045 of 23
+November, the second run in those four files of `expm1`, `log`, `log10` and `log1p` (35.8 / 70.8 /
+96.8, 1.98, 1.37). `log1p-xeon8573c-2026-11-03.txt`,
 of the same day as the pair, reads 41.5 / 82.7 / 113.0 (1.99, 1.37), and its scalar `StrictMath`
 loop reads 7,358 ns on common data where the `log1p` file of 21 November reads 8,846. Each file's
 header says which it ran on; no cause for the difference is claimed here. The 25 nightly draws of

@@ -516,7 +516,7 @@ class Log1pTest {
    * has, over the thresholds, dense draws over (-1, 4) and draws from 2^52 to 2^53. The same
    * inputs pass in the normal run, through {@link #faultRunInputsPass}. Two are narrower: the
    * guarded arm's own fault, caught on lone NaNs, and {@link Log1p#FOLD_SHORT_PATH}, caught on
-   * the four witnesses by the three arms that compute the {@code hu == 0} path, which the
+   * the four witnesses by the two arms that compute the {@code hu == 0} path, which the
    * nightly's fuzz and sweep almost certainly miss (dispatching it there normally reports a
    * missed fault).
    */
@@ -535,12 +535,11 @@ class Log1pTest {
             "Log1p.log1pGuarded", species, x -> Log1p.log1pGuarded(x, null), StrictMath::log1p,
             loneNaNInputs()))));
     // The fold of the hu == 0 path reaches the arms that compute that path, the blended and the
-    // guarded arm and so the public one. The finish arm finishes those lanes with StrictMath, so
-    // it cannot see the fold and is left out; the check is the four inputs where the two paths
+    // guarded arm. The finish arm, and so the public one, finishes those lanes with StrictMath,
+    // so it cannot see the fold and is left out; the check is the four inputs where the two paths
     // differ, which no draw finds in a fault run's time.
     catchers.put(Log1p.FOLD_SHORT_PATH, () -> forEachWidth(species -> {
-      for (String name : new String[] {
-          "VFdlibm.log1p", "Log1p.log1pBlended", "Log1p.log1pGuarded"}) {
+      for (String name : new String[] {"Log1p.log1pBlended", "Log1p.log1pGuarded"}) {
         BiFunction<DoubleVector, VectorMask<Double>, DoubleVector> arm = ARMS.get(name);
         PlantedFaultTest.assertCaught(Log1p.FOLD_SHORT_PATH, () -> Oracle.assertUnary(
             name, species, x -> arm.apply(x, null), StrictMath::log1p, shortPathWitnessInputs()));

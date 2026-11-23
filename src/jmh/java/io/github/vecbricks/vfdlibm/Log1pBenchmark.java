@@ -26,9 +26,9 @@ import org.openjdk.jmh.annotations.Warmup;
 
 /**
  * log1p over an array of 1024 doubles: the scalar {@code StrictMath.log1p} loop and {@code
- * Log1p}'s three arms, {@link Log1p#log1pGuarded} (rare paths blended behind one test, what
- * {@link VFdlibm#log1p} runs), {@link Log1p#log1pBlended} (rare paths always blended) and {@link
- * Log1p#log1pFinish} (rare lanes finished per lane by {@code StrictMath}), each vector form at
+ * Log1p}'s three arms, {@link Log1p#log1pGuarded} (rare paths blended behind one test), {@link
+ * Log1p#log1pBlended} (rare paths always blended) and {@link Log1p#log1pFinish} (rare lanes
+ * finished per lane by {@code StrictMath}, what {@link VFdlibm#log1p} runs), each vector form at
  * 256 and 512 bits and at the host's preferred species. 128 bits is left out: on x86 C2 lowers no
  * mask at two 64-bit lanes, so every 128-bit arm boxes (SKILLS.md). On a host without 512-bit
  * vectors the 512-bit benchmarks run in software and measure nothing useful.

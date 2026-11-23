@@ -75,31 +75,19 @@ import jdk.incubator.vector.VectorSpecies;
  *       call that takes a vector.
  * </ul>
  *
- * <p>All three are exact. {@link #expm1}, which {@code VFdlibm.expm1} calls, is the guarded arm,
- * provisionally, as for log1p, whose rare paths are as cheap in vector form. By minimums at 256
- * bits and the preferred species (and 512 bits on the Xeon), every arm is within 1.3x of the
- * others on every one of those rows (the EPYC's 512-bit rows run in the Java fallback and are
- * left out), so no direction is read: on the AMD EPYC 7763 ({@code
- * bench/results/expm1-epyc7763-2026-11-20.txt}, two runs) the finish arm is lowest on every such
- * row; on the Xeon Platinum 8573C ({@code bench/results/expm1-xeon8573c-2026-11-21.txt}, one
- * run) the guarded arm is lowest on mixed data at all three and at 256 bits on common data, the
- * finish arm at the preferred species and 512 bits on common data. The earlier Xeon file ({@code
- * expm1-xeon8573c-2026-11-04.txt}) had the guarded arm lowest on the preferred rows of both
- * kinds of data. The EPYC file of 20 November and the Xeon file of 21 November time the class
- * before {@link #expm1Core} and before the finish's first eight lanes were written out with
- * constant indices (issue #37); the class changed between their two commits by a fault constant
- * and a local in the k conversion. The EPYC's file of 21 November ({@code
- * bench/results/expm1-epyc7763-2026-11-21.txt}, one run, main at 9b9cc7b) is the only one with
- * core rows, and also times the finish before the eight lanes; its minimums read the guarded
- * arm over the finish at 1.02 on common data and 1.07 to 1.08 on mixed data, against 1.13 to
- * 1.15 and 1.07 to 1.08 in the 20 November files, all within 1.3x, and no pair or re-run backs
- * the 1.02. The rules for a tie within 1.3x and for hosts that disagree are set (issue #30): a tie
- * goes to the finish arm, so rule 1 would move expm1 to the finish arm at the Xeon 8573C's second
- * run unless the guarded arm wins by more than 1.3x there (the {@code *Max} rows of the files
- * committed so far time the finish that boxed before issue #37 and are left out); until then the
- * guarded arm stays, provisionally, and a first run of the other AVX-512 hosts ({@code
- * HARDWARE.md}) or a pair may revise the choice; the other two arms are kept so it can be
- * re-measured ({@code SKILLS.md}).
+ * <p>All three are exact. {@link #expm1}, which {@code VFdlibm.expm1} calls, is the finish arm,
+ * by issue #30's rule 1: a tie within 1.3x on every host that has a file goes to the finish arm.
+ * By minimums neither other arm is lower than the finish by more than 1.3x at any species: on the
+ * Xeon Platinum 8573C ({@code bench/results/expm1-xeon8573c-2026-11-22.txt}, a run and a re-run)
+ * at 256 bits, 512 bits, the preferred species and {@code SPECIES_MAX}, and on the AMD EPYC 7763
+ * ({@code bench/results/expm1-epyc7763-2026-11-23.txt}, a run and a re-run) at 256 bits, the
+ * preferred species and {@code SPECIES_MAX} (its 512-bit rows run in the Java fallback and are
+ * left out). It is a tie, not a speed-up: on the Xeon's mixed data the guarded arm reads lower,
+ * inside 1.3x. Both files time the arms' bodies as they are now (each called by name), after the
+ * finish's first eight lanes were written out with constant indices (issue #37); {@code
+ * SKILLS.md} reads the earlier host files, of the code before it. Like every default, it stays
+ * provisional until a host run revises it, and the other two arms are kept, tested, so the choice
+ * can be re-measured.
  *
  * <p>{@link #expm1Core} and {@link #expm1Rare} split the finish arm into its branch-free part and
  * its rare-lane mask, as {@code Exp.expCore} and {@code Exp.expRare} do, so that a port that
@@ -192,12 +180,12 @@ final class Expm1 {
   private Expm1() {}
 
   /**
-   * expm1 as {@code VFdlibm.expm1} computes it, the guarded arm. {@code live} is null for every
+   * expm1 as {@code VFdlibm.expm1} computes it, the finish arm. {@code live} is null for every
    * lane; otherwise only live lanes are computed, inactive lanes return {@code x}'s lane
    * untouched, and an inactive lane never sends the vector down a rare path.
    */
   static DoubleVector expm1(DoubleVector x, VectorMask<Double> live) {
-    return expm1(x, live, GUARDED);
+    return expm1(x, live, FINISH);
   }
 
   /**
@@ -218,8 +206,8 @@ final class Expm1 {
 
   /**
    * expm1 with the rare lanes finished per lane by {@code StrictMath.expm1}, read and written in
-   * the vector with {@code lane} and {@code withLane}. {@code live} is as for {@link
-   * #expm1(DoubleVector, VectorMask)}.
+   * the vector with {@code lane} and {@code withLane}, as {@link #expm1(DoubleVector, VectorMask)}
+   * does. {@code live} is as for {@link #expm1(DoubleVector, VectorMask)}.
    */
   static DoubleVector expm1Finish(DoubleVector x, VectorMask<Double> live) {
     return expm1(x, live, FINISH);

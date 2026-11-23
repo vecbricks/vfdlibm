@@ -30,10 +30,10 @@ import jdk.incubator.vector.VectorMask;
  * <p>Which species to pass. Every species of 128 bits or more gives the same bits. The files
  * under {@code bench/results/}, in the source repository and not in the jar, read what the body
  * allocates at each, in bytes per op, an op being one pass over 1024 doubles. The arm that {@code
- * exp}, {@code log} and {@code log10} call is the finish arm, the one {@code expm1}, {@code
- * log1p} and {@code atan2} call is the guarded arm, and the one {@code cosh} calls is the slice
- * arm; {@code hypot} and {@code pow} have one arm, the finish. No file under {@code
- * bench/results/} reads {@code hypot} or {@code pow} yet: every file the list below cites predates
+ * exp}, {@code expm1}, {@code log}, {@code log10} and {@code log1p} call is the finish arm, the
+ * one {@code atan2} calls is the guarded arm, and the one {@code cosh} calls is the slice arm;
+ * {@code hypot} and {@code pow} have one arm, the finish. No file under {@code bench/results/}
+ * reads {@code hypot} or {@code pow} yet: every file the list below cites predates
  * them, and of the list only the allocation check that CI runs covers them. On its mixed data
  * {@code StrictMath.pow}, which finishes {@code pow}'s rare lanes, allocates on some of them
  * itself, so that check reads {@code pow}'s rows against an oracle baseline, which they match
@@ -50,7 +50,7 @@ import jdk.incubator.vector.VectorMask;
  *   <li>At 128 bits {@code exp} and {@code log} allocate 0.5 to 0.6 million bytes per op on
  *       x86, the finish arm that {@code VFdlibm} calls: on the EPYC 7763, an AVX2 host, in the
  *       files of 20 November 2026 named below, and on the Xeon Platinum 8573C in {@code
- *       bench/results/exp-xeon8573c-2026-11-21.txt} and {@code log-xeon8573c-2026-11-21.txt}.
+ *       bench/results/exp-xeon8573c-2026-11-21.txt} and {@code log-xeon8573c-2026-11-22.txt}.
  *       {@code log10}, {@code log1p} and {@code expm1} have no 128-bit row.
  *   <li>On the EPYC 7763 at 512 bits, which is the Vector API's Java fallback there, each of the
  *       five functions allocates 0.9 to 1.8 million bytes per op. The files of 20 November 2026
@@ -86,7 +86,12 @@ import jdk.incubator.vector.VectorMask;
  *       atan} and {@code acos}, whose finishes were written in that shape from the start, and of
  *       {@code atan2}, which finishes no lane per lane ({@code asin-xeon8573c-2026-11-22.txt}
  *       and {@code asin-epyc7763-2026-11-22.txt}, and the same for {@code atan}, {@code acos}
- *       and {@code atan2}), read under 0.05 bytes per op.
+ *       and {@code atan2}), read under 0.05 bytes per op, and so do those of today's {@code
+ *       expm1}, {@code log}, {@code log10} and {@code log1p} on the Xeon 8573C ({@code
+ *       expm1-xeon8573c-2026-11-22.txt}, a run and a re-run, and the same for the other three)
+ *       and of {@code expm1} and {@code log1p} on the EPYC 7763 ({@code
+ *       expm1-epyc7763-2026-11-23.txt} and {@code log1p-epyc7763-2026-11-23.txt}, a run and a
+ *       re-run each).
  *   <li>Not measured: any port's speed at 512 bits against 256 on the EPYC 9V74 draws that have
  *       AVX-512 ({@code HARDWARE.md} has only a datapath reading for them, and lists {@code
  *       MaxVectorSize=64}), any port's speed on Arm, and allocation on an Arm host with vectors

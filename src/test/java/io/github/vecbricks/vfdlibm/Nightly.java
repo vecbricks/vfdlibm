@@ -130,10 +130,10 @@ final class Nightly {
         // an extra lane is finished by StrictMath here and so matches.
         new Arm("Exp.expCore+expRare", Nightly::expCoreAndRare, null))),
     EXPM1("expm1", StrictMath::expm1, List.of(
-        // VFdlibm.expm1 is Expm1.expm1Guarded, so the guarded arm is checked under that name.
+        // VFdlibm.expm1 is Expm1.expm1Finish, so the finish arm is checked under that name.
         new Arm("VFdlibm.expm1", VFdlibm::expm1, VFdlibm::expm1),
         new Arm("Expm1.expm1Blended", x -> Expm1.expm1Blended(x, null), Expm1::expm1Blended),
-        new Arm("Expm1.expm1Finish", x -> Expm1.expm1Finish(x, null), Expm1::expm1Finish),
+        new Arm("Expm1.expm1Guarded", x -> Expm1.expm1Guarded(x, null), Expm1::expm1Guarded),
         // The core entry sinh nests, as Exp's above: the core in every lane, the rare mask's
         // lanes finished per lane here, no masked form. It catches expm1Rare missing a lane the
         // core gets wrong, never expm1Rare marking too many: an extra lane matches by StrictMath.
@@ -145,10 +145,10 @@ final class Nightly {
         new Arm("VFdlibm.log10", VFdlibm::log10, VFdlibm::log10),
         new Arm("Log10.log10Blended", x -> Log10.log10Blended(x, null), Log10::log10Blended))),
     LOG1P("log1p", StrictMath::log1p, List.of(
-        // VFdlibm.log1p is Log1p.log1pGuarded, so the guarded arm is checked under that name.
+        // VFdlibm.log1p is Log1p.log1pFinish, so the finish arm is checked under that name.
         new Arm("VFdlibm.log1p", VFdlibm::log1p, VFdlibm::log1p),
         new Arm("Log1p.log1pBlended", x -> Log1p.log1pBlended(x, null), Log1p::log1pBlended),
-        new Arm("Log1p.log1pFinish", x -> Log1p.log1pFinish(x, null), Log1p::log1pFinish))),
+        new Arm("Log1p.log1pGuarded", x -> Log1p.log1pGuarded(x, null), Log1p::log1pGuarded))),
     SINH("sinh", StrictMath::sinh, List.of(
         new Arm("VFdlibm.sinh", VFdlibm::sinh, VFdlibm::sinh))),
     COSH("cosh", StrictMath::cosh, List.of(
