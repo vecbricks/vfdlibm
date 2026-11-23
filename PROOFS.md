@@ -947,19 +947,22 @@ against the C's and below `2^31`; the exponent field is masked away in both, so 
 loop. `ProofsTest.l17RareComparesAreTheCs` (c): the two long compares against
 the C's on every high word within `2^16` of 0, `0x7ff00000`, `0x7fffffff` and `0x80000000` (where
 an answer changes or the int wraps), with five low words each, and on 2^20 sampled patterns.
-`ProofsTest.l17NegativeLanesAreAnsweredEarly` (H18): on every sign-set pattern of a set of
-specials, sampled patterns and every exponent field, `StrictMath.log10` is a NaN, or `-inf` for
-`-0`, so it fails if the C kept a negative lane; and for some of those patterns `K` is not the
-C's `k` on every one of those patterns, which shows H18 is needed. **Vector tie, here.**
+`ProofsTest.l17NegativeLanesAreAnsweredEarly` is a witness for H18 and the oracle's own check,
+not a hinge test: on every sign-set pattern of a set of specials, sampled patterns and every
+exponent field, `StrictMath.log10` is a NaN, or `-inf` for `-0`, as the C's early returns give.
+On every one of those patterns the long `K` is not the C's `k`, which shows H18 is needed: the
+long field holds the sign bit, so `K` is at least 1025, while the C's `k` is at most -1024; this
+holds for every input, so no test checks it. The checks of H18 are
+`l17NegativeLanesAreBlendedOver` below and Varka's suite. **Vector tie, here.**
 `ProofsTest.l17NegativeLanesAreBlendedOver` checks H18 on `Log10`'s own masks, whose blends
 Varka's kernel emits in the same order: `Log10.log10Blended`, at every width, against
 `StrictMath.log10` by raw bits on those sign-set patterns, each beside its positive twin so that
 a vector mixes rare and kept lanes; a rare blend dropped or placed before the general form fails
 there. **Vector tie, in Varka.** Where L17's own claim, the kernel, is checked: Varka's
-`VarkaMathPortSuite` (vecbricks/varka, the pull request that adds `VarkaMathPort.log10`, branch
-`varka-345d-log-r`) runs the emitted `VarkaMathPort.log10` against `VFdlibm.log10` and
-`Log10.log10Blended` by raw bits, on 2^24 sampled inputs and the fixed vectors of e_log.c's and
-e_log10.c's words. That Varka's kernel uses these long words is not checked here.
+`VarkaMathPortSuite` (vecbricks/varka#1645) runs the emitted `VarkaMathPort.log10` against
+`VFdlibm.log10` and `Log10.log10Blended` by raw bits, on 2^24 sampled inputs and the fixed
+vectors of e_log.c's and e_log10.c's words. That Varka's kernel uses these long words is not
+checked here.
 
 **Encoding.** None, no machine-checked file: (a) is an integer identity checked by the Java
 loops above over every exponent field and every significand word; (c) is step 3's argument,

@@ -1038,7 +1038,7 @@ class ProofsTest {
 
   // L17: log10's words in long lanes, as Varka emits them.
 
-  /** The C's k of e_log10.c's lines 81 and 84 for the signed high word hx, scaled or not. */
+  /** The C's k of e_log10.c's lines 80 and 84, hx the signed high word (line 81's if scaled). */
   private static int l17CK(int hx, int scaled) {
     return (hx >> 20) - 1023 - 54 * scaled;
   }
@@ -1118,20 +1118,19 @@ class ProofsTest {
   }
 
   /**
-   * L17's H18: the C answers every lane with the sign bit set early, a NaN or -inf for -0, so a
-   * negative lane's words are never kept; this fails if the C kept one. And on every one of
-   * those lanes the long K is not the C's k (the long field holds the sign bit, at least 0x800,
-   * where the C's is negative), so H18 is needed.
+   * L17's H18, a witness and the oracle's own check, not a hinge test: StrictMath.log10 answers
+   * every lane with the sign bit set with a NaN, or -inf for -0, as the C's early returns do. On
+   * every one of those lanes the long K is not the C's k (the long field holds the sign bit, so
+   * K is at least 1025, while the C's k is at most -1024), which shows H18 is needed; that holds
+   * for every input, so it is not asserted. H18 is checked by l17NegativeLanesAreBlendedOver and
+   * Varka's suite.
    */
   @Test
   void l17NegativeLanesAreAnsweredEarly() {
     for (double x : l17SignSet()) {
-      long b = bits(x);
       double got = StrictMath.log10(x);
       assertTrue(x == 0.0 ? bits(got) == bits(Double.NEGATIVE_INFINITY) : Double.isNaN(got),
           Oracle.hex(x));
-      long k = ((b >>> 32) >>> 20) - 1023;
-      assertTrue(k >= 0x800 - 1023 && k != l17CK((int) (b >> 32), 0), Oracle.hex(x));
     }
   }
 
