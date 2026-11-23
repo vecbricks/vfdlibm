@@ -25,19 +25,23 @@ INCLUDE's regex (see the comment there), and so is ExpKindsBench, by its class n
 call the bodies ExpBenchmark's rows call, and its other inputs values are checked by naming it,
 as below.
 
-A port whose oracle allocates on the lanes the port finishes with it (StrictMath.pow does on some
-inputs) cannot read under THRESHOLD on mixed data, boxed or not. Its class may then hold an oracle
+A port whose oracle allocates on the lanes the port finishes with it (the pow port, issue #34)
+cannot read under THRESHOLD on mixed data, boxed or not. Its class may then hold an oracle
 baseline: a method named ORACLE_METHOD that calls the oracle in a scalar loop on exactly the lanes
 the arms finish with it, and does nothing else. The check then runs that method in the same JMH run
-as the arms and judges each arm row of the class, of the same params and JVM options, against it:
-the arm's worst iteration must stay under the baseline's lowest iteration plus THRESHOLD. The
-baseline is reported (its lowest and highest iteration) and never judged by the bound. When the
-class has one, a run without its row fails, and so does a baseline whose source is not a scalar
-loop: oracle_source_problem() reads the method in src/jmh/java and allows in it no call but
-StrictMath's, no lambda or method reference, and no name of the Vector API or of a vector species.
-That the lanes it calls the oracle on are the lanes the arms finish with it is a contract the
-script cannot read: the class's Javadoc states it, and its review holds it. A class without the
-method is judged by the absolute bound as before.
+as the arms and judges each arm row of the class, of the same params and JVM options, against it,
+like with like: the arm's lowest iteration within THRESHOLD of the baseline's lowest, either way,
+and its highest under the baseline's highest plus THRESHOLD. Above is a box; below is an arm that
+does not finish those lanes with the oracle, or allocates less for it than the loop does, where a
+box could hide in the difference. So every arm of such a class must finish with the oracle on the
+same lanes. The baseline is reported (its lowest and highest iteration) and not bounded itself.
+When the class has one, a run without its row fails, and so does a baseline whose source is not a
+scalar loop: oracle_source_problem() reads the method in src/jmh/java and allows in it no call but
+StrictMath's, no `new`, no lambda or method reference, no name of the Vector API or of a vector
+species, and no StrictMath declared in the file. That the lanes it calls the oracle on are the
+lanes the arms finish with it is a contract the script cannot read: the class's Javadoc states it,
+and its review holds it, with the lower side of the comparison above. A class without the method
+is judged by the absolute bound as before.
 
 With --why it runs nothing new through the check: it reads the last run's result and runs the
 rows that failed once more (WHY_ROWS of them at most, one of each benchmark method first),
@@ -80,14 +84,14 @@ import sys
 # sits between the two. The unboxed reading is a rate times the time of an op, so it grows with
 # a slow row: on Arm, 0.103 B/op at 14.7 us per op, and 1 B/op would be reached at about
 # 143 us per op with no vector boxed. A row that slow wants the threshold read again. An arm row
-# of a class with an oracle baseline (the module's docstring) has the bound THRESHOLD over the
-# baseline row's lowest iteration instead: what the oracle allocates is no box, and a box adds a
-# vector, some 64 B/op at the least, on top of it.
+# of a class with an oracle baseline (the module's docstring) is held within THRESHOLD of the
+# baseline row instead: what the oracle allocates is no box, and a box adds a vector, some
+# 64 B/op at the least, on top of it.
 THRESHOLD = 1.0
 
 # The oracle baseline: the method a *Benchmark class names so (the module's docstring), the
-# pattern that lists it, and where its source is read. The lowest iteration, not the highest, is
-# the baseline, so that an oracle iteration C2 was late on cannot excuse a box in an arm.
+# pattern that lists it, and where its source is read. Lowest iterations are compared, so that an
+# oracle iteration C2 was late on cannot excuse a box, which shows in every settled iteration.
 ORACLE_METHOD = "rareOracle"
 ORACLE = r".*Benchmark\.%s$" % ORACLE_METHOD
 SOURCES = "src/jmh/java"
@@ -259,7 +263,12 @@ def oracle_source_problem(name, root=SOURCES):
         end += 1
     if depth:
         return f"{ORACLE_METHOD}() in {path} does not close"
+    shadow = re.search(r"\b(?:class|interface|enum|record)\s+StrictMath\b", text)
+    if shadow:
+        return f"{path} declares a StrictMath of its own"
     body = text[start.end():end - 1]
+    if re.search(r"\bnew\b", body):
+        return f"{ORACLE_METHOD}() creates an object or an array"
     for word in JAVA_VECTOR.findall(body):
         return f"{ORACLE_METHOD}() names {word}, of the Vector API"
     if "->" in body or "::" in body:
@@ -316,14 +325,20 @@ def judge(rows, threshold, root=SOURCES):
             continue
         baseline = baselines.get(row_key(row))
         if baseline is None:
-            bound, against = threshold, ""
-        else:
-            lowest = min(alloc_iterations(baseline))
-            bound = lowest + threshold
-            against = (f", bound {bound:.3f}: {ORACLE_METHOD}'s lowest {lowest:.3f} plus"
-                       f" {threshold}")
-        verdicts.append((row, worst < bound, f"{label}: max {worst:.3f} B/op {counted_over}"
-                         f"{against}", bound))
+            verdicts.append((row, worst < threshold, f"{label}: max {worst:.3f} B/op"
+                             f" {counted_over}", threshold))
+            continue
+        # Like with like: the arm's settled iteration against the baseline's, within the
+        # threshold either way, and its worst against the baseline's worst. Above, a box; below,
+        # an arm that does not call the oracle on those lanes, or calls it for less (C2
+        # removing some of its allocation in the arm), where a box could hide in the
+        # difference.
+        lowest, highest = min(alloc_iterations(baseline)), max(alloc_iterations(baseline))
+        least = min(iterations)
+        ok = abs(least - lowest) < threshold and worst < highest + threshold
+        verdicts.append((row, ok, f"{label}: {least:.3f} to {worst:.3f} B/op {counted_over},"
+                         f" against {ORACLE_METHOD}'s {lowest:.3f} to {highest:.3f} within"
+                         f" {threshold}", lowest + threshold))
     return verdicts
 
 
@@ -515,14 +530,23 @@ def selftest():
                 ok = check(path, THRESHOLD, expected, inputs, scratch)
             return ok, out.getvalue()
 
-        # An arm within the bound over its baseline passes, and both numbers are printed.
-        ok, out = verdict([row(arm, [1824.01, 1824.4]), row(oracle, [1824.02, 1830.0])])
+        # An arm within the bound of its baseline passes, with the same spread, and both
+        # readings are printed.
+        ok, out = verdict([row(arm, [1824.01, 1829.4]), row(oracle, [1824.02, 1830.0])])
         assert ok, out
-        assert "max 1824.400 B/op" in out and "lowest 1824.020" in out, out
+        assert "ok    PowBenchmark.finish256 [inputs=mixed]: 1824.010 to 1829.400 B/op" in out \
+            and "rareOracle's 1824.020 to 1830.000 within 1.0" in out, out
         assert "base  PowBenchmark.rareOracle [inputs=mixed]: 1824.020 to 1830.000" in out, out
-        # Over it by the bound, it fails; the baseline's lowest iteration is the baseline, so
-        # its late one does not excuse the arm.
-        ok, out = verdict([row(arm, [1824.0, 1825.1]), row(oracle, [1824.02, 1900.0])])
+        # Over it by the bound, it fails: a box, settled; a baseline's late iteration does not
+        # excuse it; nor does a worst iteration past the baseline's worst pass.
+        for arm_norms, oracle_norms in (([1825.1, 1825.1], [1824.02, 1824.05]),
+                                        ([1890.0, 1890.0], [1824.0, 1900.0]),
+                                        ([1824.0, 1831.5], [1824.0, 1830.0])):
+            ok, out = verdict([row(arm, arm_norms), row(oracle, oracle_norms)])
+            assert not ok and "FAIL  PowBenchmark.finish256" in out, (arm_norms, out)
+        # Under it by the bound, it fails too: an arm that does not finish those lanes with
+        # the oracle, or that allocates less for it than the loop, could hide a box there.
+        ok, out = verdict([row(arm, [64.0, 64.0]), row(oracle, [1824.0, 1824.0])])
         assert not ok and "FAIL  PowBenchmark.finish256" in out, out
         # The baseline missing from a run that lists it fails loudly, and the arms fall back
         # to the absolute bound.
@@ -551,6 +575,8 @@ def selftest():
                 (scalar.replace("out[i] = StrictMath.pow(xs[i], ys[i])",
                                 "StrictMath.pow(xs[i], ys[i]); g(x -> x)"), "lambda"),
                 (scalar.replace("for (int i = 0; i < N; i++)", "{"), "no loop"),
+                (scalar.replace("return out;", "return new double[N];"), "creates"),
+                (scalar + "\n  static class StrictMath {}\n", "StrictMath of its own"),
                 (scalar.replace("rareOracle", "rareOracles"), "no method")):
             ok, out = verdict([row(arm, [1824.0]), row(oracle, [1824.0])], body)
             assert not ok and why_not in out and "not a scalar oracle baseline" in out, (why_not,
@@ -645,6 +671,12 @@ def main():
         if not all(re.fullmatch(r"\w+", v) for v in inputs):
             parser.error("--inputs takes comma-separated names, e.g. common,mixed")
     include = args.include or (PREFERRED if args.preferred_only else INCLUDE)
+    try:
+        # include is wrapped with the baselines' pattern, so a flag such as (?i) cannot lead it.
+        re.compile(f"(?:{include})|{ORACLE}")
+    except re.error as e:
+        parser.error(f"--include {include!r} cannot be joined to the baselines' pattern ({e});"
+                     " write a flag inline, as (?i:...)")
     expected = None
     if not args.no_run:
         # A result left by an earlier run must not stand in for this one.
@@ -680,13 +712,13 @@ def main():
             sys.exit(1)
     if not check(RESULT, args.threshold, expected, inputs):
         print(f"A row is missing, or an oracle baseline is no scalar loop, or a row allocated"
-              f" {args.threshold} B/op or more (over its class's {ORACLE_METHOD}, where it has"
-              " one): a vector body boxed, or, if only its first iteration did, C2 had not"
-              " finished. See SKILLS.md.")
+              f" {args.threshold} B/op or more (or strayed that far from its class's"
+              f" {ORACLE_METHOD}, where it has one): a vector body boxed, or, if only its first"
+              " iteration did, C2 had not finished. See SKILLS.md.")
         sys.exit(1)
     ran = "the rows found" if args.no_run else f"inputs={','.join(inputs)}"
-    print(f"No vector body allocates {args.threshold} B/op or more, over its class's"
-          f" {ORACLE_METHOD} where it has one ({ran}).")
+    print(f"No vector body allocates {args.threshold} B/op or more (none strays that far from"
+          f" its class's {ORACLE_METHOD}, where it has one) ({ran}).")
 
 
 if __name__ == "__main__":

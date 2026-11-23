@@ -67,13 +67,15 @@ stops the next port re-trying a settled question.
   see that path box. The `*Max` rows are in, since the finish writes out its first eight lanes
   with constant indices (below).
 - **An oracle that allocates gets a baseline.** A port that finishes rare lanes with an oracle
-  that itself allocates on them (`StrictMath.pow` on some inputs) cannot read under 1 B/op on
-  mixed data, boxed or not. Its `*Benchmark` class then holds `rareOracle`, a scalar loop calling
+  that itself allocates on them (the reason is `pow`) cannot read under 1 B/op on mixed data,
+  boxed or not. Its `*Benchmark` class then holds `rareOracle`, a scalar loop calling
   `StrictMath` on exactly the lanes the arms finish with it (its Javadoc states this; the script
   cannot read lanes), and `bench/alloc-check.py` runs it with the arms and fails an arm whose
-  worst iteration reaches the baseline's lowest plus 1 B/op, printing both. A box adds a whole
-  vector on top, so it still fails. The script refuses a `rareOracle` whose source calls anything
-  but `StrictMath` or names the Vector API, and fails a run without its row.
+  lowest iteration is not within 1 B/op of the baseline's lowest, either way, or whose worst
+  reaches the baseline's worst plus 1 B/op, printing both. A box adds a whole vector on top; an
+  arm that does not finish with the oracle reads under it; both fail, so every arm of such a
+  class must finish with it. The script refuses a `rareOracle` whose source calls anything but
+  `StrictMath`, creates an object or names the Vector API, and fails a run without its row.
 - **On Arm the check runs the preferred rows, and they pass.** GitHub's Arm runners have 128-bit
   vectors (`MaxVectorSize=16 UseSVE=2` on all 332 Arm jobs of `HARDWARE.md`, "What the pool
   gives"), so the preferred species is 128 bits there and a `*256` row would run in the Java
