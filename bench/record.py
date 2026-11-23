@@ -65,8 +65,8 @@ under src/main/java and src/jmh/java that is not Java source, and module-info.ja
 package-info.java there, must be the same too, and src/test/resources if a test class is under
 the benchmark. git reads the files at both commits, in this script's clone, which must hold
 both commits; one it lacks is fetched from origin (a network call), and if that fails the runs
-are refused. A line "# Code:"
-under the run's line says which commits and files were compared, and check computes it again.
+are refused. A line "# Code:" under the run's line says which commits and files were
+compared, and check computes it again.
 
 `check` reads a results file's header lines, tables and raw section and compares them with what
 `write` makes from the artifact, and fails if they differ or if a marker line is still there.
@@ -573,7 +573,8 @@ def joined_files(directories, name=None):
                     note = code_note(len(blocks[of_class[cls]]) + 2, commits[0],
                                      commits[n - 1], cls)
                 except CodeDiffers as e:
-                    NOTES.append("run %d is not in %s: %s" % (n, of_class[cls], e))
+                    NOTES.append("the run given %s is not in %s: %s"
+                                 % (ordinal(n), of_class[cls], e))
                     continue
                 blocks[of_class[cls]].append(note + [title, "#"] + [
                     l for i, l in enumerate(block) if not (l == "#" and block[i - 1] == "#")])
@@ -788,12 +789,11 @@ def code_compared(first, later, classes):
     key = (first, later, tuple(sorted(classes)))
     if key in CODE_CACHE:
         return CODE_CACHE[key]
-    trees, code, closure = {}, {}, set()
+    trees, code, closure, unread = {}, {}, set(), {}
     for sha in (first, later):
         have_commit(sha)
         trees[sha] = tree(sha)
         declares = {}
-        unread = {}
         for path, data in trees[sha].items():
             if path.endswith(".java") and path.startswith(ROOTS):
                 what = "%s at %s" % (path, sha[:7])
@@ -802,8 +802,9 @@ def code_compared(first, later, classes):
                     names = top_level_types(code[sha, path][1])
                 except (Problem, UnicodeDecodeError) as e:
                     # A file this script cannot read is refused only if the closure needs it;
-                    # until then it declares every name it holds, so that it is not missed.
-                    unread[path] = ("%s is not UTF-8" % what) if isinstance(
+                    # until then it declares every name it holds, so that it is not missed
+                    # (a word of its prose may count, which can only refuse more).
+                    unread[sha, path] = ("%s is not UTF-8" % what) if isinstance(
                         e, UnicodeDecodeError) else str(e)
                     names = DECLARATION.findall(data.decode("utf-8", "replace"))
                 for name in names:
@@ -817,8 +818,8 @@ def code_compared(first, later, classes):
         mine = set()
         while todo:
             path = todo.pop()
-            if path in unread:
-                raise Problem(unread[path])
+            if (sha, path) in unread:
+                raise CodeDiffers(unread[sha, path])
             mine.add(path)
             for name in set(IDENTIFIER.findall(code[sha, path][1])):
                 todo |= declares.get(name, set()) - mine
@@ -836,7 +837,10 @@ def code_compared(first, later, classes):
             if pom_shape(a, "pom.xml at " + first[:7]) != pom_shape(b, "pom.xml at "
                                                                      + later[:7]):
                 differ.append(path)
-        elif path.endswith(".java"):
+        elif (first, path) in unread or (later, path) in unread:
+            differ.append("%s (not read: %s)" % (path, unread.get((first, path))
+                                                 or unread.get((later, path))))
+        elif (first, path) in code and (later, path) in code:
             if code[first, path][0] != code[later, path][0]:
                 differ.append(path)
         elif a != b:
@@ -954,6 +958,10 @@ def commit_of(directory):
     return (dict((k, v) for k, v in plain_header(lines)).get("Commit") or "").split(" ")[0]
 
 
+def ordinal(n):
+    return {1: "first", 2: "second", 3: "third"}.get(n, "%dth" % n)
+
+
 def code_differs(first, directory, classes):
     try:
         code_note(2, commit_of(first), commit_of(directory), classes)
@@ -966,8 +974,11 @@ def check_note(part, n, first, directory):
     """A later run's lines between its RUN_LINE and its title: the code note, recomputed from
     git at the two runs' commits, its words compared; nothing if they are at one commit."""
     # The code is compared first: a re-run of other code is refused whatever the file holds.
-    want = " ".join(" ".join(code_note(n, commit_of(first), commit_of(directory),
-                                       classes_of(part))).split())
+    try:
+        want = " ".join(" ".join(code_note(n, commit_of(first), commit_of(directory),
+                                           classes_of(part))).split())
+    except CodeDiffers as e:
+        return [str(e)]
     title = artifact_lines(directory)[0][0]
     if title not in part:
         return []  # check_run says the title is missing
@@ -1291,6 +1302,14 @@ def selftest_code(repo):
         raise AssertionError("a new module-info.java")
     except CodeDiffers as e:
         assert "module-info.java (only at %s)" % c7[:7] in str(e), e
+    # A file in the closure at one commit that cannot be read at the other is a difference.
+    c8 = commit({main + "Exp.java": files[main + "Exp.java"].replace("Lanes.one()", "1.0"),
+                 main + "Lanes.java": 'final class Lanes { String s = "\\u0022"; }\n'}, "gone")
+    try:
+        code_compared(c1, c8, ["ExpBenchmark"])
+        raise AssertionError("a file not read at one commit")
+    except CodeDiffers as e:
+        assert "Lanes.java (not read: " in str(e), e
     note = code_note(2, c1, c2, {"ExpBenchmark"})
     assert note[0].startswith("# Code:        Run 1 is at %s and run 2 at %s" % (c1[:7], c2[:7]))
     assert all(len(l) <= WIDTH for l in note) and "src/main/java/p: Exp.java, Lanes.java" in \
@@ -1340,16 +1359,13 @@ def selftest_code(repo):
             "exp-xeon8573c-2026-11-20.txt"]
         assert RUN_LINE % (2, 2) in mixed["log1p-xeon8573c-2026-11-20.txt"]
         assert len(NOTES) == 1 and NOTES[0].startswith(
-            "run 2 is not in exp-xeon8573c-2026-11-20.txt") and \
+            "the run given second is not in exp-xeon8573c-2026-11-20.txt") and \
             "src/main/java/p/Lanes.java" in NOTES[0], NOTES
         del NOTES[:]
         assert check(written(mixed["log1p-xeon8573c-2026-11-20.txt"]), [d, again]) == []
         assert check(written(mixed["exp-xeon8573c-2026-11-20.txt"]), [d, again]) == []
-        try:
-            check(written(two), [d, again])
-            raise AssertionError("a re-run of other code")
-        except CodeDiffers as e:
-            assert "src/main/java/p/Lanes.java" in str(e), e
+        found = check(written(two), [d, again])
+        assert any("run 2: " in x and "src/main/java/p/Lanes.java" in x for x in found), found
         # A middle run that lacks the class: the note numbers the run by its place in the file,
         # and the file checks against all three runs.
         with tempfile.TemporaryDirectory() as middle:
