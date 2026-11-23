@@ -719,8 +719,8 @@ class HypotTest {
         }
       });
       if (!process.waitFor(CHILD_SECONDS, TimeUnit.SECONDS)) {
-        throw new AssertionError(mode + ": the JVM did not finish in " + CHILD_SECONDS
-            + " s; its output:\n" + bytes.toString(StandardCharsets.UTF_8));
+        throw new AssertionError(label + ", " + mode + ": the JVM did not finish in "
+            + CHILD_SECONDS + " s; its output:\n" + bytes.toString(StandardCharsets.UTF_8));
       }
       drained.join();
     } finally {
@@ -729,7 +729,7 @@ class HypotTest {
     }
     String text = bytes.toString(StandardCharsets.UTF_8);
     System.out.println(label + ", " + mode + ":\n" + text);
-    assertEquals(0, process.exitValue(), mode + ":\n" + text);
+    assertEquals(0, process.exitValue(), label + ", " + mode + ":\n" + text);
     return text;
   }
 

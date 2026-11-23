@@ -216,7 +216,8 @@ class PowTest {
    * and its {@code scalbn}, which {@code reference/} does not hold, is {@code Math.scalb}
    * ({@link #scalbn}). The C's {@code lx} and {@code ly} are unsigned: they are tested against
    * zero (alone or ORed, lines 119-168), compared for equality with {@code j<<(52-k)} (line 138)
-   * and shifted right without sign (line 137), so an {@code int} holds their bits. Line 113's {@code i0} and {@code i1} are unused in the C and left out.
+   * and shifted right without sign (line 137), so an {@code int} holds their bits. Line 113's
+   * {@code i0} and {@code i1} are unused in the C and left out.
    */
   static double cPow(double x, double y, Variant variant, long[] paths) {
     double z;
@@ -684,7 +685,7 @@ class PowTest {
 
   /**
    * A negative {@code x} beside an integer or half-integer {@code y} (lines 131-144, 185, 188):
-   * {@code |y|} from 1 to 2^60, its exponent drawn evenly so that both sides of line 136's {@code
+   * {@code |y|} from 1 to 2^61, its exponent drawn evenly so that both sides of line 136's {@code
    * k > 20} and of line 133's 2^53 are drawn, and {@code |x|} near 1, a power of two, or anywhere.
    */
   static Inputs.Pairs integerPairs(long seed, int n) {
@@ -908,8 +909,9 @@ class PowTest {
   }
 
   /**
-   * Random bits, uniform draws of Varka's baseline range, every normal exponent of {@code x}, and
-   * subnormal {@code x} (line 213), each beside a {@code |y|} from 2^-12 to 2^12.
+   * Random bits for both arguments, uniform draws of Varka's baseline range ({@code x} in [1e-6,
+   * 1e6), {@code y} in [-10, 10)), and every normal exponent of {@code x} and subnormal {@code x}
+   * (line 213), these last two each beside a {@code |y|} from 2^-12 to 2^12.
    */
   static Inputs.Pairs densePairs(long seed, int n) {
     SplittableRandom random = new SplittableRandom(seed + 6);
@@ -934,8 +936,9 @@ class PowTest {
    */
   static Inputs.Pairs everything(long seed, int n) {
     return concat(specialPairs(), exactPairs(), fuzzPairs(seed, n), integerPairs(seed + 1, n),
-        hugeYPairs(seed + 2, n), targetPairs(seed + 3, n), minNormalPairs(seed + 4, Math.max(1, n >> 6)),
-        nanPairs(seed + 5, n), densePairs(seed + 6, n));
+        hugeYPairs(seed + 2, n), targetPairs(seed + 3, n),
+        minNormalPairs(seed + 4, Math.max(1, n >> 6)), nanPairs(seed + 5, n),
+        densePairs(seed + 6, n));
   }
 
   /** The pairs one after another. */
