@@ -91,6 +91,11 @@ vfdlibm ports fdlibm's double functions to the Java Vector API, each lane bit-id
   takes `common` (no lane takes a rare path) and `mixed` (rare lanes run); see `SKILLS.md`.
   CI runs it on x86 both ways and, for the `<arm>Preferred` methods, on the Arm runner, where
   the preferred species is 128 bits.
+  A port whose oracle allocates on the lanes it finishes (`pow`: `StrictMath.pow` does on some
+  inputs) adds an oracle baseline, a method `rareOracle` that calls `StrictMath` in a scalar
+  loop on exactly those lanes and does nothing else; the check runs it in the same run and fails
+  an arm only past the baseline's own allocation plus 1 B/op, refuses a baseline whose source
+  calls anything but `StrictMath`, and fails if its row is missing (`--selftest` shows each).
   A class that measures a port's bodies on other data and is not the port's benchmark is named
   otherwise (`ExpKindsBench`), so CI leaves it out; check it by name and on its own inputs
   before reading its times (`--include` with `--inputs`; the command is in its Javadoc). Its
