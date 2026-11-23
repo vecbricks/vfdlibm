@@ -230,7 +230,8 @@ and pass `dev/jar-check.sh --release`. The steps:
    both hosts against the release candidate (its files committed first): `bench/readme-table.py
    --write --tag v<version>`. Until the tag exists the script compares the files with HEAD's code
    and requires HEAD's pom version to be `<version>` or `<version>-SNAPSHOT` (a minor's release
-   pull request sets the pom to `<version>-SNAPSHOT` for it); once `dev/release.sh` has tagged,
+   pull request sets the pom to `<version>-SNAPSHOT` for it) and `CHANGELOG.md` to have the
+   heading `## [<version>]`; once `dev/release.sh` has tagged,
    with the tag's, which gives the same table, since the release commit's version, `<scm><tag>`
    and `project.build.outputTimestamp` are left out of the comparison. Between the merge of
    this pull request and the tag, `main` takes no change to code under a benchmark or to
@@ -249,7 +250,11 @@ and pass `dev/jar-check.sh --release`. The steps:
    the tag is `v<version>`, the pom says `<version>` and the tagged commit is on `main`
    (`dev/release-version.sh`), and builds the release's jars as a release would; ci.yml's jobs
    and the proofs under both solvers run on it too. Wait for it and for CI to be green: nothing
-   is uploaded yet, and a red tag is dropped by deleting it on origin and here.
+   is uploaded yet, and a red tag is dropped by deleting it on origin and here. While it is
+   dropped, `main` is past the release (its pom at the next `-SNAPSHOT`), and the README's
+   speedup table is checked against the "Release <version>" commit in `main`'s history, with a
+   note; tag the fixed release again, or set the table's marker back to the previous release
+   (`bench/readme-table.py --write --tag v<previous>`).
 4. `git checkout v<version> && mvn -B -Prelease clean deploy` builds the sources and Javadoc
    jars, signs them with the owner's key and uploads them to Central's portal; publish the
    deployment there, then `git checkout main`. The jars `dev/release.sh` checked and the jars

@@ -24,8 +24,12 @@ The release flow (AGENTS.md, "Releases", step 1): the release pull request, made
 dev/release.sh tags, sets the marker to the coming tag with --write --tag v<version>, after a
 benchmark pass on both hosts against the release candidate. While the tag does not exist (in
 this clone, nor at origin, from which it is fetched), the code compared is HEAD's, and HEAD's
-pom.xml must say <version> or <version>-SNAPSHOT, or the script refuses: so a marker cannot
-name a tag that is not coming next. In that window, from the release pull request's merge to
+pom.xml must say <version> or <version>-SNAPSHOT and HEAD's CHANGELOG.md must have the heading
+"## [<version>]", or the script refuses: so a marker cannot name a tag that is not coming next.
+If HEAD is past the release (its pom at the next -SNAPSHOT) and the tag was dropped after a red
+dry run, the code compared is that of the "Release <version>" commit in HEAD's history, with a
+note to tag it again or set the marker back to the previous release. Whether origin has the tag
+is asked with git ls-remote, whatever the locale. In that window, from the release pull request's merge to
 the tag, a change to the code under a benchmark or to pom.xml merged to main moves the table and
 fails --check: main takes nothing but the release until the tag is pushed. Once dev/release.sh
 has made the tag, the code compared is the tag's; the release commit changes only the pom's
@@ -38,9 +42,9 @@ always, and xeon6973p, epyc9v45 and neoversen2 once a results file of theirs exi
 holds two ratios, for the inputs common and mixed: the minimum of the file's scalarStrictMath row
 over the minimum of the default arm at the preferred species (its <arm>Preferred row), both of
 one run, in ns/op as the file's min/avg/max table gives them. Where a file holds a run and its
-re-run, the ratio is taken within each run and the lower one is shown. A ratio under 1.40 from
-a file of one run is marked: "(one run, near 1.3x)" from 1.30, "(one run, under 1.3x)" below,
-since AGENTS.md asks a claim under about 1.3x to be re-run.
+re-run, the ratio is taken within each run and the lower one is shown. From a file of one run,
+a ratio from 1.30 to under 1.40 is marked "(one run, near 1.3x)", and one under 1.30 shows no
+figure but "re-run needed", since AGENTS.md asks a claim under about 1.3x to be re-run.
 
 The file of a function and host is bench/results/<function>-<host>-<date>.txt whose benchmark
 class is <Function>Benchmark (so -kinds, -pair, -onediv and laptop files are not read): the
@@ -94,6 +98,7 @@ END = "<!-- end of speedup-table -->"
 NOT_MEASURED = "not measured"
 OLDER, NEWER = "older code", "newer code"
 NEAR, UNDER = decimal.Decimal("1.40"), decimal.Decimal("1.30")
+RERUN = "re-run needed"
 
 
 RECORD_POM_SHAPE = record.pom_shape
@@ -131,16 +136,23 @@ def pom_version(data):
 
 def reference(tag, version):
     """The commit whose code the table describes: the tag's, fetched from origin if this clone
-    lacks it; while the tag does not exist, HEAD's, if HEAD's pom.xml is that version's."""
+    lacks it; while the tag does not exist, HEAD's, if HEAD's pom.xml is that version's and
+    CHANGELOG.md has its heading; and if HEAD is past it, its release commit (a tag dropped
+    after a red dry run)."""
     sha = rev("refs/tags/" + tag)
     if not sha and record.git("remote", "get-url", "origin", check=False).returncode == 0:
-        done = record.git("fetch", "--quiet", "origin", "refs/tags/%s:refs/tags/%s" % (tag, tag),
-                          check=False, timeout=record.FETCH_TIMEOUT)
-        error = done.stderr.decode("utf-8", "replace").strip()
-        if done.returncode != 0 and "couldn't find remote ref" not in error:
+        # Whether origin has the tag, from ls-remote's output, not from git's words, which
+        # depend on the locale.
+        asked = record.git("ls-remote", "--tags", "origin", "refs/tags/" + tag, check=False,
+                           timeout=record.FETCH_TIMEOUT)
+        if asked.returncode != 0:
             raise record.Problem("the tag %s is not in this clone, and origin could not be asked"
-                                 " for it: %s" % (tag, error))
-        sha = rev("refs/tags/" + tag)
+                                 " for it: %s" % (tag, asked.stderr.decode("utf-8", "replace")
+                                                  .strip()))
+        if asked.stdout.strip():
+            record.git("fetch", "--quiet", "origin", "refs/tags/%s:refs/tags/%s" % (tag, tag),
+                       timeout=record.FETCH_TIMEOUT)
+            sha = rev("refs/tags/" + tag)
     if sha:
         tags = [t for t in record.git("tag", "-l", "v*").stdout.decode().split()
                 if re.fullmatch(r"v\d+\.\d+\.\d+", t)]
@@ -151,11 +163,29 @@ def reference(tag, version):
         return sha, False
     head = rev("HEAD")
     have = pom_version(record.tree(head)["pom.xml"])
-    if have not in (version, version + "-SNAPSHOT"):
-        raise record.Problem("the tag %s does not exist here or at origin, and HEAD's pom.xml"
-                             " says %s, not %s or %s-SNAPSHOT: the marker names a release that"
-                             " is neither made nor coming next" % (tag, have, version, version))
-    return head, True
+    if have in (version, version + "-SNAPSHOT"):
+        log = record.git("show", "HEAD:CHANGELOG.md", check=False).stdout.decode("utf-8",
+                                                                                 "replace")
+        if not re.search(r"^## \[%s\]" % re.escape(version), log, re.M):
+            raise record.Problem("the tag %s is not made, and CHANGELOG.md has no '## [%s]'"
+                                 " heading: the release pull request adds it with the table"
+                                 % (tag, version))
+        return head, True
+    # Past the release: dev/release.sh's "Release <version>" commit, whose pom says <version>,
+    # is in HEAD's history, and its tag is not made (dropped after a red dry run).
+    for line in record.git("log", "--format=%H %s", "HEAD").stdout.decode().splitlines():
+        sha, _, subject = line.partition(" ")
+        if subject == "Release " + version and pom_version(
+                record.tree(sha)["pom.xml"]) == version:
+            print("bench/readme-table.py: note: the tag %s is not made, and HEAD's history holds"
+                  " its release commit %s, whose code is compared: tag it again, or set the"
+                  " README's marker back to the previous release" % (tag, sha[:7]),
+                  file=sys.stderr)
+            return sha, True
+    raise record.Problem("the tag %s does not exist here or at origin, HEAD's pom.xml says %s,"
+                         " not %s or %s-SNAPSHOT, and HEAD's history has no 'Release %s'"
+                         " commit: the marker names a release that is neither made nor coming"
+                         " next" % (tag, have, version, version, version))
 
 
 def java(src, path):
@@ -180,7 +210,9 @@ CONSTANT = r"[A-Z][A-Z0-9_]*"
 
 
 def arm_of_constant(constant):
-    arm = constant.lower()
+    """An arm's constant as its benchmark methods name it: BLEND as blended, ONE_DIV as oneDiv."""
+    words = constant.lower().split("_")
+    arm = words[0] + "".join(w.capitalize() for w in words[1:])
     return "blended" if arm == "blend" else arm
 
 
@@ -254,7 +286,7 @@ def width_of(header, path):
 
 def cell(runs, cls, arm):
     """The cell's text from a file's runs: 'common / mixed', each the lowest of the runs'
-    ratios, marked if one run gives it under 1.40, or what is missing."""
+    ratios, marked or replaced if one run gives it under 1.40, or what is missing."""
     out = []
     for kind in KINDS:
         need = ("%s.scalarStrictMath" % cls, "%s.%sPreferred" % (cls, arm))
@@ -270,10 +302,12 @@ def cell(runs, cls, arm):
             out.append("no %s row" % " or ".join(sorted(lacks)))
             continue
         low = min(ratios)
-        mark = ""
-        if len(runs) == 1 and low < NEAR:
-            mark = " (one run, %s 1.3x)" % ("near" if low >= UNDER else "under")
-        out.append("%sx%s" % (low, mark))
+        if len(runs) == 1 and low < UNDER:
+            out.append(RERUN)  # AGENTS.md: a claim under about 1.3x is re-run first
+        elif len(runs) == 1 and low < NEAR:
+            out.append("%sx (one run, near 1.3x)" % low)
+        else:
+            out.append("%sx" % low)
     return " / ".join(out)
 
 
@@ -352,7 +386,7 @@ def table_and_state(root, tag):
                 commits = [(h.get("Commit") or "").split(" ")[0] for h, _ in runs]
                 if not all(commits):
                     continue  # a run with no Commit line in its header: older code
-                newest = newest or commits[0]
+                newest = newest or commits[-1]
                 if all(same_code(c, ref, cls) for c in commits):
                     for h, _ in runs:
                         widths.setdefault(host, {}).setdefault(width_of(h, path), path)
@@ -376,8 +410,8 @@ def table_and_state(root, tag):
         "For vfdlibm %s (tag %s). Each figure is `StrictMath` called once per lane (the"
         " `scalarStrictMath` row) over the function's default arm at the host's preferred"
         " species (its `<arm>Preferred` row), by minimum ns/op within one run; where a file"
-        " holds a run and its re-run, the lower of the two runs' ratios is shown, and a ratio"
-        " under 1.4x from one run is marked, since it is not re-run. `common`: no lane takes a"
+        " holds a run and its re-run, the lower of the two runs' ratios is shown; from one run, a"
+        " ratio under 1.4x is marked, and one under 1.3x says \"re-run needed\". `common`: no lane takes a"
         " rare path; `mixed`: rare lanes run. The preferred species is %s. \"older code\" and"
         " \"newer code\": the files of that function and host time code older or newer than"
         " the release's; \"not measured\": there is no file. The figures come from the newest"
@@ -550,6 +584,13 @@ def selftest_in(repo):
         made.append(message)
         return rev("HEAD")
 
+    def tag(name, sha):
+        subprocess.run(["git", "-C", repo, "-c", "tag.gpgSign=false", "-c",
+                        "commit.gpgsign=false", "tag", name, sha], check=True)
+
+    def untag(name):
+        subprocess.run(["git", "-C", repo, "tag", "-d", name], check=True, capture_output=True)
+
     def body(tag):
         record.CODE_CACHE.clear()
         lines = table(repo, tag)
@@ -597,14 +638,17 @@ def selftest_in(repo):
                 (c1, 32, {k: v for k, v in mins("finishPreferred", 800.0, 600.0).items()
                           if k != ("finishPreferred", "mixed")})])}, "files")
 
-    # v0.1.1 is coming: no tag, and HEAD's pom says 0.1.1-SNAPSHOT, so HEAD's code is compared.
+    # v0.1.1 is coming once CHANGELOG.md has its heading: no tag, and HEAD's pom says
+    # 0.1.1-SNAPSHOT, so HEAD's code is compared.
+    refused("v0.1.1", "CHANGELOG.md has no '## [0.1.1]' heading")
+    commit({"CHANGELOG.md": "# Changelog\n\n## [0.1.1] - 2026-11-24\n"}, "changelog")
     # Each run's ratio: 1000/200 and 1100/400 in run 1, 900/250 and 1200/500 in run 2; the
     # lower of each kind is shown. One run's 1100/800 and 1000/800 are marked.
     coming = [
         "| Function | xeon8573c (AVX-512): common / mixed | epyc7763 (AVX2): common / mixed |",
         "|---|---|---|",
         "| `exp` | 3.60x / 2.40x | 3.33x / 1.38x (one run, near 1.3x) |",
-        "| `atan` | older code | 1.25x (one run, under 1.3x) / no finishPreferred row |",
+        "| `atan` | older code | re-run needed / no finishPreferred row |",
         "| `hypot` | not measured | not measured |"]
     got = body("v0.1.1")
     assert got == coming, got
@@ -679,21 +723,39 @@ def selftest_in(repo):
 
     # An arm constant of digits and underscores is read, not taken for a body in place.
     commit({main + "Exp.java": EXP.replace("FINISH", "ONE_DIV")}, "constant")
-    refused("v0.1.1", "ExpBenchmark has no one_divPreferred()")
+    refused("v0.1.1", "ExpBenchmark has no oneDivPreferred()")
     commit({main + "Exp.java": EXP}, "undo")
 
     # dev/release.sh: the release commit (version and <scm><tag>), the tag, the next snapshot.
     rel = commit({"pom.xml": POM.replace("0.1.1-SNAPSHOT", "0.1.1").replace(
         "<tag>HEAD</tag>", "<tag>v0.1.1</tag>")}, "Release 0.1.1")
-    subprocess.run(["git", "-C", repo, "tag", "v0.1.1", rel], check=True)
+    tag("v0.1.1", rel)
     commit({"pom.xml": POM.replace("0.1.1-SNAPSHOT", "0.1.2-SNAPSHOT")}, "Start 0.1.2")
     # The tag's code is the same as the files', <scm><tag> and the version aside, so the
     # README of the release pull request, which dev/release.sh leaves as it is, still checks.
     assert body("v0.1.1") == coming, body("v0.1.1")
     assert check(repo, "README.md") == []
+    # The tag dropped after a red dry run, main past it: the release commit's code is compared.
+    untag("v0.1.1")
+    assert body("v0.1.1") == coming, body("v0.1.1")
+    tag("v0.1.1", rel)
+    # A tag missing here is fetched from origin, asked by ls-remote; an origin that cannot be
+    # asked is an error, not a release to come.
+    with tempfile.TemporaryDirectory(prefix="readme-table-origin-") as origin:
+        subprocess.run(["git", "init", "-q", "--bare", origin], check=True)
+        subprocess.run(["git", "-C", repo, "remote", "add", "origin", origin], check=True)
+        subprocess.run(["git", "-C", repo, "push", "-q", "origin", "v0.1.1"], check=True)
+        untag("v0.1.1")
+        assert body("v0.1.1") == coming and rev("refs/tags/v0.1.1") == rel
+        untag("v0.1.1")
+        subprocess.run(["git", "-C", repo, "remote", "set-url", "origin", origin + ".missing"],
+                       check=True)
+        refused("v0.1.1", "origin could not be asked")
+        subprocess.run(["git", "-C", repo, "remote", "remove", "origin"], check=True)
+        tag("v0.1.1", rel)
 
     # An older release's tag is refused: the table is of the latest.
-    subprocess.run(["git", "-C", repo, "tag", "v0.1.0", c0], check=True)
+    tag("v0.1.0", c0)
     refused("v0.1.0", "v0.1.0 is not the latest release, v0.1.1 is")
     # VFdlibm.exp that takes another arm than Exp.exp's default: its row is refused.
     undo = {main + "VFdlibm.java": VFDLIBM}
@@ -701,9 +763,9 @@ def selftest_in(repo):
                                                    "return Exp.expBlended(x, null)")}, "front")
     rel2 = commit({"pom.xml": POM.replace("0.1.1-SNAPSHOT", "0.1.2").replace(
         "<tag>HEAD</tag>", "<tag>v0.1.2</tag>")}, "Release 0.1.2")
-    subprocess.run(["git", "-C", repo, "tag", "v0.1.2", rel2], check=True)
+    tag("v0.1.2", rel2)
     refused("v0.1.2", "ExpBenchmark.finishPreferred calls exp, expBlended")
-    subprocess.run(["git", "-C", repo, "tag", "-d", "v0.1.2"], check=True, capture_output=True)
+    untag("v0.1.2")
     commit(dict(undo, **{"pom.xml": POM.replace("0.1.1-SNAPSHOT", "0.1.2-SNAPSHOT")}), "undo")
 
     # On main after the tag: a code change, a new function and another JMH change nothing.
@@ -730,8 +792,8 @@ def selftest_in(repo):
         " | epyc7763 (AVX2): common / mixed |",
         "|---|---|---|---|",
         "| `exp` | 3.60x / 2.40x | not measured | 3.33x / 1.38x (one run, near 1.3x) |",
-        "| `atan` | older code | 8.00x / 1.00x (one run, under 1.3x) | 1.25x (one run, under"
-        " 1.3x) / no finishPreferred row |",
+        "| `atan` | older code | 8.00x / re-run needed | re-run needed / no finishPreferred"
+        " row |",
         "| `hypot` | not measured | not measured | newer code |"], got
     assert check(repo, "README.md") != []  # a results file changed the table: --write again
     assert hypot
