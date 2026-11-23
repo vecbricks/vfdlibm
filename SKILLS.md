@@ -1000,17 +1000,18 @@ blend and 10 to 23 instructions. At 128 bits the bodies are 8 to 16 times longer
     `pool.py` table): 210 in the sweep, 301 in the fuzz and 209 on Arm, 65.4 a function by the mean,
     and atan2 the most, 87 (35.1 of sweep in 2 jobs, 29.2 of fuzz in 2, 22.7 on Arm in 4). hypot
     adds 8 jobs (2 sweep, 2 fuzz, 4 Arm), and at atan2's cost about 87 runner-minutes, 807 a night.
-    For the span, replaying that night's jobs in matrix order on 6, 8 and 5 slots gives 46 to 47
-    minutes for each kind where the night took 49 (fuzz) to 58 (Arm), since the gaps between one job
-    and the next are not modelled; so the model's increase is added to the measured 57.8, not its
-    total: with hypot's jobs at atan2's durations Arm, the kind that ended last, gains 4.4 minutes
-    (the sweep 1.1, the fuzz 0.1), and with them at each kind's longest job 8.4 (3.8 and 4.1), a
-    span of about 62 to 66 minutes, under the budget's 90. It is an estimate on one night, with
-    hypot's cost assumed to be atan2's, not a reading, and high for the sweep, since atan2's sweep
-    checks two arms and hypot's one (the fuzz runs a fixed time whatever the arms, so its minutes
-    are the same); the first nights with twelve are the measurement, read as above. The plan job at
-    the defaults makes 24 sweep entries, 48 for Arm and 24 for the fuzz; 16 shards make 192 sweep
-    entries (224 with `both`), and 32 shards of all twelve (384) are refused.
+    For the span, replaying that night's jobs in the order they started on 6, 8 and 5 slots, hypot's
+    appended at the end, gives 46 to 47 minutes for each kind where the night took 49 (fuzz) to 58
+    (Arm), since the gaps between one job and the next are not modelled; so the model's increase is
+    added to the measured 57.8, not its total: with hypot's jobs at atan2's durations Arm, the kind
+    that ended last, gains 4.4 minutes (the sweep 1.1, the fuzz 0.1), and with them at each kind's
+    longest job 8.4 (3.8 and 4.1), a span of about 62 to 66 minutes, under the budget's 90. It is an
+    estimate on one night, with hypot's cost assumed to be atan2's, not a reading, and high for the
+    sweep, since atan2's sweep checks two arms and hypot's one (the fuzz runs a fixed time whatever
+    the arms, so its minutes are the same); the first nights with twelve are the measurement, read
+    as above. The plan job at the defaults makes 24 sweep entries, 48 for Arm and 24 for the fuzz;
+    16 shards make 192 sweep entries (224 with `both`), and 32 shards of all twelve (384) are
+    refused.
   - **Slots 6, 8 and 5, and the 20 jobs (21 November 2026).** The matrices' `max-parallel` is 6
     for the sweep, 8 for the fuzz and 5 for Arm: 19, and the proofs job makes 20, all of the free
     plan's jobs while the matrices are full. The plan job runs before them and the fault-caught
