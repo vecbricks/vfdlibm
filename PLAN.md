@@ -42,8 +42,7 @@ own logarithm and exponential and calls only `sqrt`, `fabs` and `scalbn`. `sinh`
 (`VFdlibm.sinh`, from `e_sinh.c`, computing through `expm1`'s common path below 22 and finishing
 the rest per lane), and so is `cosh` (`VFdlibm.cosh`, from `e_cosh.c`, through `exp`'s common path
 and expm1's `k == 0` lines, with two arms for its small range: the default arm is the slice arm,
-provisionally: the host files of 21 November read the finish arm lower on every `CoshBenchmark`
-row, by ratios near 1.3x or inside it, and decide neither). `asin` is done
+provisionally, until a host run decides, section 5). `asin` is done
 too (`VFdlibm.asin`, from `e_asin.c`, with `sqrt` as the Vector API's `SQRT`, one arm, and the
 lanes of `|x| >= 1` finished per lane), and so is `atan` (`VFdlibm.atan`, from `s_atan.c`, five
 ranges through one division on blended operands, the lanes from `2^66` up finished per lane), and
@@ -102,15 +101,13 @@ five are a later, optional set; the large-argument reduction of the trigonometri
   -XX:MaxVectorSize=32`, 128 and 256 bits on every draw), on x86 with `-XX:MaxVectorSize=16`
   (all of it at 128 bits) and on Arm (128 bits).
 - **Nightly:** `.github/workflows/nightly.yml` sweeps every high word of exp, expm1, log, log10,
-  log1p, sinh, cosh, atan, asin, acos and atan2 (atan2, of two arguments, one argument at a time)
-  with three low words each (every branch fdlibm decides on the high word) at every width but 128
-  bits on x86, where a rotating 1/32 slice a night covers it in 32 nights, and at 128 bits on Arm
-  every night; it fuzzes from a fresh seed at every width, and runs every proof under both solvers;
-  a failure opens an issue labelled `nightly-failure` with the mismatching inputs, ready for a
-  `hard-cases` file (`SKILLS.md`), and a dispatch that plants a fault, to test that alert, opens one
-  labelled `nightly-fault-test`. `hypot` is registered with `Sweep` and `Fuzz`
-  (`Nightly.PairFunction.HYPOT`), so a slice runs by hand, but the night does not list it yet: a
-  later pull request adds it to `nightly.yml`, as #126 did for atan2 after its port.
+  log1p, sinh, cosh, atan, asin, acos, atan2 and hypot (atan2 and hypot, of two arguments, one
+  argument at a time) with three low words each (every branch fdlibm decides on the high word) at
+  every width but 128 bits on x86, where a rotating 1/32 slice a night covers it in 32 nights, and
+  at 128 bits on Arm every night; it fuzzes from a fresh seed at every width, and runs every proof
+  under both solvers; a failure opens an issue labelled `nightly-failure` with the mismatching
+  inputs, ready for a `hard-cases` file (`SKILLS.md`), and a dispatch that plants a fault, to test
+  that alert, opens one labelled `nightly-fault-test`.
 - **Masked forms:** a masked form is checked under seeded random masks, all-true and all-false;
   active lanes must equal `StrictMath` and inactive lanes must keep the input's raw bits (for a
   two-argument function, the first argument's).
@@ -155,15 +152,24 @@ five are a later, optional set; the large-argument reduction of the trigonometri
   out of both rules; a later run's `*Max` rows time today's finish. On the other rows no function
   needs rule 2 yet, so `VFdlibm` runs one arm at every species. Every default stays provisional
   until a host run revises it. Meanwhile `VFdlibm` calls the finish arm of `exp`, `log` and `log10`;
-  the guarded arm of `expm1` and `log1p`, by the owner's deferral of rule 1 until the 8573C's second
-  run (issue #30, 21 November); the slice arm of `cosh`, provisionally, as the rule's exception
-  (`bench/results/cosh-xeon8573c-2026-11-21.txt` and `cosh-epyc7763-2026-11-21.txt` read the finish
-  arm lower on every row by ratios near 1.3x or inside it, and give no direction); and the guarded
-  arm of `atan2`, which has no finish arm, so rule 1 does not pick between its two ([issue #30's
-  corrected comment](https://github.com/vecbricks/vfdlibm/issues/30#issuecomment-7085437272)).
-  Neither host's file gives the arms a direction (`atan2-xeon8573c-2026-11-22.txt`, inside 1.3x;
-  `atan2-epyc7763-2026-11-22.txt`, near 1.3x or inside it, one run), so guarded stays the default at
-  every species by the owner's decision of 22 November until a re-run of each host.
+  the guarded arm of `expm1` and `log1p`, by the owner's deferral of rule 1 (issue #30, 21 November)
+  until a second run, on the 8573C, of the code the 22 November files time (those files are the
+  first run of it); the slice arm of `cosh`, provisionally, as the rule's exception, whose arm a
+  host run decides ([issue #30's
+  comment](https://github.com/vecbricks/vfdlibm/issues/30#issuecomment-7091848602); its readings are
+  under the list); and the guarded arm of `atan2`, which has no finish arm, so rule 1 does not pick
+  between its two ([issue #30's corrected
+  comment](https://github.com/vecbricks/vfdlibm/issues/30#issuecomment-7085437272)). Each host has
+  timed atan2's arms in a run and a re-run (`atan2-xeon8573c-2026-11-22.txt`,
+  `atan2-epyc7763-2026-11-22.txt`), and neither file gives them a direction, so guarded stays the
+  default at every species by the owner's decision of 22 November.
+  cosh's readings, by minimums: on `CoshBenchmark` the EPYC 7763's two runs agree, outside 1.3x, on
+  the finish arm lower on common data (slice over finish 1.33 to 1.37), a direction, and give no
+  direction on mixed data (`bench/results/cosh-epyc7763-2026-11-21.txt`); on `CoshKindsBench` the
+  finish arm reads lower outside 1.3x with no small lane (1.46 to 1.70 on both hosts), lower inside
+  1.3x at 3.5% of small lanes, and the slice arm lower inside 1.3x at 17%
+  (`cosh-kinds-epyc7763-2026-11-21.txt`, `cosh-kinds-xeon8573c-2026-11-21.txt`). The Xeon 8573C has
+  one `CoshBenchmark` run (`cosh-xeon8573c-2026-11-21.txt`); a second run decides.
 
 ## 6. Rules
 

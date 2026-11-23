@@ -969,28 +969,54 @@ blend and 10 to 23 instructions. At 128 bits the bodies are 8 to 16 times longer
     has not been rerun for eight, and atan's own cost is not measured, nor are sinh's and
     cosh's: the first nights with them are, with `pool.py fetch` and `cost`, and this entry is
     requoted from those.
-  - **Eleven functions: unmeasured.** asin, acos and atan2 join the night's list, so the scheduled
-    night runs eleven (atan2 sweeps one argument a night by `pair-passes=alternate`, so its jobs are
-    one function's worth at the defaults), and no night has run them. Everything here is an
-    extrapolation, not a reading. An estimate made for ten functions of one argument, not derived in
-    this document, was about 730 runner-minutes at the default 2 shards and 4 Arm shards (the 72
-    runner-minutes a function of the budget entry above would give 720); atan2 adds a function whose
-    cost is not estimated. The plan job at the defaults makes 22 sweep entries, 44 for Arm and 22
-    for the fuzz, against the 256 each may hold; a run of nine or more functions at 32 shards (288
-    for nine, more for eleven) exceeds that cap and the plan job refuses it, and eight fit. No span
-    is modelled here: the entry below computes its figures for eight functions (about 72 minutes);
-    scaling that by the count of functions gives about 90 for ten and 99 for eleven, the budget's 90
-    and over it, which is arithmetic on an extrapolation and no prediction. The first nights with
-    eleven are the measurement, read as above; the levers below are the answer if the median passes
-    90. **What `alternate` does about the slice:** the argument it picks is `days / nights % 2 + 1`
-    and the slice's night is `days % slice-nights`, and at the defaults (1 and 32) the parity of the
-    day is the parity of the slice's index, so a slice would keep one argument for good, half of
-    each argument's 128-bit slices never swept. The rotation therefore turns over once every
-    `slice-nights` nights when `nights` is below it (`(days / nights + days / slice-nights) % 2 +
-    1`), so a slice meets both arguments in two cycles of 32 nights, and the same argument is swept
-    on two nights running at each turn. Simulated over 20000 days for `nights` and `slice-nights` of
-    1 and 32, 2 and 32, 4 and 32, 32 and 32, 64 and 32, 1 and 1, and 2 and 1, every slice meets
-    both; the plan job was not run on a real night. `pair-passes=both` sweeps both every night.
+  - **Eleven functions: unmeasured when written (21 November 2026).** This entry was written before
+    a night ran them, and its extrapolations below, the 99 minutes for eleven among them, are of
+    that day: the first scheduled night of eleven took a span of 57.8 minutes and 720 runner-minutes
+    (the entry on twelve functions, below, with its file). asin, acos and atan2 join the night's
+    list, so the scheduled night runs eleven (atan2 sweeps one argument a night by
+    `pair-passes=alternate`, so its jobs are one function's worth at the defaults), and no night has
+    run them. Everything here is an extrapolation, not a reading. An estimate made for ten functions
+    of one argument, not derived in this document, was about 730 runner-minutes at the default 2
+    shards and 4 Arm shards (the 72 runner-minutes a function of the budget entry above would give
+    720); atan2 adds a function whose cost is not estimated. The plan job at the defaults makes 22
+    sweep entries, 44 for Arm and 22 for the fuzz, against the 256 each may hold; a run of nine or
+    more functions at 32 shards (288 for nine, more for eleven) exceeds that cap and the plan job
+    refuses it, and eight fit. No span is modelled here: the entry below computes its figures for
+    eight functions (about 72 minutes); scaling that by the count of functions gives about 90 for
+    ten and 99 for eleven, the budget's 90 and over it, which is arithmetic on an extrapolation and
+    no prediction. The first nights with eleven are the measurement, read as above; the levers below
+    are the answer if the median passes 90. **What `alternate` does about the slice:** the argument
+    it picks is `days / nights % 2 + 1` and the slice's night is `days % slice-nights`, and at the
+    defaults (1 and 32) the parity of the day is the parity of the slice's index, so a slice would
+    keep one argument for good, half of each argument's 128-bit slices never swept. The rotation
+    therefore turns over once every `slice-nights` nights when `nights` is below it (`(days / nights
+    + days / slice-nights) % 2 + 1`), so a slice meets both arguments in two cycles of 32 nights,
+    and the same argument is swept on two nights running at each turn. Simulated over 20000 days for
+    `nights` and `slice-nights` of 1 and 32, 2 and 32, 4 and 32, 32 and 32, 64 and 32, 1 and 1, and
+    2 and 1, every slice meets both; the plan job was not run on a real night. `pair-passes=both`
+    sweeps both every night.
+  - **Twelve functions: an estimate from the eleven's night (23 November 2026).** hypot joins the
+    list as a second function of two arguments (`pairs`), swept one argument a night by `alternate`,
+    the same argument as atan2's every night (one rotation for both). The scheduled night of 22
+    November (run 44994568244, eleven functions, slots 6, 8 and 5) took 720 runner-minutes and a
+    span of 57.8 minutes, by `bench/pool/pool.py cost bench/pool/nightly-cost-2026-11-22.tsv` (its
+    row for that run; the file also holds the day's dispatch, run 44999281363, of six functions at 8
+    shards with both arguments of atan2, no night of the defaults): 210 in the sweep, 301 in the
+    fuzz and 209 on Arm, 65.4 a function by the mean, and atan2 the most, 87, summed from that run's
+    rows of atan2's jobs in the file (35.1 of sweep in 2 jobs, 29.2 of fuzz in 2, 22.7 on Arm in 4).
+    hypot adds 8 jobs (2 sweep, 2 fuzz, 4 Arm), and at atan2's cost about 87 runner-minutes, 807 a
+    night. For the span, replaying that night's jobs in the order they started on 6, 8 and 5 slots,
+    hypot's appended at the end, gives 46 to 47 minutes for each kind where the night took 49 (fuzz)
+    to 58 (Arm), since the gaps between one job and the next are not modelled; so the model's
+    increase is added to the measured 57.8, not its total: with hypot's jobs at atan2's durations
+    Arm, the kind that ended last, gains 4.4 minutes (the sweep 1.1, the fuzz 0.1), and with them at
+    each kind's longest job 8.4 (3.8 and 4.1), a span of about 62 to 66 minutes, under the budget's
+    90. It is an estimate on one night, with hypot's cost assumed to be atan2's, not a reading, and
+    high for the sweep, since atan2's sweep checks two arms and hypot's one (the fuzz runs a fixed
+    time whatever the arms, so its minutes are the same); the first nights with twelve are the
+    measurement, read as above. The plan job at the defaults makes 24 sweep entries, 48 for Arm and
+    24 for the fuzz; 16 shards make 192 sweep entries (224 with `both`), and 32 shards of all twelve
+    (384) are refused.
   - **Slots 6, 8 and 5, and the 20 jobs (21 November 2026).** The matrices' `max-parallel` is 6
     for the sweep, 8 for the fuzz and 5 for Arm: 19, and the proofs job makes 20, all of the free
     plan's jobs while the matrices are full. The plan job runs before them and the fault-caught
@@ -1014,7 +1040,9 @@ blend and 10 to 23 instructions. At 128 bits the bodies are 8 to 16 times longer
     and not the shards bound the span. Which of these to give up first is the owner's.
   - **Not in it.** A cost of atan2's pair sweep: 13 times 72 assumes functions of one argument,
     and atan2 joined with no night of its own run, so its place in the arithmetic is an
-    assumption (one function's worth at the defaults), not a reading.
+    assumption (one function's worth at the defaults), not a reading. One night has read it since
+    (87 runner-minutes, the entry on twelve functions), and the 13-function figures here are not
+    requoted from it.
 - **When a night fails,** the `alert` job (the only one with `issues: write`) opens an issue
   labelled `nightly-failure`, or comments on the open one, with the run's link, the seed, each
   job's result, the dispatch inputs that replay the run (seed, `nights`, `shards`, `arm-shards`,
@@ -1108,18 +1136,17 @@ blend and 10 to 23 instructions. At 128 bits the bodies are 8 to 16 times longer
   only on `|x| < 0.5*ln2`, so their cost follows the share of that range, which is 3.5% in
   Varka's baseline benchmark and 17% in Spark's unit tests (issue #32): at 8 lanes a vector
   holds one in 27% and 82% of the cases. `CoshKindsBench` has those two shares, and
-  `CoshBenchmark`'s common data 0.6% of them. A laptop run under load read no direction and was
-  not kept. Each host has since run both classes once
-  (`bench/results/cosh-xeon8573c-2026-11-21.txt`, `cosh-epyc7763-2026-11-21.txt`,
-  `cosh-kinds-xeon8573c-2026-11-21.txt` and `cosh-kinds-epyc7763-2026-11-21.txt`), and no file
-  decides the arm: on `CoshBenchmark` the finish arm reads lower on every row, slice over finish
-  1.24 to 1.35 on the Xeon 8573C and 1.29 to 1.35 on the EPYC 7763, ratios near 1.3x or inside
-  it that give no direction until a re-run; on `CoshKindsBench` the finish arm reads lower by
-  more than 1.3x only on data with no small lane, and the arms read within 1.3x of each other,
-  with no direction, at 3.5% and 17% of small lanes, Varka's and Spark's shares. cosh is the
-  named exception to issue #30's tie rule (its per-lane set is not rare, so a host run decides),
-  so the default is still the plan's baseline design, not a measurement, and stays provisional
-  until a host run decides it.
+  `CoshBenchmark`'s common data 0.6% of them. A laptop run under load read no direction and was not
+  kept. The slice arm stays the default, provisionally, as the named exception to issue #30's tie
+  rule (its per-lane set is not rare, so a host run decides; [issue #30's
+  comment](https://github.com/vecbricks/vfdlibm/issues/30#issuecomment-7091848602)). The readings,
+  by minimums: on `CoshBenchmark` the EPYC 7763's two runs agree, outside 1.3x, on the finish arm
+  lower on common data (slice over finish 1.33 to 1.37), a direction, and give no direction on mixed
+  data (`bench/results/cosh-epyc7763-2026-11-21.txt`); on `CoshKindsBench` the finish arm reads
+  lower outside 1.3x with no small lane (1.46 to 1.70 on both hosts), lower inside 1.3x at 3.5% of
+  small lanes, and the slice arm lower inside 1.3x at 17% (`cosh-kinds-epyc7763-2026-11-21.txt`,
+  `cosh-kinds-xeon8573c-2026-11-21.txt`). The Xeon 8573C has one `CoshBenchmark` run
+  (`cosh-xeon8573c-2026-11-21.txt`); a second run decides.
 - **Which exp faults reach cosh.** `exp.dropCorrection` and `exp.constantOffByOneUlp`, which
   change `expCore`'s lanes of `|x| >= 0.5 ln2`. `exp.thresholdMoved` moves the subnormal
   scale-back, which `expCore` leaves out, and `exp.dropKForcing` the lanes of the word of 0.5
@@ -1269,15 +1296,13 @@ blend and 10 to 23 instructions. At 128 bits the bodies are 8 to 16 times longer
   `bench/alloc-check.py` passes on the `Atan2Benchmark` rows (`blended` and `guarded`, at 256 bits,
   the preferred species and `SPECIES_MAX`, common and mixed data) at this laptop's flags and as an
   AVX2 host, and CI runs it. Those local readings are not committed, so no figure of them is
-  quoted. Each host has timed both arms once (`bench/results/atan2-xeon8573c-2026-11-22.txt` and
-  `atan2-epyc7763-2026-11-22.txt`): on the Xeon they read within 1.3x of each other at every
-  width, and on the EPYC 7763 near 1.3x or inside it, so neither file gives them a direction.
-  atan2 has no finish arm (both arms compute the special lanes in the vector; blended runs their
-  blends in every vector, guarded behind a test), so rule 1 of issue #30 does not pick between
-  them ([the issue's corrected
-  comment](https://github.com/vecbricks/vfdlibm/issues/30#issuecomment-7085437272)).
-  So guarded stays the default at every species by the owner's decision of 22 November until a
-  re-run of each host.
+  quoted. Each host has timed both arms in a run and a re-run
+  (`bench/results/atan2-xeon8573c-2026-11-22.txt` and `atan2-epyc7763-2026-11-22.txt`), and neither
+  file gives them a direction. atan2 has no finish arm (both arms compute the special lanes in the
+  vector; blended runs their blends in every vector, guarded behind a test), so rule 1 of issue #30
+  does not pick between them ([the issue's corrected
+  comment](https://github.com/vecbricks/vfdlibm/issues/30#issuecomment-7085437272)). So guarded
+  stays the default at every species by the owner's decision of 22 November.
 - **A lane the core must not see.** A NaN, an infinity or a huge `t` in a lane the special blends
   overwrite would send the vector to atan's per-lane finish. The mask `t < 2^66` keeps them out
   (a NaN compares false), and a vector with no special lane never reaches the finish.

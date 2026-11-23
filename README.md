@@ -187,14 +187,15 @@ fdlibm's own sequence of operations, lane by lane. That is this library.
   hosts disagree the files say so. The rules are set (issue #30): a tie within 1.3x on every host
   that has a file goes to the finish arm, except for `cosh`, whose arm a host run decides, and where
   hosts disagree each species keeps its own arm (no function needs that yet). `expm1` and `log1p`
-  stay on their guarded arm by the owner's deferral of the rule until the 8573C's second run. The
+  stay on their guarded arm by the owner's deferral of the rule until a second run, on the 8573C, of
+  the code its files of 22 November time. The
   `*Max` rows of the host files of 3 to 21 November for `exp`, `expm1`, `log`, `log10` and `log1p`
   (`exp-onediv-xeon8573c-2026-11-03.txt` and those of 20 and 21 November;
   `log1p-xeon8573c-2026-11-03.txt` and `expm1-xeon8573c-2026-11-04.txt` have no `*Max` row) time the
   finish that boxed before issue #37 and are left out of the rules. `atan2` has no finish arm, so
-  the rule does not pick between its two; neither host's file gives them a direction, and its
-  guarded arm stays the default at every species by the owner's decision until a re-run of each
-  host. Every default stays provisional until a host run revises it; `PLAN.md` section 5 gives each
+  the rule does not pick between its two; neither host's file gives them a direction after a run and
+  a re-run each, and its guarded arm stays the default at every species by the owner's decision.
+  Every default stays provisional until a host run revises it; `PLAN.md` section 5 gives each
   function's case. The laptop's numbers do not agree at every width.
 
 ## Testing
