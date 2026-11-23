@@ -191,8 +191,9 @@ fdlibm's own sequence of operations, lane by lane. That is this library.
   that has a file goes to the finish arm, except for `cosh`, whose arm a host run decides, and where
   hosts disagree each species keeps its own arm (no function needs that yet). By that rule `expm1`
   and `log1p` run the finish arm: their files of today's code (`expm1-xeon8573c-2026-11-22.txt`, a
-  run and a re-run, `expm1-epyc7763-2026-11-23.txt`, and the same for `log1p`) read no arm lower
-  than the finish by more than 1.3x at any species, a tie and not a speed-up. The
+  run and a re-run, `expm1-epyc7763-2026-11-23.txt`, the same, and the same for `log1p`) read no
+  arm lower than the finish by more than 1.3x at any species in any run, a tie and not a speed-up.
+  The
   `*Max` rows of the host files of 3 to 21 November for `exp`, `expm1`, `log`, `log10` and `log1p`
   (`exp-onediv-xeon8573c-2026-11-03.txt` and those of 20 and 21 November;
   `log1p-xeon8573c-2026-11-03.txt` and `expm1-xeon8573c-2026-11-04.txt` have no `*Max` row) time the

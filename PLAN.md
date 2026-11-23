@@ -163,7 +163,7 @@ five are a later, optional set; the large-argument reduction of the trigonometri
   `expm1` and `log1p`, the last two by rule 1 since the 8573C's second run of their code, which the
   owner's deferral of 21 November waited for: by minimums neither other arm is lower than the
   finish by more than 1.3x at any species, in both runs of `expm1-xeon8573c-2026-11-22.txt` and
-  `log1p-xeon8573c-2026-11-22.txt` and in `expm1-epyc7763-2026-11-23.txt` and
+  `log1p-xeon8573c-2026-11-22.txt` and of `expm1-epyc7763-2026-11-23.txt` and
   `log1p-epyc7763-2026-11-23.txt`, a tie, with the guarded arm lower inside 1.3x on some mixed rows;
   the slice arm of `cosh`, provisionally, as the rule's exception, whose arm a
   host run decides ([issue #30's

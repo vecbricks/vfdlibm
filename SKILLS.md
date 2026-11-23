@@ -212,7 +212,8 @@ belongs here too, since it stops the next port re-trying a settled question.
   host files of today's finish read its `*Max` rows on mixed data as allocation-free too: the Xeon
   Platinum 8573C's of 22 November for expm1, log, log10 and log1p (`expm1-xeon8573c-2026-11-22.txt`
   and its three siblings, a run and a re-run) and the EPYC 7763's of 23 November for expm1 and
-  log1p (`expm1-epyc7763-2026-11-23.txt`, `log1p-epyc7763-2026-11-23.txt`), every `finishMax` row
+  log1p (`expm1-epyc7763-2026-11-23.txt`, `log1p-epyc7763-2026-11-23.txt`, a run and a re-run
+  too), every `finishMax` row
   under 0.05 B/op.
 - **At two 64-bit lanes x86 C2 lowers no mask.** Compare to mask, blend, mask cast, mask
   broadcast, logic and test are `not supported` at `vlen=2` for double and long masks, and fine
@@ -848,10 +849,11 @@ mnemonic); the other operations count the same at both widths.
   and on the Xeon 512 bits. On the Xeon Platinum 8573C
   (`bench/results/log1p-xeon8573c-2026-11-22.txt`, a run and a re-run) guarded over finish is 0.96
   to 1.02 on common data and 0.85 to 0.93 on mixed data, and blended over finish 1.13 to 1.22 and
-  0.93 to 1.00; on the EPYC 7763 (`bench/results/log1p-epyc7763-2026-11-23.txt`) guarded over
-  finish is 0.98 to 1.03 and 0.92 to 0.93, and blended over finish 1.19 to 1.20 and 0.99 to 1.00.
-  Every arm is within 1.3x of the finish on every one of those rows, so no direction is read, and
-  the guarded arm reads lower on mixed data on both hosts, inside 1.3x. By issue #30's rule 1 (a
+  0.93 to 1.00; on the EPYC 7763 (`bench/results/log1p-epyc7763-2026-11-23.txt`, a run and a
+  re-run) guarded over finish is 0.98 to 1.03 and 0.92 to 0.95, and blended over finish 1.19 to
+  1.20 and 0.99 to 1.00. Every arm is within 1.3x of the finish on every one of those rows in every
+  run, so no direction is read, and the guarded arm reads lower on mixed data on both hosts, inside
+  1.3x. By issue #30's rule 1 (a
   tie within 1.3x on every host that has a file goes to the finish arm) `VFdlibm.log1p` runs the
   finish arm since then: the owner had deferred the rule for log1p until the 8573C's second run,
   and neither file reads the guarded arm lower by more than 1.3x at any species. That is a tie,
@@ -1020,16 +1022,17 @@ mnemonic); the other operations count the same at both widths.
   the Xeon Platinum 8573C (`bench/results/expm1-xeon8573c-2026-11-22.txt`, a run and a re-run)
   guarded over finish is 0.93 to 1.07 on common data and 0.84 to 0.92 on mixed data, and blended
   over finish 1.08 to 1.18 and 0.90 to 1.00; on the EPYC 7763
-  (`bench/results/expm1-epyc7763-2026-11-23.txt`) guarded over finish is 1.02 to 1.03 and 1.04,
-  and blended over finish 1.18 to 1.20 and 1.14, the finish lowest on every row there. Every arm is
-  within 1.3x of the finish on every one of those rows, so no direction is read, and the hosts
-  still differ in which arm is lowest on mixed data (guarded on the Xeon, finish on the EPYC). By
+  (`bench/results/expm1-epyc7763-2026-11-23.txt`, a run and a re-run) guarded over finish is 1.02
+  to 1.03 and 1.04, and blended over finish 1.18 to 1.20 and 1.14, the finish lowest on every row
+  there. Every arm is within 1.3x of the finish on every one of those rows in every run, so no
+  direction is read, and the hosts differ in which arm is lowest on mixed data (guarded on the
+  Xeon, finish on the EPYC). By
   issue #30's rule 1 (a tie within 1.3x on every host that has a file goes to the finish arm)
   `VFdlibm.expm1` runs the finish arm since then: the owner had deferred the rule for expm1 until
   the 8573C's second run, and neither file reads the guarded arm lower by more than 1.3x at any
   species. That is a tie, not a speed-up; a first run of the other AVX-512 hosts or a pair may
   revise the choice. Both files have core rows: finish over core is 0.99 to 1.08 on the Xeon and
-  1.17 to 1.18 on the EPYC on common data, inside 1.3x.
+  1.17 to 1.23 on the EPYC on common data, inside 1.3x.
 - **Lefevre's direction bit is the 54th bit of the exact |result|.** testlibm-data's last field
   agreed with that for all 7578 `em1` lines (3836 ones, 3742 zeros), not with "the exact
   result is above the rounded one", which splits about evenly.

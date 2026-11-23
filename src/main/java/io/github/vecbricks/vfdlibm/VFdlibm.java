@@ -90,7 +90,8 @@ import jdk.incubator.vector.VectorMask;
  *       expm1}, {@code log}, {@code log10} and {@code log1p} on the Xeon 8573C ({@code
  *       expm1-xeon8573c-2026-11-22.txt}, a run and a re-run, and the same for the other three)
  *       and of {@code expm1} and {@code log1p} on the EPYC 7763 ({@code
- *       expm1-epyc7763-2026-11-23.txt} and {@code log1p-epyc7763-2026-11-23.txt}).
+ *       expm1-epyc7763-2026-11-23.txt} and {@code log1p-epyc7763-2026-11-23.txt}, a run and a
+ *       re-run each).
  *   <li>Not measured: any port's speed at 512 bits against 256 on the EPYC 9V74 draws that have
  *       AVX-512 ({@code HARDWARE.md} has only a datapath reading for them, and lists {@code
  *       MaxVectorSize=64}), any port's speed on Arm, and allocation on an Arm host with vectors

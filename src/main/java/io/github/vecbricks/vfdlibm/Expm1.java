@@ -80,13 +80,14 @@ import jdk.incubator.vector.VectorSpecies;
  * By minimums neither other arm is lower than the finish by more than 1.3x at any species: on the
  * Xeon Platinum 8573C ({@code bench/results/expm1-xeon8573c-2026-11-22.txt}, a run and a re-run)
  * at 256 bits, 512 bits, the preferred species and {@code SPECIES_MAX}, and on the AMD EPYC 7763
- * ({@code bench/results/expm1-epyc7763-2026-11-23.txt}) at 256 bits, the preferred species and
- * {@code SPECIES_MAX} (its 512-bit rows run in the Java fallback and are left out). It is a tie,
- * not a speed-up: on the Xeon's mixed data the guarded arm reads lower, inside 1.3x. Both files
- * time the arms as they are now, after the finish's first eight lanes were written out with
- * constant indices (issue #37); {@code SKILLS.md} reads the earlier host files, of the code before
- * it. Like every default, it stays provisional until a host run revises it, and the other two
- * arms are kept, tested, so the choice can be re-measured.
+ * ({@code bench/results/expm1-epyc7763-2026-11-23.txt}, a run and a re-run) at 256 bits, the
+ * preferred species and {@code SPECIES_MAX} (its 512-bit rows run in the Java fallback and are
+ * left out). It is a tie, not a speed-up: on the Xeon's mixed data the guarded arm reads lower,
+ * inside 1.3x.
+ * Both files time the arms as they are now, after the finish's first eight lanes were written out
+ * with constant indices (issue #37); {@code SKILLS.md} reads the earlier host files, of the code
+ * before it. Like every default, it stays provisional until a host run revises it, and the other
+ * two arms are kept, tested, so the choice can be re-measured.
  *
  * <p>{@link #expm1Core} and {@link #expm1Rare} split the finish arm into its branch-free part and
  * its rare-lane mask, as {@code Exp.expCore} and {@code Exp.expRare} do, so that a port that

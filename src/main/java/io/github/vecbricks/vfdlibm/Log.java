@@ -72,15 +72,14 @@ import jdk.incubator.vector.VectorSpecies;
  * re-run inside 1.3x, and on mixed data the finish 1.13 to 1.17 times the blend. On the AMD EPYC
  * 7763 ({@code bench/results/log-epyc7763-2026-11-20.txt}, two runs) at 256 bits, its native
  * width and its preferred species, the ratio is 1.22 to 1.24 on ordinary data and 1.02 to 1.03 on
- * mixed data,
- * within 1.3x, and the finish read 0.017 B/op or less in JMH's table; that file times this class
- * before the finish's first eight lanes were written out with constant indices (issue #37). Both
- * host files time it after the departures of {@code PROOFS.md}'s L6 to L9. The rules for a tie
- * within 1.3x and for hosts that disagree are set (issue #30): a tie goes to the finish arm, which
- * log keeps, and the choice stays provisional until a host run revises it, a first of the other
- * AVX-512 hosts ({@code HARDWARE.md}), an EPYC run of the code as it is now or a pair ({@code
- * bench/pair.sh}); the second arm is kept so it can be re-measured, on other hosts and as the JDK
- * changes. The laptop's runs measured the body before those departures.
+ * mixed data, within 1.3x, and the finish read 0.017 B/op or less in JMH's table; that file times
+ * this class before the finish's first eight lanes were written out with constant indices (issue
+ * #37). Both host files time it after the departures of {@code PROOFS.md}'s L6 to L9. The rules
+ * for a tie within 1.3x and for hosts that disagree are set (issue #30): a tie goes to the finish
+ * arm, which log keeps, and the choice stays provisional until a host run revises it, a first of
+ * the other AVX-512 hosts ({@code HARDWARE.md}), an EPYC run of the code as it is now or a pair
+ * ({@code bench/pair.sh}); the second arm is kept so it can be re-measured, on other hosts and as
+ * the JDK changes. The laptop's runs measured the body before those departures.
  *
  * <p>{@link #logCore} is the common path alone, with no rare lanes and no finish: {@code Log10}
  * computes its {@code __ieee754_log} through it, the only entry it uses.
