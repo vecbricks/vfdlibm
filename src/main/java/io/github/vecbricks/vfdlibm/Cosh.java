@@ -81,18 +81,15 @@ import jdk.incubator.vector.VectorSpecies;
  * the body.
  *
  * <p>{@link #cosh(DoubleVector, VectorMask)}, which {@code VFdlibm.cosh} calls, is the slice
- * arm, provisionally: the choice is the design's, not a measurement's. On {@code CoshBenchmark} the
- * EPYC 7763's run and re-run ({@code bench/results/cosh-epyc7763-2026-11-21.txt}) both read the
- * finish arm lower outside 1.3x on common data and agree, a direction on common data, and give no
- * direction on mixed data; the Xeon 8573C has one run ({@code cosh-xeon8573c-2026-11-21.txt}),
- * whose ratios are near 1.3x or inside it and give no direction. On {@code CoshKindsBench} ({@code
- * cosh-kinds-epyc7763-2026-11-21.txt}, two runs, and {@code cosh-kinds-xeon8573c-2026-11-21.txt},
- * one) the finish arm reads lower by more than 1.3x only on data with no small lane, and at 3.5%
- * and 17% of small lanes the arms read within 1.3x of each other, with no direction ({@code
- * SKILLS.md}). So the one direction is the EPYC's on common data, where 0.6% of the lanes are
- * small. cosh is the named exception to issue #30's tie rule, since its per-lane set is not rare: a
- * host run decides its arm, by the owner's call, and the slice default stays provisional until
- * then. The default is chosen in {@code cosh(x,
+ * arm, provisionally, as the named exception to issue #30's tie rule: its per-lane set is not rare,
+ * so a host run decides its arm (issue #30,
+ * https://github.com/vecbricks/vfdlibm/issues/30#issuecomment-7091848602). The readings, by
+ * minimums: on {@code CoshBenchmark}'s common data the EPYC 7763's two runs read the finish arm
+ * lower, near 1.3x ({@code bench/results/cosh-epyc7763-2026-11-21.txt}); on {@code CoshKindsBench}
+ * the finish arm reads lower at 3.5% of small lanes and the slice arm at 17%, inside 1.3x on both
+ * hosts ({@code cosh-kinds-epyc7763-2026-11-21.txt}, {@code cosh-kinds-xeon8573c-2026-11-21.txt}).
+ * The Xeon 8573C has one cosh run ({@code cosh-xeon8573c-2026-11-21.txt}), and a re-run is
+ * dispatched. The default is chosen in {@code cosh(x,
  * live)}; other places say "the default arm".
  */
 final class Cosh {

@@ -1109,17 +1109,14 @@ blend and 10 to 23 instructions. At 128 bits the bodies are 8 to 16 times longer
   Varka's baseline benchmark and 17% in Spark's unit tests (issue #32): at 8 lanes a vector
   holds one in 27% and 82% of the cases. `CoshKindsBench` has those two shares, and
   `CoshBenchmark`'s common data 0.6% of them. A laptop run under load read no direction and was not
-  kept. On `CoshBenchmark` the EPYC 7763's run and re-run
-  (`bench/results/cosh-epyc7763-2026-11-21.txt`) both read the finish arm lower outside 1.3x on
-  common data and agree, a direction on common data, and give no direction on mixed data; the Xeon
-  8573C has one run (`cosh-xeon8573c-2026-11-21.txt`), whose ratios are near 1.3x or inside it and
-  give no direction until a re-run. On `CoshKindsBench` (`cosh-kinds-epyc7763-2026-11-21.txt`, two
-  runs, and `cosh-kinds-xeon8573c-2026-11-21.txt`, one) the finish arm reads lower by more than 1.3x
-  only on data with no small lane, and at 3.5% and 17% of small lanes, Varka's and Spark's shares,
-  the arms read within 1.3x of each other, with no direction. cosh is the named exception to issue
-  #30's tie rule (its per-lane set is not rare, so a host run decides), so the default is still the
-  plan's baseline design, not a measurement, and stays provisional; which arm it keeps is the
-  owner's call.
+  kept. The slice arm stays the default, provisionally, as the named exception to issue #30's tie
+  rule (its per-lane set is not rare, so a host run decides; [issue #30's
+  comment](https://github.com/vecbricks/vfdlibm/issues/30#issuecomment-7091848602)). The readings,
+  by minimums: on `CoshBenchmark`'s common data the EPYC 7763's two runs read the finish arm lower,
+  near 1.3x (`bench/results/cosh-epyc7763-2026-11-21.txt`); on `CoshKindsBench` the finish arm reads
+  lower at 3.5% of small lanes and the slice arm at 17%, inside 1.3x on both hosts
+  (`cosh-kinds-epyc7763-2026-11-21.txt`, `cosh-kinds-xeon8573c-2026-11-21.txt`). The Xeon 8573C has
+  one cosh run (`cosh-xeon8573c-2026-11-21.txt`), and a re-run is dispatched.
 - **Which exp faults reach cosh.** `exp.dropCorrection` and `exp.constantOffByOneUlp`, which
   change `expCore`'s lanes of `|x| >= 0.5 ln2`. `exp.thresholdMoved` moves the subnormal
   scale-back, which `expCore` leaves out, and `exp.dropKForcing` the lanes of the word of 0.5

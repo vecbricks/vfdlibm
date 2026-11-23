@@ -42,8 +42,7 @@ own logarithm and exponential and calls only `sqrt`, `fabs` and `scalbn`. `sinh`
 (`VFdlibm.sinh`, from `e_sinh.c`, computing through `expm1`'s common path below 22 and finishing
 the rest per lane), and so is `cosh` (`VFdlibm.cosh`, from `e_cosh.c`, through `exp`'s common path
 and expm1's `k == 0` lines, with two arms for its small range: the default arm is the slice arm,
-provisionally: the EPYC 7763's run and re-run read the finish arm lower on common data, the Xeon
-8573C's one run gives no direction, and the arm is the owner's call, section 5). `asin` is done
+provisionally, until a host run decides, section 5). `asin` is done
 too (`VFdlibm.asin`, from `e_asin.c`, with `sqrt` as the Vector API's `SQRT`, one arm, and the
 lanes of `|x| >= 1` finished per lane), and so is `atan` (`VFdlibm.atan`, from `s_atan.c`, five
 ranges through one division on blended operands, the lanes from `2^66` up finished per lane), and
@@ -157,10 +156,13 @@ five are a later, optional set; the large-argument reduction of the trigonometri
   until a host run revises it. Meanwhile `VFdlibm` calls the finish arm of `exp`, `log` and `log10`;
   the guarded arm of `expm1` and `log1p`, by the owner's deferral of rule 1 until the 8573C's second
   run (issue #30, 21 November); the slice arm of `cosh`, provisionally, as the rule's exception,
-  whose arm is the owner's call: `bench/results/cosh-epyc7763-2026-11-21.txt` holds a run and a
-  re-run, which agree on the finish arm lower on common data and give no direction on mixed data,
-  `cosh-xeon8573c-2026-11-21.txt` one run with no direction, and the `cosh-kinds-` files no
-  direction at 3.5% or 17% of small lanes; and the guarded arm of `atan2`, which has no finish arm,
+  whose arm a host run decides ([issue #30's
+  comment](https://github.com/vecbricks/vfdlibm/issues/30#issuecomment-7091848602)): on
+  `CoshBenchmark`'s common data the EPYC 7763's two runs read the finish arm lower, near 1.3x
+  (`bench/results/cosh-epyc7763-2026-11-21.txt`); on `CoshKindsBench` the finish arm reads lower at
+  3.5% of small lanes and the slice arm at 17%, inside 1.3x on both hosts; the Xeon 8573C has one
+  cosh run (`cosh-xeon8573c-2026-11-21.txt`), and a re-run is dispatched; and the guarded arm of
+  `atan2`, which has no finish arm,
   so rule 1 does not pick between its two ([issue #30's corrected
   comment](https://github.com/vecbricks/vfdlibm/issues/30#issuecomment-7085437272)). Each host has
   timed atan2's arms in a run and a re-run (`atan2-xeon8573c-2026-11-22.txt`,
