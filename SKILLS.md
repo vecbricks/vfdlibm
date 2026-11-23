@@ -3,9 +3,9 @@
 Lessons about benchmarking, the JIT and the Vector API that every port follows. Most were learned in
 Varka (github.com/vecbricks/varka, its `sql/varka/skills/`) and are rewritten here for a vector math
 library; the last sections are what the `exp`, `log`, `log1p`, `log10`, `expm1`, `sinh`, `cosh`,
-`asin`, `atan`, `acos`, `atan2` and `hypot` ports taught. Each entry says where its numbers come from. A new lesson
-goes in the section it belongs to, as a short entry; a negative result belongs here too, since it
-stops the next port re-trying a settled question.
+`asin`, `atan`, `acos`, `atan2`, `hypot` and `pow` ports taught. Each entry says where its numbers
+come from. A new lesson goes in the section it belongs to, as a short entry; a negative result
+belongs here too, since it stops the next port re-trying a settled question.
 
 ## Benchmarking with JMH
 
@@ -1610,3 +1610,48 @@ operations count the same at both widths.
   path, exact triples with nearly equal legs, scaled into each range), and
   `HardCasePairsTest` rechecks the claim on the committed file with `BigDecimal`. Whether
   self-computed files are acceptable is the owner's question on #34, not answered yet.
+
+## What the pow port taught
+
+- **The common path alone, prototyped first.** By the owner's decisions of 23 November 2026 on issue
+  34, the first body computes e_pow.c's common path only (a positive normal `x` that is not 1, a
+  finite `y` of `iy <= 0x41e00000` that is not 0, +-1, 2 or 0.5, `z` inside lines 266 and 272, a
+  normal result) and finishes every other lane per lane by `StrictMath.pow`; the guard is
+  `PROOFS.md`'s L18. Before any test, its body (206 lines with comments: two divisions, six low-word
+  clears, int-lane shifts by per-lane counts and `I2D`) was checked for boxing and read in assembly.
+  With the body inlined the 256- and 512-bit loops are one copy of it, 334 to 388 instructions with
+  88 packed-double operations, two `vdivpd`, no FMA and three calls (the traps and the entry
+  barrier), at this laptop's AVX-512 flags, and 379 to 429 instructions at 256 bits as an AVX2 host
+  (`-XX:UseAVX=2 -XX:MaxVectorSize=32`), with the same operations and calls; it was read with #153's
+  assembly check overlaid, not committed here. `--why` named no refused call of `Pow` or `Lanes`,
+  but `NodeCountInliningCutoff` refused the benchmark methods themselves and `Blackhole::consume`:
+  the graph is past the cutoff with pow's body alone, so nothing more fits beside it.
+- **`StrictMath.pow` allocates, which the allocation check cannot tell from a box.** On JDK 25.0.5.1
+  the scalar `StrictMath.pow` loop of `PowBenchmark` allocates 96 bytes a call (98,304 B/op on
+  common data), and in a standalone probe only the calls that reach the oracle's main path did (a
+  negative `x` with an integer `y`, a subnormal `x`, overflow, underflow, a subnormal result), and
+  not even a common-path call there, so the allocation depends on how the JIT compiled the oracle;
+  its cause is not read. `PowBenchmark`'s `mixed` data holds 19 lanes of those kinds, and its vector
+  rows read 1,824 B/op, 19 times 96; with those kinds left out every row read under 0.25 B/op at the
+  laptop's flags and as an AVX2 host, and a scratch row calling `StrictMath.pow` on the same 19
+  lanes alone read 1,824.02 B/op both ways. So the per-lane finish of pow costs the oracle's own
+  allocation, and `bench/alloc-check.py` fails its `mixed` rows though the body does not box. What
+  the benchmark's `mixed` data should hold is the owner's decision.
+- **Which guard parts are hinges.** Run through the common path alone, every part of the guard but
+  two changes results on pairs it alone keeps out (`PROOFS.md`, L18, with the counts): a `|y|` past
+  2^31 beside `x` within 2^-40 of 1 only rarely (42 of 5,952 pairs), where the C's short log and the
+  main log mostly agree. `x = 1` and a zero `y` give the C's 1.0 through the common path, and stay
+  in the guard because the C returns early there.
+- **The faults, sized on 2^22 draws each** (a throwaway program over `Pow.pow` at 256 bits, once per
+  fault; counts of pairs that differ from `StrictMath.pow`; the unplanted port 0 on each).
+  `pow.guardAdmitsNegativeX` (the guard tests `ix` for `hx`): 0 of Varka's range, 4,194,304 of
+  negative `x` in `[-1e6, -1e-6)`, 398,271 of `PowTest.integerPairs`, 1,047,567 of sampled bits,
+  15,420 of the 88,804 special pairs. `pow.guardMissesSubnormal` (line 306's test dropped): 0 of
+  Varka's range, 1,190,254 of `PowTest.targetPairs`, 34 of sampled bits, 158 of the special pairs.
+  `pow.dropT2` (line 261's `y*t2` dropped): 4,194,304 of Varka's range, 1,329,994 of the target
+  pairs, 8,669 of the special pairs. The fault run's inputs (`PowTest.faultRunInputs`) hold the
+  special pairs, integer and target pairs, the pairs of each guard part and dense draws.
+- **Hard cases: none.** Lefevre's lines hold one argument, and no published table of pow's hard
+  cases is known here; #34's question on self-computed files was answered for hypot only, so no
+  `hard-cases/pow.txt` is written. The gate's exact powers (`integer ** integer` up to 2^53) and the
+  pairs either side of `MIN_NORMAL` are in the suite.

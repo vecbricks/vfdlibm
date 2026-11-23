@@ -572,6 +572,7 @@ public final class Consumer {
     check("acos", StrictMath::acos);
     checkPair("atan2", StrictMath::atan2, false);
     checkPair("hypot", StrictMath::hypot, true);
+    checkPair("pow", StrictMath::pow, false);
     Module module = VFdlibm.class.getModule();
     String in = module.isNamed() ? module.getName() : "";
     System.out.printf("%d lanes at %d bits, %d wrong; the library is in %s%n", lanes,

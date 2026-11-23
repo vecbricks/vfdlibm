@@ -52,6 +52,7 @@ class PlantedFaultTest {
     CATCHERS.putAll(AtanTest.faultCatchers());
     CATCHERS.putAll(Atan2Test.faultCatchers());
     CATCHERS.putAll(HypotTest.faultCatchers());
+    CATCHERS.putAll(PowTest.faultCatchers());
   }
 
   /**
