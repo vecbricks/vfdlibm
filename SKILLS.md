@@ -1638,7 +1638,7 @@ mnemonic); the other operations count the same at both widths.
   34, the first body computes e_pow.c's common path only (a positive normal `x` that is not 1, a
   finite `y` of `iy <= 0x41e00000` that is not 0, +-1, 2 or 0.5, `z` inside lines 266 and 272, a
   normal result) and finishes every other lane per lane by `StrictMath.pow`; the guard is
-  `PROOFS.md`'s L18. Before any test, its body (two divisions, six low-word clears, int-lane shifts
+  `PROOFS.md`'s L19. Before any test, its body (two divisions, six low-word clears, int-lane shifts
   by per-lane counts and `I2D`) was run through `bench/alloc-check.py` and read with the assembly
   check: at 256 and 512 bits on the laptop's AVX-512 flags and at 256 bits as an AVX2 host, each
   loop is one copy of the body with two `vdivpd`, no FMA and no call but the traps and the entry
@@ -1656,7 +1656,7 @@ mnemonic); the other operations count the same at both widths.
   such rows with an oracle baseline: `PowBenchmark.rareOracle` calls `StrictMath.pow` on the lanes
   the finish takes, over the same arrays, and no timing is claimed of it.
 - **Which guard parts are hinges.** Run through the common path alone, every part of the guard but
-  two changes results on pairs it alone keeps out (`PROOFS.md`, L18, with the counts): a `|y|` past
+  two changes results on pairs it alone keeps out (`PROOFS.md`, L19, with the counts): a `|y|` past
   2^31 beside `x` within 2^-40 of 1 only rarely (42 of 5,952 pairs), where the C's short log and the
   main log mostly agree. `x = 1` and a zero `y` give the C's 1.0 through the common path, and stay
   in the guard because the C returns early there.

@@ -47,8 +47,8 @@ import jdk.incubator.vector.VectorSpecies;
  * the C: the special values of either argument, a negative {@code x} (whose sign {@code s} and
  * {@code yisint} the vector never computes), a subnormal {@code x}, {@code |y| > 2^31}, overflow,
  * underflow, and the subnormal results line 306 sends to {@code scalbn}. That the guard admits
- * only lanes the common path is right for is {@code PROOFS.md}'s L18; that the C's {@code s*z} is
- * {@code z} there is L19.
+ * only lanes the common path is right for is {@code PROOFS.md}'s L19; that the C's {@code s*z} is
+ * {@code z} there is L20.
  *
  * <p>Every operation of the common path is the C's, in the C's order, with no fused multiply-add
  * and no reassociation; its choices ({@code bp[k]}, {@code dp_h[k]}, {@code dp_l[k]}, line 220's
@@ -145,7 +145,7 @@ final class Pow {
     IntVector ix = hx.and(0x7fffffff);
     IntVector iy = hy.and(0x7fffffff);
 
-    // The guard (PROOFS.md, L18): the lanes the common path is not right for, from the
+    // The guard (PROOFS.md, L19): the lanes the common path is not right for, from the
     // arguments. x: not positive, normal and finite (hx outside [0x00100000, 0x7ff00000), which
     // takes in every negative x, the zeros, the subnormals, the infinities and the NaNs), or 1.
     IntVector hxTested = ADMITTING_NEGATIVE_X ? ix : hx;
@@ -236,7 +236,7 @@ final class Pow {
     // Line 264: j = __HI(z), written out.
     IntVector jz = (IntVector) ((LongVector) z.viewAsIntegralLanes())
         .lanewise(VectorOperators.LSHR, 32).convertShape(VectorOperators.L2I, intSpecies, 0);
-    // Lines 266 and 272, each taken as a whole (L18): z >= 1024 or z <= -1075.
+    // Lines 266 and 272, each taken as a whole (L19): z >= 1024 or z <= -1075.
     VectorMask<Integer> boundsI = jz.compare(VectorOperators.GE, OVERFLOW_WORD)
         .or(jz.and(0x7fffffff).compare(VectorOperators.GE, UNDERFLOW_WORD));
 
@@ -289,7 +289,7 @@ final class Pow {
     }
     rare = rare.or(lateI.cast(species));
     // Line 307: __HI(z) += (n<<20), which is __HI(z) = j; line 308: s*z is z, s being one on
-    // every common lane (L19).
+    // every common lane (L20).
     DoubleVector result = (DoubleVector) ((LongVector) jr
         .convertShape(VectorOperators.I2L, longSpecies, 0)).lanewise(VectorOperators.LSHL, 32)
         .or(zrBits.and(Lanes.LOW_WORD)).viewAsFloatingLanes();

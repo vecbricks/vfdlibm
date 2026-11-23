@@ -56,7 +56,7 @@ the lanes of an infinity or a NaN finished per lane), and so is `pow` (`VFdlibm.
 `e_pow.c`, the last of the thirteen: its common path in the vector, a positive normal `x` that is
 not 1 and a finite `y` of `iy <= 0x41e00000` that is not 0, +-1, 2 or 0.5, with a normal result,
 and every other lane finished per lane, by the owner's decisions of 23 November 2026 on issue 34;
-`PROOFS.md`, L18 and L19). So all thirteen are ported.
+`PROOFS.md`, L19 and L20). So all thirteen are ported.
 `log`, `log10` and `log1p` are done too (`VFdlibm.log`, from
 `e_log.c`, `VFdlibm.log10`, from `e_log10.c`, which computes through log's common path, and
 `VFdlibm.log1p`, from `s_log1p.c`), and so is `expm1` (`VFdlibm.expm1`, from `s_expm1.c`, whose

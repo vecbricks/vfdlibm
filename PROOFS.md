@@ -1790,9 +1790,9 @@ the Vector API masks to five bits and which are not kept, L13's H3), and line 29
 blend under `j < 0`. Every `__LO(v) = 0` is an AND of `v`'s bits with the high word's mask, every
 `__HI(v) = word` an int word widened by `I2L` and shifted left by 32, or-ed with `v`'s low word
 (none, for `t_h` of line 231 and `t` of line 289, which start from `zero`), and `(double)n` is
-`I2D`, exact. Two things are not the C's text: the guard (L18), and line 307 with line 308 (L19).
+`I2D`, exact. Two things are not the C's text: the guard (L19), and line 307 with line 308 (L20).
 
-### L18. The guard admits only lanes on which the common path is the C
+### L19. The guard admits only lanes on which the common path is the C
 
 **Statement.** Let a lane be admitted when none of these holds, the vector's rare mask being
 their union (and-ed with `live` in the masked form):
@@ -1811,7 +1811,7 @@ their union (and-ed with `live` in the masked form):
 On an admitted lane the C takes no return before line 308, takes line 208's branch and not line
 212's, does not take line 306, and has `s = one`; so the C's result is line 307's `z` times `s`,
 and every operation the vector computes on the lane is the C's, so the lane is the C's result
-(by L13 and L19). A lane that is not admitted is overwritten by `StrictMath.pow` on its own
+(by L13 and L20). A lane that is not admitted is overwritten by `StrictMath.pow` on its own
 arguments.
 
 **Hypotheses.** The input domain is every pair of doubles. The hinge conditions are the seven
@@ -1841,19 +1841,19 @@ path would be wrong: on `x = 1.0` (2) and on a zero `y` (3) the common path's op
 `1.0`, the C's result, on every pair drawn (with `x = 1`, `ss` and every term after it are zeros
 and `z` is `+-0`; with `y` a zero, `z` is a zero). The proof does not use that. Every other part
 is a hinge: on pairs that part alone keeps out, the common path differs from `StrictMath.pow` on
-some (one run of `l18EachPartOfTheGuardIsAHingeOrNamedRedundant`, pairs differing of pairs drawn:
+some (one run of `l19EachPartOfTheGuardIsAHingeOrNamedRedundant`, pairs differing of pairs drawn:
 a negative `x` 59,285 of 64,197, `+0` or a subnormal `x` 15,726 of 16,323, `+inf` or a NaN `x`
 2,677 of 2,677, `|y|` past 2^31 beside `x` within 2^-40 of 1 42 of 5,952, the special `y` 457 of
 7,821, `z` out of bounds 10,249 of 10,367, a subnormal result 19,707 of 19,707; `x = 1` 0 of 4,255
 and a zero `y` 0 of 4,166).
 
-**Test (scalar).** `PowTest.l18TheGuardAdmitsOnlyTheCommonPath` runs the C as written (`cPow`,
+**Test (scalar).** `PowTest.l19TheGuardAdmitsOnlyTheCommonPath` runs the C as written (`cPow`,
 which the gate holds equal to `StrictMath.pow` in every JIT mode) on the gate's inputs and the
 guard's boundaries, and on every admitted pair asserts that the C took only the common path's ways
 out (the three intervals, either side of `|z| = 0.5` and line 307; none of the returns, no
 subnormal `x`, no short log, no scalbn, no negative result) and that the common path transcribed
 alone (`commonPath`, lines 210-307 with every return left out) is the C's result, bit for bit.
-`l18EachPartOfTheGuardIsAHingeOrNamedRedundant` draws pairs on which one part alone holds and
+`l19EachPartOfTheGuardIsAHingeOrNamedRedundant` draws pairs on which one part alone holds and
 requires the common path to differ from `StrictMath.pow` on some of them, for each part but the
 two redundant ones, on which it requires no difference; so a guard without a hinge part fails it.
 **Vector tie.** `PowTest.guardBoundaries` runs the guard's boundaries (the words of the smallest
@@ -1867,17 +1867,17 @@ faults.** `pow.guardAdmitsNegativeX` tests `ix` instead of `hx` in part 1, and
 
 **Encoding.** None: a case analysis of the C's tests, informal, not machine-checked.
 
-### L19. Line 307 is `__HI(z) = j`, and line 308's `s*z` is `z`
+### L20. Line 307 is `__HI(z) = j`, and line 308's `s*z` is `z`
 
-**Statement.** On an admitted lane (L18) the vector's result, `z` with its high word replaced by
+**Statement.** On an admitted lane (L19) the vector's result, `z` with its high word replaced by
 `j` of line 305, is the C's `s*z` after line 307.
 
 **Proof.** Line 307's `__HI(z) += (n<<20)` sets `z`'s high word to `__HI(z) + (n<<20)` modulo
 2^32 and keeps its low word; line 304-305's `j` is that same `int` sum, so writing `j` as the high
-word is the same operation. By L18 `s = one`, and `fl(1 * z) = z` for every `z` (R3), so line 308
+word is the same operation. By L19 `s = one`, and `fl(1 * z) = z` for every `z` (R3), so line 308
 returns `z`. QED.
 
-**Test.** The vector tie of L18 (`lanesAreTheTranscription` compares the lanes with `commonPath`,
+**Test.** The vector tie of L19 (`lanesAreTheTranscription` compares the lanes with `commonPath`,
 which writes line 307 as the C does and returns `z` without `s`); `pow.guardAdmitsNegativeX`
 shows that a lane with `s = -one` let through gives other bits (a negative `x` with an odd `y`).
 

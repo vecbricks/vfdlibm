@@ -1169,7 +1169,7 @@ class PowTest {
   }
 
   // ---------------------------------------------------------------------------------------------
-  // The common path, and the guard of the vector port (PROOFS.md, L18 and L19)
+  // The common path, and the guard of the vector port (PROOFS.md, L19 and L20)
   // ---------------------------------------------------------------------------------------------
 
   /**
@@ -1262,7 +1262,7 @@ class PowTest {
     return new CommonPath(withHi(z, j), bounds, subnormal); // 307
   }
 
-  /** The parts of the vector's guard (PROOFS.md, L18): each a reason a lane is finished. */
+  /** The parts of the vector's guard (PROOFS.md, L19): each a reason a lane is finished. */
   enum Guard {
     /** {@code hx < 0}: a negative {@code x}, {@code -0} included. */
     NEGATIVE_X,
@@ -1320,7 +1320,7 @@ class PowTest {
     return holds;
   }
 
-  /** The ways out of the C a lane the guard admits may take (L18): no other is allowed. */
+  /** The ways out of the C a lane the guard admits may take (L19): no other is allowed. */
   static final java.util.EnumSet<Path> COMMON_PATHS = java.util.EnumSet.of(Path.INTERVAL_0,
       Path.INTERVAL_1, Path.INTERVAL_2, Path.Z_ABOVE_HALF, Path.Z_NOT_ABOVE_HALF,
       Path.NORMAL_RESULT);
@@ -1368,14 +1368,14 @@ class PowTest {
   }
 
   /**
-   * L18's statement on scalar Java: on every pair the guard admits, the C as written takes only
+   * L19's statement on scalar Java: on every pair the guard admits, the C as written takes only
    * the common path's ways out ({@link #COMMON_PATHS}: none of the returns of lines 119-198 or
    * 266-278, line 208's branch and not line 212, line 307 and not line 306, {@code s = one}),
    * and the common path's result is the C's, bit for bit. The pairs admitted are many and reach
    * each of those ways out.
    */
   @Test
-  void l18TheGuardAdmitsOnlyTheCommonPath() {
+  void l19TheGuardAdmitsOnlyTheCommonPath() {
     Inputs.Pairs p = guardInputs(SEED + 2, DRAWS >> 2);
     long admitted = 0;
     long[] reached = new long[Path.values().length];
@@ -1406,14 +1406,14 @@ class PowTest {
   }
 
   /**
-   * L18's hinges: each part of the guard, alone, keeps out pairs on which the common path is not
-   * the C's (so a guard without it would be wrong), but for the two parts L18 names as redundant,
+   * L19's hinges: each part of the guard, alone, keeps out pairs on which the common path is not
+   * the C's (so a guard without it would be wrong), but for the two parts L19 names as redundant,
    * {@code x == 1} and {@code y == 0}, on whose pairs the common path gives the C's result, and
    * which the guard keeps because the C returns early there. Each part is drawn on pairs only it
    * holds on.
    */
   @Test
-  void l18EachPartOfTheGuardIsAHingeOrNamedRedundant() {
+  void l19EachPartOfTheGuardIsAHingeOrNamedRedundant() {
     Inputs.Pairs p = concat(guardInputs(SEED + 3, DRAWS >> 2), hingePairs(SEED + 4, DRAWS >> 2));
     long[] alone = new long[Guard.values().length];
     long[] wrong = new long[Guard.values().length];
@@ -1435,7 +1435,7 @@ class PowTest {
       counts.append(' ').append(g).append('=').append(wrong[g.ordinal()]).append('/')
           .append(alone[g.ordinal()]);
     }
-    System.out.println("pow L18, pairs differing / pairs of each part alone:" + counts);
+    System.out.println("pow L19, pairs differing / pairs of each part alone:" + counts);
     for (Guard g : Guard.values()) {
       assertTrue(alone[g.ordinal()] > 0, g + " never holds alone:" + counts);
       if (g == Guard.X_ONE || g == Guard.Y_ZERO) {
@@ -1544,7 +1544,7 @@ class PowTest {
     assertPow(width.species(), densePairs(9500L + 16L * width.ordinal(), DRAWS));
   }
 
-  /** L18's vector tie: the boundaries of the guard, and the pairs of each part alone. */
+  /** L19's vector tie: the boundaries of the guard, and the pairs of each part alone. */
   @ParameterizedTest
   @EnumSource(VectorWidth.class)
   void guardBoundaries(VectorWidth width) {
