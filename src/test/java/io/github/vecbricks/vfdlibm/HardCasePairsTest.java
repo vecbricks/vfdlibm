@@ -15,7 +15,10 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.math.MathContext;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
 import java.util.Arrays;
+import java.util.HexFormat;
 import java.util.HashSet;
 import java.util.Set;
 import org.junit.jupiter.api.Test;
@@ -354,24 +357,39 @@ class HardCasePairsTest {
   /** The number of pairs of each claim of {@code hard-cases/hypot-coremath.txt}, in order. */
   private static final int[] HYPOT_CM_SECTIONS = {1, 8, 1, 10};
 
+  /** The forms of each source pair, eight lines in a row: two orders, four sign combinations. */
+  private static final int HYPOT_CM_FORMS = 8;
+
   /**
    * Every pair of {@code hard-cases/hypot-coremath.txt} is what its header says, by its place in
-   * the file and exact arithmetic on {@code s = x*x + y*y}: the first is within {@code 2^-105} ulp
-   * of a midpoint, the next eight are ties ({@code s} the square of a midpoint), the next within
-   * {@code 2^-105} ulp of a double, and the last ten within {@code 2^-60} ulp of a midpoint; none
-   * is exact, none of the near ones is a tie, and no pair repeats.
+   * the file and exact arithmetic on {@code s = x*x + y*y}. Each source pair takes eight lines in
+   * a row, {@code (|x|, |y|)} and {@code (|y|, |x|)} with the four sign combinations; of the source
+   * pairs, the first is within {@code 2^-105} ulp of a midpoint, the next eight are ties ({@code
+   * s} the square of a midpoint), the next within {@code 2^-105} ulp of a double, and the last ten
+   * within {@code 2^-60} ulp of a midpoint; none is exact, none of the near ones is a tie, and no
+   * pair repeats.
    */
   @Test
   void theHypotCoreMathFileIsOfTiesAndNearMidpointsAndDoubles() {
     Inputs.Pairs pairs = Inputs.hardCasePairs("hypot-coremath");
     int n = pairs.x().length;
-    assertEquals(Arrays.stream(HYPOT_CM_SECTIONS).sum(), n);
+    assertEquals(Arrays.stream(HYPOT_CM_SECTIONS).sum() * HYPOT_CM_FORMS, n);
     Set<String> seen = new HashSet<>();
-    for (int i = 0; i < n; i++) {
-      double x = pairs.x()[i];
-      double y = pairs.y()[i];
-      String where = "pair " + i + ": " + Oracle.hex(x) + ", " + Oracle.hex(y);
+    for (int line = 0; line < n; line++) {
+      double x = pairs.x()[line];
+      double y = pairs.y()[line];
+      String where = "pair " + line + ": " + Oracle.hex(x) + ", " + Oracle.hex(y);
       assertTrue(seen.add(Oracle.hex(x) + " " + Oracle.hex(y)), where + " is a repeat");
+      // the form: (a, b) then (b, a), each with the signs ++, -+, +-, --
+      int form = line % HYPOT_CM_FORMS;
+      int first = line - form;
+      double a = Math.abs(pairs.x()[first]);
+      double b = Math.abs(pairs.y()[first]);
+      assertEquals(form < 4 ? a : b, Math.abs(x), where + ": |x| of form " + form);
+      assertEquals(form < 4 ? b : a, Math.abs(y), where + ": |y| of form " + form);
+      assertEquals((form & 1) != 0, Double.doubleToRawLongBits(x) < 0, where + ": sign of x");
+      assertEquals((form & 2) != 0, Double.doubleToRawLongBits(y) < 0, where + ": sign of y");
+      int i = line / HYPOT_CM_FORMS;
       Dyadic s = Dyadic.of(x).pow(2).plus(Dyadic.of(y).pow(2));
       double r = StrictMath.hypot(x, y);
       boolean tie = false;
@@ -417,6 +435,13 @@ class HardCasePairsTest {
   private static final int POW_CM_TIES = 139;
 
   /**
+   * The SHA-256 of the first three ranges' data lines, {@code 0x<x> 0x<y>} and a newline each, so
+   * that a hand edit of pairs no claim here checks shows (the script's output is reproducible).
+   */
+  private static final String POW_CM_NEAR_SHA256 =
+      "26abf5c961b14b6427c710666289c6af00e3809fd123256feaab4f2b54d19742";
+
+  /**
    * Whether {@code c^(2^k) = X^p}, that is {@code c = X^(p / 2^k)} for {@code c} positive: for a
    * negative {@code p}, whether {@code c^(2^k) X^|p| = 1}.
    */
@@ -436,15 +461,23 @@ class HardCasePairsTest {
    * k <= 4}, and the exact {@code |x|**y} is checked with {@code BigInteger} arithmetic to be a
    * double or a midpoint between two doubles beside {@code StrictMath.pow}'s result: the 3/2
    * range holds 139 of each, and every pair of the last range is a tie. The first three
-   * ranges' sizes are pinned only as their sum, since nothing in a pair tells them apart. No pair
-   * repeats.
+   * ranges' sizes are pinned only as their sum, since nothing in a pair tells them apart, and
+   * their lines by a SHA-256. No pair repeats.
    */
   @Test
-  void thePowCoreMathFileIsOfNearCasesExactResultsAndTies() {
+  void thePowCoreMathFileIsOfNearCasesExactResultsAndTies() throws Exception {
     Inputs.Pairs pairs = Inputs.hardCasePairs("pow-coremath");
     int n = pairs.x().length;
     assertEquals(Arrays.stream(POW_CM_SECTIONS).sum(), n);
     int rational = POW_CM_SECTIONS[0] + POW_CM_SECTIONS[1] + POW_CM_SECTIONS[2];
+    StringBuilder near = new StringBuilder();
+    for (int i = 0; i < rational; i++) {
+      near.append(String.format("0x%016x 0x%016x\n", Double.doubleToRawLongBits(pairs.x()[i]),
+          Double.doubleToRawLongBits(pairs.y()[i])));
+    }
+    byte[] digest = MessageDigest.getInstance("SHA-256")
+        .digest(near.toString().getBytes(StandardCharsets.US_ASCII));
+    assertEquals(POW_CM_NEAR_SHA256, HexFormat.of().formatHex(digest), "the near ranges' lines");
     Set<String> seen = new HashSet<>();
     int exact = 0;
     int ties = 0;

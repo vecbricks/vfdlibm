@@ -1691,7 +1691,8 @@ mnemonic); the other operations count the same at both widths.
   ([issue 34](https://github.com/vecbricks/vfdlibm/issues/34#issuecomment-7100457001)).
 - **Hard cases, published** (issue 144). A published list does exist, CORE-MATH's
   `src/binary64/hypot/hypot.wc` (MIT): `hard-cases/hypot-coremath.txt` holds 20 of its pairs,
-  which `dev/coremath-hard-cases.py` takes by line number at a pinned commit and sha256: the
+  each in its eight forms (both orders, four sign combinations, as CORE-MATH's check expands
+  them), which `dev/coremath-hard-cases.py` takes by line number at a pinned commit and sha256: the
   RNDN and RNDZ worst cases (within 2^-105 ulp of a midpoint and of a double), eight exact ties,
   and the ten pairs of its large section within 2^-60 ulp of a midpoint. `HardCasePairsTest`
   rechecks each with `BigInteger` arithmetic, by its place in the file. The whole list (33,202
@@ -1755,11 +1756,16 @@ mnemonic); the other operations count the same at both widths.
   CORE-MATH's `pow.wc`, which `dev/coremath-hard-cases.py` takes by line number at a pinned commit
   and sha256: the list's first section of worst cases, Gombala's targeted-search cases of 110 or
   more identical bits after the round bit and his near-rational ones of 100 or more (the source's
-  `# N`), the 278 exact results and ties at `y = 3/2`, and the first three of the 7,396
-  midpoint cases for each of their 41 values of `y`; 32 lines that repeat an earlier pair are
-  not written again. `HardCasePairsTest` rechecks the exact results and ties with `BigInteger`
-  arithmetic (`c^(2^k) = |x|^p` for `y = p / 2^k`); the near pairs' `# N` is the source's claim,
-  which needs `x**y` to well over 100 bits to recheck, so only their count is pinned. The whole
+  `# N`), the 278 exact results and ties at `y = 3/2`, and three of the 7,396 midpoint cases
+  for each of their 41 values of `y` (the first and last of its run, results near 2^-1022 or
+  2^1024, and the one nearest 1); 32 lines that repeat an earlier pair are not written again.
+  The subnormal sections are left out: by decision A on issue 34 a subnormal result is finished
+  per lane by `StrictMath.pow`, so those lanes would compare `StrictMath` with itself; they come
+  back when a widening moves subnormal results into the vector. `HardCasePairsTest` rechecks
+  the exact results and ties with `BigInteger` arithmetic (`c^(2^k) = |x|^p` for `y = p / 2^k`);
+  the near pairs' `# N` is the source's claim,
+  which needs `x**y` to well over 100 bits to recheck, so only their count and a SHA-256 of
+  their lines are pinned. The whole
   list (1,000,874 exactly parsed lines) matched `StrictMath` at every width when it was
   evaluated, so the file is a selection, not a fix; its 2,305 lines that do not spell exactly
   one double (strtod would round them) matched too, read as strtod rounds them, and none is in

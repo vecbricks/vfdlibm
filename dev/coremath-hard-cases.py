@@ -27,14 +27,19 @@ The script refuses a file whose sha256 is not the one below, so a later version 
 whose line numbers would differ, is never read by these numbers. Every selected line must be a
 data line of two fields, each spelling exactly one double (hex, decimal without an exponent,
 `inf` or `nan`; any other spelling is refused): a spelling that strtod would round is refused,
-as is a line of the filtered ranges without its source's `# N` annotation, and the run stops with status 1 and writes nothing. Each double is
-built from an integer mantissa and exponent, never by a rounding conversion, and Python's
-float.fromhex only cross-checks it. A selected line whose pair an earlier selected line already
-gave is not written again; the header lists each with the line it repeats. The output is
-reproducible: a second run rewrites both files byte for byte.
+as is a line of the ranges filtered by N without its source's `# N` annotation, and the run
+stops with status 1 and writes nothing. Each double is built from an integer mantissa and
+exponent, never by a rounding conversion, and Python's float.fromhex only cross-checks it. A
+selected line whose pair an earlier selected line already gave is not written again; the header
+lists each with the line it repeats. Each hypot pair is written in its eight forms, (|x|, |y|)
+and (|y|, |x|) with each of the four sign combinations, as CORE-MATH's own check expands its
+list; each pow pair is written as it is. Floating point only chooses lines (pow's last range
+takes, per y, the line whose result lies nearest 1); every value written is parsed exactly. The
+output is reproducible: a second run rewrites both files byte for byte.
 """
 
 import hashlib
+import math
 import re
 import struct
 import sys
@@ -49,7 +54,8 @@ NOTICE_LINES = 20  # lines 1-20 of each .wc file: the project line and the MIT p
 
 # function: (path in the repository, line count, sha256, ranges);
 # a range is (first, last, filter, why), filter None (every line), ("N", n) (the lines whose
-# source annotation `# N` is at least n) or ("first per y", k) (the first k lines of each y).
+# source annotation `# N` is at least n) or ("spread per y", None) (of each y's run of lines,
+# the first, the last and the one whose result lies nearest 1).
 LISTS = {
     "hypot": (
         "src/binary64/hypot/hypot.wc", 33276,
@@ -91,9 +97,12 @@ LISTS = {
             (31265, 31542, None,
              "the source's \"exact/midpoint cases from core-math-power/bacsel-results\", y = 3/2:"
              " all 278 lines, 139 exact results and 139 ties"),
-            (992315, 999710, ("first per y", 3),
+            (992315, 999710, ("spread per y", None),
              "Bernt Gombala's normal midpoint cases (wc_norm_midpoint_cases.txt): 7396 exact ties"
-             " over 41 values of y; the first 3 lines of each y"),
+             " over 41 values of y, each y's lines in one run; of each run the first line, the"
+             " last, and the one whose result lies nearest 1 (by |y log2 |x||, a choice of lines"
+             " only), which the first and last never are: results from near 2^-1022 or 2^1024"
+             " and near 1"),
         ],
     ),
 }
@@ -173,6 +182,13 @@ def read(path, rel, count, digest):
     return lines
 
 
+def log2_result(line, y_bits):
+    """About log2 |x**y| for a data line, in floating point: it only chooses lines."""
+    x = struct.unpack(">d", struct.pack(">Q", parse(line.split(",")[0], "") & ~(1 << 63)))[0]
+    y = struct.unpack(">d", struct.pack(">Q", y_bits))[0]
+    return y * math.log2(x)
+
+
 def select(name, lines, ranges):
     """The pairs of the ranges' lines, in order; the pairs written per range; the repeats.
 
@@ -184,7 +200,23 @@ def select(name, lines, ranges):
     per_range = []
     repeats = []
     for first, last, keep, _ in ranges:
-        per_y = {}
+        chosen = None
+        if keep is not None and keep[0] == "spread per y":
+            runs = {}
+            for number in range(first, last + 1):
+                fields = lines[number - 1].partition("#")[0].split(",")
+                if len(fields) != 2:
+                    fail(f"{name}.wc line {number}: not a data line of two fields")
+                runs.setdefault(parse(fields[1], f"{name}.wc line {number}"), []).append(number)
+            chosen = set()
+            for y, numbers in runs.items():
+                if numbers != list(range(numbers[0], numbers[-1] + 1)):
+                    fail(f"{name}.wc lines {first}-{last}: a y's lines are not one run")
+                near_one = min(numbers, key=lambda n: abs(log2_result(lines[n - 1], y)))
+                picked = {numbers[0], near_one, numbers[-1]}
+                if len(picked) != 3:
+                    fail(f"{name}.wc line {near_one}: the result nearest 1 ends its run")
+                chosen |= picked
         written = 0
         for number in range(first, last + 1):
             line = lines[number - 1]
@@ -199,10 +231,8 @@ def select(name, lines, ranges):
                     fail(f"{where}: no `# N` annotation: {line!r}")
                 if int(note.strip()) < keep[1]:
                     continue
-            if keep is not None and keep[0] == "first per y":
-                per_y[y] = per_y.get(y, 0) + 1
-                if per_y[y] > keep[1]:
-                    continue
+            if chosen is not None and number not in chosen:
+                continue
             if (x, y) in first_line:
                 repeats.append((number, first_line[(x, y)]))
                 continue
@@ -219,8 +249,7 @@ def ranges_text(ranges, per_range):
     for (first, last, keep, why), written in zip(ranges, per_range):
         span = str(first) if first == last else f"{first}-{last}"
         if keep is not None:
-            kind = "N >= %d" if keep[0] == "N" else "the first %d per y"
-            span += f" ({kind % keep[1]})"
+            span += f" (N >= {keep[1]})" if keep[0] == "N" else " (3 per y)"
         pending.append((span, written))
         if why is not None:
             total = sum(w for _, w in pending)
@@ -261,7 +290,9 @@ def header(name, rel, count, digest, notice, ranges, pairs, per_range, repeats):
         claim = [
             "Each pair is hard for correct rounding: hypot's exact result is a midpoint between two"
             " doubles, or lies within 2^-60 ulp of one, or within 2^-105 ulp of a double."
-            " HardCasePairsTest rechecks each of these claims with BigInteger arithmetic of its"
+            " Each source pair is written in eight forms, (|x|, |y|) and (|y|, |x|) with each of"
+            " the four sign combinations, eight lines in a row; hypot's result is the same for"
+            " all eight. HardCasePairsTest rechecks each claim with BigInteger arithmetic of its"
             " own, by the pair's place in this file.",
         ]
         port = "e_hypot.c"
@@ -275,12 +306,18 @@ def header(name, rel, count, digest, notice, ranges, pairs, per_range, repeats):
             " (the first pair, the source's line 25, carries none: the source lists it among"
             " its worst cases and says no more). That is the source's claim: the test checks"
             " those pairs' parse and count only, since rechecking N needs x**y to well over 100"
-            " bits after the round bit.",
+            " bits after the round bit; a SHA-256 of their lines pins them against a hand edit.",
+            "",
+            "The source's subnormal sections (Gombala's subnormal midpoint cases, lines"
+            " 999720-1002900, and his subnormal non-midpoint cases, from line 1002914) are not"
+            " taken: by the owner's decision A on issue 34 the port finishes a subnormal result"
+            " per lane by StrictMath.pow, so those lanes would compare StrictMath with itself."
+            " They come back when a widening moves subnormal results into the vector.",
         ]
         port = "e_pow.c"
     text = [
-        f"Pairs for {name} (a function of two arguments) from CORE-MATH's published list of its hard"
-        " cases: one pair a line, `x y`, each as its raw bits in hex (Double.doubleToRawLongBits),"
+        f"Pairs for {name} (a function of two arguments) from CORE-MATH's published list of its"
+        " hard cases: one pair a line, `x y`, each as its raw bits in hex (Double.doubleToRawLongBits),"
         f" x first. Read by Inputs.hardCasePairs(\"{name}-coremath\"). Lines starting with # are"
         f" comments. hard-cases/{name}.txt is the self-computed file beside it.",
         "",
@@ -317,6 +354,14 @@ def header(name, rel, count, digest, notice, ranges, pairs, per_range, repeats):
     return out
 
 
+def forms(x, y):
+    """(|x|, |y|) and (|y|, |x|), each with the signs ++, -+, +-, --: eight pairs of raw bits."""
+    sign = 1 << 63
+    a, b = x & ~sign, y & ~sign
+    return [(first | (sign if s & 1 else 0), second | (sign if s & 2 else 0))
+            for first, second in ((a, b), (b, a)) for s in range(4)]
+
+
 def main(argv):
     if len(argv) != 3:
         fail("usage: python3 -I dev/coremath-hard-cases.py <hypot.wc> <pow.wc>")
@@ -329,6 +374,11 @@ def main(argv):
                 notice[-1] != "# SOFTWARE.":
             fail(f"{path}: lines 1-{NOTICE_LINES} are not the notice")
         pairs, per_range, repeats = select(name, lines, ranges)
+        if name == "hypot":
+            pairs = [variant for x, y in pairs for variant in forms(x, y)]
+            per_range = [8 * w for w in per_range]
+            if len(set(pairs)) != len(pairs):
+                fail("hypot: two forms of the pairs are the same pair")
         body = header(name, rel, count, digest, notice, ranges, pairs, per_range, repeats)
         body += [f"0x{x:016x} 0x{y:016x}" for x, y in pairs]
         written[name] = "\n".join(body) + "\n"
