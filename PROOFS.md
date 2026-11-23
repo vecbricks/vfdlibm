@@ -1133,19 +1133,23 @@ non-finite lanes answered early, `k = 0` and `hu = 1` on line 126's lanes, lines
 otherwise) against the kernel's long words with its blends, the final `k` and `hu` of each lane
 that is not answered early, and where lines 129-150 run, that `u`'s sign is clear, `HU` is `hu`
 and `K` is in `[-53, 1024]`. With the kernel's `hu = 1` blend on line 126's lanes dropped by hand
-(and reverted), it failed at `x = -0.25`, `hu` 131072 against the C's 1. `ProofsTest.l18KeptWordsOnLine126LanesAreNotTheCs` is H20's
-witness, not a hinge test: lines 152-164 from the C's `k = 0`, `f = x` and `hu = 1` give
-`StrictMath.log1p`'s bits on the two witnesses, `2^-25` and 2^12 sampled lanes of line 126's
-band, so its finish is the C's; the same kernel words without line 126's two blends have `K = 0`
-and `hu = 0` at `2^-25` and at each witness, and with `f = x` the witnesses' results are one ulp
-off `StrictMath`'s and `2^-25`'s equal. With the blends put back into that kernel by hand (and
-reverted), it failed at the first witness, `hu` 1 against the 0 it requires.
-`ProofsTest.l18Line126WitnessesThroughLog1pBlended` runs the witnesses, their neighbours and
-`2^-25` through `Log1p.log1pBlended` at every width against `StrictMath.log1p` by raw bits. And a
-loop over
+(and reverted), it failed at `x = -0.25`, `hu` 131072 against the C's 1. And a loop over
 every significand word from 0 to `0xfffff` checks the long `hu & 0x000fffff`, the compare with
 `0x6a09e`, both ORed words, the quarter word and the rebuilt bits of `u` against the C's ints, an
 integer identity, since the mask drops the sign.
+
+`ProofsTest.l18KeptWordsOnLine126LanesAreNotTheCs` is H20's witness, not a hinge test: no change
+to `Log1p` or to Varka's kernel can make it fail, since it checks the test's own model of a
+kernel that broke H20. Lines 152-164 from the C's `k = 0`, `f = x` and `hu = 1` give
+`StrictMath.log1p`'s bits on the two witnesses, `2^-25` and 2^12 sampled lanes of line 126's
+band, so its finish is the C's; the same model's words without line 126's two blends have `K =
+0` and `hu = 0` at `2^-25` and at each witness, and with `f = x` the witnesses' results are the
+bits H20 quotes, one ulp off `StrictMath`'s, and `2^-25`'s are equal. **Vector tie, here.**
+`ProofsTest.l18Line126WitnessesThroughEveryArm` runs the witnesses, their neighbours and `2^-25`,
+each at every lane position among line-126 lanes, through every arm of `Log1p` at every width,
+unmasked and masked, against `StrictMath.log1p` by raw bits. With `Log1p`'s `hu = 1` blend on line 126's lanes
+dropped by hand (and reverted), it failed at every width, 48 of its 448 inputs differing in the
+public arm, the first one checked.
 `ProofsTest.l18EarlyLanesAreAnsweredEarly` (H19): every lane of a set with `!(x > -1)` (one pattern
 at every exponent field from `0x3ff` up with the sign set, `-1` and its neighbours below, the
 specials and sampled patterns that are not above -1, the NaNs of both signs) meets the C's

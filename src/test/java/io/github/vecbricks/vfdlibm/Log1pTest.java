@@ -52,8 +52,11 @@ class Log1pTest {
   private static final double TWO52 = 0x1p52;
   private static final double TWO53 = 0x1p53;
 
-  /** The arms, by name, each a masked form; a null mask computes every lane. */
-  private static final Map<String, BiFunction<DoubleVector, VectorMask<Double>, DoubleVector>>
+  /**
+   * The arms, by name, each a masked form; a null mask computes every lane. ProofsTest's L18
+   * tie uses them too.
+   */
+  static final Map<String, BiFunction<DoubleVector, VectorMask<Double>, DoubleVector>>
       ARMS = arms();
 
   private static Map<String, BiFunction<DoubleVector, VectorMask<Double>, DoubleVector>> arms() {

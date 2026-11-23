@@ -1465,20 +1465,37 @@ class ProofsTest {
     }
   }
 
-  /** L18's H20 witnesses, their neighbours and 2^-25 through Log1p.log1pBlended at every width. */
+  /**
+   * L18's H20 witnesses, their neighbours and 2^-25, each at every position of a block of the
+   * widest vector's lanes filled with 0.25 (a line-126 lane), through every arm of Log1p at every
+   * width, unmasked and masked, against StrictMath.log1p by raw bits.
+   */
   @ParameterizedTest
   @EnumSource(VectorWidth.class)
-  void l18Line126WitnessesThroughLog1pBlended(VectorWidth width) {
-    double[] xs = new double[3 * L18_LINE126_WITNESSES.length + 1];
+  void l18Line126WitnessesThroughEveryArm(VectorWidth width) {
+    double[] inputs = new double[3 * L18_LINE126_WITNESSES.length + 1];
     int n = 0;
     for (double w : L18_LINE126_WITNESSES) {
-      xs[n++] = Math.nextDown(w);
-      xs[n++] = w;
-      xs[n++] = Math.nextUp(w);
+      inputs[n++] = Math.nextDown(w);
+      inputs[n++] = w;
+      inputs[n++] = Math.nextUp(w);
     }
-    xs[n] = 0x1p-25;
-    Oracle.assertUnary("l18 line 126", width.species(), x -> Log1p.log1pBlended(x, null),
-        StrictMath::log1p, xs);
+    inputs[n] = 0x1p-25;
+    int g = Math.max(8, DoubleVector.SPECIES_MAX.length());
+    double[] xs = new double[inputs.length * g * g];
+    Arrays.fill(xs, 0.25);
+    for (int i = 0; i < inputs.length; i++) {
+      for (int at = 0; at < g; at++) {
+        xs[(i * g + at) * g + at] = inputs[i];
+      }
+    }
+    long seed = 1806L + width.ordinal();
+    Log1pTest.ARMS.forEach((name, arm) -> Oracle.assertUnary("l18 line 126 " + name,
+        width.species(), x -> arm.apply(x, null), StrictMath::log1p, xs));
+    for (var arm : Log1pTest.ARMS.entrySet()) {
+      Oracle.assertUnaryMasked("l18 line 126 " + arm.getKey(), width.species(), arm.getValue(),
+          StrictMath::log1p, xs, seed++);
+    }
   }
 
   /**
