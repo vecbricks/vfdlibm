@@ -71,7 +71,8 @@ class AsmTest {
     arms.put("log1p", List.of("blended", "blendedMasked", "finish", "finishMasked", "guarded",
         "guardedMasked"));
     arms.put("sinh", List.of("finish", "finishMasked"));
-    arms.put("cosh", List.of("finish", "finishMasked", "slice", "sliceMasked"));
+    arms.put("cosh", List.of("default", "defaultMasked", "finish", "finishMasked", "slice",
+        "sliceMasked"));
     arms.put("asin", List.of("finish", "finishMasked"));
     arms.put("atan", List.of("finish", "finishMasked"));
     arms.put("acos", List.of("finish", "finishMasked"));
@@ -107,37 +108,105 @@ class AsmTest {
   static final java.nio.file.Path CI = java.nio.file.Path.of(".github", "workflows", "ci.yml");
 
   /**
-   * The assembly check's rows of ci.yml's build matrix ({@code asm: true}), each name with the
-   * widths its {@code asm-widths} names. Read line by line: an entry starts at {@code - name:}
-   * and its keys follow, one per line, as ci.yml writes them.
+   * One row of ci.yml's build matrix that runs the assembly check: its name, the widths its
+   * {@code asm-widths} names, and the widest vector its {@code jvm-args} leave ({@code
+   * MaxVectorSize} in bytes, or 256 bits under {@code UseAVX} 1 or 2, 128 under 0; 512 without
+   * either).
    */
-  static Map<String, List<Integer>> ciAsmRows(List<String> lines) {
-    Map<String, List<Integer>> rows = new LinkedHashMap<>();
+  record CiRow(String name, List<Integer> widths, int maxBits) {
+    /** The widths this row really checks: those it names that its vectors reach. */
+    List<Integer> checked() {
+      return widths.stream().filter(w -> w <= maxBits).toList();
+    }
+  }
+
+  private static final java.util.regex.Pattern MAX_VECTOR_SIZE =
+      java.util.regex.Pattern.compile("-XX:MaxVectorSize=(\\d+)");
+  private static final java.util.regex.Pattern USE_AVX =
+      java.util.regex.Pattern.compile("-XX:UseAVX=(\\d+)");
+
+  /** The widest vector, in bits, a row's {@code jvm-args} leave C2. */
+  static int maxBits(String jvmArgs) {
+    int bits = 512;
+    java.util.regex.Matcher avx = USE_AVX.matcher(jvmArgs);
+    if (avx.find()) {
+      int level = Integer.parseInt(avx.group(1));
+      bits = level >= 3 ? 512 : level >= 1 ? 256 : 128;
+    }
+    java.util.regex.Matcher size = MAX_VECTOR_SIZE.matcher(jvmArgs);
+    if (size.find()) {
+      bits = Math.min(bits, 8 * Integer.parseInt(size.group(1)));
+    }
+    return bits;
+  }
+
+  /**
+   * The rows of the {@code build} job's matrix that run the assembly check ({@code asm: true}).
+   * Read line by line, as ci.yml writes it: the job starts at the key {@code build:} under {@code
+   * jobs:} and ends at its {@code steps:} or the next job; an entry starts at {@code - name:} and
+   * its keys follow, one per line; {@code #} comments are dropped.
+   */
+  static List<CiRow> ciAsmRows(List<String> lines) {
+    List<CiRow> rows = new ArrayList<>();
+    boolean inBuild = false;
     String name = null;
     boolean asm = false;
     String widths = null;
-    for (String line : lines) {
+    String jvmArgs = "";
+    for (String raw : lines) {
+      String line = stripComment(raw);
+      if (line.isBlank()) {
+        continue;
+      }
       String t = line.trim();
-      if (t.startsWith("- name:") || t.equals("steps:")) {
+      int indent = line.length() - line.stripLeading().length();
+      if (!inBuild) {
+        inBuild = indent == 2 && t.equals("build:");
+        continue;
+      }
+      boolean end = indent <= 2 || t.equals("steps:");
+      if (end || t.startsWith("- name:")) {
         if (name != null && asm) {
-          rows.put(name, widths == null ? List.of() : AsmCheck.widths(widths));
+          rows.add(new CiRow(name, widths == null ? List.of() : AsmCheck.widths(widths),
+              maxBits(jvmArgs)));
         }
-        name = t.startsWith("- name:") ? unquote(t.substring("- name:".length())) : null;
-        asm = false;
-        widths = null;
-        if (t.equals("steps:")) {
+        if (end) {
           break;
         }
+        name = unquote(t.substring("- name:".length()));
+        asm = false;
+        widths = null;
+        jvmArgs = "";
       } else if (name != null && t.equals("asm: true")) {
         asm = true;
       } else if (name != null && t.startsWith("asm-widths:")) {
         widths = unquote(t.substring("asm-widths:".length()));
+      } else if (name != null && t.startsWith("jvm-args:")) {
+        jvmArgs = unquote(t.substring("jvm-args:".length()));
       }
     }
-    if (name != null && asm) {
-      rows.put(name, widths == null ? List.of() : AsmCheck.widths(widths));
+    if (name != null && asm && inBuild) {
+      rows.add(new CiRow(name, widths == null ? List.of() : AsmCheck.widths(widths),
+          maxBits(jvmArgs)));
     }
     return rows;
+  }
+
+  /**
+   * {@code line} without its YAML comment: from a {@code #} that starts the line or follows a
+   * space, outside quotes.
+   */
+  private static String stripComment(String line) {
+    boolean quoted = false;
+    for (int i = 0; i < line.length(); i++) {
+      char c = line.charAt(i);
+      if (c == '"') {
+        quoted = !quoted;
+      } else if (c == '#' && !quoted && (i == 0 || Character.isWhitespace(line.charAt(i - 1)))) {
+        return line.substring(0, i).stripTrailing();
+      }
+    }
+    return line;
   }
 
   private static String unquote(String value) {
@@ -149,8 +218,8 @@ class AsmTest {
   /** The names of ci.yml's rows that check {@code bits}, for a skip's message. */
   static String rowsCovering(int bits) {
     try {
-      List<String> names = ciAsmRows(java.nio.file.Files.readAllLines(CI)).entrySet().stream()
-          .filter(e -> e.getValue().contains(bits)).map(e -> "'" + e.getKey() + "'").toList();
+      List<String> names = ciAsmRows(java.nio.file.Files.readAllLines(CI)).stream()
+          .filter(r -> r.checked().contains(bits)).map(r -> "'" + r.name() + "'").toList();
       return names.isEmpty() ? "(none: ciRowsCoverEveryWidth fails)" : String.join(", ", names);
     } catch (IOException | RuntimeException e) {
       return "(" + CI + " not read: " + e + ")";
@@ -158,39 +227,85 @@ class AsmTest {
   }
 
   /**
-   * The split of the widths between ci.yml's rows leaves none out: every row that runs the check
-   * names its widths, and together they are 128, 256 and 512 bits.
+   * What is wrong with a split of the widths between rows: a row that runs the check and names no
+   * width, a row naming a width its vectors do not reach (it would skip it), and a width no row
+   * checks. Empty for a split that checks every width.
    */
-  @Test
-  void ciRowsCoverEveryWidth() throws IOException {
-    Map<String, List<Integer>> rows = ciAsmRows(java.nio.file.Files.readAllLines(CI));
-    assertTrue(rows.size() >= 2, "ci.yml's assembly check rows: " + rows);
+  static List<String> coverageViolations(List<CiRow> rows) {
+    List<String> violations = new ArrayList<>();
     java.util.Set<Integer> covered = new java.util.TreeSet<>();
-    for (Map.Entry<String, List<Integer>> row : rows.entrySet()) {
-      assertTrue(!row.getValue().isEmpty(), "ci.yml's row '" + row.getKey()
-          + "' runs the assembly check but names no asm-widths");
-      covered.addAll(row.getValue());
+    for (CiRow row : rows) {
+      if (row.widths().isEmpty()) {
+        violations.add("row '" + row.name() + "' runs the assembly check but names no asm-widths");
+      }
+      for (int w : row.widths()) {
+        if (w > row.maxBits()) {
+          violations.add("row '" + row.name() + "' names " + w + " bits, but its vectors stop at "
+              + row.maxBits());
+        }
+      }
+      covered.addAll(row.checked());
     }
-    assertEquals(new java.util.TreeSet<>(AsmCheck.ALL_WIDTHS), covered, "widths checked in CI: "
-        + rows);
+    for (int w : AsmCheck.ALL_WIDTHS) {
+      if (!covered.contains(w)) {
+        violations.add(w + " bits is checked on no row");
+      }
+    }
+    return violations;
   }
 
-  /** The parser on a matrix like ci.yml's, and a split that leaves a width out. */
+  /** ci.yml's split of the widths between its rows leaves none out (see coverageViolations). */
+  @Test
+  void ciRowsCoverEveryWidth() throws IOException {
+    List<CiRow> rows = ciAsmRows(java.nio.file.Files.readAllLines(CI));
+    assertTrue(rows.size() >= 2, "ci.yml's assembly check rows: " + rows);
+    assertEquals(List.of(), coverageViolations(rows), "ci.yml's rows: " + rows);
+  }
+
+  /** The parser on a matrix shaped like ci.yml's, and splits that leave a width out. */
   @Test
   void ciRowsAreReadAsCiWritesThem() {
-    List<String> matrix = List.of("      matrix:", "        include:",
-        "          - name: x86 wide", "            os: ubuntu-latest", "            asm: true",
-        "            asm-widths: \"256,512\"", "          - name: x86 128 bits",
-        "            asm: true", "            asm-widths: \"128\"",
-        "          - name: Arm 128 bits", "            os: ubuntu-24.04-arm", "    steps:", "      - name: Build",
-        "        asm: true");
-    assertEquals(Map.of("x86 wide", List.of(256, 512), "x86 128 bits", List.of(128)),
-        ciAsmRows(matrix));
-    // without the 128-bit row, 128 bits is covered nowhere
-    assertEquals(Map.of("x86 wide", List.of(256, 512)),
-        ciAsmRows(matrix.subList(0, 6)));
-    // a row that runs the check and names no widths is read as covering none
-    assertEquals(Map.of("x86 wide", List.of()), ciAsmRows(matrix.subList(0, 5)));
+    List<String> before = List.of("name: ci", "jobs:", "  other:", "    strategy:",
+        "      matrix:", "        include:", "          - name: not the build job",
+        "            asm: true", "            asm-widths: \"512\"", "  build:",
+        "    strategy:", "      matrix:", "        include:");
+    List<String> wide = List.of("          # a comment: - name: no row",
+        "          - name: x86 wide", "            jvm-args: \"\"",
+        "            asm: true  # the check", "            asm-widths: \"256,512\"");
+    List<String> avx2 = List.of("          - name: x86 as AVX2",
+        "            jvm-args: -XX:UseAVX=2 -XX:MaxVectorSize=32", "            asm: true",
+        "            asm-widths: \"256\"");
+    List<String> narrow = List.of("          - name: x86 128 bits",
+        "            jvm-args: -XX:MaxVectorSize=16", "            asm: true",
+        "            asm-widths: \"128\"", "          - name: Arm 128 bits",
+        "            os: ubuntu-24.04-arm");
+    List<String> after = List.of("    steps:", "      - name: Build", "        asm: true",
+        "  proofs:", "    strategy:", "      matrix:", "        include:",
+        "          - name: after the build job", "            asm: true");
+    List<CiRow> rows = ciAsmRows(concat(before, wide, avx2, narrow, after));
+    assertEquals(List.of(new CiRow("x86 wide", List.of(256, 512), 512),
+        new CiRow("x86 as AVX2", List.of(256), 256),
+        new CiRow("x86 128 bits", List.of(128), 128)), rows);
+    assertEquals(List.of(), coverageViolations(rows));
+    // only the AVX2 row names 512: it skips it there, so 512 is checked nowhere
+    List<String> avx2With512 = new ArrayList<>(avx2);
+    avx2With512.set(3, "            asm-widths: \"256,512\"");
+    List<String> wideWithout512 = new ArrayList<>(wide);
+    wideWithout512.set(4, "            asm-widths: \"256\"");
+    List<String> violations = coverageViolations(
+        ciAsmRows(concat(before, wideWithout512, avx2With512, narrow, after)));
+    assertEquals(List.of("row 'x86 as AVX2' names 512 bits, but its vectors stop at 256",
+        "512 bits is checked on no row"), violations);
+    // without the 128-bit row, 128 bits is checked nowhere
+    assertEquals(List.of("128 bits is checked on no row"),
+        coverageViolations(ciAsmRows(concat(before, wide, avx2, after))));
+    // a row that runs the check and names no widths
+    assertEquals(List.of("row 'x86 wide' runs the assembly check but names no asm-widths"),
+        coverageViolations(ciAsmRows(concat(before, wide.subList(0, 4), avx2, narrow, after)))
+            .subList(0, 1));
+    assertEquals(512, maxBits(""));
+    assertEquals(256, maxBits("-XX:UseAVX=2"));
+    assertEquals(128, maxBits("-XX:UseAVX=3 -XX:MaxVectorSize=16"));
     assertEquals(List.of(128, 256, 512), AsmCheck.widths(null));
     assertEquals(List.of(128, 256, 512), AsmCheck.widths(" "));
     assertEquals(List.of(256, 512), AsmCheck.widths("256, 512"));
@@ -200,12 +315,22 @@ class AsmTest {
     }
   }
 
-  /** What leaving the preferred species out rests on: it is one of the fixed widths' species. */
+  @SafeVarargs
+  private static List<String> concat(List<String>... parts) {
+    return Stream.of(parts).flatMap(List::stream).toList();
+  }
+
+  /**
+   * What leaving the preferred species out rests on: it is one of the fixed widths' species. On
+   * a host whose preferred species is none of them (64 bits, or a scalable Arm vector) the check
+   * does not run, and this is skipped.
+   */
   @Test
   void thePreferredSpeciesIsAFixedWidths() {
     var preferred = jdk.incubator.vector.DoubleVector.SPECIES_PREFERRED;
     int bits = preferred.vectorBitSize();
-    assertTrue(bits == 128 || bits == 256 || bits == 512, bits + " bits");
+    org.junit.jupiter.api.Assumptions.assumeTrue(AsmCheck.ALL_WIDTHS.contains(bits),
+        () -> "the preferred species is " + bits + " bits, none of the check's widths");
     assertTrue(preferred == jdk.incubator.vector.VectorSpecies.of(double.class,
         jdk.incubator.vector.VectorShape.forBitSize(bits)), "the preferred species is not the "
         + bits + "-bit one");
@@ -214,7 +339,7 @@ class AsmTest {
   /**
    * Each function at each fixed width. The preferred species is left out: it is one of the fixed
    * widths' species, the same object, so its code is what that width's case reads (exp's census
-   * read the same at both), and a second run of it would add a third to a row's time.
+   * read the same at both), and a second run of it would only add time.
    */
   static Stream<Arguments> functionsAndWidths() {
     return ARMS.keySet().stream().flatMap(f -> Stream.of(VectorWidth.values())

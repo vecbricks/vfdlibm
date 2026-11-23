@@ -242,7 +242,7 @@ agree.
 - **The arms.** Each port's benchmark arms, unmasked and masked, and the cores the benchmarks call:
   exp (finish, blended, core), expm1 (guarded, blended, finish, core), log and log10 (finish,
   blended), log1p (guarded, blended, finish), sinh, asin, atan, acos and hypot (finish), cosh
-  (slice, finish, each by name rather than through `VFdlibm.cosh`'s default) and atan2 (guarded,
+  (slice and finish by name, and `VFdlibm.cosh`, the default, as `default`) and atan2 (guarded,
   blended); the default arm goes through `VFdlibm`, the others through the port's class.
 - **The rules.** Every byte decoded; packed-double arithmetic (`v(add|sub|mul|div|sqrt)pd`)
   present and on the width's registers only (`xmm`, `ymm`, `zmm`), no scalar `*sd` arithmetic or
@@ -269,20 +269,25 @@ agree.
   fallback, 60 to 444 calls per method (the census below), as "At two 64-bit lanes x86 C2 lowers
   no mask" predicts. Width, FMA and the rest are asserted there.
 - **CI splits the widths between its x86 rows.** `VFDLIBM_ASM_WIDTHS` (ci.yml's `asm-widths`)
-  names the widths a run checks: `256,512` on the default and the AVX2 rows, `128` on the
-  `MaxVectorSize=16` row, where the 128-bit cases, about three quarters of the check's time, run
-  once. A width left out skips with the row that checks it; `AsmTest.ciRowsCoverEveryWidth` fails
-  if the rows together leave one out. Unset, as here, every width runs. So 128 bits is read on one
-  flag set in CI, `MaxVectorSize=16` on whatever runner is drawn; the census above has it under
-  all three.
+  names the widths a run checks: `256,512` on the default row, `256` on the AVX2 row (its vectors
+  stop there), `128` on the `MaxVectorSize=16` row, where the 128-bit cases, most of the check's
+  time, run once. A width left out skips with the row that checks it;
+  `AsmTest.ciRowsCoverEveryWidth` fails if a row names a width its `jvm-args` do not reach, or the
+  rows together leave one out. Unset, as here, every width runs. So in CI 128-bit code is read
+  under `MaxVectorSize=16` only, on whatever runner is drawn, an accepted trade-off; the census
+  below has it under all three flag sets. 512 bits is read only when the default row draws an
+  AVX-512 runner, as before the split.
 - **The preferred species is not run again.** It is the same species object as one of the fixed
-  widths, and exp's census read the same at both; a second run would add a third to a row's time.
-- **Keep the probe's own methods out of line.** The forced `inline,io.github.vecbricks.vfdlibm.*::*`
-  covers the probe too, so a compile of whatever calls an arm could take the arm's loop in, and
-  the arm's own compile, the one read, might never come. With `dontinline` on the probe, given
-  after the forced inline (the later command wins), `PrintInlining` shows the reflective caller's
-  `@ 18 AsmProbe::expBlended ... failed to inline: disallowed by CompileCommand`, while `Exp::exp`
-  still inlines into the arm.
+  widths, and exp's census read the same at both; a second run would only add time.
+- **Keep the probe's own methods out of line.** The probe's `main` calls each arm by reflection,
+  `Method.invoke`, whose compiled `LambdaForm$DMH::invokeStatic` calls the arm, and the forced
+  `inline,io.github.vecbricks.vfdlibm.*::*` covers the probe too: that caller's compile took the
+  arm's loop in (`force inline by CompileCommand`), and the arm's own compile, the one read, might
+  never have come. With `dontinline` on the probe after the forced inline, `PrintInlining` shows
+  `@ 18 AsmProbe::expBlended ... failed to inline: disallowed by CompileCommand` at every such
+  site, while `Exp::exp` still inlines into the arm. The order decides it: exp's probe at 256 bits
+  with the two commands swapped printed `force inline by CompileCommand` at those sites instead
+  (JDK 25.0.5.1), so the later of two matching commands wins.
 - **Print the caller's loop, not exp's methods.** Without the forced inline, `Exp`'s shared
   three-argument body compiles as a method of its own whose `arm` is no constant; it takes and
   returns heap vectors, calls `blend` and `convert` unintrinsified and allocates (`C2 Runtime
@@ -318,45 +323,45 @@ run, the same in a second. Each is the whole nmethod of the probe's loop, prolog
 paths included, so the constant broadcasts C2 hoists before the loop count, and from 256 bits up the
 stack accesses are the stack bang and the uncommon traps' saves, not spills; `bench/asm/README.md`
 counts the hot loop alone. The columns: all instructions, packed-double arithmetic, `vdivpd`,
-blends, broadcasts, compares (`vpcmp*`, `vcmp*`), mask-register operations (`k*`), conversions
+`vsqrtpd` (added with the other ports' census below; 0 in every exp row), blends, broadcasts, compares (`vpcmp*`, `vcmp*`), mask-register operations (`k*`), conversions
 (`vcvt*`, `vpmov*`), operands on `[rsp`, calls, FMA. The preferred species read the same as its
 fixed width (512 bits on the host's flags, 256 as an AVX2 host). The rows are the test's output
 (`grep '^| exp '`), less its function and width columns, under shorter headers.
 
 On the host's own flags (AVX-512, `MaxVectorSize=64`):
 
-| bits | arm | insns | pd | div | blend | bcast | cmp | k | cvt | stack | calls | fma |
-| ---: | :--- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| 128 | finish | 1195 | 24 | 1 | 0 | 9 | 3 | 2 | 19 | 351 | 60 | 0 |
-| 128 | finishMasked | 1366 | 24 | 1 | 0 | 9 | 3 | 2 | 19 | 421 | 71 | 0 |
-| 128 | blended | 2289 | 26 | 1 | 0 | 14 | 3 | 2 | 20 | 535 | 126 | 0 |
-| 128 | blendedMasked | 2469 | 26 | 1 | 0 | 14 | 3 | 2 | 20 | 682 | 132 | 0 |
-| 128 | core | 1872 | 24 | 1 | 0 | 14 | 6 | 4 | 24 | 555 | 91 | 0 |
-| 256 | finish | 137 | 24 | 1 | 2 | 17 | 7 | 5 | 4 | 8 | 3 | 0 |
-| 256 | finishMasked | 159 | 24 | 1 | 3 | 17 | 7 | 6 | 4 | 10 | 3 | 0 |
-| 256 | blended | 145 | 26 | 1 | 8 | 24 | 12 | 4 | 4 | 2 | 2 | 0 |
-| 256 | blendedMasked | 157 | 26 | 1 | 9 | 24 | 12 | 4 | 4 | 3 | 2 | 0 |
-| 256 | core | 133 | 24 | 1 | 2 | 17 | 7 | 3 | 4 | 3 | 2 | 0 |
-| 512 | finish | 140 | 24 | 1 | 2 | 17 | 7 | 5 | 4 | 8 | 3 | 0 |
-| 512 | finishMasked | 155 | 24 | 1 | 3 | 17 | 7 | 7 | 4 | 10 | 3 | 0 |
-| 512 | blended | 145 | 26 | 1 | 8 | 24 | 12 | 4 | 4 | 2 | 2 | 0 |
-| 512 | blendedMasked | 155 | 26 | 1 | 9 | 24 | 12 | 4 | 4 | 3 | 2 | 0 |
-| 512 | core | 134 | 24 | 1 | 2 | 17 | 7 | 3 | 4 | 3 | 2 | 0 |
+| bits | arm | insns | pd | div | sqrt | blend | bcast | cmp | k | cvt | stack | calls | fma |
+| ---: | :--- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 128 | finish | 1195 | 24 | 1 | 0 | 0 | 9 | 3 | 2 | 19 | 351 | 60 | 0 |
+| 128 | finishMasked | 1366 | 24 | 1 | 0 | 0 | 9 | 3 | 2 | 19 | 421 | 71 | 0 |
+| 128 | blended | 2289 | 26 | 1 | 0 | 0 | 14 | 3 | 2 | 20 | 535 | 126 | 0 |
+| 128 | blendedMasked | 2469 | 26 | 1 | 0 | 0 | 14 | 3 | 2 | 20 | 682 | 132 | 0 |
+| 128 | core | 1872 | 24 | 1 | 0 | 0 | 14 | 6 | 4 | 24 | 555 | 91 | 0 |
+| 256 | finish | 137 | 24 | 1 | 0 | 2 | 17 | 7 | 5 | 4 | 8 | 3 | 0 |
+| 256 | finishMasked | 159 | 24 | 1 | 0 | 3 | 17 | 7 | 6 | 4 | 10 | 3 | 0 |
+| 256 | blended | 145 | 26 | 1 | 0 | 8 | 24 | 12 | 4 | 4 | 2 | 2 | 0 |
+| 256 | blendedMasked | 157 | 26 | 1 | 0 | 9 | 24 | 12 | 4 | 4 | 3 | 2 | 0 |
+| 256 | core | 133 | 24 | 1 | 0 | 2 | 17 | 7 | 3 | 4 | 3 | 2 | 0 |
+| 512 | finish | 140 | 24 | 1 | 0 | 2 | 17 | 7 | 5 | 4 | 8 | 3 | 0 |
+| 512 | finishMasked | 155 | 24 | 1 | 0 | 3 | 17 | 7 | 7 | 4 | 10 | 3 | 0 |
+| 512 | blended | 145 | 26 | 1 | 0 | 8 | 24 | 12 | 4 | 4 | 2 | 2 | 0 |
+| 512 | blendedMasked | 155 | 26 | 1 | 0 | 9 | 24 | 12 | 4 | 4 | 3 | 2 | 0 |
+| 512 | core | 134 | 24 | 1 | 0 | 2 | 17 | 7 | 3 | 4 | 3 | 2 | 0 |
 
 As an AVX2 host (`-XX:UseAVX=2 -XX:MaxVectorSize=32`):
 
-| bits | arm | insns | pd | div | blend | bcast | cmp | k | cvt | stack | calls | fma |
-| ---: | :--- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| 128 | finish | 1147 | 24 | 1 | 2 | 9 | 4 | 0 | 18 | 295 | 60 | 0 |
-| 128 | finishMasked | 1321 | 24 | 1 | 2 | 9 | 4 | 0 | 18 | 374 | 71 | 0 |
-| 128 | blended | 2313 | 26 | 1 | 2 | 14 | 4 | 0 | 19 | 573 | 126 | 0 |
-| 128 | blendedMasked | 2272 | 26 | 1 | 2 | 14 | 4 | 0 | 19 | 505 | 132 | 0 |
-| 128 | core | 1745 | 24 | 1 | 4 | 14 | 8 | 0 | 22 | 438 | 91 | 0 |
-| 256 | finish | 144 | 24 | 1 | 5 | 17 | 8 | 0 | 3 | 8 | 3 | 0 |
-| 256 | finishMasked | 167 | 24 | 1 | 6 | 17 | 8 | 0 | 4 | 10 | 3 | 0 |
-| 256 | blended | 152 | 26 | 1 | 10 | 25 | 13 | 0 | 3 | 2 | 2 | 0 |
-| 256 | blendedMasked | 167 | 26 | 1 | 11 | 25 | 13 | 0 | 4 | 5 | 2 | 0 |
-| 256 | core | 140 | 24 | 1 | 5 | 17 | 8 | 0 | 3 | 3 | 2 | 0 |
+| bits | arm | insns | pd | div | sqrt | blend | bcast | cmp | k | cvt | stack | calls | fma |
+| ---: | :--- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 128 | finish | 1147 | 24 | 1 | 0 | 2 | 9 | 4 | 0 | 18 | 295 | 60 | 0 |
+| 128 | finishMasked | 1321 | 24 | 1 | 0 | 2 | 9 | 4 | 0 | 18 | 374 | 71 | 0 |
+| 128 | blended | 2313 | 26 | 1 | 0 | 2 | 14 | 4 | 0 | 19 | 573 | 126 | 0 |
+| 128 | blendedMasked | 2272 | 26 | 1 | 0 | 2 | 14 | 4 | 0 | 19 | 505 | 132 | 0 |
+| 128 | core | 1745 | 24 | 1 | 0 | 4 | 14 | 8 | 0 | 22 | 438 | 91 | 0 |
+| 256 | finish | 144 | 24 | 1 | 0 | 5 | 17 | 8 | 0 | 3 | 8 | 3 | 0 |
+| 256 | finishMasked | 167 | 24 | 1 | 0 | 6 | 17 | 8 | 0 | 4 | 10 | 3 | 0 |
+| 256 | blended | 152 | 26 | 1 | 0 | 10 | 25 | 13 | 0 | 3 | 2 | 2 | 0 |
+| 256 | blendedMasked | 167 | 26 | 1 | 0 | 11 | 25 | 13 | 0 | 4 | 5 | 2 | 0 |
+| 256 | core | 140 | 24 | 1 | 0 | 5 | 17 | 8 | 0 | 3 | 3 | 2 | 0 |
 
 What it reads: no FMA in any arm at any width under either flag set. From 256 bits up every arm is
 one copy of the body (24 packed-double operations, one `vdivpd`; the blended arm's two more are its
@@ -557,7 +562,11 @@ traps and the entry barrier: 2 calls for the blended arms of log, log10, log1p a
 expm1's core, 4 for atan2's guarded arm, 3 for every other. asin, acos and hypot take their
 square root as one `vsqrtpd`. Masking adds one blend and 10 to 59 instructions on AVX-512, 17 to
 66 on AVX2, which has no mask registers (its `k` column is 0). At 128 bits every arm runs the
-Java fallback, 60 to 444 calls per method, as for exp.
+Java fallback, 60 to 444 calls per method, as for exp. acos's 49 packed-double operations at 128
+bits against 42 above are seven more `vsqrtpd`, 8 against 1: around the fallback's allocations
+of boxed vectors C2 computes `sqrt(z)` again at its uses, each from the same register, instead
+of keeping the one result (read in acos's 128-bit `finish` compile, by mnemonic); the other
+operations count the same at both widths.
 
 ## Where headline numbers come from: four named hosts
 

@@ -35,8 +35,9 @@ jobs:
             # The one row that also runs the jar check's self-test.
             jar-self-test: true
             # The assembly check's widths are split between the x86 rows (AsmTest checks the
-            # split leaves none out): 256 and 512 here and on the AVX2 row, 128 on the 128-bit
-            # row, where the 128-bit cases, three quarters of the check's time, run once.
+            # split leaves none out): 256 and 512 here, 256 on the AVX2 row, 128 on the 128-bit
+            # row, so the 128-bit cases, most of the check's time, run once (128-bit code is
+            # read under MaxVectorSize=16 only, an accepted trade-off).
             asm: true
             asm-widths: "256,512"
           # x86 compiled as an AVX2 host, the headline EPYC 7763, whatever runner is drawn:
@@ -47,7 +48,7 @@ jobs:
             os: ubuntu-latest
             jvm-args: -XX:UseAVX=2 -XX:MaxVectorSize=32
             asm: true
-            asm-widths: "256,512"
+            asm-widths: "256"
           # x86 with vectors capped at 16 bytes: every case runs at 128 bits (the preferred
           # species is 128 bits too), and the 256- and 512-bit cases are skipped.
           - name: x86 128 bits

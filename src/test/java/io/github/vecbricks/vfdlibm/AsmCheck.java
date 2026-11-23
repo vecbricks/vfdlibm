@@ -192,9 +192,10 @@ final class AsmCheck {
    * the calling thread ({@code -Xbatch}: a warm-up count alone only queues a compile), with hsdis
    * from {@code hsdisDir} and this JVM's {@code -XX} options (a CI row's {@code UseAVX} and
    * {@code MaxVectorSize}). The probe's own methods are kept from inlining ({@code dontinline},
-   * given after the forced inline, which it overrides for them): otherwise an on-stack-replacement
-   * compile of {@code main} could take in an arm's loop, and the arm's own compile, the one read,
-   * might never come. Fails on a non-zero exit, a timeout, or output without the probe's done
+   * given after the forced inline: of two matching commands the later wins, which swapping them
+   * showed, SKILLS.md): otherwise the compiled caller of an arm, {@code Method.invoke}'s {@code
+   * LambdaForm$DMH::invokeStatic}, takes in the arm's loop, and the arm's own compile, the one
+   * read, might never come. Fails on a non-zero exit, a timeout, or output without the probe's done
    * line.
    */
   static String runProbe(Class<?> probe, Path hsdisDir, List<String> properties)

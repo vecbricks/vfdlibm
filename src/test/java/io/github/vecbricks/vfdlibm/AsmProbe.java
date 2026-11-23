@@ -28,9 +28,10 @@ import jdk.incubator.vector.VectorSpecies;
  * followed by a capital ({@code expFinish}, {@code log10BlendedMasked}), taking the same five
  * arrays; {@link #arms} finds them by that rule, for this class's {@code main} and for {@link
  * AsmTest} alike. Each arm makes direct static calls into vfdlibm, which the child's forced inline
- * puts in the loop, while the arms themselves are kept out of {@code main} ({@code dontinline}), so
- * that each is a compile of its own and an on-stack-replacement compile of {@code main} cannot
- * swallow one.
+ * puts in the loop, while the arms themselves are kept out of their callers ({@code dontinline}):
+ * {@code main} calls each by reflection, and the compiled {@code LambdaForm$DMH::invokeStatic}
+ * behind {@code Method.invoke} would otherwise take the arm in, so that the arm's own compile,
+ * the one read, might never come.
  *
  * <p>The data are each benchmark's common inputs, on which no lane takes a rare path: the per-lane
  * finish is compiled as an uncommon trap, and no {@code StrictMath} code is compiled into the C2
@@ -319,8 +320,24 @@ final class AsmProbe {
   }
 
   // ---------------------------------------------------------------------------------------------
-  // cosh: CoshBenchmark's arms, each by name (not through VFdlibm.cosh's default), on
-  // 0.35 <= |x| < 60.
+  // cosh: CoshBenchmark's arms, each by name, and VFdlibm.cosh, the public default, whichever arm
+  // it calls; on 0.35 <= |x| < 60.
+
+  /** {@link VFdlibm#cosh(DoubleVector)}: the public default, whichever arm it calls. */
+  static void coshDefault(double[] a, double[] b, double[] out, boolean[] live,
+      boolean[] flags) {
+    for (int i = 0; i < N; i += S.length()) {
+      VFdlibm.cosh(DoubleVector.fromArray(S, a, i)).intoArray(out, i);
+    }
+  }
+
+  static void coshDefaultMasked(double[] a, double[] b, double[] out, boolean[] live,
+      boolean[] flags) {
+    for (int i = 0; i < N; i += S.length()) {
+      VFdlibm.cosh(DoubleVector.fromArray(S, a, i), VectorMask.fromArray(S, live, i))
+          .intoArray(out, i);
+    }
+  }
 
   static void coshSlice(double[] a, double[] b, double[] out, boolean[] live, boolean[] flags) {
     for (int i = 0; i < N; i += S.length()) {
