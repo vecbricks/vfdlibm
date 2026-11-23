@@ -108,11 +108,11 @@ five are a later, optional set; the large-argument reduction of the trigonometri
   -XX:MaxVectorSize=32`, 128 and 256 bits on every draw), on x86 with `-XX:MaxVectorSize=16`
   (all of it at 128 bits) and on Arm (128 bits).
 - **Nightly:** `.github/workflows/nightly.yml` sweeps every high word of exp, expm1, log, log10,
-  log1p, sinh, cosh, atan, asin, acos, atan2 and hypot (atan2 and hypot, of two arguments, one
-  argument at a time) with three low words each (every branch fdlibm decides on the high word) at
-  every width but 128 bits on x86, where a rotating 1/32 slice a night covers it in 32 nights, and
-  at 128 bits on Arm every night; it fuzzes from a fresh seed at every width, and runs every proof
-  under both solvers; a failure opens an issue labelled `nightly-failure` with the mismatching
+  log1p, sinh, cosh, atan, asin, acos, atan2, hypot and pow (atan2, hypot and pow, of two arguments,
+  one argument at a time) with three low words each (every branch fdlibm decides on the high word)
+  at every width but 128 bits on x86, where a rotating 1/32 slice a night covers it in 32 nights,
+  and at 128 bits on Arm every night; it fuzzes from a fresh seed at every width, and runs every
+  proof under both solvers; a failure opens an issue labelled `nightly-failure` with the mismatching
   inputs, ready for a `hard-cases` file (`SKILLS.md`), and a dispatch that plants a fault, to test
   that alert, opens one labelled `nightly-fault-test`.
 - **Masked forms:** a masked form is checked under seeded random masks, all-true and all-false;
