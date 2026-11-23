@@ -1103,7 +1103,42 @@ class ProofsTest {
       if (field >= 0x3ca) {
         assertTrue(k >= -53 && k <= 1024, at);
       }
+      if (field >= 0x3ca && field < 0x7ff) {
+        assertTrue(k + 1 <= 1024, at);
+      }
     }
+    // Field 0x7ff takes line 146's k += 1 only for a NaN u: +inf's masked word is 0, below
+    // 0x6a09e, and the lowest masked word that takes it is a NaN's.
+    assertTrue((bits(Double.POSITIVE_INFINITY) >>> 32 & 0x000fffffL) < Log1p.HU_SQRT2);
+    assertTrue(Double.isNaN(Double.longBitsToDouble((0x7ff00000L | Log1p.HU_SQRT2) << 32)));
+    // On real kept lanes, u = 1.0+x (or x from 2^53) has its sign clear, HU is the C's hu, and
+    // K after line 146 is the C's k, in [-53, 1024].
+    double[] kept = Inputs.concat(new double[] {Math.nextUp(-1.0), -0.5, -0x1p-60, 0.0, 0x1p-60,
+        Math.nextDown(0x1p53), 0x1p53, Double.MAX_VALUE, Double.POSITIVE_INFINITY},
+        Inputs.sampled(1802L, 1 << 16), Inputs.uniform(1803L, 1 << 16, -1.0, 4.0));
+    int keptLanes = 0;
+    for (double x : kept) {
+      if (!(x > -1.0)) {
+        continue;
+      }
+      double u = x >= 0x1p53 ? x : 1.0 + x;
+      long hu = bits(u) >>> 32;
+      int chu = (int) (bits(u) >> 32);
+      String at = Oracle.hex(x);
+      assertTrue(hu < 1L << 31 && hu == (long) chu, at);
+      long k = (hu >>> 20) - 1023;
+      int ck = (chu >> 20) - 1023;
+      if ((chu & 0x000fffff) >= Log1p.HU_SQRT2) {
+        ck += 1;
+      }
+      if ((hu & 0x000fffffL) >= Log1p.HU_SQRT2) {
+        k += 1;
+      }
+      assertEquals((long) ck, k, at);
+      assertTrue(k >= -53 && k <= 1024, at);
+      keptLanes++;
+    }
+    assertTrue(keptLanes > 1 << 16, "kept lanes " + keptLanes);
     // The exponent field is masked away, so the significand word is all the rest reads; the
     // low word of u is 0x5555aaaa here, any word, since the C's __HI(u) = w leaves it.
     long uLow = 0x5555_aaaaL;
@@ -1157,16 +1192,21 @@ class ProofsTest {
   }
 
   /**
-   * L18's H19: the C answers every lane with !(x > -1) early, -inf at -1 and a NaN elsewhere,
-   * so a word of such a lane is never kept; this fails if the C kept one. And on every lane of
-   * the set below -1 that is no NaN, u is negative and the long HU is not the C's hu widened,
-   * so H19 is needed.
+   * L18's H19: every lane with !(x > -1) meets the C's early-return test, line 114's (hx below
+   * 0x3FDA827A and ax at least 0x3ff00000) or line 128's (hx at least 0x7ff00000), so this fails
+   * if such a lane reached the reduction; and StrictMath.log1p answers it -inf at -1 and a NaN
+   * elsewhere, the answers the kernel blends. And on every lane of the set below -1 that is no
+   * NaN, u is negative and the long HU is not the C's hu widened, so H19 is needed.
    */
   @Test
   void l18EarlyLanesAreAnsweredEarly() {
     int below = 0;
     for (double x : l18EarlySet()) {
       assertFalse(x > -1.0, Oracle.hex(x));
+      int hx = (int) (bits(x) >> 32);
+      int ax = hx & 0x7fffffff;
+      assertTrue((hx < Log1p.HX_BELOW_SQRT2_M1 && ax >= Log1p.AX_MINUS_ONE)
+          || hx >= Log1p.HX_NON_FINITE, Oracle.hex(x));
       double got = StrictMath.log1p(x);
       assertTrue(x == -1.0 ? bits(got) == bits(Double.NEGATIVE_INFINITY) : Double.isNaN(got),
           Oracle.hex(x));
