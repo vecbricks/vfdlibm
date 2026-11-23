@@ -1428,11 +1428,11 @@ class ProofsTest {
    * sampled loop): on line 126's lanes the C's k = 0, f = x and hu = 1 through lines 152-164
    * give StrictMath.log1p's bits (checked on the witnesses, 2^-25 and 2^12 sampled lanes of the
    * band), as do the C's words of lines 129-150 on L12's rows, which take the short path with
-   * k = 1 and k = -1, and on the lanes of 2^13 sampled inputs that reach those lines, so the finish is the C's
-   * on both of its paths; a kernel that blends f = x but keeps the computed k and hu
-   * (l18KernelWords without line 126's blends) has k = 0 and hu = 0 at 2^-25 and at each
-   * witness, so it takes the short path, and at each witness, one of each sign, its result is
-   * one ulp off StrictMath's. At 2^-25 the rerouted lane happens to give the same bits.
+   * k = 1 and k = -1, and on the lanes of 2^13 sampled inputs that reach those lines, so the
+   * finish is the C's on both of its paths; a kernel that blends f = x but keeps the computed k
+   * and hu (l18KernelWords without line 126's blends) has k = 0 and hu = 0 at 2^-25 and at
+   * each witness, so it takes the short path, and at each witness, one of each sign, its result
+   * is one ulp off StrictMath's. At 2^-25 the rerouted lane happens to give the same bits.
    */
   @Test
   void l18KeptWordsOnLine126LanesAreNotTheCs() {
