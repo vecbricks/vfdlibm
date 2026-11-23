@@ -46,17 +46,21 @@ import java.util.regex.Pattern;
  *   <li>{@link #undecodedViolations}: every byte decoded, or the other rules read garbage (hsdis
  *       needs Capstone 5 or later for AVX-512; {@code dev/hsdis-build.sh}).
  *   <li>{@link #widthViolations}: at least one packed-double arithmetic instruction ({@code
- *       v(add|sub|mul|div)pd}), every one of them on registers of the width's class ({@code xmm}
- *       at 128 bits, {@code ymm} at 256, {@code zmm} at 512), and no scalar double arithmetic
- *       ({@code (v)(add|sub|mul|div)sd}). Narrower registers elsewhere are allowed: the int lanes
- *       of a 512-bit body are a {@code ymm}, and zeroing idioms name {@code xmm}.
+ *       v(add|sub|mul|div|sqrt)pd}), every one of them on registers of the width's class ({@code
+ *       xmm} at 128 bits, {@code ymm} at 256, {@code zmm} at 512), and no scalar double
+ *       arithmetic ({@code (v)(add|sub|mul|div|sqrt)sd}). Narrower registers elsewhere are
+ *       allowed: the int lanes of a 512-bit body are a {@code ymm}, and zeroing idioms name {@code
+ *       xmm}.
  *   <li>{@link #fmaViolations}: no fused multiply-add of any form ({@code vfmadd*}, {@code
  *       vfmsub*}, {@code vfnmadd*}, {@code vfnmsub*}, {@code vfmaddsub*}, {@code vfmsubadd*}).
  *   <li>{@link #callViolations}: every {@code call} goes to an uncommon trap ({@code {runtime_call
  *       UncommonTrapBlob}}) or the method entry barrier ({@code {runtime_call
- *       Stub::method_entry_barrier}}). On data where no lane is rare C2 compiles each rare branch
- *       as an uncommon trap, a deoptimizing exit that is never the common path; so any other
- *       call, anywhere in the method, fails, which is stricter than the common path alone.
+ *       Stub::method_entry_barrier}}), and no other instruction carries a call's relocation but
+ *       the safepoint poll stub's {@code jmp} ({@code {runtime_call SafepointBlob}}). On data
+ *       where no lane is rare C2 compiles each rare branch as an uncommon trap, a deoptimizing
+ *       exit that is never the common path; so any other call, anywhere in the method, fails,
+ *       which is stricter than the common path alone. Prefixes such as {@code notrack} are read
+ *       off before the mnemonic, so {@code notrack call} is a call.
  *   <li>{@link #licenceViolations}: no inlined frame of {@code java.lang.StrictMath} or {@code
  *       FdLibm}, whose compiled code this project does not read (AGENTS.md, licence). HotSpot
  *       names frames only at calls, traps and safepoints, so this is a backstop; what keeps that
@@ -137,6 +141,43 @@ final class AsmCheck {
     return null;
   }
 
+  /**
+   * The environment variable that names the widths, in bits, this run checks ({@code 128}, or
+   * {@code 256,512}); unset or empty, every width. CI's x86 rows split the widths between them
+   * ({@code asm-widths} in ci.yml), and {@code AsmTest} checks that together they cover all.
+   */
+  static final String WIDTHS_ENV = "VFDLIBM_ASM_WIDTHS";
+  /** The widths the check knows. */
+  static final List<Integer> ALL_WIDTHS = List.of(128, 256, 512);
+
+  /** The widths {@link #WIDTHS_ENV} names. */
+  static List<Integer> widths() {
+    return widths(System.getenv(WIDTHS_ENV));
+  }
+
+  /** {@link #widths()} for the value {@code env}: every width when null or blank. */
+  static List<Integer> widths(String env) {
+    if (env == null || env.isBlank()) {
+      return ALL_WIDTHS;
+    }
+    List<Integer> widths = new ArrayList<>();
+    for (String part : env.split(",")) {
+      int bits;
+      try {
+        bits = Integer.parseInt(part.trim());
+      } catch (NumberFormatException e) {
+        throw new IllegalArgumentException(WIDTHS_ENV + "='" + env + "': '" + part.trim()
+            + "' is not a width in bits");
+      }
+      if (!ALL_WIDTHS.contains(bits) || widths.contains(bits)) {
+        throw new IllegalArgumentException(WIDTHS_ENV + "='" + env + "': " + bits
+            + " is not one of " + ALL_WIDTHS + " or is named twice");
+      }
+      widths.add(bits);
+    }
+    return List.copyOf(widths);
+  }
+
   /** Whether {@link #REQUIRED_ENV} turns a skip into a failure. */
   static boolean required() {
     return "true".equals(System.getenv(REQUIRED_ENV));
@@ -150,8 +191,12 @@ final class AsmCheck {
    * of {@code probe}, with vfdlibm's methods forced inline as the benchmarks run them, compiled on
    * the calling thread ({@code -Xbatch}: a warm-up count alone only queues a compile), with hsdis
    * from {@code hsdisDir} and this JVM's {@code -XX} options (a CI row's {@code UseAVX} and
-   * {@code MaxVectorSize}). Fails on a non-zero exit, a timeout, or output without the probe's
-   * done line.
+   * {@code MaxVectorSize}). The probe's own methods are kept from inlining ({@code dontinline},
+   * given after the forced inline: of two matching commands the later wins, which swapping them
+   * showed, SKILLS.md): otherwise the compiled caller of an arm, {@code Method.invoke}'s {@code
+   * LambdaForm$DMH::invokeStatic}, takes in the arm's loop, and the arm's own compile, the one
+   * read, might never come. Fails on a non-zero exit, a timeout, or output without the probe's done
+   * line.
    */
   static String runProbe(Class<?> probe, Path hsdisDir, List<String> properties)
       throws IOException, InterruptedException {
@@ -167,6 +212,7 @@ final class AsmCheck {
     command.addAll(properties);
     command.addAll(List.of("-XX:PrintAssemblyOptions=intel", "-XX:CompileCommand=quiet",
         "-XX:CompileCommand=inline,io.github.vecbricks.vfdlibm.*::*",
+        "-XX:CompileCommand=dontinline," + probe.getName() + "::*",
         "-XX:CompileCommand=print," + probe.getName() + "::*",
         "-cp", System.getProperty("java.class.path"), probe.getName()));
     ProcessBuilder builder = new ProcessBuilder(command).redirectErrorStream(true);
@@ -211,13 +257,27 @@ final class AsmCheck {
   // ---------------------------------------------------------------------------------------------
   // Parsing
 
-  /** One instruction: its address, mnemonic, operands and the comments HotSpot put after it. */
-  record Instruction(long address, String mnemonic, String operands, String notes) {
+  /**
+   * One instruction: its address, its prefixes ({@code notrack}, {@code lock}, ...; empty for
+   * none), its mnemonic, operands and the comments HotSpot put after it.
+   */
+  record Instruction(long address, String prefixes, String mnemonic, String operands,
+      String notes) {
     @Override
     public String toString() {
-      return String.format(Locale.ROOT, "0x%x: %s %s", address, mnemonic, operands);
+      return String.format(Locale.ROOT, "0x%x: %s%s %s", address,
+          prefixes.isEmpty() ? "" : prefixes + " ", mnemonic, operands);
     }
   }
+
+  /**
+   * The prefixes a disassembler may print before a mnemonic as words of their own ({@code notrack
+   * call r10}), which {@link #lastC2} moves out of the mnemonic so that every rule reads the
+   * instruction itself.
+   */
+  private static final Pattern PREFIX = Pattern.compile(
+      "lock|rep|repe|repz|repne|repnz|notrack|bnd|xacquire|xrelease|data16|data32|addr16|addr32"
+          + "|rex64|rex(\\.[wrxb]+)?|cs|ds|es|fs|gs|ss");
 
   /**
    * A method's C2 code from its entry point to its stubs, and the lines in that range that were
@@ -297,16 +357,24 @@ final class AsmCheck {
       } else if (inCode) {
         Matcher m = INSTRUCTION.matcher(line);
         if (m.matches()) {
+          String mnemonic = m.group(2);
           String operands = m.group(3) == null ? "" : m.group(3).trim();
           String note = m.group(4) == null ? "" : m.group(4);
-          code.add(new Instruction(Long.parseUnsignedLong(m.group(1), 16), m.group(2), operands,
-              note));
+          StringBuilder prefixes = new StringBuilder();
+          while (PREFIX.matcher(mnemonic).matches() && !operands.isEmpty()) {
+            prefixes.append(prefixes.isEmpty() ? "" : " ").append(mnemonic);
+            String[] split = operands.split("\\s+", 2);
+            mnemonic = split[0];
+            operands = split.length > 1 ? split[1] : "";
+          }
+          code.add(new Instruction(Long.parseUnsignedLong(m.group(1), 16), prefixes.toString(),
+              mnemonic, operands, note));
         } else {
           Matcher n = NOTE.matcher(line);
           if (n.matches() && !code.isEmpty()) {
             Instruction last = code.remove(code.size() - 1);
-            code.add(new Instruction(last.address(), last.mnemonic(), last.operands(),
-                last.notes() + " ;" + n.group(1).trim()));
+            code.add(new Instruction(last.address(), last.prefixes(), last.mnemonic(),
+                last.operands(), last.notes() + " ;" + n.group(1).trim()));
           } else if (!n.matches() && !line.isBlank() && !line.trim().startsWith("#")
               && !isEntry(line)) {
             unread.add(line);
@@ -322,12 +390,22 @@ final class AsmCheck {
   // ---------------------------------------------------------------------------------------------
   // The rules
 
-  private static final Pattern PACKED_DOUBLE = Pattern.compile("v(add|sub|mul|div)pd");
-  private static final Pattern SCALAR_DOUBLE = Pattern.compile("v?(add|sub|mul|div)sd");
+  private static final Pattern PACKED_DOUBLE = Pattern.compile("v(add|sub|mul|div|sqrt)pd");
+  private static final Pattern SCALAR_DOUBLE = Pattern.compile("v?(add|sub|mul|div|sqrt)sd");
   private static final Pattern FMA = Pattern.compile("vfn?m(add|sub).*");
   private static final Pattern VECTOR_REGISTER = Pattern.compile("\\b([xyz]mm)\\d+\\b");
+  /** A relocation that marks a call or a jump out of the method: HotSpot's comment for it. */
+  private static final Pattern CALL_RELOCATION = Pattern.compile(
+      "\\{(?:runtime_call|static_call|opt_virtual_call|optimized virtual_call|virtual_call)"
+          + "\\b[^}]*\\}");
+  /** The relocations a {@code call} may carry: an uncommon trap and the method entry barrier. */
   private static final List<String> ALLOWED_CALLS =
       List.of("{runtime_call UncommonTrapBlob}", "{runtime_call Stub::method_entry_barrier}");
+  /**
+   * The relocation a {@code jmp} may carry: the safepoint poll stub C2 places after the body,
+   * which the return's poll enters only when a safepoint is pending.
+   */
+  private static final List<String> ALLOWED_JUMPS = List.of("{runtime_call SafepointBlob}");
 
   /** The register class of a vector of {@code bits}. */
   static String registerClass(int bits) {
@@ -360,7 +438,7 @@ final class AsmCheck {
       }
     }
     if (packed == 0) {
-      violations.add(body.method() + ": no packed-double arithmetic (v(add|sub|mul|div)pd)");
+      violations.add(body.method() + ": no packed-double arithmetic (v(add|sub|mul|div|sqrt)pd)");
     }
     return violations;
   }
@@ -371,10 +449,27 @@ final class AsmCheck {
         "is a fused multiply-add");
   }
 
-  /** Every call that is not an uncommon trap or the entry barrier. */
+  /**
+   * Every call that is not an uncommon trap or the entry barrier, and every other instruction
+   * that carries a call's relocation ({@code {runtime_call ...}}, {@code {static_call}}, {@code
+   * {optimized virtual_call}}, {@code {virtual_call}}) but the poll stub's {@code jmp} to the
+   * safepoint blob: a tail jump that HotSpot marks as a call is a call too. Each relocation is
+   * matched whole, so an allowed one beside another does not pass, and a {@code call} with none
+   * fails. A {@code jmp} with no call relocation (one to a label, an indirect one, one marked
+   * only {@code {external_word}}) is not read as leaving the method.
+   */
   static List<String> callViolations(Body body) {
-    return matching(body, insn -> insn.mnemonic().startsWith("call")
-        && ALLOWED_CALLS.stream().noneMatch(insn.notes()::contains), "is a call");
+    return matching(body, insn -> {
+      List<String> relocations = CALL_RELOCATION.matcher(insn.notes()).results()
+          .map(java.util.regex.MatchResult::group).toList();
+      if (insn.mnemonic().startsWith("call")) {
+        return relocations.isEmpty() || !ALLOWED_CALLS.containsAll(relocations);
+      }
+      if (insn.mnemonic().equals("jmp")) {
+        return !ALLOWED_JUMPS.containsAll(relocations);
+      }
+      return !relocations.isEmpty();
+    }, "is a call");
   }
 
   /**
@@ -421,6 +516,7 @@ final class AsmCheck {
     c.put("insns", insn -> true);
     c.put("pd arith", insn -> PACKED_DOUBLE.matcher(insn.mnemonic()).matches());
     c.put("vdivpd", insn -> insn.mnemonic().equals("vdivpd"));
+    c.put("vsqrtpd", insn -> insn.mnemonic().equals("vsqrtpd"));
     c.put("blends", insn -> insn.mnemonic().contains("blend"));
     c.put("broadcasts", insn -> insn.mnemonic().contains("broadcast"));
     c.put("compares", insn -> insn.mnemonic().startsWith("vpcmp")
