@@ -1077,9 +1077,14 @@ word.
   blends `k = 0`, `f = x` and `hu = 1` over the words computed from `u`, as the C sets them
   there and never computes `u`; on the tiny lanes (`|x| < 2^-29`, lines 118-123) and the
   non-finite ones (line 128) the C's early answers are blended over every other result. It is
-  needed: at `x = 2^-25`, a line-126 lane, `u = 1 + 2^-25` has `HU & 0x000fffff = 0`, so a
-  kernel that kept `HU` there would take the `hu == 0` path of lines 153-158 instead of the
-  general one, which L12 shows is not bit-identical.
+  needed: at `x = 2^-25`, a line-126 lane, `u = 1 + 2^-25` has `HU & 0x000fffff = 0` and `K =
+  0`, so a kernel that kept the words computed from `u` there, even with `f = x` blended, would
+  take the `hu == 0` short path of lines 153-158 with `k = 0` and `f = x`, a path the C never
+  takes (L12's rows are `k = 1` and `k = -1` lanes, so they do not cover it). At `2^-25` the
+  short path happens to give the C's bits; at `x = 0x3ea5a84a_dfba2358` (`1+x` in `(1, 1 +
+  2^-20)`) and `x = 0xbeaa4106_df3cfdd0` (`1+x` in `(1 - 2^-20, 1)`), where the kept `K` and
+  `hu` are 0 too, its result is one ulp off the C's, `0x3ea5a84a_6a776be3` against
+  `0x3ea5a84a_6a776be2` and `0xbeaa4107_8b8e7e29` against `0xbeaa4107_8b8e7e2a`.
 
 **Proof.**
 1. (a) As signed longs, `b = hx * 2^32 + lo` with `0 <= lo < 2^32`, and `h * 2^32` lies in
@@ -1132,6 +1137,24 @@ and `K` is in `[-53, 1024]`. With the kernel's `hu = 1` blend on line 126's lane
 every significand word from 0 to `0xfffff` checks the long `hu & 0x000fffff`, the compare with
 `0x6a09e`, both ORed words, the quarter word and the rebuilt bits of `u` against the C's ints, an
 integer identity, since the mask drops the sign.
+
+`ProofsTest.l18KeptWordsOnLine126LanesAreNotTheCs` is H20's witness, not a hinge test: no change
+to `Log1p` or to Varka's kernel can make it fail, since it checks the test's own model of a
+kernel that broke H20. Lines 152-164 from the C's `k = 0`, `f = x` and `hu = 1` give
+`StrictMath.log1p`'s bits on the two witnesses, `2^-25` and 2^12 sampled lanes of line 126's
+band, and from the C's words of lines 129-150 on L12's four rows (the short path with `k = 1` and
+`k = -1`) and the lanes of 2^13 sampled inputs that reach those lines, so its finish is the C's
+on both paths; the same model's words without line 126's two blends have `K = 0` and `hu = 0`
+at `2^-25` and at each witness, and with `f = x` the witnesses' results are the bits H20 quotes,
+one ulp off `StrictMath`'s, and `2^-25`'s are equal. **Vector tie, here.**
+`ProofsTest.l18Line126WitnessesThroughEveryArm` runs the witnesses, their neighbours and `2^-25`,
+each at every lane position among line-126 lanes, through every arm of `Log1p` at every width,
+unmasked and masked, against `StrictMath.log1p` by raw bits. The finish arm, which the public one
+is, cannot see a dropped `hu = 1` blend: the lane gets `hu == 0`, joins the rare mask and is
+finished by `StrictMath.log1p`, as for L12's fold; the blended and the guarded arm see it. With
+`Log1p`'s `hu = 1` blend on line 126's lanes dropped by hand (and reverted), the public arm passed
+and the blended arm, the next one checked, failed at every width, 48 of its 448 inputs differing.
+
 `ProofsTest.l18EarlyLanesAreAnsweredEarly` (H19): every lane of a set with `!(x > -1)` (one pattern
 at every exponent field from `0x3ff` up with the sign set, `-1` and its neighbours below, the
 specials and sampled patterns that are not above -1, the NaNs of both signs) meets the C's
