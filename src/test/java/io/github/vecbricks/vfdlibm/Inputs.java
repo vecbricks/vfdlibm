@@ -67,14 +67,36 @@ final class Inputs {
 
   /**
    * {@code n} doubles of random sign whose magnitudes are spread evenly over the binary exponents
-   * from {@code 2^minExponent} to {@code 2^maxExponent}, with random significands.
+   * from {@code 2^minExponent} to {@code 2^maxExponent}, with random significands. The exponents
+   * are normal ones, -1022 to 1023, and others are refused: -1023 would give subnormals with a
+   * stray leading bit, and anything lower wraps the exponent field into huge finite values,
+   * infinities and NaNs. {@link #subnormals} draws below 2^-1022.
    */
   static double[] magnitudes(long seed, int n, int minExponent, int maxExponent) {
+    if (minExponent < -1022 || maxExponent > 1023 || minExponent > maxExponent) {
+      throw new IllegalArgumentException(
+          "exponents " + minExponent + " to " + maxExponent + " are not within -1022 to 1023");
+    }
     SplittableRandom random = new SplittableRandom(seed);
     double[] xs = new double[n];
     for (int i = 0; i < n; i++) {
       long exponent = random.nextInt(minExponent, maxExponent + 1) + 1023L;
       long bits = (exponent << 52) | (random.nextLong() & 0x000f_ffff_ffff_ffffL);
+      xs[i] = random.nextBoolean() ? Double.longBitsToDouble(bits) : -Double.longBitsToDouble(bits);
+    }
+    return xs;
+  }
+
+  /**
+   * {@code n} subnormal doubles of random sign, nonzero, with the leading bit spread evenly over the
+   * 52 positions so that every binade from 2^-1074 to 2^-1023 is drawn about as often.
+   */
+  static double[] subnormals(long seed, int n) {
+    SplittableRandom random = new SplittableRandom(seed);
+    double[] xs = new double[n];
+    for (int i = 0; i < n; i++) {
+      long bits = (random.nextLong() & 0x000f_ffff_ffff_ffffL) >>> random.nextInt(52);
+      bits = bits == 0 ? 1 : bits;
       xs[i] = random.nextBoolean() ? Double.longBitsToDouble(bits) : -Double.longBitsToDouble(bits);
     }
     return xs;

@@ -367,6 +367,32 @@ class HarnessSelfTest {
   }
 
   @Test
+  void magnitudesStayInTheirExponentsAndRefuseSubnormalOnes() {
+    for (double x : Inputs.magnitudes(9L, 4096, -1022, 1023)) {
+      assertTrue(Double.isFinite(x) && Math.abs(x) >= Double.MIN_NORMAL, "drew " + x);
+    }
+    for (double x : Inputs.magnitudes(10L, 4096, -3, 2)) {
+      assertTrue(Math.abs(x) >= 0.125 && Math.abs(x) < 8.0, "drew " + x);
+    }
+    assertThrows(IllegalArgumentException.class, () -> Inputs.magnitudes(1L, 8, -1074, 1023));
+    assertThrows(IllegalArgumentException.class, () -> Inputs.magnitudes(1L, 8, 0, 1024));
+    assertThrows(IllegalArgumentException.class, () -> Inputs.magnitudes(1L, 8, 5, 4));
+  }
+
+  @Test
+  void subnormalsAreSubnormalAndNonzero() {
+    int belowTwoToMinus1060 = 0;
+    for (double x : Inputs.subnormals(11L, 4096)) {
+      assertTrue(x != 0.0 && Math.abs(x) < Double.MIN_NORMAL, "drew " + x);
+      if (Math.abs(x) < 0x1p-1060) {
+        belowTwoToMinus1060++;
+      }
+    }
+    // The leading bit is spread over 52 positions, so about 14 of 52 binades lie below 2^-1060.
+    assertTrue(belowTwoToMinus1060 > 4096 / 8, "only " + belowTwoToMinus1060 + " below 2^-1060");
+  }
+
+  @Test
   void aroundIsConsecutiveDoubles() {
     long one = Double.doubleToRawLongBits(1.0);
     assertArrayEquals(new long[] {one - 2, one - 1, one, one + 1, one + 2},
