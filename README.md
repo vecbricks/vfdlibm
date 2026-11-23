@@ -185,8 +185,8 @@ fdlibm's own sequence of operations, lane by lane. That is this library.
   Xeon Platinum 8573C and the EPYC 7763 (`bench/results/`), and each file's reading is in
   `SKILLS.md`; where two arms are within 1.3x of each other no direction is read, and where the
   hosts disagree the files say so. The rules are set (issue #30): a tie within 1.3x on every host
-  that has a file goes to the finish arm, except for `cosh`, whose arm the owner decided on 23
-  November (the finish arm: no row gives its slice arm a direction), and where
+  that has a file goes to the finish arm, except for `cosh`, whose arm a host run decides (the owner
+  made it the finish arm on 23 November: no measured row favours its slice arm), and where
   hosts disagree each species keeps its own arm (no function needs that yet). `expm1` and `log1p`
   stay on their guarded arm by the owner's deferral of the rule until the 8573C's second run. The
   `*Max` rows of the host files of 3 to 21 November for `exp`, `expm1`, `log`, `log10` and `log1p`

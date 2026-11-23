@@ -1119,10 +1119,9 @@ blend and 10 to 23 instructions. At 128 bits the bodies are 8 to 16 times longer
   only on data with no small lane, and at 3.5% and 17% of small lanes, Varka's and Spark's shares,
   the arms read within 1.3x of each other, with no direction. cosh is the named exception to issue
   #30's tie rule (its per-lane set is not rare, so a host run decides), and the owner made the
-  finish arm its default on 23 November: no row gives slice a direction (at 17% of small lanes it
-  reads lower, inside 1.3x), the EPYC 7763's two runs give finish one on common data, neither host
-  gives a direction at Varka's and Spark's shares of small lanes, and the owner applied rule 1's
-  tie-break to cosh. It is not read as faster, and the
+  finish arm its default on 23 November: no measured row favours slice, the EPYC 7763's two runs
+  read finish lower on common data near 1.3x, neither host gives a direction at Varka's and Spark's
+  shares of small lanes, and rule 1's tie goes to the finish arm. It is not read as faster, and the
   slice arm stays, tested, so the choice can be re-measured.
 - **Which exp faults reach cosh.** `exp.dropCorrection` and `exp.constantOffByOneUlp`, which
   change `expCore`'s lanes of `|x| >= 0.5 ln2`. `exp.thresholdMoved` moves the subnormal
