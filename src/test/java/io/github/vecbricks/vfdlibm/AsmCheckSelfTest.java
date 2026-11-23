@@ -99,7 +99,8 @@ class AsmCheckSelfTest {
         + insn(0x88fc, "kortestb", "k7, k7")
         + insn(0x8900, "jne", "0x7ac3981f8a00")
         + call(0x8a00, "io.github.vecbricks.vfdlibm.Exp::exp@615 (line 298)",
-            "{runtime_call UncommonTrapBlob}");
+            "{runtime_call UncommonTrapBlob}")
+        + insn(0x8a20, "jmp", "0x7ac397a9c260      ;   {runtime_call SafepointBlob}");
   }
 
   private static AsmCheck.Body body(String output) {
@@ -114,7 +115,7 @@ class AsmCheckSelfTest {
     assertTrue(AsmCheck.disassembled(output));
     AsmCheck.Body body = body(output);
     // the constant pool and the stubs are not code; the entry barrier is the first instruction
-    assertEquals(12, body.code().size(), body.code().toString());
+    assertEquals(13, body.code().size(), body.code().toString());
     assertEquals(List.of(), AsmCheck.widthViolations(body, 512));
     assertEquals(List.of(), AsmCheck.fmaViolations(body));
     assertEquals(List.of(), AsmCheck.callViolations(body));
@@ -158,6 +159,14 @@ class AsmCheckSelfTest {
     List<String> violations = AsmCheck.widthViolations(body(nmethod(scalar)), 512);
     assertEquals(1, violations.size(), violations.toString());
     assertTrue(violations.get(0).contains("scalar"), violations.toString());
+    // a square root is arithmetic too: scalar, or on narrower registers, it fails
+    violations = AsmCheck.widthViolations(body(nmethod(clean512()
+        + insn(0x8a40, "vsqrtsd", "xmm0, xmm0, xmm1"))), 512);
+    assertEquals(1, violations.size(), violations.toString());
+    assertEquals(1, AsmCheck.widthViolations(body(nmethod(clean512()
+        + insn(0x8a40, "vsqrtpd", "ymm0, ymm1"))), 512).size());
+    assertEquals(List.of(), AsmCheck.widthViolations(body(nmethod(clean512()
+        + insn(0x8a40, "vsqrtpd", "zmm0, zmm1"))), 512));
     String none = clean512().replaceAll("v(mul|add|div)pd", "vpaddq");
     violations = AsmCheck.widthViolations(body(nmethod(none)), 512);
     assertEquals(1, violations.size(), violations.toString());
@@ -173,6 +182,52 @@ class AsmCheckSelfTest {
     List<String> violations = AsmCheck.callViolations(body(nmethod(code)));
     assertEquals(1, violations.size(), violations.toString());
     assertTrue(violations.get(0).contains(relocation), violations.toString());
+  }
+
+  /**
+   * A call is read under its prefixes, and a call's relocation fails on any instruction: a tail
+   * jump to a stub, a call that also names an allowed stub, or a call with no relocation at all.
+   */
+  @ParameterizedTest
+  @ValueSource(strings = {
+      "notrack\t\tcall\t\tqword ptr [r10 + 0x8]      ;   {virtual_call}",
+      "bnd\t\tnotrack\t\tcall\t\tr10      ;   {optimized virtual_call}",
+      "data16\t\tcall\t\t0x7ac397aae4e0      ;   {static_call}",
+      // no relocation: only read as a call once the prefix is off
+      "rex64\t\tcall\t\tr10",
+      "cs\t\tcall\t\tqword ptr [r10]",
+      "notrack\t\tjmp\t\tr10      ;   {static_call}",
+      "jmp\t\t0x7ac397aae4e0      ;   {runtime_call StubRoutines::dexp}",
+      "jmp\t\t0x7ac397aae4e0      ;   {static_call}",
+      "notrack\t\tjmp\t\tr10      ;   {runtime_call C2 Runtime rethrow}",
+      "mov\t\tr10, 0x7ac397aae4e0      ;   {runtime_call StubRoutines::dexp}",
+      "call\t\t0x7ac397aae4e0      ;   {runtime_call UncommonTrapBlob} {static_call}",
+      "call\t\t0x7ac397aae4e0"})
+  void aCallUnderAPrefixOrInAnotherInstructionFails(String line) {
+    String[] parts = line.split("\t\t", 2);
+    String code = clean512() + insn(0x8a40, parts[0], parts[1]);
+    List<String> violations = AsmCheck.callViolations(body(nmethod(code)));
+    assertEquals(1, violations.size(), line + ": " + violations);
+  }
+
+  @Test
+  void prefixesAreReadOffTheMnemonic() {
+    String code = clean512()
+        + insn(0x8a40, "notrack", "call\t\t0x7ac397aae4e0      ;   {runtime_call UncommonTrapBlob}")
+        + insn(0x8a48, "data16", "vfmadd231pd\t\tzmm0, zmm1, zmm2")
+        + insn(0x8a50, "lock", "add\t\tdword ptr [rsp], 0");
+    AsmCheck.Body body = body(nmethod(code));
+    AsmCheck.Instruction call = body.code().get(body.code().size() - 3);
+    assertEquals("notrack", call.prefixes());
+    assertEquals("call", call.mnemonic());
+    // an allowed call under a prefix passes, and counts in the census as a call
+    assertEquals(List.of(), AsmCheck.callViolations(body));
+    List<String> columns = List.copyOf(AsmCheck.CENSUS.keySet());
+    assertEquals(3, AsmCheck.census(body).get(columns.indexOf("calls")));
+    // a fused multiply-add under a prefix fails
+    assertEquals(1, AsmCheck.fmaViolations(body).size(), body.code().toString());
+    assertEquals("add", body.code().get(body.code().size() - 1).mnemonic());
+    assertEquals("lock", body.code().get(body.code().size() - 1).prefixes());
   }
 
   @ParameterizedTest
