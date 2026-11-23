@@ -542,7 +542,9 @@ class PowTest {
    * Line 306's {@code scalbn(z, n)}: {@code Math.scalb}, the stand-in for the C's, which {@code
    * reference/} does not hold, or (by {@link Variant#TRUNCATING_SCALBN}) the exact product with
    * the bits it drops cut off. It counts how the scale rounds. {@code z} is positive and normal,
-   * and the product is below {@code 2^-1022}.
+   * and the product is below {@code 2^-1022}. That {@code Math.scalb} is fdlibm's {@code scalbn}
+   * is not shown here, since {@code s_scalbn.c} is not in {@code reference/} (issue 34, decision
+   * 1): the gate shows only that, so transcribed, line 306 is {@code StrictMath}'s.
    */
   static double scalbn(double z, int n, Variant variant, long[] paths) {
     long bits = Double.doubleToRawLongBits(z);
@@ -645,14 +647,15 @@ class PowTest {
   /**
    * Where e_pow.c's branches are, for the fuzz's pair draws: {@link #WORDS} for both arguments;
    * for {@code x} the significand splits of lines 218-220 and the points 0, 1, 2 and the
-   * smallest normal; for {@code y} the special exponents, 2^31, 2^64 and the result's limits.
-   * pow has no branch on the two words relative to each other, so it lists no {@code wordGaps}.
+   * smallest normal; for {@code y} the special exponents, 2^31 and 2^64 (the result's limits,
+   * which need {@code x} and {@code y} together, are {@link #targetPairs}'). pow has no branch on
+   * the two words relative to each other, so it lists no {@code wordGaps}.
    */
   static final Fuzz.PairEdges EDGES = new Fuzz.PairEdges(
       new Fuzz.Edges(WORDS, new int[] {0x3988e, 0xbb67a}, false,
           new double[] {0.0, 1.0, 2.0, Double.MIN_NORMAL, Double.POSITIVE_INFINITY}),
       new Fuzz.Edges(WORDS, new int[0], false,
-          new double[] {0.5, 1.0, 2.0, 0x1p31, 0x1p64, 1024.0, -1075.0, Double.POSITIVE_INFINITY}),
+          new double[] {0.5, 1.0, 2.0, 0x1p31, 0x1p64, Double.POSITIVE_INFINITY}),
       Fuzz.PAIR_SPECIALS);
 
   static Inputs.Pairs fuzzPairs(long seed, int n) {
@@ -795,21 +798,28 @@ class PowTest {
    * of -1022, finer than a step of {@code y} moves it, so {@code y} is {@code 1022/k} for an
    * integer {@code k} from 256 to 1021 (a {@code y} from 1 to 4, not 2), whose small size makes a
    * step of {@code x} move {@code y*log2(x)} by a few 2^-53 only, and {@code x} is {@code 2^-k}
-   * moved by up to 256 ulps: a binary search over those {@code x}, by {@code StrictMath.pow}'s
-   * result (the oracle chooses inputs here; the check compares on them as on any), keeps the two
-   * neighbours whose results are below and at or above {@code MIN_NORMAL}. Two pairs per draw.
+   * moved by up to 4096 ulps (a {@code k} whose range does not cross {@code MIN_NORMAL} is drawn
+   * again): a binary search over those {@code x}, by {@code StrictMath.pow}'s result (the oracle
+   * chooses inputs here; the check compares on them as on any), keeps the two neighbours whose
+   * results are below and at or above {@code MIN_NORMAL}. Two pairs per draw.
    */
   static Inputs.Pairs minNormalPairs(long seed, int n) {
     SplittableRandom random = new SplittableRandom(seed);
     double[] xs = new double[2 * n];
     double[] ys = new double[2 * n];
     for (int i = 0; i < n; i++) {
-      int k = random.nextInt(256, 1022);
-      k = k == 511 ? 510 : k;
-      double y = 1022.0 / k;
-      long x0 = Double.doubleToRawLongBits(Math.scalb(1.0, -k));
-      long lo = x0 - 256;
-      long hi = x0 + 256;
+      double y;
+      long lo;
+      long hi;
+      do {
+        int k = random.nextInt(256, 1022);
+        k = k == 511 ? 510 : k;
+        y = 1022.0 / k;
+        long x0 = Double.doubleToRawLongBits(Math.scalb(1.0, -k));
+        lo = x0 - 4096;
+        hi = x0 + 4096;
+      } while (!(StrictMath.pow(Double.longBitsToDouble(lo), y) < Double.MIN_NORMAL
+          && StrictMath.pow(Double.longBitsToDouble(hi), y) >= Double.MIN_NORMAL));
       while (hi - lo > 1) {
         long mid = (lo + hi) >>> 1;
         if (StrictMath.pow(Double.longBitsToDouble(mid), y) < Double.MIN_NORMAL) {
@@ -906,7 +916,11 @@ class PowTest {
             Inputs.magnitudes(seed + 5, n, -12, 12)));
   }
 
-  /** The gate's inputs: {@code n} draws of each generator, the special and the exact pairs. */
+  /**
+   * The gate's inputs: the special and the exact pairs, {@code n} pairs of each generator but two,
+   * {@code n/32} pairs either side of {@code MIN_NORMAL} ({@code n/64} searches) and {@code 3n}
+   * dense pairs.
+   */
   static Inputs.Pairs everything(long seed, int n) {
     return concat(specialPairs(), exactPairs(), fuzzPairs(seed, n), integerPairs(seed + 1, n),
         hugeYPairs(seed + 2, n), targetPairs(seed + 3, n), minNormalPairs(seed + 4, n >> 6),
