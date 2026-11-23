@@ -1077,9 +1077,14 @@ word.
   blends `k = 0`, `f = x` and `hu = 1` over the words computed from `u`, as the C sets them
   there and never computes `u`; on the tiny lanes (`|x| < 2^-29`, lines 118-123) and the
   non-finite ones (line 128) the C's early answers are blended over every other result. It is
-  needed: at `x = 2^-25`, a line-126 lane, `u = 1 + 2^-25` has `HU & 0x000fffff = 0`, so a
-  kernel that kept `HU` there would take the `hu == 0` path of lines 153-158 instead of the
-  general one, which L12 shows is not bit-identical.
+  needed: at `x = 2^-25`, a line-126 lane, `u = 1 + 2^-25` has `HU & 0x000fffff = 0` and `K =
+  0`, so a kernel that kept the words computed from `u` there, even with `f = x` blended, would
+  take the `hu == 0` short path of lines 153-158 with `k = 0` and `f = x`, a path the C never
+  takes (L12's rows are `k = 1` and `k = -1` lanes, so they do not cover it). At `2^-25` the
+  short path happens to give the C's bits; at `x = 0x3ea5a84a_dfba2358` (`1+x` in `(1, 1 +
+  2^-20)`) and `x = 0xbeaa4106_df3cfdd0` (`1+x` in `(1 - 2^-20, 1)`), where the kept `K` and
+  `hu` are 0 too, its result is one ulp off the C's, `0x3ea5a84a_6a776be3` against
+  `0x3ea5a84a_6a776be2` and `0xbeaa4107_8b8e7e29` against `0xbeaa4107_8b8e7e2a`.
 
 **Proof.**
 1. (a) As signed longs, `b = hx * 2^32 + lo` with `0 <= lo < 2^32`, and `h * 2^32` lies in
@@ -1128,7 +1133,16 @@ non-finite lanes answered early, `k = 0` and `hu = 1` on line 126's lanes, lines
 otherwise) against the kernel's long words with its blends, the final `k` and `hu` of each lane
 that is not answered early, and where lines 129-150 run, that `u`'s sign is clear, `HU` is `hu`
 and `K` is in `[-53, 1024]`. With the kernel's `hu = 1` blend on line 126's lanes dropped by hand
-(and reverted), it failed at `x = -0.25`, `hu` 131072 against the C's 1. And a loop over
+(and reverted), it failed at `x = -0.25`, `hu` 131072 against the C's 1. `ProofsTest.l18KeptWordsOnLine126LanesAreNotTheCs` is H20's
+witness, not a hinge test: lines 152-164 from the C's `k = 0`, `f = x` and `hu = 1` give
+`StrictMath.log1p`'s bits on the two witnesses, `2^-25` and 2^12 sampled lanes of line 126's
+band, so its finish is the C's; the same kernel words without line 126's two blends have `K = 0`
+and `hu = 0` at `2^-25` and at each witness, and with `f = x` the witnesses' results are one ulp
+off `StrictMath`'s and `2^-25`'s equal. With the blends put back into that kernel by hand (and
+reverted), it failed at the first witness, `hu` 1 against the 0 it requires.
+`ProofsTest.l18Line126WitnessesThroughLog1pBlended` runs the witnesses, their neighbours and
+`2^-25` through `Log1p.log1pBlended` at every width against `StrictMath.log1p` by raw bits. And a
+loop over
 every significand word from 0 to `0xfffff` checks the long `hu & 0x000fffff`, the compare with
 `0x6a09e`, both ORed words, the quarter word and the rebuilt bits of `u` against the C's ints, an
 integer identity, since the mask drops the sign.

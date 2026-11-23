@@ -8,6 +8,7 @@
  */
 package io.github.vecbricks.vfdlibm;
 
+import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
@@ -1365,6 +1366,15 @@ class ProofsTest {
    * as VarkaMathPort.log1p and Log1p.log1pBlended do.
    */
   private static long[] l18KernelWords(double x) {
+    return l18KernelWords(x, true);
+  }
+
+  /**
+   * {@link #l18KernelWords(double)}, or with {@code blendLine126} false the same words without
+   * line 126's two blends: a kernel that broke H20 by keeping the words computed from u on line
+   * 126's lanes.
+   */
+  private static long[] l18KernelWords(double x, boolean blendLine126) {
     long b = bits(x);
     boolean below = b < Lanes.fromHiBits(Log1p.HX_BELOW_SQRT2_M1);
     boolean kZeroPath = below && (b > Lanes.fromHiBits(1) - 1
@@ -1377,9 +1387,98 @@ class ProofsTest {
     boolean halve = hum >= Log1p.HU_SQRT2;
     k = halve ? k + 1 : k;
     long huQuarter = halve ? (0x00100000L - hum) >>> 2 : hum;
-    k = kZeroPath ? 0 : k;
-    long huFinal = kZeroPath ? 1 : huQuarter;
+    boolean blend = blendLine126 && kZeroPath;
+    k = blend ? 0 : k;
+    long huFinal = blend ? 1 : huQuarter;
     return new long[] {k, huFinal};
+  }
+
+  /** s_log1p.c's lines 152-164 from the words k, f, hu and c, in scalar Java. */
+  private static double l18Finish(long k, double f, long hu, double c) {
+    double hfsq = 0.5 * f * f;
+    if (hu == 0) {
+      if (f == Log1p.ZERO) {
+        return k == 0 ? Log1p.ZERO : k * Log1p.LN2_HI + (c + k * Log1p.LN2_LO);
+      }
+      double r = hfsq * (1.0 - Log1p.TWO_THIRDS * f);
+      return k == 0 ? f - r : k * Log1p.LN2_HI - ((r - (k * Log1p.LN2_LO + c)) - f);
+    }
+    double s = f / (2.0 + f);
+    double z = s * s;
+    double r = z * (Log1p.LP1 + z * (Log1p.LP2 + z * (Log1p.LP3 + z * (Log1p.LP4 + z * (Log1p.LP5
+        + z * (Log1p.LP6 + z * Log1p.LP7))))));
+    return k == 0 ? f - (hfsq - s * (hfsq + r))
+        : k * Log1p.LN2_HI - ((hfsq - (s * (hfsq + r) + (k * Log1p.LN2_LO + c))) - f);
+  }
+
+  /**
+   * Line-126 lanes where a kernel that kept the words computed from u, H20 broken, gives a result
+   * other than the C's: k = 0 and hu = 0 there, so the lane takes the hu == 0 short path of lines
+   * 153-158 with f = x, one ulp off StrictMath.log1p.
+   */
+  private static final double[] L18_LINE126_WITNESSES = {
+      Double.longBitsToDouble(0x3ea5a84a_dfba2358L), Double.longBitsToDouble(0xbeaa4106_df3cfdd0L)};
+
+  /** StrictMath.log1p's bits at each witness, then the bits of the kernel that kept the words. */
+  private static final long[][] L18_LINE126_RESULTS = {
+      {0x3ea5a84a_6a776be2L, 0x3ea5a84a_6a776be3L}, {0xbeaa4107_8b8e7e2aL, 0xbeaa4107_8b8e7e29L}};
+
+  /**
+   * L18's H20 is needed (a witness, not the hinge test, which is l18LongWordsAreLog1psInts's
+   * sampled loop): on line 126's lanes the C's k = 0, f = x and hu = 1 through lines 152-164
+   * give StrictMath.log1p's bits (checked on the witnesses, 2^-25 and 2^12 sampled lanes of the
+   * band, so the finish is the C's); a kernel that blends f = x but keeps the computed k and hu
+   * (l18KernelWords without line 126's blends) has k = 0 and hu = 0 at 2^-25 and at each
+   * witness, so it takes the short path, and at each witness, one of each sign, its result is
+   * one ulp off StrictMath's. At 2^-25 the rerouted lane happens to give the same bits.
+   */
+  @Test
+  void l18KeptWordsOnLine126LanesAreNotTheCs() {
+    double[] band = Inputs.concat(L18_LINE126_WITNESSES, new double[] {0x1p-25},
+        Inputs.uniform(1805L, 1 << 12, -0.29, 0.41));
+    int line126 = 0;
+    for (double x : band) {
+      int[] c = l18CWords(x);
+      if (c == null || c[2] != 0) {
+        continue;
+      }
+      assertEquals(bits(StrictMath.log1p(x)), bits(l18Finish(c[0], x, c[1], 0.0)), Oracle.hex(x));
+      line126++;
+    }
+    assertTrue(line126 > 1 << 11, "line-126 lanes " + line126);
+    for (double x : Inputs.concat(L18_LINE126_WITNESSES, new double[] {0x1p-25})) {
+      String at = Oracle.hex(x);
+      assertArrayEquals(new int[] {0, 1, 0}, l18CWords(x), at);
+      long[] kept = l18KernelWords(x, false);
+      assertEquals(0L, kept[0], at);
+      assertEquals(0L, kept[1], at);
+      long strict = bits(StrictMath.log1p(x));
+      long got = bits(l18Finish(kept[0], x, kept[1], 0.0));
+      assertEquals(x == 0x1p-25 ? 0L : 1L, Math.abs(got - strict), at);
+    }
+    for (int j = 0; j < L18_LINE126_WITNESSES.length; j++) {
+      double x = L18_LINE126_WITNESSES[j];
+      long[] kept = l18KernelWords(x, false);
+      assertEquals(L18_LINE126_RESULTS[j][0], bits(StrictMath.log1p(x)), Oracle.hex(x));
+      assertEquals(L18_LINE126_RESULTS[j][1], bits(l18Finish(kept[0], x, kept[1], 0.0)),
+          Oracle.hex(x));
+    }
+  }
+
+  /** L18's H20 witnesses, their neighbours and 2^-25 through Log1p.log1pBlended at every width. */
+  @ParameterizedTest
+  @EnumSource(VectorWidth.class)
+  void l18Line126WitnessesThroughLog1pBlended(VectorWidth width) {
+    double[] xs = new double[3 * L18_LINE126_WITNESSES.length + 1];
+    int n = 0;
+    for (double w : L18_LINE126_WITNESSES) {
+      xs[n++] = Math.nextDown(w);
+      xs[n++] = w;
+      xs[n++] = Math.nextUp(w);
+    }
+    xs[n] = 0x1p-25;
+    Oracle.assertUnary("l18 line 126", width.species(), x -> Log1p.log1pBlended(x, null),
+        StrictMath::log1p, xs);
   }
 
   /**
