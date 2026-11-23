@@ -15,12 +15,13 @@ import jdk.incubator.vector.VectorMask;
 /**
  * fdlibm's double functions over {@link DoubleVector} lanes, each lane bit-identical to the
  * {@link StrictMath} method of the same name, NaN payloads and signed zeros included; the one
- * exception is a lane of a function of two arguments ({@code atan2}, {@code hypot}) where both
- * arguments are NaN with different bits, which is one of the two arguments' bits with the quiet
- * bit set, and for {@code hypot} the sign cleared too (which one is not specified).
+ * exception is a lane of a function of two arguments ({@code atan2}, {@code hypot}, {@code
+ * pow}) where both arguments are NaN with different bits, which is one of the two arguments' bits
+ * with the quiet bit set, and for {@code hypot} the sign cleared too (which one is not
+ * specified).
  *
  * <p>Every method works on a vector of any species of 128 bits or more (exp, expm1, log, log10,
- * log1p, sinh, cosh, asin, atan, acos, atan2 and hypot hold fdlibm's {@code int} words in int
+ * log1p, sinh, cosh, asin, atan, acos, atan2, hypot and pow hold fdlibm's {@code int} words in int
  * lanes of half the vector's size). Each comes in two forms: one computes every lane, and a masked
  * form
  * computes only the lanes set in {@code live} and returns every other lane of its argument
@@ -31,9 +32,9 @@ import jdk.incubator.vector.VectorMask;
  * allocates at each, in bytes per op, an op being one pass over 1024 doubles. The arm that {@code
  * exp}, {@code log} and {@code log10} call is the finish arm, the one {@code expm1}, {@code
  * log1p} and {@code atan2} call is the guarded arm, and the one {@code cosh} calls is the slice
- * arm; {@code hypot} has one arm, the finish. No file under {@code bench/results/} reads {@code
- * hypot} yet: every file the list below cites predates it, and of the list only the allocation
- * check that CI runs covers it.
+ * arm; {@code hypot} and {@code pow} have one arm, the finish. No file under {@code
+ * bench/results/} reads {@code hypot} or {@code pow} yet: every file the list below cites predates
+ * them, and of the list only the allocation check that CI runs covers them.
  *
  * <ul>
  *   <li>Covered by {@code bench/alloc-check.py}, which CI runs and which fails a body that
@@ -378,5 +379,35 @@ public final class VFdlibm {
    */
   public static DoubleVector hypot(DoubleVector x, DoubleVector y, VectorMask<Double> live) {
     return Hypot.hypot(x, y, Objects.requireNonNull(live, "live"));
+  }
+
+  /**
+   * {@code StrictMath.pow(x, y)} in every lane, except that a lane where both arguments are NaN
+   * with different bits is one of the two with the quiet bit set (which one is not specified,
+   * since {@code StrictMath}'s own choice varies); every other lane, a NaN beside a finite value
+   * included, has {@code StrictMath}'s bits. Ported from fdlibm 5.3's {@code e_pow.c}: a lane of
+   * a positive, normal {@code x} and a finite {@code y} of moderate size is computed in the
+   * vector, and every other lane (a special or negative argument, overflow, underflow and a
+   * subnormal result) is finished per lane by {@code StrictMath.pow}.
+   *
+   * @param x the bases
+   * @param y the exponents, of {@code x}'s species
+   * @return {@code x} to the power {@code y} in each lane
+   */
+  public static DoubleVector pow(DoubleVector x, DoubleVector y) {
+    return Pow.pow(x, y, null);
+  }
+
+  /**
+   * {@link #pow(DoubleVector, DoubleVector)} in the lanes set in {@code live}; every other lane is
+   * {@code x}'s, untouched.
+   *
+   * @param x the bases
+   * @param y the exponents, of {@code x}'s species
+   * @param live the lanes to compute, of the same species
+   * @return the power of each live lane, and {@code x} in the others
+   */
+  public static DoubleVector pow(DoubleVector x, DoubleVector y, VectorMask<Double> live) {
+    return Pow.pow(x, y, Objects.requireNonNull(live, "live"));
   }
 }
