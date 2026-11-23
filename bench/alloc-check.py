@@ -27,21 +27,28 @@ as below.
 
 A port whose oracle allocates on the lanes the port finishes with it (the pow port, issue #34)
 cannot read under THRESHOLD on mixed data, boxed or not. Its class may then hold an oracle
-baseline: a method named ORACLE_METHOD that calls the oracle in a scalar loop on exactly the lanes
-the arms finish with it, and does nothing else. The check then runs that method in the same JMH run
-as the arms and judges each arm row of the class, of the same params and JVM options, against it,
-like with like: the arm's lowest iteration within THRESHOLD of the baseline's lowest, either way,
-and its highest under the baseline's highest plus THRESHOLD. Above is a box; below is an arm that
-does not finish those lanes with the oracle, or allocates less for it than the loop does, where a
-box could hide in the difference. So every arm of such a class must finish with the oracle on the
-same lanes. The baseline is reported (its lowest and highest iteration) and not bounded itself.
+baseline: a method named ORACLE_METHOD that calls the oracle in a scalar loop on exactly the
+lanes the arms finish with it, and does nothing else. The check runs that method in the same JMH
+run as the arms and judges each arm row of the class, of the same params and JVM options,
+against it: the arm's lowest iteration within THRESHOLD of the baseline's lowest, either way,
+and its highest under the baseline's lowest plus THRESHOLD. Above is a box; below is an arm that
+does not finish those lanes with the oracle, or allocates less for it than the loop does, where
+a box could hide in the difference. So every arm of such a class must finish with the oracle on
+the same lanes. Where the baseline's lowest is under THRESHOLD (common data, on which the oracle
+never runs), the arm has the absolute bound. The baseline is reported (its lowest and highest
+iteration) and not bounded itself.
+
 When the class has one, a run without its row fails, and so does a baseline whose source is not
 ORACLE_SHAPE: oracle_source_problem() reads the class in src/jmh/java and requires the method,
 comments and spacing aside, to be that one loop token for token, calling java.lang.StrictMath
-with one argument or two, and the file to declare nothing named java. That the lanes it calls the
-oracle on are the
-lanes the arms finish with it is a contract the script cannot read: the class's Javadoc states it,
-and its review holds it, with the lower side of the comparison above. A class without the method
+with one argument or two, and every source file of the class's package to declare nothing named
+java, which would obscure java.lang.StrictMath. Not checked: a field named java inherited from a
+class of another package (no benchmark class extends one). That the lanes it calls the oracle on
+are the lanes the arms finish with it is a contract the script cannot read: the class's Javadoc
+states it, and its review holds it, with the lower side of the comparison above. So is the
+oracle's allocation being the same in the baseline's small loop and in the arm, where escape
+analysis could remove more or less of it: a port that adds a baseline records, at each flag
+setting the check runs, that its arms read what the baseline reads. A class without the method
 is judged by the absolute bound as before.
 
 With --why it runs nothing new through the check: it reads the last run's result and runs the
@@ -86,13 +93,14 @@ import sys
 # a slow row: on Arm, 0.103 B/op at 14.7 us per op, and 1 B/op would be reached at about
 # 143 us per op with no vector boxed. A row that slow wants the threshold read again. An arm row
 # of a class with an oracle baseline (the module's docstring) is held within THRESHOLD of the
-# baseline row instead: what the oracle allocates is no box, and a box adds a vector, some
-# 64 B/op at the least, on top of it.
+# baseline row's lowest iteration instead: what the oracle allocates is no box, and a box adds a
+# vector, some 64 B/op at the least, on top of it.
 THRESHOLD = 1.0
 
 # The oracle baseline: the method a *Benchmark class names so (the module's docstring), the
-# pattern that lists it, and where its source is read. Lowest iterations are compared, so that an
-# oracle iteration C2 was late on cannot excuse a box, which shows in every settled iteration.
+# pattern that lists it, and where its source is read. An arm's lowest and highest iterations are
+# both held to the baseline's lowest, so that an oracle iteration C2 was late on cannot excuse a
+# box in any iteration of the arm.
 ORACLE_METHOD = "rareOracle"
 ORACLE = r".*Benchmark\.%s$" % ORACLE_METHOD
 SOURCES = "src/jmh/java"
@@ -263,9 +271,10 @@ def oracle_source_problem(name, root=SOURCES):
 
     It reads the class's source under root and fails closed: no file, a name ORACLE_METHOD
     other than once, a declaration and body that are not ORACLE_SHAPE token for token (comments
-    and spacing aside) for one of ORACLE_ARGS, or a `java` in the file that is no package name
-    (a field or a class named so would obscure java.lang.StrictMath) are each a problem. What
-    it cannot read is that rare marks the lanes the arms finish with the oracle."""
+    and spacing aside) for one of ORACLE_ARGS, or a `java` that is no package name in any source
+    file of the class's package (a field or a type named so would obscure java.lang.StrictMath)
+    are each a problem. What it cannot read: that rare marks the lanes the arms finish with the
+    oracle, and a field named java inherited from a class of another package."""
     path = os.path.join(root, *class_of(name).split(".")) + ".java"
     expected = (f"{ORACLE_METHOD}() must read, comments and spacing aside: "
                 + ORACLE_SHAPE.replace("NAME", "<method>").replace("ARGS", "xs[i] or xs[i], ys[i]"))
@@ -277,8 +286,18 @@ def oracle_source_problem(name, root=SOURCES):
     places = [k for k, token in enumerate(tokens) if token == ORACLE_METHOD]
     if len(places) != 1:
         return f"{path} names {ORACLE_METHOD} {len(places)} times, not once; {expected}"
-    if any(token == "java" and tokens[k + 1:k + 2] != ["."] for k, token in enumerate(tokens)):
-        return f"{path} declares a java of its own, which obscures java.lang.StrictMath"
+    package = os.path.dirname(path)
+    for other in sorted(os.listdir(package)):
+        if not other.endswith(".java"):
+            continue
+        try:
+            with open(os.path.join(package, other), encoding="utf-8") as f:
+                words = java_tokens(f.read())
+        except OSError:
+            return f"cannot read {os.path.join(package, other)} for a java of its own"
+        if any(word == "java" and words[k + 1:k + 2] != ["."] for k, word in enumerate(words)):
+            return (f"{os.path.join(package, other)} declares a java of its own, which obscures"
+                    " java.lang.StrictMath")
     for shape in oracle_shapes():
         start = places[0] - shape.index(ORACLE_METHOD)
         got = tokens[max(start, 0):start + len(shape)]
@@ -289,6 +308,15 @@ def oracle_source_problem(name, root=SOURCES):
     return f"not of the one shape a baseline may have; {expected}"
 
 
+def oracle_declared(cls, root=SOURCES):
+    """Whether the source of the class cls under root names ORACLE_METHOD."""
+    try:
+        with open(os.path.join(root, *cls.split(".")) + ".java", encoding="utf-8") as f:
+            return ORACLE_METHOD in java_tokens(f.read())
+    except OSError:
+        return False
+
+
 def row_key(row):
     """What a baseline and an arm row share: the class, every param and the JVM's options."""
     return (class_of(row["benchmark"]), tuple(sorted(row.get("params", {}).items())),
@@ -296,9 +324,11 @@ def row_key(row):
 
 
 def judge(rows, threshold, root=SOURCES):
-    """The verdict on each row: (row, ok, line, bound, under), line being what check() prints
+    """The verdict on each row: (row, ok, line, bound, cause), line being what check() prints
     after the verdict, bound the row's upper bound in B/op (None for a baseline, which is not
-    bounded), and under, for an arm that failed for reading under its baseline, by how much."""
+    bounded), and cause, for a failing arm that a rerun under C2's printing would not explain,
+    why it failed: it reads under its baseline, or its class's baseline was refused or has no
+    row in the run."""
     baselines, problems = {}, {}
     for row in rows:
         name = row["benchmark"]
@@ -331,32 +361,46 @@ def judge(rows, threshold, root=SOURCES):
             continue
         baseline = baselines.get(row_key(row))
         if baseline is None:
-            verdicts.append((row, worst < threshold, f"{label}: max {worst:.3f} B/op"
-                             f" {counted_over}", threshold, None))
+            ok, cause = worst < threshold, None
+            if not ok:
+                cls = class_of(name)
+                refused = [problems[n] for n in problems if class_of(n) == cls and problems[n]]
+                if refused:
+                    cause = f"its class's {ORACLE_METHOD} was refused: {refused[0]}"
+                elif oracle_declared(cls, root):
+                    cause = (f"its class declares {ORACLE_METHOD}, and the run has no row of it"
+                             " for these params and JVM options")
+            verdicts.append((row, ok, f"{label}: max {worst:.3f} B/op {counted_over}"
+                             + (f"; {cause}" if cause else ""), threshold, cause))
             continue
-        # Like with like: the arm's settled iteration against the baseline's, within the
-        # threshold either way, and its worst against the baseline's worst. Above, a box; below,
-        # an arm that does not call the oracle on those lanes, or calls it for less (C2
-        # removing some of its allocation in the arm), where a box could hide in the
-        # difference.
         lowest, highest = min(alloc_iterations(baseline)), max(alloc_iterations(baseline))
-        least = min(iterations)
-        ok = abs(least - lowest) < threshold and worst < highest + threshold
-        under = lowest - least if least <= lowest - threshold else None
-        reason = (f"; under the baseline by {under:.3f} B/op: the arm does not finish those lanes"
-                  " with the oracle" if under is not None else "")
+        if lowest < threshold:
+            # The oracle did not run (common data): nothing of it to allow for.
+            verdicts.append((row, worst < threshold, f"{label}: max {worst:.3f} B/op"
+                             f" {counted_over}, the absolute bound ({ORACLE_METHOD}'s lowest"
+                             f" {lowest:.3f} is under {threshold})", threshold, None))
+            continue
+        # The arm's lowest iteration within the threshold of the baseline's lowest, either way,
+        # and its highest under the baseline's lowest plus the threshold, so that no iteration
+        # of the baseline C2 was late on excuses a box. Above, a box; below, an arm that does
+        # not call the oracle on those lanes, or calls it for less (C2 removing some of its
+        # allocation in the arm), where a box could hide in the difference.
+        least, bound = min(iterations), lowest + threshold
+        ok = abs(least - lowest) < threshold and worst < bound
+        cause = (f"under the baseline by {lowest - least:.3f} B/op: the arm does not finish"
+                 " those lanes with the oracle" if least <= lowest - threshold else None)
         verdicts.append((row, ok, f"{label}: {least:.3f} to {worst:.3f} B/op {counted_over},"
-                         f" against {ORACLE_METHOD}'s {lowest:.3f} to {highest:.3f} within"
-                         f" {threshold}{reason}", lowest + threshold, under))
+                         f" against {ORACLE_METHOD}'s {lowest:.3f} to {highest:.3f}, bound"
+                         f" {bound:.3f}" + (f"; {cause}" if cause else ""), bound, cause))
     return verdicts
 
 
 def failing(path, threshold, root=SOURCES):
-    """The arm rows at path that check() fails for their allocation, each with its bound and,
-    for one under its baseline, by how much (judge())."""
+    """The arm rows at path that check() fails for their allocation, each with its bound and
+    the cause judge() gives, if any, that a rerun would not explain."""
     with open(path, encoding="utf-8") as f:
         rows = json.load(f)
-    return [(row, bound, under) for row, ok, _, bound, under in judge(rows, threshold, root)
+    return [(row, bound, cause) for row, ok, _, bound, cause in judge(rows, threshold, root)
             if not ok and bound is not None]
 
 
@@ -384,7 +428,7 @@ def tiered_inline_small_code(jvm, jvm_args):
     return f"-XX:InlineSmallCode={match.group(1)}" if match else ""
 
 
-def why(mvn, path, threshold):
+def why(mvn, path, threshold, root=SOURCES):
     """Runs failing rows of path once more and prints C2's account of each.
 
     A row runs under the JVM options the result records for it, the ones it failed under, not
@@ -392,8 +436,16 @@ def why(mvn, path, threshold):
     if not os.path.exists(path):
         print(f"No {path}: the check did not get as far as a result, see its own output.")
         return
-    rows = failing(path, threshold)
-    if not rows:
+    rows = failing(path, threshold, root)
+    # A failure with a cause of its own (an arm under its baseline, or a class's baseline
+    # refused or missing) has no box for C2's account to explain: say so, and rerun the others.
+    for row, _, cause in rows:
+        if cause:
+            print(f"{row['benchmark']} [inputs={row.get('params', {}).get('inputs')}]: {cause}."
+                  " Not rerun.")
+    caused = bool(rows) and all(cause for _, _, cause in rows)
+    rows = [failed for failed in rows if not failed[2]]
+    if not rows and not caused:
         print(f"No arm row of {path} reached its bound ({threshold} B/op, or that over its"
               f" class's {ORACLE_METHOD}); if the check failed, a row was missing or had no"
               " gc.alloc.rate.norm, or a baseline was refused, see its own output.")
@@ -406,14 +458,9 @@ def why(mvn, path, threshold):
                                                      for chosen in first)]
         print(f"{len(rows)} rows failed; asking about {WHY_ROWS} of them, one of each"
               " benchmark method first.")
-    for row, bound, under in rows[:WHY_ROWS]:
+    for row, bound, _ in rows[:WHY_ROWS]:
         name, inputs = row["benchmark"], row.get("params", {}).get("inputs")
         print(f"\n== {name} [inputs={inputs}]", flush=True)
-        if under is not None:
-            # No box to explain: C2's account would not say why the arm allocates too little.
-            print(f"Under the baseline by {under:.3f} B/op: the arm does not finish those lanes"
-                  f" with the oracle as {ORACLE_METHOD} does. Not rerun.")
-            continue
         param = f" -p inputs={inputs}" if inputs else ""
         jvm_args = row.get("jvmArgs", [])
         small_code = tiered_inline_small_code(row.get("jvm", "java"), jvm_args)
@@ -548,15 +595,16 @@ def selftest():
 
         # An arm within the bound of its baseline passes, with the same spread, and both
         # readings are printed.
-        ok, out = verdict([row(arm, [1824.01, 1829.4]), row(oracle, [1824.02, 1830.0])])
+        ok, out = verdict([row(arm, [1824.01, 1824.9]), row(oracle, [1824.02, 1830.0])])
         assert ok, out
-        assert "ok    PowBenchmark.finish256 [inputs=mixed]: 1824.010 to 1829.400 B/op" in out \
-            and "rareOracle's 1824.020 to 1830.000 within 1.0" in out, out
+        assert "ok    PowBenchmark.finish256 [inputs=mixed]: 1824.010 to 1824.900 B/op" in out \
+            and "rareOracle's 1824.020 to 1830.000, bound 1825.020" in out, out
         assert "base  PowBenchmark.rareOracle [inputs=mixed]: 1824.020 to 1830.000" in out, out
         # Over it by the bound, it fails: a box, settled; a baseline's late iteration does not
         # excuse it; nor does a worst iteration past the baseline's worst pass.
         for arm_norms, oracle_norms in (([1825.1, 1825.1], [1824.02, 1824.05]),
                                         ([1890.0, 1890.0], [1824.0, 1900.0]),
+                                        ([1824.3, 1890.0], [1824.0, 1900.0]),
                                         ([1824.0, 1831.5], [1824.0, 1830.0])):
             ok, out = verdict([row(arm, arm_norms), row(oracle, oracle_norms)])
             assert not ok and "FAIL  PowBenchmark.finish256" in out, (arm_norms, out)
@@ -565,12 +613,19 @@ def selftest():
         ok, out = verdict([row(arm, [64.0, 64.0]), row(oracle, [1824.0, 1824.0])])
         assert not ok and "FAIL  PowBenchmark.finish256" in out \
             and "under the baseline by 1760.000 B/op: the arm does not finish" in out, out
+        # On common data the oracle does not run, and the arm has the absolute bound.
+        ok, out = verdict([row(arm, [0.02, 0.5], "common"), row(oracle, [0.02, 0.03], "common")],
+                          inputs=("common",))
+        assert ok and "the absolute bound (rareOracle's lowest 0.020" in out, out
+        ok, out = verdict([row(arm, [0.02, 1.5], "common"), row(oracle, [0.02, 0.9], "common")],
+                          inputs=("common",))
+        assert not ok and "FAIL  PowBenchmark.finish256 [inputs=common]: max 1.500" in out, out
         # The baseline missing from a run that lists it fails loudly, and the arms fall back
         # to the absolute bound.
         ok, out = verdict([row(arm, [1824.0])], expected=[arm, oracle])
         assert not ok and "declares this oracle baseline" in out, out
         assert "FAIL  PowBenchmark.finish256 [inputs=mixed]: max 1824.000 B/op over 1" \
-            " iterations\n" in out, out
+            " iterations; its class declares rareOracle, and the run has no row" in out, out
         # A class without one has the absolute bound, as before.
         ok, out = verdict([row(plain, [0.02, 0.03])], expected=[plain])
         assert ok and "ok    ExpBenchmark.finish256 [inputs=mixed]: max 0.030 B/op" in out, out
@@ -598,11 +653,13 @@ def selftest():
                 (scalar.replace("rareOracle", "rareOracles"), "0 times"),
                 (scalar + "\n  // rareOracle\n  String t = rareOracle().toString();\n", "2 times"),
                 (scalar + "\n  static double[] java;\n", "java of its own"),
-                (scalar + "\n  static class java {}\n", "java of its own")):
+                (scalar + "\n  static class java {}\n", "java of its own"),
+                (scalar + "\n}\nclass Other { int java; ", "java of its own")):
             ok, out = verdict([row(arm, [1824.0]), row(oracle, [1824.0])], body)
             assert not ok and why_not in out and "not a scalar oracle baseline" in out, (why_not,
                                                                                          out)
-            assert why_not != "shape" or "out[i] = java.lang.StrictMath.<method>(xs[i] or" in out
+            assert why_not != "shape" or "out[i] = java.lang.StrictMath.<method>(xs[i] or" \
+                in out, out
             assert "FAIL  PowBenchmark.finish256" in out, out
         ok, out = verdict([row(oracle, [1824.0])], None)
         assert not ok and "no source" in out, out
@@ -624,9 +681,31 @@ def selftest():
             json.dump([row(arm, [1824.0]), row(oracle, [1824.0]), row(plain, [64.0]),
                        row(arm, [1900.0], inputs="common"), row(oracle, [0.02], inputs="common")],
                       f)
-        rerun = [(r["benchmark"], r["params"]["inputs"], round(bound, 3), under)
-                 for r, bound, under in failing(path, THRESHOLD, scratch)]
-        assert rerun == [(plain, "mixed", 1.0, None), (arm, "common", 1.02, None)], rerun
+        rerun = [(r["benchmark"], r["params"]["inputs"], round(bound, 3), cause)
+                 for r, bound, cause in failing(path, THRESHOLD, scratch)]
+        assert rerun == [(plain, "mixed", 1.0, None), (arm, "common", 1.0, None)], rerun
+        # An arm with a cause of its own is not rerun, and --why says why: under its baseline,
+        # its baseline refused, or its baseline missing though the class declares it.
+        for rows, cause in (([row(arm, [64.0]), row(oracle, [1824.0])], "under the baseline by"
+                             " 1760.000 B/op: the arm does not finish those lanes"),
+                            ([row(arm, [1824.0])], "its class declares rareOracle, and the run"
+                             " has no row of it"),
+                            ([row(arm, [1824.0]), row(oracle, [1824.0], jvm_args=())],
+                             "its class declares rareOracle, and the run has no row")):
+            with open(path, "w", encoding="utf-8") as f:
+                json.dump(rows, f)
+            out = io.StringIO()
+            with contextlib.redirect_stdout(out):
+                why(os.path.join(scratch, "no-maven"), path, THRESHOLD, scratch)
+            assert f"{arm} [inputs=mixed]: {cause}" in out.getvalue() and "Not rerun." in \
+                out.getvalue() and "Running:" not in out.getvalue(), out.getvalue()
+        with open(source, "w", encoding="utf-8") as f:
+            f.write(scalar.replace("java.lang.", ""))
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump([row(arm, [1824.0]), row(oracle, [1824.0])], f)
+        rerun = [cause for _, _, cause in failing(path, THRESHOLD, scratch)]
+        assert len(rerun) == 1 and rerun[0].startswith("its class's rareOracle was refused: "), \
+            rerun
 
     # The listing: a class's baseline joins the rows include names, under any include, and
     # only for the classes that have one of them; the run's regex reaches exactly those.
@@ -639,9 +718,10 @@ def selftest():
         regex = run_regex(include, [oracle])
         assert [n for n in listed if re.search(regex, n)] == sorted(
             arms + [oracle], key=listed.index), include
-    assert split_listed(listed, r"ExpBenchmark") == ([plain], [])
-    assert run_regex(INCLUDE, []) == INCLUDE
-    assert not is_oracle(f"{pkg}.ExpKindsBench.rareOracle") and is_oracle(oracle)
+    assert split_listed(listed, r"ExpBenchmark") == ([plain], []), split_listed(listed,
+                                                                                r"ExpBenchmark")
+    assert run_regex(INCLUDE, []) == INCLUDE, run_regex(INCLUDE, [])
+    assert not is_oracle(f"{pkg}.ExpKindsBench.rareOracle") and is_oracle(oracle), oracle
     print("alloc-check.py: selftest passed")
 
 
@@ -663,7 +743,8 @@ def main():
                              " setUp rejects a value it does not know (default: common,mixed)")
     parser.add_argument("--threshold", type=float, default=THRESHOLD, help="bytes per op")
     parser.add_argument("--no-run", action="store_true",
-                        help=f"only check the rows of an existing {RESULT}")
+                        help=f"only check the rows of an existing {RESULT}; a baseline's"
+                             " source is read now, as it stands")
     parser.add_argument("--why", action="store_true",
                         help=f"run each failing row of an existing {RESULT} once more, with C2"
                              " printing what it did not intrinsify or inline")
@@ -671,6 +752,8 @@ def main():
                         help="check the verdicts on made-up results, with no Maven or JVM")
     args = parser.parse_args()
     if args.selftest:
+        if sys.argv[1:] != ["--selftest"]:
+            parser.error("--selftest takes no other option")
         selftest()
         return
     if args.include and args.preferred_only:
@@ -744,8 +827,8 @@ def main():
               " iteration did, C2 had not finished. See SKILLS.md.")
         sys.exit(1)
     ran = "the rows found" if args.no_run else f"inputs={','.join(inputs)}"
-    print(f"No vector body allocates {args.threshold} B/op or more (none strays that far from"
-          f" its class's {ORACLE_METHOD}, where it has one) ({ran}).")
+    print(f"No vector body allocates {args.threshold} B/op or more; the arms of a class with"
+          f" {ORACLE_METHOD} were judged against it instead ({ran}).")
 
 
 if __name__ == "__main__":

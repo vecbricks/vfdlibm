@@ -72,7 +72,8 @@ stops the next port re-trying a settled question.
   `StrictMath` on exactly the lanes the arms finish with it (its Javadoc states this; the script
   cannot read lanes), and `bench/alloc-check.py` runs it with the arms and fails an arm whose
   lowest iteration is not within 1 B/op of the baseline's lowest, either way, or whose worst
-  reaches the baseline's worst plus 1 B/op, printing both. A box adds a whole vector on top; an
+  reaches the baseline's lowest plus 1 B/op (the absolute bound where that lowest is under
+  1 B/op, as on common data), printing both. A box adds a whole vector on top; an
   arm that does not finish with the oracle reads under it; both fail, so every arm of such a
   class must finish with it. The script refuses a `rareOracle` of any other shape than its one
   template, `ORACLE_SHAPE` in the script (the loop `for (int i = 0; i < N; i++) { if (rare[i]) {
