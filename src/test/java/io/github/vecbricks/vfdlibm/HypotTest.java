@@ -687,13 +687,22 @@ class HypotTest {
    */
   static String runInJvm(JitMode mode, int draws, int passes)
       throws IOException, InterruptedException {
+    return runInJvm(HypotTest.class, "hypot gate", mode, draws, passes);
+  }
+
+  /**
+   * {@link #runInJvm(JitMode, int, int)} for the gate whose {@code main} is {@code gate}'s, its
+   * output printed under {@code label}: {@code PowTest} runs its children by it too.
+   */
+  static String runInJvm(Class<?> gate, String label, JitMode mode, int draws, int passes)
+      throws IOException, InterruptedException {
     List<String> command = new ArrayList<>();
     command.add(java.nio.file.Path.of(System.getProperty("java.home"), "bin", "java").toString());
     if (mode.flag != null) {
       command.add(mode.flag);
     }
     command.addAll(List.of("-Xmx256m", "--add-modules", "jdk.incubator.vector", "-cp",
-        System.getProperty("java.class.path"), HypotTest.class.getName(),
+        System.getProperty("java.class.path"), gate.getName(),
         Integer.toString(draws), Integer.toString(passes)));
     // ByteArrayOutputStream is synchronized, so a timeout can report what was read so far.
     ByteArrayOutputStream bytes = new ByteArrayOutputStream();
@@ -719,7 +728,7 @@ class HypotTest {
       process.destroyForcibly();
     }
     String text = bytes.toString(StandardCharsets.UTF_8);
-    System.out.println("hypot gate, " + mode + ":\n" + text);
+    System.out.println(label + ", " + mode + ":\n" + text);
     assertEquals(0, process.exitValue(), mode + ":\n" + text);
     return text;
   }
@@ -760,11 +769,23 @@ class HypotTest {
   @ParameterizedTest
   @EnumSource(JitMode.class)
   void scalarTranscriptionIsStrictMathInEveryJitMode(JitMode mode) throws Exception {
+    assumeNoWidthOption();
+    assertRanInModeAndPassed(mode, runInJvm(mode, DRAWS >> 2, 3));
+  }
+
+  /** Skips a test in a JVM with a width option ({@code -XX:MaxVectorSize}, {@code -XX:UseAVX}). */
+  static void assumeNoWidthOption() {
     List<String> own = ManagementFactory.getRuntimeMXBean().getInputArguments();
     assumeTrue(own.stream().noneMatch(
         a -> a.startsWith("-XX:MaxVectorSize=") || a.startsWith("-XX:UseAVX=")),
         "a row with width options: " + own);
-    String text = runInJvm(mode, DRAWS >> 2, 3);
+  }
+
+  /**
+   * A child's output, {@code text}: its JVM had {@code mode}'s flag, its {@code java.vm.info}
+   * says interpreted mode for {@code -Xint} and mixed mode for the others, and it passed.
+   */
+  static void assertRanInModeAndPassed(JitMode mode, String text) {
     String jvm = text.lines().filter(l -> l.startsWith("jvm: ")).findFirst().orElseThrow();
     if (mode.flag != null) {
       assertTrue(jvm.contains(mode.flag), jvm);
