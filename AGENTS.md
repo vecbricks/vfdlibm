@@ -160,6 +160,11 @@ port teaches.
   otherwise refuses: then the later run is a first run of new code, in a file of its own.
 - When a change moves committed numbers, measure again and commit the new file, then requote
   every document from it, rather than patching quoted figures one by one.
+- The README's speedup table is generated, never edited: `bench/readme-table.py --write` puts
+  it between its markers, from the newest results file per function and host that times this
+  commit's code, and CI's `--check` fails when it differs, so a new results file, or a change to
+  the code under a benchmark (`pom.xml` included), is followed by `--write` in the same pull
+  request.
 
 ## Papers are transcribed, not paraphrased from memory
 
