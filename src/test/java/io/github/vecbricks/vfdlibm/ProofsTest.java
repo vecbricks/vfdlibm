@@ -1046,8 +1046,8 @@ class ProofsTest {
   /**
    * L17 (a), (b): a loop over every exponent field, 0 to 0x7ff, scaled and not, which is every
    * value K takes: the long K, I and y against the C's int k, i and I2D, K in [-1077, 1024]; a
-   * scaled subnormal's field is 3 to 54; and a loop over every significand word for both I and
-   * five exponent fields: the long new high word against the C's, below 2^31.
+   * scaled subnormal's field is 3 to 54; and a loop over every significand word for both I:
+   * the long new high word against the C's, below 2^31.
    */
   @Test
   void l17LongWordsAreLog10sInts() {
@@ -1070,18 +1070,16 @@ class ProofsTest {
     // A scaled lane is a subnormal times 2^54: its field is 3 (2^-1020) to 54 (below 2^-968).
     assertEquals(3, (int) (bits(Double.MIN_VALUE * Log10.TWO54) >>> 52));
     assertEquals(54, (int) (bits(Math.nextDown(Double.MIN_NORMAL) * Log10.TWO54) >>> 52));
-    for (int field : new int[] {0, 1, 0x3ff, 0x7fe, 0x7ff}) {
-      for (int m = 0; m <= 0xfffff; m++) {
-        int chx = (field << 20) | m;
-        long hx = Integer.toUnsignedLong(chx);
-        for (int ci = 0; ci < 2; ci++) {
-          long i = ci;
-          long word = (hx & 0x000fffff) | ((0x3ffL - i) << 20);
-          int cword = (chx & 0x000fffff) | ((0x3ff - ci) << 20);
-          if (word != (long) cword || word < 0 || word >= 1L << 31) {
-            assertEquals((long) cword, word, "field " + field + ", m " + m + ", i " + i);
-            assertTrue(word >= 0 && word < 1L << 31, "word " + Long.toHexString(word));
-          }
+    // The exponent field is masked away in both words, so the significand and I are all that
+    // the new high word reads.
+    for (int m = 0; m <= 0xfffff; m++) {
+      for (int ci = 0; ci < 2; ci++) {
+        long i = ci;
+        long word = (m & 0x000fffffL) | ((0x3ffL - i) << 20);
+        int cword = (m & 0x000fffff) | ((0x3ff - ci) << 20);
+        if (word != (long) cword || word < 0 || word >= 1L << 31) {
+          assertEquals((long) cword, word, "m " + m + ", i " + i);
+          assertTrue(word >= 0 && word < 1L << 31, "word " + Long.toHexString(word));
         }
       }
     }
@@ -1121,21 +1119,20 @@ class ProofsTest {
 
   /**
    * L17's H18: the C answers every lane with the sign bit set early, a NaN or -inf for -0, so a
-   * negative lane's words are never kept; this fails if the C kept one. And on some of those
-   * lanes the long K is not the C's k, so H18 is needed.
+   * negative lane's words are never kept; this fails if the C kept one. And on every one of
+   * those lanes the long K is not the C's k (the long field holds the sign bit, at least 0x800,
+   * where the C's is negative), so H18 is needed.
    */
   @Test
   void l17NegativeLanesAreAnsweredEarly() {
-    boolean kDiffers = false;
     for (double x : l17SignSet()) {
       long b = bits(x);
       double got = StrictMath.log10(x);
       assertTrue(x == 0.0 ? bits(got) == bits(Double.NEGATIVE_INFINITY) : Double.isNaN(got),
           Oracle.hex(x));
       long k = ((b >>> 32) >>> 20) - 1023;
-      kDiffers |= k != l17CK((int) (b >> 32), 0);
+      assertTrue(k >= 0x800 - 1023 && k != l17CK((int) (b >> 32), 0), Oracle.hex(x));
     }
-    assertTrue(kDiffers);
   }
 
   /**

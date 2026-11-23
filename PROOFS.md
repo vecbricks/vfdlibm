@@ -911,8 +911,9 @@ for the long one.
 
 **Hypotheses.**
 - (H18) The sign bit of `b` is clear on every lane whose result is kept. A lane with it set is
-  `x < 0` or `-0`, which the C answers at line 79 with `(x-x)/zero` (a NaN) or at line 78 with
-  `-two54/zero` (`-inf`), and the kernel blends those two answers over every earlier result.
+  `x < 0`, `-0` or a NaN with the sign bit set, which the C answers at line 79 with
+  `(x-x)/zero` (a NaN) or at line 78 with `-two54/zero` (`-inf`), and the kernel blends those
+  two answers over every earlier result.
   It is needed: for a negative `b`, `HX >>> 20` holds the sign bit and `K` is not the C's `k`.
 
 **Proof.**
@@ -940,15 +941,16 @@ exponent field from 0 to `0x7ff`, scaled and not, which by step 1 is every value
 words depend on `b` only through `HX >>> 20` and `HX & 0xfffff`), checks `K`, `I` and `y`
 against the C's int `k`, `i` and `I2D`, and `K` in `[-1077, 1024]`; it also checks, from the
 smallest and the largest subnormal, that a scaled lane's field is 3 to 54, so a kept lane's `K`
-is in `[-1074, 1024]`. A second loop runs every significand word from 0 to `0xfffff`, for both
-`I` and the exponent fields 0, 1, `0x3ff`, `0x7fe` and `0x7ff`, the long new high word against
-the C's and below `2^31`. `ProofsTest.l17RareComparesAreTheCs` (c): the two long compares against
+is in `[-1074, 1023]` (field `0x7ff`, `K = 1024`, is `+inf` or a NaN, always blended over). A
+second loop runs every significand word from 0 to `0xfffff`, for both `I`, the long new high word
+against the C's and below `2^31`; the exponent field is masked away in both, so it needs no
+loop. `ProofsTest.l17RareComparesAreTheCs` (c): the two long compares against
 the C's on every high word within `2^16` of 0, `0x7ff00000`, `0x7fffffff` and `0x80000000` (where
 an answer changes or the int wraps), with five low words each, and on 2^20 sampled patterns.
 `ProofsTest.l17NegativeLanesAreAnsweredEarly` (H18): on every sign-set pattern of a set of
 specials, sampled patterns and every exponent field, `StrictMath.log10` is a NaN, or `-inf` for
 `-0`, so it fails if the C kept a negative lane; and for some of those patterns `K` is not the
-C's `k`, which shows H18 is needed. **Vector tie, here.**
+C's `k` on every one of those patterns, which shows H18 is needed. **Vector tie, here.**
 `ProofsTest.l17NegativeLanesAreBlendedOver` checks H18 on `Log10`'s own masks, whose blends
 Varka's kernel emits in the same order: `Log10.log10Blended`, at every width, against
 `StrictMath.log10` by raw bits on those sign-set patterns, each beside its positive twin so that
