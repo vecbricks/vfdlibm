@@ -83,12 +83,13 @@ five are a later, optional set; the large-argument reduction of the trigonometri
     hard cases, one resource per function under `src/test/resources/.../hard-cases/` (so far `exp`,
     `expm1`, `log`, `log10`, `log1p`, `sinh`, `cosh`, `asin`, `atan` and `acos`), loaded with
     `Inputs.hardCases("<function>")`, and for a function of two arguments a file of pairs loaded
-    with `Inputs.hardCasePairs` (`atan2`, derived from atan's inputs, and `hypot`, computed by
+    with `Inputs.hardCasePairs` (`atan2`, derived from atan's inputs, `hypot`, computed by
     `dev/hypot-hard-cases.py` with exact integer arithmetic, since no published table of hypot's
-    hard cases is known). The inputs of Lefevre's list come out of
-    `dev/testlibm-extract.py`, which rechecks each line with 400-digit arithmetic against exact
-    values it derives itself (`sinh`'s, `cosh`'s, `atan`'s, `asin`'s and `acos`'s files were
-    written by it). A port that keeps fdlibm's
+    hard cases is known, and `pow`, computed the same way by `dev/pow-hard-cases.py`: exact
+    results, ties, results near a midpoint and the doubles beside the result's thresholds). The
+    inputs of Lefevre's list come out of `dev/testlibm-extract.py`, which rechecks each line with
+    400-digit arithmetic against exact values it derives itself (`sinh`'s, `cosh`'s, `atan`'s,
+    `asin`'s and `acos`'s files were written by it). A port that keeps fdlibm's
     operations, or departs from them only where `PROOFS.md` proves the result equal, matches
     `StrictMath` on them by construction; they sit where a dropped correction term or a
     reassociated sum, an error far below one ulp, is most likely to change the returned double.

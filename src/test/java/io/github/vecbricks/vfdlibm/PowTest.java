@@ -1585,9 +1585,24 @@ class PowTest {
     assertTrue(admitted > 1 << 15, "admitted " + admitted);
   }
 
-  /** A smaller {@link #everything}, with the boundaries, for the masked forms. */
+  private static Inputs.Pairs hardCasePairs() {
+    return Inputs.hardCasePairs("pow");
+  }
+
+  /**
+   * {@code hard-cases/pow.txt}: exact results, ties, results near a midpoint and the doubles
+   * either side of the result's thresholds, computed by {@code dev/pow-hard-cases.py}
+   * ({@link HardCasePairsTest} checks the claims).
+   */
+  @ParameterizedTest
+  @EnumSource(VectorWidth.class)
+  void publishedPairs(VectorWidth width) {
+    assertPow(width.species(), hardCasePairs());
+  }
+
+  /** A smaller {@link #everything}, with the boundaries and hard cases, for the masked forms. */
   private static Inputs.Pairs everythingSmall(long seed) {
-    return concat(everything(seed, 1 << 12), guardBoundaryPairs());
+    return concat(everything(seed, 1 << 12), guardBoundaryPairs(), hardCasePairs());
   }
 
   @ParameterizedTest

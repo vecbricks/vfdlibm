@@ -1769,5 +1769,7 @@ special values, the exact powers, the fuzz's draws at the C's words and points, 
 integer and half-integer `y`, huge `y` beside `x` near 1, `y*log2(x)` near 1024, -1075, the
 subnormal results and +-0.5, pairs either side of `MIN_NORMAL`, NaN pairs, sampled bits, Varka's
 baseline range and every exponent, the guard's boundaries, and every subset of a vector's lanes
-rare. The constants are pinned to the C's hexadecimal (`constantsAreTheSourcesBits`,
-`portConstantsAreTheSources`). No hard-case file exists for pow.
+rare, and the 4,168 pairs of `hard-cases/pow.txt` (exact results, ties, results within 2^-28 ulp
+of a midpoint and the doubles beside the result's thresholds, computed by
+`dev/pow-hard-cases.py`). The constants are pinned to the C's hexadecimal
+(`constantsAreTheSourcesBits`, `portConstantsAreTheSources`).
