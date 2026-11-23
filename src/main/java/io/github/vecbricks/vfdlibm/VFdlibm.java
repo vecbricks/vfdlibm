@@ -34,7 +34,9 @@ import jdk.incubator.vector.VectorMask;
  * log1p} and {@code atan2} call is the guarded arm, and the one {@code cosh} calls is the slice
  * arm; {@code hypot} and {@code pow} have one arm, the finish. No file under {@code
  * bench/results/} reads {@code hypot} or {@code pow} yet: every file the list below cites predates
- * them, and of the list only the allocation check that CI runs covers them.
+ * them, and of the list only the allocation check that CI runs covers them. On its mixed data
+ * that check fails {@code pow}'s rows without a box: {@code StrictMath.pow}, which finishes the
+ * rare lanes, allocates on some of them itself ({@code SKILLS.md}, "What the pow port taught").
  *
  * <ul>
  *   <li>Covered by {@code bench/alloc-check.py}, which CI runs and which fails a body that
@@ -387,8 +389,9 @@ public final class VFdlibm {
    * since {@code StrictMath}'s own choice varies); every other lane, a NaN beside a finite value
    * included, has {@code StrictMath}'s bits. Ported from fdlibm 5.3's {@code e_pow.c}: a lane of
    * a positive, normal {@code x} and a finite {@code y} of moderate size is computed in the
-   * vector, and every other lane (a special or negative argument, overflow, underflow and a
-   * subnormal result) is finished per lane by {@code StrictMath.pow}.
+   * vector, and every other lane (a special, negative or subnormal {@code x}, a special {@code y}
+   * or one past about {@code 2^31}, overflow, underflow and a subnormal result) is finished per
+   * lane by {@code StrictMath.pow}.
    *
    * @param x the bases
    * @param y the exponents, of {@code x}'s species

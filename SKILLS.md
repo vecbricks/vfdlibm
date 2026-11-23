@@ -1613,30 +1613,29 @@ operations count the same at both widths.
 
 ## What the pow port taught
 
-- **The common path alone, prototyped first.** By the owner's decisions of 23 November 2026 on issue
-  34, the first body computes e_pow.c's common path only (a positive normal `x` that is not 1, a
-  finite `y` of `iy <= 0x41e00000` that is not 0, +-1, 2 or 0.5, `z` inside lines 266 and 272, a
-  normal result) and finishes every other lane per lane by `StrictMath.pow`; the guard is
-  `PROOFS.md`'s L18. Before any test, its body (206 lines with comments: two divisions, six low-word
-  clears, int-lane shifts by per-lane counts and `I2D`) was checked for boxing and read in assembly.
-  With the body inlined the 256- and 512-bit loops are one copy of it, 334 to 388 instructions with
-  88 packed-double operations, two `vdivpd`, no FMA and three calls (the traps and the entry
-  barrier), at this laptop's AVX-512 flags, and 379 to 429 instructions at 256 bits as an AVX2 host
-  (`-XX:UseAVX=2 -XX:MaxVectorSize=32`), with the same operations and calls; it was read with #153's
-  assembly check overlaid, not committed here. `--why` named no refused call of `Pow` or `Lanes`,
-  but `NodeCountInliningCutoff` refused the benchmark methods themselves and `Blackhole::consume`:
-  the graph is past the cutoff with pow's body alone, so nothing more fits beside it.
-- **`StrictMath.pow` allocates, which the allocation check cannot tell from a box.** On JDK 25.0.5.1
-  the scalar `StrictMath.pow` loop of `PowBenchmark` allocates 96 bytes a call (98,304 B/op on
-  common data), and in a standalone probe only the calls that reach the oracle's main path did (a
-  negative `x` with an integer `y`, a subnormal `x`, overflow, underflow, a subnormal result), and
-  not even a common-path call there, so the allocation depends on how the JIT compiled the oracle;
-  its cause is not read. `PowBenchmark`'s `mixed` data holds 19 lanes of those kinds, and its vector
-  rows read 1,824 B/op, 19 times 96; with those kinds left out every row read under 0.25 B/op at the
-  laptop's flags and as an AVX2 host, and a scratch row calling `StrictMath.pow` on the same 19
-  lanes alone read 1,824.02 B/op both ways. So the per-lane finish of pow costs the oracle's own
-  allocation, and `bench/alloc-check.py` fails its `mixed` rows though the body does not box. What
-  the benchmark's `mixed` data should hold is the owner's decision.
+- **The common path alone, prototyped first.** By the owner's decisions of 23 November 2026 on
+  issue 34, the first body computes e_pow.c's common path only (a positive normal `x` that is not
+  1, a finite `y` of `iy <= 0x41e00000` that is not 0, +-1, 2 or 0.5, `z` inside lines 266 and
+  272, a normal result) and finishes every other lane per lane by `StrictMath.pow`; the guard is
+  `PROOFS.md`'s L18. Before any test, its body (two divisions, six low-word clears, int-lane
+  shifts by per-lane counts and `I2D`) was run through `bench/alloc-check.py` and read with #153's
+  assembly check overlaid (not committed here): at 256 and 512 bits on the laptop's AVX-512 flags
+  and at 256 bits as an AVX2 host, each loop was one copy of the body with two `vdivpd`, no FMA
+  and no call but the traps and the entry barrier. `--why` named no refused call of `Pow` or
+  `Lanes`, but `NodeCountInliningCutoff` refused the benchmark methods themselves and
+  `Blackhole::consume`: the graph is past the cutoff with pow's body alone, so nothing more fits
+  beside it. No results file holds these readings, so no figure of them is quoted.
+- **`StrictMath.pow` allocates, which the allocation check cannot tell from a box.** On JDK
+  25.0.5.1 the scalar `StrictMath.pow` loop of `PowBenchmark` allocates, and in a standalone probe
+  only the calls that reach the oracle's main path did (a negative `x` with an integer `y`, a
+  subnormal `x`, overflow, underflow, a subnormal result), and not a common-path call there, so
+  the allocation depends on how the JIT compiled the oracle; its cause is not read. The vector
+  rows on `mixed` data allocate what the finish's calls on those lanes do: with those kinds left
+  out of the data every row passed, and a scratch row calling `StrictMath.pow` on the same lanes
+  alone allocated as much as the finish rows, at the laptop's flags and as an AVX2 host (local
+  readings, not committed). So `bench/alloc-check.py` fails pow's `mixed` rows though the body
+  does not box; what the benchmark's `mixed` data should hold, and how the check treats it, is
+  the owner's decision.
 - **Which guard parts are hinges.** Run through the common path alone, every part of the guard but
   two changes results on pairs it alone keeps out (`PROOFS.md`, L18, with the counts): a `|y|` past
   2^31 beside `x` within 2^-40 of 1 only rarely (42 of 5,952 pairs), where the C's short log and the
