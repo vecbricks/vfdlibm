@@ -1035,4 +1035,169 @@ class ProofsTest {
     Oracle.assertUnary("l15 expm1Blended", width.species(), x -> Expm1.expm1Blended(x, null),
         StrictMath::expm1, l15EveryK());
   }
+
+  // L18: log1p's signed compares and words in long lanes, as Varka emits them.
+
+  /** The C's signed words of s_log1p.c that L18 (a) compares hx with, and the int range's ends. */
+  private static final int[] L18_WORDS = {Log1p.HX_BELOW_SQRT2_M1, 1,
+      Log1p.HX_NEGATIVE_K_ZERO + 1, Log1p.HX_NON_FINITE, Log1p.HX_HUGE, Integer.MIN_VALUE,
+      Integer.MAX_VALUE};
+
+  /** L18 (a)'s two long compares of the raw bits b against the C's int compares for h. */
+  private static void l18AssertCompares(long b, int h) {
+    int hx = (int) (b >> 32);
+    String at = Long.toHexString(b) + ", h " + Integer.toHexString(h);
+    assertEquals(hx < h, b < Lanes.fromHiBits(h), at);
+    if (h != Integer.MIN_VALUE) {
+      assertEquals(hx >= h, b > Lanes.fromHiBits(h) - 1, at);
+    }
+  }
+
+  /**
+   * L18 (a): the signed long compares on the raw bits are the C's int compares, for each of
+   * s_log1p.c's words and the int range's ends, on every high word within 2^16 of that word
+   * (the int wraps there for the ends), with five low words each, and on 2^20 sampled patterns
+   * against every one of those words.
+   */
+  @Test
+  void l18SignedComparesAreTheCs() {
+    long[] los = {0L, 1L, 0x7fff_ffffL, 0x8000_0000L, 0xffff_ffffL};
+    int checked = 0;
+    for (int h : L18_WORDS) {
+      for (int d = -(1 << 16); d <= 1 << 16; d++) {
+        for (long lo : los) {
+          l18AssertCompares(((long) (h + d) << 32) | lo, h);
+          checked++;
+        }
+      }
+    }
+    assertEquals(L18_WORDS.length * ((1 << 17) + 1) * los.length, checked);
+    SplittableRandom random = new SplittableRandom(1800L);
+    for (int n = 0; n < 1 << 20; n++) {
+      long b = random.nextLong();
+      for (int h : L18_WORDS) {
+        l18AssertCompares(b, h);
+      }
+    }
+  }
+
+  /**
+   * L18 (b): a loop over every exponent field, 0 to 0x7ff, which is every value HU >>> 20 takes
+   * on a lane whose u has its sign clear: the long K and K + 1 against the C's int k, and K in
+   * [-53, 1024] from field 0x3ca, the smallest u's (checked); and a loop over every significand
+   * word: the long masked word, its compare with 0x6a09e, both ORed words, the quarter word and
+   * u's rebuilt bits against the C's ints.
+   */
+  @Test
+  void l18LongWordsAreLog1psInts() {
+    assertEquals(0x3ca, (int) (bits(1.0 + Math.nextUp(-1.0)) >>> 52));
+    for (int field = 0; field <= 0x7ff; field++) {
+      int chu = field << 20;
+      long hu = Integer.toUnsignedLong(chu);
+      long k = (hu >>> 20) - 1023;
+      int ck = (chu >> 20) - 1023;
+      String at = "field " + field;
+      assertEquals((long) chu, hu, at);
+      assertEquals((long) ck, k, at);
+      assertEquals((long) (ck + 1), k + 1, at);
+      if (field >= 0x3ca) {
+        assertTrue(k >= -53 && k <= 1024, at);
+      }
+    }
+    // The exponent field is masked away, so the significand word is all the rest reads; the
+    // low word of u is 0x5555aaaa here, any word, since the C's __HI(u) = w leaves it.
+    long uLow = 0x5555_aaaaL;
+    for (int m = 0; m <= 0xfffff; m++) {
+      int chu = 0x3ff00000 | m;
+      long hu = Integer.toUnsignedLong(chu);
+      int chum = chu & 0x000fffff;
+      long hum = hu & 0x000fffffL;
+      String at = "m " + Integer.toHexString(m);
+      assertEquals((long) chum, hum, at);
+      assertEquals(chum < Log1p.HU_SQRT2, hum < Log1p.HU_SQRT2, at);
+      for (int cOr : new int[] {0x3ff00000, 0x3fe00000}) {
+        int cword = chum | cOr;
+        long word = hum | cOr;
+        assertEquals((long) cword, word, at);
+        assertTrue(word >= 0 && word < 1L << 31, at);
+        long rebuilt = (uLow & 0xffff_ffffL) | (word << 32);
+        assertEquals(((long) cword << 32) | uLow, rebuilt, at);
+      }
+      assertEquals((long) ((0x00100000 - chum) >> 2), (0x00100000L - hum) >>> 2, at);
+    }
+  }
+
+  /**
+   * Lanes with !(x > -1): one pattern at every exponent field from 0x3ff up with the sign set,
+   * -1 and 64 neighbours below it, the specials and 2^16 sampled patterns that are not above
+   * -1, and NaNs of both signs with several payloads.
+   */
+  private static double[] l18EarlySet() {
+    double[] pool = Inputs.concat(Inputs.specials(), Inputs.sampled(1801L, 1 << 16));
+    double[] out = new double[(0x800 - 0x3ff) + 65 + pool.length + 8];
+    int n = 0;
+    for (int field = 0x3ff; field <= 0x7ff; field++) {
+      long significand = field * 0x9e3779b97f4aL & 0xf_ffff_ffff_ffffL;
+      out[n++] = Double.longBitsToDouble(Long.MIN_VALUE | ((long) field << 52) | significand);
+    }
+    for (int j = 0; j <= 64; j++) {
+      out[n++] = Double.longBitsToDouble(bits(-1.0) + j);
+    }
+    for (double x : pool) {
+      if (!(x > -1.0)) {
+        out[n++] = x;
+      }
+    }
+    for (long nan : new long[] {0x7ff8000000000000L, 0xfff8000000000000L, 0x7ff0000000000001L,
+        0xfff0000000000001L, 0x7ff800000000beefL, 0xfff800000000beefL, 0x7fffffffffffffffL,
+        0xffffffffffffffffL}) {
+      out[n++] = Double.longBitsToDouble(nan);
+    }
+    return Arrays.copyOf(out, n);
+  }
+
+  /**
+   * L18's H19: the C answers every lane with !(x > -1) early, -inf at -1 and a NaN elsewhere,
+   * so a word of such a lane is never kept; this fails if the C kept one. And on every lane of
+   * the set below -1 that is no NaN, u is negative and the long HU is not the C's hu widened,
+   * so H19 is needed.
+   */
+  @Test
+  void l18EarlyLanesAreAnsweredEarly() {
+    int below = 0;
+    for (double x : l18EarlySet()) {
+      assertFalse(x > -1.0, Oracle.hex(x));
+      double got = StrictMath.log1p(x);
+      assertTrue(x == -1.0 ? bits(got) == bits(Double.NEGATIVE_INFINITY) : Double.isNaN(got),
+          Oracle.hex(x));
+      if (x < -1.0) {
+        double u = 1.0 + x;
+        long hu = bits(u) >>> 32;
+        int chu = (int) (bits(u) >> 32);
+        assertTrue(u < 0.0 && hu >= 1L << 31 && hu != (long) chu, Oracle.hex(x));
+        below++;
+      }
+    }
+    assertTrue(below > 0x400);
+  }
+
+  /**
+   * L18's H19 on Log1p's own masks: Log1p.log1pBlended, whose blends Varka's kernel emits in the
+   * same order, against StrictMath by raw bits on the early set, each lane beside a kept twin
+   * above -1 (its magnitude, or 0.25 for a NaN), so that a vector mixes early and kept lanes. A
+   * kernel that kept an early lane's general form, its blend dropped or placed before the
+   * general one, fails here.
+   */
+  @ParameterizedTest
+  @EnumSource(VectorWidth.class)
+  void l18EarlyLanesAreBlendedOver(VectorWidth width) {
+    double[] early = l18EarlySet();
+    double[] xs = new double[2 * early.length];
+    for (int j = 0; j < early.length; j++) {
+      xs[2 * j] = early[j];
+      xs[2 * j + 1] = Double.isNaN(early[j]) ? 0.25 : Math.abs(early[j]);
+    }
+    Oracle.assertUnary("l18 log1pBlended", width.species(), x -> Log1p.log1pBlended(x, null),
+        StrictMath::log1p, xs);
+  }
 }
