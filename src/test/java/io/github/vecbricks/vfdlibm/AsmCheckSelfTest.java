@@ -193,6 +193,10 @@ class AsmCheckSelfTest {
       "notrack\t\tcall\t\tqword ptr [r10 + 0x8]      ;   {virtual_call}",
       "bnd\t\tnotrack\t\tcall\t\tr10      ;   {optimized virtual_call}",
       "data16\t\tcall\t\t0x7ac397aae4e0      ;   {static_call}",
+      // no relocation: only read as a call once the prefix is off
+      "rex64\t\tcall\t\tr10",
+      "cs\t\tcall\t\tqword ptr [r10]",
+      "notrack\t\tjmp\t\tr10      ;   {static_call}",
       "jmp\t\t0x7ac397aae4e0      ;   {runtime_call StubRoutines::dexp}",
       "jmp\t\t0x7ac397aae4e0      ;   {static_call}",
       "notrack\t\tjmp\t\tr10      ;   {runtime_call C2 Runtime rethrow}",

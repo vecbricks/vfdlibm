@@ -104,8 +104,12 @@ class AsmTest {
   /** What leaving the preferred species out rests on: it is one of the fixed widths' species. */
   @Test
   void thePreferredSpeciesIsAFixedWidths() {
-    int bits = jdk.incubator.vector.DoubleVector.SPECIES_PREFERRED.vectorBitSize();
+    var preferred = jdk.incubator.vector.DoubleVector.SPECIES_PREFERRED;
+    int bits = preferred.vectorBitSize();
     assertTrue(bits == 128 || bits == 256 || bits == 512, bits + " bits");
+    assertTrue(preferred == jdk.incubator.vector.VectorSpecies.of(double.class,
+        jdk.incubator.vector.VectorShape.forBitSize(bits)), "the preferred species is not the "
+        + bits + "-bit one");
   }
 
   /**

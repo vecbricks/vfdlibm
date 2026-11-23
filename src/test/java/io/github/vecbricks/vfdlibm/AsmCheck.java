@@ -239,7 +239,7 @@ final class AsmCheck {
    */
   private static final Pattern PREFIX = Pattern.compile(
       "lock|rep|repe|repz|repne|repnz|notrack|bnd|xacquire|xrelease|data16|data32|addr16|addr32"
-          + "|rex(\\.[wrxb]+)?");
+          + "|rex64|rex(\\.[wrxb]+)?|cs|ds|es|fs|gs|ss");
 
   /**
    * A method's C2 code from its entry point to its stubs, and the lines in that range that were
@@ -415,8 +415,10 @@ final class AsmCheck {
    * Every call that is not an uncommon trap or the entry barrier, and every other instruction
    * that carries a call's relocation ({@code {runtime_call ...}}, {@code {static_call}}, {@code
    * {optimized virtual_call}}, {@code {virtual_call}}) but the poll stub's {@code jmp} to the
-   * safepoint blob: a tail jump to a stub is a call too. Each relocation is matched whole, so an
-   * allowed one beside another does not pass, and a {@code call} with none fails.
+   * safepoint blob: a tail jump that HotSpot marks as a call is a call too. Each relocation is
+   * matched whole, so an allowed one beside another does not pass, and a {@code call} with none
+   * fails. A {@code jmp} with no call relocation (one to a label, an indirect one, one marked
+   * only {@code {external_word}}) is not read as leaving the method.
    */
   static List<String> callViolations(Body body) {
     return matching(body, insn -> {

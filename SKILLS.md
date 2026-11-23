@@ -548,7 +548,7 @@ What it reads: no FMA and no scalar double arithmetic in any arm at any width un
 three flag sets. From 256 bits up each arm is one copy of its body and calls only its uncommon
 traps and the entry barrier: 2 calls for the blended arms of log, log10, log1p and expm1 and for
 expm1's core, 4 for atan2's guarded arm, 3 for every other. asin, acos and hypot take their
-square root as one `vsqrtpd`. Masking adds one blend and 10 to 59 instructions on AVX-512, 15 to
+square root as one `vsqrtpd`. Masking adds one blend and 10 to 59 instructions on AVX-512, 17 to
 66 on AVX2, which has no mask registers (its `k` column is 0). At 128 bits every arm runs the
 Java fallback, 60 to 444 calls per method, as for exp.
 

@@ -493,7 +493,8 @@ final class AsmProbe {
    * and prints a done line.
    */
   public static void main(String[] args) throws ReflectiveOperationException {
-    String function = System.getProperty("vfdlibm.asm.function");
+    String function = java.util.Objects.requireNonNull(
+        System.getProperty("vfdlibm.asm.function"), "-Dvfdlibm.asm.function");
     List<Method> arms = arms(function);
     if (arms.isEmpty()) {
       throw new IllegalArgumentException("no arms for '" + function + "'");
