@@ -85,12 +85,14 @@ import jdk.incubator.vector.VectorSpecies;
  * EPYC 7763's run and re-run ({@code bench/results/cosh-epyc7763-2026-11-21.txt}) both read the
  * finish arm lower outside 1.3x on common data and agree, a direction on common data, and give no
  * direction on mixed data; the Xeon 8573C has one run ({@code cosh-xeon8573c-2026-11-21.txt}),
- * whose ratios give no direction until a re-run. On {@code CoshKindsBench} ({@code
+ * whose ratios are near 1.3x or inside it and give no direction. On {@code CoshKindsBench} ({@code
  * cosh-kinds-epyc7763-2026-11-21.txt}, two runs, and {@code cosh-kinds-xeon8573c-2026-11-21.txt},
- * one) the arms read within 1.3x of each other at 3.5% and 17% of small lanes, with no direction
- * ({@code SKILLS.md}). cosh is the named exception to issue #30's tie rule, since its per-lane set
- * is not rare: a host run decides its arm, which is the owner's call, and the slice default stays
- * provisional until then. The default is chosen in {@code cosh(x,
+ * one) the finish arm reads lower by more than 1.3x only on data with no small lane, and at 3.5%
+ * and 17% of small lanes the arms read within 1.3x of each other, with no direction ({@code
+ * SKILLS.md}). So the one direction is the EPYC's on common data, where 0.6% of the lanes are
+ * small. cosh is the named exception to issue #30's tie rule, since its per-lane set is not rare: a
+ * host run decides its arm, by the owner's call, and the slice default stays provisional until
+ * then. The default is chosen in {@code cosh(x,
  * live)}; other places say "the default arm".
  */
 final class Cosh {

@@ -80,7 +80,8 @@ at 256 and 93.7 to 96.3 at 512: `exp-onediv-xeon8573c-2026-11-03.txt` (34.7 / 68
 files of 21 November, from two runs: `exp-xeon8573c-2026-11-21.txt` and its five siblings (34.5 /
 69.1 / 93.7, 2.00, 1.36) and `sinh-`, `cosh-` and `cosh-kinds-xeon8573c-2026-11-21.txt` (34.9 /
 69.9 / 94.8, 2.00, 1.36), and the four of 22 November, `asin-xeon8573c-2026-11-22.txt` and its
-three siblings (35.7 / 70.8 / 96.3, 1.98, 1.36). `log1p-xeon8573c-2026-11-03.txt`, of the same
+three siblings (35.7 / 70.8 / 96.3, 1.98, 1.36, and 34.6 / 69.1 / 93.8, 2.00, 1.36 for the second
+run in `atan2-xeon8573c-2026-11-22.txt`). `log1p-xeon8573c-2026-11-03.txt`, of the same
 day as the pair, reads 41.5 / 82.7 / 113.0 (1.99, 1.37), and its scalar `StrictMath` loop reads
 7,358 ns on common data where the `log1p` file of 21 November reads 8,846. Each file's header says
 which it ran on; no cause for the difference is claimed here. The 25 nightly draws of this CPU in
