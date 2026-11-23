@@ -1,16 +1,17 @@
 # vfdlibm
 
 fdlibm on the Java Vector API: math functions over `DoubleVector` lanes whose every lane is
-bit-identical to `java.lang.StrictMath`, but for a two-NaN lane of `atan2` or `hypot`.
+bit-identical to `java.lang.StrictMath`, but for a two-NaN lane of `atan2`, `hypot` or `pow`.
 
 **Status: 0.x.** `exp`, `expm1`, `log`, `log1p`, `log10`, `sinh`, `cosh`, `asin`, `atan`, `acos`
 and `atan2` are ported and released in 0.2.0 (`exp`, `expm1`, `log`, `log1p` and `log10` in
-0.1.0), as `io.github.vecbricks:vfdlibm`; `hypot` is ported on `main` and not released yet.
-Functions are added one at a time, as
-[Varka](https://github.com/vecbricks/varka) needs them. A minor version may break the API and a
-patch may not; adding a function is a patch. Bit identity with `StrictMath` is the contract, and
-no version changes it (`CHANGELOG.md`); the one lane it excepts is a lane of two NaNs with
-different bits in `atan2` or `hypot`.
+0.1.0), as `io.github.vecbricks:vfdlibm`; `hypot` and `pow` are ported on `main` and not
+released yet, which makes all thirteen functions of the plan's set (`PLAN.md` section 3) ported,
+`pow` with its common path in the vector and its other lanes finished per lane. Functions are
+added one at a time, as [Varka](https://github.com/vecbricks/varka) needs them. A minor version
+may break the API and a patch may not; adding a function is a patch. Bit identity with
+`StrictMath` is the contract, and no version changes it (`CHANGELOG.md`); the one lane it excepts
+is a lane of two NaNs with different bits in `atan2`, `hypot` or `pow`.
 
 ## Use
 
@@ -124,8 +125,8 @@ java --module-path "target/classes:$(cat cp.txt)" -m example/example.Main
 
 Each function takes a vector of any species of 128 bits or more. Released in 0.2.0: `exp`,
 `expm1`, `log`, `log10`, `log1p`, `sinh`, `cosh`, `asin`, `atan`, `acos` and `atan2(y, x)`, which
-takes two vectors. On `main`, unreleased: `hypot(x, y)`, which takes two vectors too. The system
-property `vfdlibm.fault` plants a
+takes two vectors. On `main`, unreleased: `hypot(x, y)` and `pow(x, y)`, which take two vectors
+too. The system property `vfdlibm.fault` plants a
 fault, for this project's tests only, and works in the shipped jar too: never set it, including
 through `JAVA_TOOL_OPTIONS`; a JVM that has it set prints a warning to `System.err` once. The
 property and the fault names are for this

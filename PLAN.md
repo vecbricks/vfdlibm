@@ -52,7 +52,11 @@ over the general path, which calls `atan`'s core, no lane finished per lane, and
 blended one and the guarded one `VFdlibm` calls at every species, by the owner's decision of 22
 November; section 5 below gives the case), and so is `hypot` (`VFdlibm.hypot`, from `e_hypot.c`,
 every finite lane in the vector with the C's stale words after its `2^1022` scaling, one arm, and
-the lanes of an infinity or a NaN finished per lane).
+the lanes of an infinity or a NaN finished per lane), and so is `pow` (`VFdlibm.pow`, from
+`e_pow.c`, the last of the thirteen: its common path in the vector, a positive normal `x` that is
+not 1 and a finite `y` of `iy <= 0x41e00000` that is not 0, +-1, 2 or 0.5, with a normal result,
+and every other lane finished per lane, by the owner's decisions of 23 November 2026 on issue 34;
+`PROOFS.md`, L19 and L20). So all thirteen are ported.
 `log`, `log10` and `log1p` are done too (`VFdlibm.log`, from
 `e_log.c`, `VFdlibm.log10`, from `e_log10.c`, which computes through log's common path, and
 `VFdlibm.log1p`, from `s_log1p.c`), and so is `expm1` (`VFdlibm.expm1`, from `s_expm1.c`, whose
@@ -79,12 +83,15 @@ five are a later, optional set; the large-argument reduction of the trigonometri
     hard cases, one resource per function under `src/test/resources/.../hard-cases/` (so far `exp`,
     `expm1`, `log`, `log10`, `log1p`, `sinh`, `cosh`, `asin`, `atan` and `acos`), loaded with
     `Inputs.hardCases("<function>")`, and for a function of two arguments a file of pairs loaded
-    with `Inputs.hardCasePairs` (`atan2`, derived from atan's inputs, and `hypot`, computed by
+    with `Inputs.hardCasePairs` (`atan2`, derived from atan's inputs, `hypot`, computed by
     `dev/hypot-hard-cases.py` with exact integer arithmetic, since no published table of hypot's
-    hard cases is known). The inputs of Lefevre's list come out of
-    `dev/testlibm-extract.py`, which rechecks each line with 400-digit arithmetic against exact
-    values it derives itself (`sinh`'s, `cosh`'s, `atan`'s, `asin`'s and `acos`'s files were
-    written by it). A port that keeps fdlibm's
+    hard cases is known, and `pow`, self-computed the same way by `dev/pow-hard-cases.py`
+    (exact results, ties, results near a midpoint and the doubles beside the result's
+    thresholds), while a published binary64 pow list, CORE-MATH's `src/binary64/pow/pow.wc`
+    (MIT), is evaluated as a follow-up, issue #144). The
+    inputs of Lefevre's list come out of `dev/testlibm-extract.py`, which rechecks each line with
+    400-digit arithmetic against exact values it derives itself (`sinh`'s, `cosh`'s, `atan`'s,
+    `asin`'s and `acos`'s files were written by it). A port that keeps fdlibm's
     operations, or departs from them only where `PROOFS.md` proves the result equal, matches
     `StrictMath` on them by construction; they sit where a dropped correction term or a
     reassociated sum, an error far below one ulp, is most likely to change the returned double.
@@ -206,8 +213,9 @@ five are a later, optional set; the large-argument reduction of the trigonometri
   has the same three arms for `expm1`, `SinhBenchmark` one for `sinh`, `CoshBenchmark` two for
   `cosh`, `AsinBenchmark` one for `asin`, `AtanBenchmark` one for `atan`, `AcosBenchmark` one for
   `acos`, `Atan2Benchmark` two for `atan2` (the blended and the guarded arm, over two arrays) and
-  `HypotBenchmark` one for `hypot` (over two arrays; no results file reads it yet).
-  Each of the twelve has rows at `SPECIES_MAX` (`*Max`), which the allocation check covers: the
+  `HypotBenchmark` one for `hypot` (over two arrays; no results file reads it yet), and
+  `PowBenchmark` one for `pow` (the same; no results file reads it either).
+  Each of the thirteen has rows at `SPECIES_MAX` (`*Max`), which the allocation check covers: the
   finish of `exp`, `expm1`, `log`, `log10` and `log1p` boxed there on mixed data until its first
   eight lanes were written out (`bench/results/max-finish-laptop-2026-11-20.txt`, then
   `bench/results/max-finish-alloc-free-laptop-2026-11-21.txt`, a laptop reading of allocation only);

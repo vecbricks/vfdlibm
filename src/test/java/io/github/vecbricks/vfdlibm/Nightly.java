@@ -232,6 +232,24 @@ final class Nightly {
     0x3ff00000
   };
 
+  /**
+   * The high words e_pow.c tests of {@code x} (lines 149-220) and of {@code y} (lines 133-198,
+   * 266-272), with their neighbours: pow's edges, and PowTest's specials.
+   */
+  static final int[] POW_WORDS = {
+    // x: zero, the subnormals' top, one and its neighbours (lines 193-198), infinity
+    0x00000000, 0x000fffff, 0x00100000, 0x3feffffe, 0x3fefffff, 0x3ff00000, 0x3ff00001,
+    0x7fefffff, 0x7ff00000,
+    // x: the interval splits of lines 218-220, at the exponent of 1 and of 2^-1000
+    0x3ff3988e, 0x3ff3988f, 0x3ff3988d, 0x3ffbb67a, 0x3ffbb679, 0x3ffbb67b, 0x0173988e,
+    0x0173988f, 0x017bb67a, 0x017bb679,
+    // y: 0.5, 1, 2, 2^20, 2^21 (line 136), 2^31 (line 191), 2^52, 2^53 (line 133), 2^64 (192)
+    0x3fe00000, 0x40000000, 0x41300000, 0x41400000, 0x41dfffff, 0x41e00000, 0x41e00001,
+    0x432fffff, 0x43300000, 0x433fffff, 0x43400000, 0x43efffff, 0x43f00000, 0x43f00001,
+    // z: 1024 and 1075 (lines 266, 272)
+    0x40900000, 0x408fffff, 0x4090cc00, 0x4090cbff, 0x4090cc01
+  };
+
   /** The differences of the high words, {@code ha-hb}, at which line 63 decides, and zero. */
   static final int[] HYPOT_GAPS = {
     0x3c00000, 0x3c00001, 0x3bfffff, -0x3c00000, -0x3c00001, -0x3bfffff, 0, 1, -1
@@ -299,11 +317,29 @@ final class Nightly {
     }
 
     /**
+     * pow: its one arm (the finish arm {@code VFdlibm} calls), the candidates of a lane of two NaNs
+     * (the operands: e_pow.c returns {@code x+y}), and where its branches are: {@link #POW_WORDS}
+     * for both arguments; for {@code x} the significand splits of lines 218-220 and the points 0,
+     * 1, 2, the smallest normal and the infinity; for {@code y} the special exponents, 2^31 and
+     * 2^64. pow has no branch on the two words relative to each other, so it lists no gaps; the
+     * result's limits, which need {@code x} and {@code y} together, are PowTest's target pairs.
+     */
+    static final PairFunction POW = new PairFunction("pow", StrictMath::pow,
+        PairBits.Candidates.OPERANDS,
+        List.of(new Arm2("VFdlibm.pow", VFdlibm::pow, VFdlibm::pow)),
+        new Fuzz.PairEdges(
+            new Fuzz.Edges(POW_WORDS, new int[] {0x3988e, 0xbb67a}, false,
+                new double[] {0.0, 1.0, 2.0, Double.MIN_NORMAL, Double.POSITIVE_INFINITY}),
+            new Fuzz.Edges(POW_WORDS, new int[0], false,
+                new double[] {0.5, 1.0, 2.0, 0x1p31, 0x1p64, Double.POSITIVE_INFINITY}),
+            Fuzz.PAIR_SPECIALS));
+
+    /**
      * The functions of two arguments by name, in the order they are listed. A port registers its
      * function here, in {@code Nightly}; a test adds a stand-in and removes it again. A function
      * in this list is not in the nightly's {@code all} until nightly.yml says so.
      */
-    static final List<PairFunction> KNOWN = new CopyOnWriteArrayList<>(List.of(ATAN2, HYPOT));
+    static final List<PairFunction> KNOWN = new CopyOnWriteArrayList<>(List.of(ATAN2, HYPOT, POW));
 
     @Override
     public int arity() {

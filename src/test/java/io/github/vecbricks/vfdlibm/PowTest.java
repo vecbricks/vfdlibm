@@ -19,13 +19,21 @@
 package io.github.vecbricks.vfdlibm;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.lang.management.ManagementFactory;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.SplittableRandom;
+import java.util.function.Consumer;
+import jdk.incubator.vector.DoubleVector;
+import jdk.incubator.vector.VectorShape;
+import jdk.incubator.vector.VectorSpecies;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.function.Executable;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
 
@@ -47,6 +55,19 @@ import org.junit.jupiter.params.provider.EnumSource;
  * rounded multiply by a power of two, and the gate counts how line 306's lanes round
  * ({@link Path#SCALB_INEXACT} and the paths after it) so that its agreement with {@code
  * StrictMath} there is not that of lanes the scale leaves exact.
+ *
+ * <p>The vector port, {@link VFdlibm#pow}, is checked against {@code StrictMath.pow} by {@link
+ * PairBits#matches} at every {@link VectorWidth} the host has and at {@code SPECIES_MAX}, unmasked
+ * and masked (a lane that is not live keeps {@code x}), on the gate's inputs and on {@code
+ * hard-cases/pow.txt}; against the transcription {@link #cPow} on every lane, and against the
+ * common path transcribed alone ({@link #commonPath}) on every lane the guard admits. L19's ties
+ * ({@code PROOFS.md}) are the scalar check that an admitted lane takes only the common path's ways
+ * out of the C, the test that each part of the guard is a hinge or named redundant, and the
+ * guard's boundaries through the vector; L20's is the same comparison with {@link #commonPath},
+ * which writes line 307 as the C does and returns {@code z} without {@code s}. Every subset of a
+ * vector's lanes is put rare beside common lanes; the constants are pinned to the C's
+ * hexadecimal; and {@link #faultCatchers} requires each of pow's three planted faults to fail the
+ * vector at every width.
  */
 class PowTest {
 
@@ -582,19 +603,7 @@ class PowTest {
    * The high words e_pow.c tests of {@code x} (lines 149-220) and of {@code y} (lines 133-198,
    * 266-272), with their neighbours: each as a double of a zero low word and of two others.
    */
-  static final int[] WORDS = {
-    // x: zero, the subnormals' top, one and its neighbours (lines 193-198), infinity
-    0x00000000, 0x000fffff, 0x00100000, 0x3feffffe, 0x3fefffff, 0x3ff00000, 0x3ff00001,
-    0x7fefffff, 0x7ff00000,
-    // x: the interval splits of lines 218-220, at the exponent of 1 and of 2^-1000
-    0x3ff3988e, 0x3ff3988f, 0x3ff3988d, 0x3ffbb67a, 0x3ffbb679, 0x3ffbb67b, 0x0173988e,
-    0x0173988f, 0x017bb67a, 0x017bb679,
-    // y: 0.5, 1, 2, 2^20, 2^21 (line 136), 2^31 (line 191), 2^52, 2^53 (line 133), 2^64 (192)
-    0x3fe00000, 0x40000000, 0x41300000, 0x41400000, 0x41dfffff, 0x41e00000, 0x41e00001,
-    0x432fffff, 0x43300000, 0x433fffff, 0x43400000, 0x43efffff, 0x43f00000, 0x43f00001,
-    // z: 1024 and 1075 (lines 266, 272)
-    0x40900000, 0x408fffff, 0x4090cc00, 0x4090cbff, 0x4090cc01
-  };
+  static final int[] WORDS = Nightly.POW_WORDS;
 
   /** NaNs of both signs, quiet and signalling, several payloads; pairs differ in one bit too. */
   private static final long[] NANS = {
@@ -652,12 +661,7 @@ class PowTest {
    * which need {@code x} and {@code y} together, are {@link #targetPairs}'). pow has no branch on
    * the two words relative to each other, so it lists no {@code wordGaps}.
    */
-  static final Fuzz.PairEdges EDGES = new Fuzz.PairEdges(
-      new Fuzz.Edges(WORDS, new int[] {0x3988e, 0xbb67a}, false,
-          new double[] {0.0, 1.0, 2.0, Double.MIN_NORMAL, Double.POSITIVE_INFINITY}),
-      new Fuzz.Edges(WORDS, new int[0], false,
-          new double[] {0.5, 1.0, 2.0, 0x1p31, 0x1p64, Double.POSITIVE_INFINITY}),
-      Fuzz.PAIR_SPECIALS);
+  static final Fuzz.PairEdges EDGES = Nightly.PairFunction.POW.edges();
 
   static Inputs.Pairs fuzzPairs(long seed, int n) {
     SplittableRandom random = new SplittableRandom(seed);
@@ -1175,5 +1179,602 @@ class PowTest {
     assertEquals(0x3FF71547652B82FEL, Double.doubleToRawLongBits(IVLN2));
     assertEquals(0x3FF7154760000000L, Double.doubleToRawLongBits(IVLN2_H));
     assertEquals(0x3E54AE0BF85DDF44L, Double.doubleToRawLongBits(IVLN2_L));
+  }
+
+  // ---------------------------------------------------------------------------------------------
+  // The common path, and the guard of the vector port (PROOFS.md, L19 and L20)
+  // ---------------------------------------------------------------------------------------------
+
+  /**
+   * What the common path gives on a lane, whatever the lane: lines 210-307 run with no return,
+   * {@code n = 0} at line 210 and line 212 left out, line 307's exponent add always and line
+   * 308's {@code s} left out, as {@link Pow#pow} computes every lane before its finish; and
+   * whether the late part of the guard holds there (line 266 or 272 taken as a whole, or line
+   * 306's test).
+   */
+  record CommonPath(double result, boolean bounds, boolean subnormal) {}
+
+  /** {@link #commonPath(double, double, boolean)} as the vector computes it. */
+  static CommonPath commonPath(double x, double y) {
+    return commonPath(x, y, false);
+  }
+
+  /**
+   * The common path, lines 210-307 of e_pow.c with every return before them, line 212 and line
+   * 308's {@code s} left out; {@code dropT2} drops line 261's {@code y*t2}, the planted fault
+   * {@code pow.dropT2}.
+   */
+  static CommonPath commonPath(double x, double y, boolean dropT2) {
+    int ix = hi(x) & 0x7fffffff;
+    int n = (ix >> 20) - 0x3ff; // 210, 214
+    int j = ix & 0x000fffff; // 215
+    ix = j | 0x3ff00000; // 217
+    int k;
+    if (j <= 0x3988E) { // 218
+      k = 0;
+    } else if (j < 0xBB67A) { // 219
+      k = 1;
+    } else { // 220
+      k = 0;
+      n += 1;
+      ix -= 0x00100000;
+    }
+    double ax = withHi(Math.abs(x), ix); // 221
+    double u = ax - BP[k]; // 224
+    double v = ONE / (ax + BP[k]); // 225
+    double ss = u * v; // 226
+    double sH = withLoZero(ss); // 227-228
+    double tH = withHi(ZERO, ((ix >> 1) | 0x20000000) + 0x00080000 + (k << 18)); // 230-231
+    double tL = ax - (tH - BP[k]); // 232
+    double sL = v * ((u - sH * tH) - sH * tL); // 233
+    double s2 = ss * ss; // 235
+    double r = s2 * s2 * (L1 + s2 * (L2 + s2 * (L3 + s2 * (L4 + s2 * (L5 + s2 * L6))))); // 236
+    r += sL * (sH + ss); // 237
+    s2 = sH * sH; // 238
+    tH = withLoZero(3.0 + s2 + r); // 239-240
+    tL = r - ((tH - 3.0) - s2); // 241
+    u = sH * tH; // 243
+    v = sL * tH + tL * ss; // 244
+    double pH = withLoZero(u + v); // 246-247
+    double pL = v - (pH - u); // 248
+    double zH = CP_H * pH; // 249
+    double zL = CP_L * pH + pL * CP + DP_L[k]; // 250
+    double t = (double) n; // 252
+    double t1 = withLoZero((((zH + zL) + DP_H[k]) + t)); // 253-254
+    double t2 = zL - (((t1 - t) - DP_H[k]) - zH); // 255
+    double y1 = withLoZero(y); // 259-260
+    pL = dropT2 ? (y - y1) * t1 : (y - y1) * t1 + y * t2; // 261
+    pH = y1 * t1; // 262
+    double z = pL + pH; // 263
+    j = hi(z); // 264
+    boolean bounds = j >= 0x40900000 || (j & 0x7fffffff) >= 0x4090cc00; // 266, 272
+    int i = j & 0x7fffffff; // 282
+    k = (i >> 20) - 0x3ff; // 283
+    n = 0; // 284
+    if (i > 0x3fe00000) { // 285
+      n = j + (0x00100000 >> (k + 1)); // 286
+      k = ((n & 0x7fffffff) >> 20) - 0x3ff; // 287
+      t = withHi(ZERO, (n & ~(0x000fffff >> k))); // 288-289
+      n = ((n & 0x000fffff) | 0x00100000) >> (20 - k); // 290
+      if (j < 0) { // 291
+        n = -n;
+      }
+      pH -= t; // 292
+    }
+    t = withLoZero(pL + pH); // 294-295
+    u = t * LG2_H; // 296
+    v = (pL - (t - pH)) * LG2 + t * LG2_L; // 297
+    z = u + v; // 298
+    double w = v - (z - u); // 299
+    t = z * z; // 300
+    t1 = z - t * (P1 + t * (P2 + t * (P3 + t * (P4 + t * P5)))); // 301
+    r = (z * t1) / (t1 - TWO) - (w + z * w); // 302
+    z = ONE - (r - z); // 303
+    j = hi(z) + (n << 20); // 304-305
+    boolean subnormal = (j >> 20) <= 0; // 306
+    return new CommonPath(withHi(z, j), bounds, subnormal); // 307
+  }
+
+  /** The parts of the vector's guard (PROOFS.md, L19): each a reason a lane is finished. */
+  enum Guard {
+    /** {@code hx < 0}: a negative {@code x}, {@code -0} included. */
+    NEGATIVE_X,
+    /** {@code 0 <= hx < 0x00100000}: {@code +0} or a positive subnormal {@code x}. */
+    ZERO_OR_SUBNORMAL_X,
+    /** {@code hx >= 0x7ff00000}: {@code +inf} or a positive NaN. */
+    NON_FINITE_X,
+    /** {@code x} is 1.0. */
+    X_ONE,
+    /** {@code y} is a zero. */
+    Y_ZERO,
+    /** {@code iy > 0x41e00000}: {@code |y|} past 2^31, the infinities and the NaNs included. */
+    Y_HUGE,
+    /** {@code y} is 1, -1, 2 or 0.5. */
+    Y_SPECIAL,
+    /** Line 266 or line 272 holds, each taken as a whole. */
+    Z_BOUNDS,
+    /** Line 306: {@code (j>>20) <= 0}, a subnormal result. */
+    SUBNORMAL_RESULT
+  }
+
+  /** The parts of the guard that hold on {@code (x, y)}, as the vector tests them. */
+  static java.util.EnumSet<Guard> guard(double x, double y) {
+    java.util.EnumSet<Guard> holds = java.util.EnumSet.noneOf(Guard.class);
+    int hx = hi(x);
+    int iy = hi(y) & 0x7fffffff;
+    long yb = Double.doubleToRawLongBits(y);
+    if (hx < 0) {
+      holds.add(Guard.NEGATIVE_X);
+    } else if (hx < 0x00100000) {
+      holds.add(Guard.ZERO_OR_SUBNORMAL_X);
+    } else if (hx >= 0x7ff00000) {
+      holds.add(Guard.NON_FINITE_X);
+    }
+    if (Double.doubleToRawLongBits(x) == Pow.X_ONE_BITS) {
+      holds.add(Guard.X_ONE);
+    }
+    if ((yb & Long.MAX_VALUE) == 0) {
+      holds.add(Guard.Y_ZERO);
+    }
+    if (iy > 0x41e00000) {
+      holds.add(Guard.Y_HUGE);
+    }
+    if (yb == Pow.Y_ONE_BITS || yb == Pow.Y_MINUS_ONE_BITS || yb == Pow.Y_TWO_BITS
+        || yb == Pow.Y_HALF_BITS) {
+      holds.add(Guard.Y_SPECIAL);
+    }
+    CommonPath c = commonPath(x, y);
+    if (c.bounds()) {
+      holds.add(Guard.Z_BOUNDS);
+    }
+    if (c.subnormal()) {
+      holds.add(Guard.SUBNORMAL_RESULT);
+    }
+    return holds;
+  }
+
+  /** The ways out of the C a lane the guard admits may take (L19): no other is allowed. */
+  static final java.util.EnumSet<Path> COMMON_PATHS = java.util.EnumSet.of(Path.INTERVAL_0,
+      Path.INTERVAL_1, Path.INTERVAL_2, Path.Z_ABOVE_HALF, Path.Z_NOT_ABOVE_HALF,
+      Path.NORMAL_RESULT);
+
+  /** Every way out of the C for the guard's tests: the gate's inputs and the boundaries. */
+  static Inputs.Pairs guardInputs(long seed, int n) {
+    return concat(everything(seed, n), guardBoundaryPairs());
+  }
+
+  /**
+   * The pairs at each boundary of the guard and beside it: {@code x} at the words of the
+   * smallest normal, the largest finite, 1 and their neighbours, either sign; {@code y} at {@code
+   * 0x41e00000} with low words 0, 1 and all ones and the word above, at 1, -1, 2, 0.5, -2, -0.5
+   * and the neighbours of each, the zeros and the smallest subnormals; each beside a few common
+   * partners.
+   */
+  static Inputs.Pairs guardBoundaryPairs() {
+    List<Double> xs = new ArrayList<>();
+    for (long b : new long[] {0x000fffffffffffffL, 0x0010000000000000L, 0x0010000000000001L,
+        0x7fefffffffffffffL, 0x7ff0000000000000L, 0x3ff0000000000000L, 0x3fefffffffffffffL,
+        0x3ff0000000000001L, 0x0000000000000001L, 0x0000000000000000L}) {
+      xs.add(Double.longBitsToDouble(b));
+      xs.add(-Double.longBitsToDouble(b));
+    }
+    xs.add(3.0);
+    xs.add(0.1);
+    xs.add(1e5);
+    List<Double> ys = new ArrayList<>();
+    for (double special : new double[] {1.0, -1.0, 2.0, 0.5, -2.0, -0.5, 0.0, Double.MIN_VALUE,
+        0x1p31, 1.5}) {
+      for (double v : new double[] {special, Math.nextUp(special), Math.nextDown(special)}) {
+        ys.add(v);
+        ys.add(-v);
+      }
+    }
+    for (int word : new int[] {0x41dfffff, 0x41e00000, 0x41e00001}) {
+      for (long low : new long[] {0L, 1L, 0xffffffffL}) {
+        ys.add(fromWords(word, low, false));
+        ys.add(fromWords(word, low, true));
+      }
+    }
+    double[] x = xs.stream().mapToDouble(Double::doubleValue).toArray();
+    double[] y = ys.stream().mapToDouble(Double::doubleValue).toArray();
+    return Inputs.cross(x, y);
+  }
+
+  /**
+   * L19's statement on scalar Java: on every pair the guard admits, the C as written takes only
+   * the common path's ways out ({@link #COMMON_PATHS}: none of the returns of lines 119-198 or
+   * 266-278, line 208's branch and not line 212, line 307 and not line 306, {@code s = one}),
+   * and the common path's result is the C's, bit for bit. The pairs admitted are many and reach
+   * each of those ways out.
+   */
+  @Test
+  void l19TheGuardAdmitsOnlyTheCommonPath() {
+    Inputs.Pairs p = guardInputs(SEED + 2, DRAWS >> 2);
+    long admitted = 0;
+    long[] reached = new long[Path.values().length];
+    for (int i = 0; i < p.x().length; i++) {
+      double x = p.x()[i];
+      double y = p.y()[i];
+      if (!guard(x, y).isEmpty()) {
+        continue;
+      }
+      admitted++;
+      long[] paths = new long[Path.values().length];
+      double c = cPow(x, y, Variant.AS_WRITTEN, paths);
+      for (Path path : Path.values()) {
+        if (paths[path.ordinal()] > 0) {
+          assertTrue(COMMON_PATHS.contains(path), "pow(" + Oracle.hex(x) + ", " + Oracle.hex(y)
+              + ") is admitted and takes " + path);
+          reached[path.ordinal()]++;
+        }
+      }
+      assertEquals(Double.doubleToRawLongBits(c),
+          Double.doubleToRawLongBits(commonPath(x, y).result()),
+          "pow(" + Oracle.hex(x) + ", " + Oracle.hex(y) + ")");
+    }
+    assertTrue(admitted > 20_000, "admitted " + admitted);
+    for (Path path : COMMON_PATHS) {
+      assertTrue(reached[path.ordinal()] > 0, path + " is never reached by an admitted pair");
+    }
+  }
+
+  /**
+   * L19's hinges: each part of the guard, alone, keeps out pairs on which the common path is not
+   * the C's (so a guard without it would be wrong), but for the two parts L19 names as redundant,
+   * {@code x == 1} and {@code y == 0}, on whose pairs the common path gives the C's result, and
+   * which the guard keeps because the C returns early there. Each part is drawn on pairs only it
+   * holds on.
+   */
+  @Test
+  void l19EachPartOfTheGuardIsAHingeOrNamedRedundant() {
+    Inputs.Pairs p = concat(guardInputs(SEED + 3, DRAWS >> 2), hingePairs(SEED + 4, DRAWS >> 2));
+    long[] alone = new long[Guard.values().length];
+    long[] wrong = new long[Guard.values().length];
+    for (int i = 0; i < p.x().length; i++) {
+      double x = p.x()[i];
+      double y = p.y()[i];
+      java.util.EnumSet<Guard> holds = guard(x, y);
+      if (holds.size() != 1) {
+        continue;
+      }
+      Guard g = holds.iterator().next();
+      alone[g.ordinal()]++;
+      if (!PairBits.matches(OPERANDS, x, y, StrictMath.pow(x, y), commonPath(x, y).result())) {
+        wrong[g.ordinal()]++;
+      }
+    }
+    StringBuilder counts = new StringBuilder();
+    for (Guard g : Guard.values()) {
+      counts.append(' ').append(g).append('=').append(wrong[g.ordinal()]).append('/')
+          .append(alone[g.ordinal()]);
+    }
+    System.out.println("pow L19, pairs differing / pairs of each part alone:" + counts);
+    for (Guard g : Guard.values()) {
+      assertTrue(alone[g.ordinal()] > 0, g + " never holds alone:" + counts);
+      if (g == Guard.X_ONE || g == Guard.Y_ZERO) {
+        assertEquals(0, wrong[g.ordinal()], g + " is named redundant:" + counts);
+      } else {
+        assertTrue(wrong[g.ordinal()] > 0, g + " is no hinge on these pairs:" + counts);
+      }
+    }
+  }
+
+  /**
+   * Pairs on which one part of the guard holds alone: a negative {@code x} beside a moderate
+   * {@code y}, a positive subnormal {@code x} beside a {@code y} small enough that the result is
+   * normal, {@code +inf} and positive NaNs beside a moderate {@code y}, {@code x = 1} and {@code
+   * y} zero beside common partners, {@code x} beside 1 with a {@code |y|} past 2^31 that keeps
+   * {@code z} in range, {@code y} special beside common {@code x}, and {@code z} out of range or
+   * a subnormal result from a common pair.
+   */
+  static Inputs.Pairs hingePairs(long seed, int n) {
+    SplittableRandom random = new SplittableRandom(seed);
+    double[] xs = new double[n];
+    double[] ys = new double[n];
+    double[] specials = {1.0, -1.0, 2.0, 0.5};
+    for (int i = 0; i < n; i++) {
+      double x = random.nextDouble(1e-3, 1e3);
+      double y = random.nextDouble(-10.0, 10.0);
+      switch (random.nextInt(9)) {
+        case 0 -> x = -x;
+        case 1 -> {
+          x = Double.longBitsToDouble(random.nextLong(1L, 0x0010000000000000L));
+          y = random.nextDouble(-0.9, 0.9);
+        }
+        case 2 -> x = random.nextBoolean() ? Double.POSITIVE_INFINITY
+            : Double.longBitsToDouble(0x7ff0000000000001L + random.nextLong(0x000fffffffffffffL));
+        case 3 -> x = 1.0;
+        case 4 -> y = random.nextBoolean() ? 0.0 : -0.0;
+        case 5 -> {
+          x = 1.0 + Math.scalb(random.nextDouble(-1.0, 1.0), -random.nextInt(40, 53));
+          y = Math.scalb(1.0 + random.nextDouble(), random.nextInt(32, 40));
+          y = random.nextBoolean() ? y : -y;
+        }
+        case 6 -> y = specials[random.nextInt(specials.length)];
+        case 7 -> y = random.nextBoolean() ? 1100.0 / StrictMath.log(x) * StrictMath.log(2.0)
+            : -1100.0 / StrictMath.log(x) * StrictMath.log(2.0);
+        default -> y = random.nextDouble(-1074.0, -1023.0)
+            / (StrictMath.log(x) / StrictMath.log(2.0));
+      }
+      xs[i] = x;
+      ys[i] = y;
+    }
+    return new Inputs.Pairs(xs, ys);
+  }
+
+  // ---------------------------------------------------------------------------------------------
+  // The vector port
+  // ---------------------------------------------------------------------------------------------
+
+  private static void assertPow(VectorSpecies<Double> species, Inputs.Pairs p) {
+    Oracle.assertPair("VFdlibm.pow", species, OPERANDS, VFdlibm::pow, StrictMath::pow, p.x(),
+        p.y());
+  }
+
+  /** {@link VFdlibm#pow} masked, under seeded random masks, all-true and all-false. */
+  private static void assertPowMasked(VectorSpecies<Double> species, Inputs.Pairs p, long seed) {
+    Oracle.assertPairMasked("VFdlibm.pow", species, OPERANDS, VFdlibm::pow, StrictMath::pow,
+        p.x(), p.y(), seed);
+  }
+
+  @ParameterizedTest
+  @EnumSource(VectorWidth.class)
+  void specialValues(VectorWidth width) {
+    assertPow(width.species(), concat(specialPairs(), nanPairs(9000L + width.ordinal(), 1 << 14)));
+  }
+
+  @ParameterizedTest
+  @EnumSource(VectorWidth.class)
+  void exactPowers(VectorWidth width) {
+    assertPow(width.species(), exactPairs());
+  }
+
+  /** The words and points the C tests, as the nightly's fuzz draws them. */
+  @ParameterizedTest
+  @EnumSource(VectorWidth.class)
+  void edges(VectorWidth width) {
+    assertPow(width.species(), fuzzPairs(9100L + width.ordinal(), DRAWS));
+  }
+
+  @ParameterizedTest
+  @EnumSource(VectorWidth.class)
+  void negativeXAndHugeY(VectorWidth width) {
+    assertPow(width.species(), concat(integerPairs(9200L + width.ordinal(), DRAWS),
+        hugeYPairs(9250L + width.ordinal(), DRAWS)));
+  }
+
+  /** {@code z} near 1024, -1075, the subnormal results and +-0.5, and either side of MIN_NORMAL. */
+  @ParameterizedTest
+  @EnumSource(VectorWidth.class)
+  void targets(VectorWidth width) {
+    assertPow(width.species(), concat(targetPairs(9300L + width.ordinal(), DRAWS),
+        minNormalPairs(9350L + width.ordinal(), 1 << 10)));
+  }
+
+  @ParameterizedTest
+  @EnumSource(VectorWidth.class)
+  void sampledAndDense(VectorWidth width) {
+    assertPow(width.species(), densePairs(9500L + 16L * width.ordinal(), DRAWS));
+  }
+
+  /** L19's vector tie: the boundaries of the guard, and the pairs of each part alone. */
+  @ParameterizedTest
+  @EnumSource(VectorWidth.class)
+  void guardBoundaries(VectorWidth width) {
+    Inputs.Pairs p = concat(guardBoundaryPairs(), hingePairs(9550L + width.ordinal(), DRAWS));
+    assertPow(width.species(), p);
+    assertPowMasked(width.species(), p, 9551L + width.ordinal());
+  }
+
+  /**
+   * The vector's lanes equal the C as written ({@link #cPow}) on every pair, by {@link
+   * PairBits}, and the common path's result, bit for bit, on every lane the guard admits: the
+   * port computes the transcribed operations, not only {@code StrictMath}'s bits.
+   */
+  @ParameterizedTest
+  @EnumSource(VectorWidth.class)
+  void lanesAreTheTranscription(VectorWidth width) {
+    VectorSpecies<Double> species = width.species();
+    Inputs.Pairs p = concat(guardInputs(9600L + width.ordinal(), 1 << 13),
+        new Inputs.Pairs(Inputs.uniform(9601L, 1 << 16, 1e-6, 1e6),
+            Inputs.uniform(9602L, 1 << 16, -10.0, 10.0)));
+    int n = species.length();
+    long admitted = 0;
+    for (int i = 0; i + n <= p.x().length; i += n) {
+      double[] got = VFdlibm.pow(DoubleVector.fromArray(species, p.x(), i),
+          DoubleVector.fromArray(species, p.y(), i)).toArray();
+      for (int lane = 0; lane < n; lane++) {
+        double x = p.x()[i + lane];
+        double y = p.y()[i + lane];
+        String where = "pow(" + Oracle.hex(x) + ", " + Oracle.hex(y) + ")";
+        assertTrue(PairBits.matches(OPERANDS, x, y, cPow(x, y), got[lane]), where);
+        if (guard(x, y).isEmpty()) {
+          admitted++;
+          assertEquals(Double.doubleToRawLongBits(commonPath(x, y).result()),
+              Double.doubleToRawLongBits(got[lane]), where);
+        }
+      }
+    }
+    assertTrue(admitted > 1 << 15, "admitted " + admitted);
+  }
+
+  private static Inputs.Pairs hardCasePairs() {
+    return Inputs.hardCasePairs("pow");
+  }
+
+  /**
+   * {@code hard-cases/pow.txt}: exact results, ties, results near a midpoint and the doubles
+   * either side of the result's thresholds, computed by {@code dev/pow-hard-cases.py}
+   * ({@link HardCasePairsTest} checks the claims).
+   */
+  @ParameterizedTest
+  @EnumSource(VectorWidth.class)
+  void publishedPairs(VectorWidth width) {
+    assertPow(width.species(), hardCasePairs());
+  }
+
+  /** A smaller {@link #everything}, with the boundaries and hard cases, for the masked forms. */
+  private static Inputs.Pairs everythingSmall(long seed) {
+    return concat(everything(seed, 1 << 12), guardBoundaryPairs(), hardCasePairs());
+  }
+
+  @ParameterizedTest
+  @EnumSource(VectorWidth.class)
+  void masked(VectorWidth width) {
+    assertPowMasked(width.species(), everythingSmall(9700L), 9701L);
+  }
+
+  /** SPECIES_MAX, which {@link VectorWidth} does not run: its int species is another shape. */
+  @Test
+  void maxSpecies() {
+    Inputs.Pairs p = everythingSmall(9750L);
+    assertPow(DoubleVector.SPECIES_MAX, p);
+    assertPowMasked(DoubleVector.SPECIES_MAX, p, 9751L);
+  }
+
+  private static double bits(long b) {
+    return Double.longBitsToDouble(b);
+  }
+
+  /** Pairs the per-lane finish takes, one for each part of the guard and the two-NaN lane. */
+  private static final double[][] RARE_LANES = {
+    {-2.0, 3.0}, {-2.0, 0.5}, {0x1p-1060, 0.75}, {0.0, 2.5}, {Double.POSITIVE_INFINITY, 1.5},
+    {Double.NaN, 1.5}, {1.0, 7.25}, {5.0, 0.0}, {5.0, -0.0}, {1.0000001, 0x1p40},
+    {5.0, Double.NaN}, {5.0, 1.0}, {5.0, -1.0}, {5.0, 2.0}, {5.0, 0.5}, {10.0, 400.0},
+    {1e-6, 60.0}, {0.5, 1060.0}, {bits(0xfff4_0000_0000_0456L), bits(0x7ff8_0000_0000_0123L)},
+  };
+
+  /** Pairs the vector computes: each interval of the significand, both sides of |z| = 0.5. */
+  private static final double[][] GENERAL_LANES = {
+    {3.7, 2.3}, {1.2, -7.5}, {1.5, 3.0}, {1.9, 0.25}, {123.0, -0.3}, {0.001, 9.5},
+    {2.0, -2.0}, {4.0, -0.5}, {1.0000001, 1e6}, {bits(0x3ff3988e_00000000L), 3.0},
+    {bits(0x3ffbb67a_00000000L), 3.0}, {0.75, 1e-300}, {7.0, 300.0}, {0.5, 1021.0},
+  };
+
+  /**
+   * One vector for every subset of a vector's lanes ({@link ExpTest#rareLaneSubsets}), the
+   * subset's lanes rare and the others common, so that a vector holds rare lanes of each kind
+   * beside common lanes of each form, in every position and mix.
+   */
+  static Inputs.Pairs everySubsetOfLanesRare(int lanes) {
+    long[] subsets = ExpTest.rareLaneSubsets(lanes);
+    double[] xs = new double[subsets.length * lanes];
+    double[] ys = new double[xs.length];
+    int rare = 0;
+    int general = 0;
+    for (int s = 0; s < subsets.length; s++) {
+      for (int lane = 0; lane < lanes; lane++) {
+        boolean isRare = (subsets[s] >>> lane & 1L) != 0;
+        double[] pair = isRare ? RARE_LANES[rare++ % RARE_LANES.length]
+            : GENERAL_LANES[general++ % GENERAL_LANES.length];
+        xs[s * lanes + lane] = pair[0];
+        ys[s * lanes + lane] = pair[1];
+      }
+    }
+    return new Inputs.Pairs(xs, ys);
+  }
+
+  /** The lanes the tests call rare and general are what the guard says they are. */
+  @Test
+  void rareAndGeneralLanesAreWhatTheGuardSays() {
+    for (double[] pair : RARE_LANES) {
+      assertTrue(!guard(pair[0], pair[1]).isEmpty(), Oracle.hex(pair[0]) + ", "
+          + Oracle.hex(pair[1]));
+    }
+    for (double[] pair : GENERAL_LANES) {
+      assertTrue(guard(pair[0], pair[1]).isEmpty(), Oracle.hex(pair[0]) + ", "
+          + Oracle.hex(pair[1]));
+    }
+  }
+
+  @ParameterizedTest
+  @EnumSource(VectorWidth.class)
+  void everySubsetOfLanesRare(VectorWidth width) {
+    assertEverySubset(width.species());
+  }
+
+  @Test
+  void everySubsetOfLanesRareAtMaxSpecies() {
+    assertEverySubset(DoubleVector.SPECIES_MAX);
+  }
+
+  private static void assertEverySubset(VectorSpecies<Double> species) {
+    Inputs.Pairs p = everySubsetOfLanesRare(species.length());
+    assertPow(species, p);
+    assertPowMasked(species, p, 9800L);
+  }
+
+  @Test
+  void maskedFormRejectsANullMask() {
+    DoubleVector v = DoubleVector.zero(DoubleVector.SPECIES_128);
+    assertThrows(NullPointerException.class, () -> VFdlibm.pow(v, v, null));
+  }
+
+  /** The port's constants and words are e_pow.c's, as this transcription has them. */
+  @Test
+  void portConstantsAreTheSources() {
+    double[][] same = {
+      {Pow.BP1, BP[1]}, {Pow.DP_H1, DP_H[1]}, {Pow.DP_L1, DP_L[1]}, {Pow.ONE, ONE},
+      {Pow.TWO, TWO}, {Pow.L1, L1}, {Pow.L2, L2}, {Pow.L3, L3}, {Pow.L4, L4}, {Pow.L5, L5},
+      {Pow.L6, L6}, {Pow.P1, P1}, {Pow.P2, P2}, {Pow.P3, P3}, {Pow.P4, P4}, {Pow.P5, P5},
+      {Pow.LG2, LG2}, {Pow.LG2_H, LG2_H}, {Pow.LG2_L, LG2_L}, {Pow.CP, CP}, {Pow.CP_H, CP_H},
+      {Pow.CP_L, CP_L}
+    };
+    for (double[] pair : same) {
+      assertEquals(Double.doubleToRawLongBits(pair[1]), Double.doubleToRawLongBits(pair[0]));
+    }
+    assertEquals(1.0, BP[0]);
+    assertEquals(0L, Double.doubleToRawLongBits(DP_H[0]));
+    assertEquals(0L, Double.doubleToRawLongBits(DP_L[0]));
+    assertEquals(0x00100000, Pow.X_NORMAL_WORD);
+    assertEquals(0x7ff00000, Pow.INF_WORD);
+    assertEquals(0x41e00000, Pow.Y_HUGE_WORD);
+    assertEquals(0x3988E, Pow.SPLIT_LOW);
+    assertEquals(0xBB67A, Pow.SPLIT_HIGH);
+    assertEquals(0x40900000, Pow.OVERFLOW_WORD);
+    assertEquals(0x4090cc00, Pow.UNDERFLOW_WORD);
+    assertEquals(0x3fe00000, Pow.HALF_WORD);
+    assertEquals(Double.doubleToRawLongBits(1.0), Pow.Y_ONE_BITS);
+    assertEquals(Double.doubleToRawLongBits(-1.0), Pow.Y_MINUS_ONE_BITS);
+    assertEquals(Double.doubleToRawLongBits(2.0), Pow.Y_TWO_BITS);
+    assertEquals(Double.doubleToRawLongBits(0.5), Pow.Y_HALF_BITS);
+    assertEquals(Double.doubleToRawLongBits(1.0), Pow.X_ONE_BITS);
+  }
+
+  // ---------------------------------------------------------------------------------------------
+  // Planted faults
+  // ---------------------------------------------------------------------------------------------
+
+  /**
+   * Each of pow's faults, with a check that must fail while it is planted: the vector form over
+   * {@link #faultRunInputs()} at every width the host has. Each was sized on draws before it was
+   * wired; the sizes are in {@code SKILLS.md}, "What the pow port taught".
+   */
+  static Map<String, Executable> faultCatchers() {
+    Map<String, Executable> catchers = new LinkedHashMap<>();
+    for (String fault : new String[] {
+        Pow.GUARD_ADMITS_NEGATIVE_X, Pow.GUARD_MISSES_SUBNORMAL, Pow.DROP_T2}) {
+      catchers.put(fault, () -> forEachWidth(species ->
+          PlantedFaultTest.assertCaught(fault, () -> assertPow(species, faultRunInputs()))));
+    }
+    return catchers;
+  }
+
+  private static Inputs.Pairs faultRunInputs() {
+    return concat(specialPairs(), integerPairs(9950L, 1 << 12), targetPairs(9951L, 1 << 12),
+        hingePairs(9952L, 1 << 12), densePairs(9953L, 1 << 10));
+  }
+
+  @ParameterizedTest
+  @EnumSource(VectorWidth.class)
+  void faultRunInputsPass(VectorWidth width) {
+    assertPow(width.species(), faultRunInputs());
+  }
+
+  private static void forEachWidth(Consumer<VectorSpecies<Double>> check) {
+    int preferred = DoubleVector.SPECIES_PREFERRED.vectorBitSize();
+    for (int bits = 128; bits <= preferred; bits *= 2) {
+      check.accept(VectorSpecies.of(double.class, VectorShape.forBitSize(bits)));
+    }
   }
 }
