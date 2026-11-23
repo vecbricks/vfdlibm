@@ -1277,6 +1277,35 @@ mnemonic); the other operations count the same at both widths.
     measurement, read as above. The plan job at the defaults makes 24 sweep entries, 48 for Arm and
     24 for the fuzz; 16 shards make 192 sweep entries (224 with `both`), and 32 shards of all twelve
     (384) are refused.
+  - **Thirteen functions: an estimate from the eleven's two nights (23 November 2026).** pow joins
+    the list as a third function of two arguments (`pairs`), swept one argument a night by
+    `alternate`, the same argument as atan2's and hypot's every night (one rotation for all three).
+    No night has run hypot or pow yet; the two scheduled nights of eleven are the readings,
+    `bench/pool/pool.py cost` on `bench/pool/nightly-cost-2026-11-22.tsv` (run 44994568244: 720
+    runner-minutes, a span of 57.8 minutes) and `nightly-cost-2026-11-23.tsv` (run 45131086418: 724
+    and 66.2; sweep 211, fuzz 305, Arm 208), and atan2 cost 87 runner-minutes on each, summed from
+    its jobs' rows (the most of any function on 22 November; on 23 November expm1 cost 88.2 to
+    atan2's 87.0). **How pow's cost is estimated:** as hypot's was, at atan2's, the costliest
+    function of two arguments measured and within a runner-minute of the costliest of all, since
+    pow's own sweep is not measured on a runner; pow has one arm (atan2 has two) but finishes its
+    rare lanes, a negative `x` among them, by `StrictMath.pow` lane by lane, so its sweep may cost
+    more than hypot's, and the bounds below cover that. hypot and pow add 16 jobs (4 sweep, 4 fuzz,
+    8 Arm), about 174 runner-minutes at atan2's cost, 894 and 898 a night. For the span, each
+    night's jobs are replayed in the order they started (jobs that started in the same second by
+    name; that order moves a figure by up to half a minute) on 6, 8 and 5 slots, with copies of
+    atan2's jobs appended in the same order, once for hypot and once for pow, and the model's
+    increase is added to the night's measured span (the model reads 46 to 47 minutes a kind where
+    the nights took 49 to 66, the gaps between jobs not modelled): with hypot's and pow's jobs at
+    atan2's durations, Arm, the kind that ended last both nights, gains 8.7 and 8.4 minutes (the
+    fuzz 8.7 and 8.5, the sweep 3.1 and 2.2), a span of about 66.5 and 74.6; with them at each
+    kind's longest job, Arm gains 20.4 and 19.9, about 78 and 86; and with pow's sweep at twice
+    atan2's on x86 and on Arm, the sweep gains 20.2 and 19.3, ending at about 77 both nights, and
+    Arm 11.8 and 11.5. So the estimate is about 66 to 75 minutes, under the budget's 90, with its
+    bounds at 86, near it. It is an estimate on two nights, with hypot's and pow's costs assumed,
+    not a reading; the first nights with thirteen are the measurement, and if their median passes 90
+    the levers below are the answer. The plan job at the defaults makes 26 sweep entries, 52 for Arm
+    and 26 for the fuzz; 16 shards make 208 sweep entries, and 256 with `both`, exactly the cap, so
+    a fourteenth function is refused there; 32 shards of all thirteen (416) are refused.
   - **Slots 6, 8 and 5, and the 20 jobs (21 November 2026).** The matrices' `max-parallel` is 6
     for the sweep, 8 for the fuzz and 5 for Arm: 19, and the proofs job makes 20, all of the free
     plan's jobs while the matrices are full. The plan job runs before them and the fault-caught
@@ -1298,11 +1327,11 @@ mnemonic); the other operations count the same at both widths.
     of them on x86, and sweeps every high word every second night; `slice-nights` 64 saves 26;
     `arm-shards` 2 saves 14 and buys nothing, since a job's setup is half a minute, so the slots
     and not the shards bound the span. Which of these to give up first is the owner's.
-  - **Not in it.** A cost of atan2's pair sweep: 13 times 72 assumes functions of one argument,
-    and atan2 joined with no night of its own run, so its place in the arithmetic is an
-    assumption (one function's worth at the defaults), not a reading. One night has read it since
-    (87 runner-minutes, the entry on twelve functions), and the 13-function figures here are not
-    requoted from it.
+  - **Not in it.** A cost of atan2's pair sweep: 13 times 72 assumes functions of one argument, and
+    atan2 joined with no night of its own run, so its place in the arithmetic is an assumption (one
+    function's worth at the defaults), not a reading. Two nights have read it since (87
+    runner-minutes each, the entries on twelve and on thirteen functions), and the 13-function
+    figures here are not requoted from it.
 - **When a night fails,** the `alert` job (the only one with `issues: write`) opens an issue
   labelled `nightly-failure`, or comments on the open one, with the run's link, the seed, each
   job's result, the dispatch inputs that replay the run (seed, `nights`, `shards`, `arm-shards`,
