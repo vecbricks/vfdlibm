@@ -62,7 +62,8 @@ import org.junit.jupiter.params.provider.EnumSource;
  * <p>The vector port, {@link VFdlibm#hypot}, is checked on the same inputs against {@code
  * StrictMath.hypot} by the same comparison, at every width and at {@code SPECIES_MAX}, unmasked
  * and masked, with vectors that mix every way out of the C and the rare lanes in every subset of
- * lanes, the pairs of {@code hard-cases/hypot.txt}, and the C's stale words (PROOFS.md, L16).
+ * lanes, the pairs of {@code hard-cases/hypot.txt} and {@code hard-cases/hypot-coremath.txt},
+ * and the C's stale words (PROOFS.md, L16).
  */
 class HypotTest {
 
@@ -852,9 +853,14 @@ class HypotTest {
     return Inputs.hardCasePairs("hypot");
   }
 
+  /** The pairs taken from CORE-MATH's list by {@code dev/coremath-hard-cases.py}. */
+  private static Inputs.Pairs coreMathPairs() {
+    return Inputs.hardCasePairs("hypot-coremath");
+  }
+
   /** A smaller {@link #everything}, with the hard cases, for the masked forms. */
   private static Inputs.Pairs everythingSmall(long seed) {
-    return concat(everything(seed, 1 << 12), hardCasePairs());
+    return concat(everything(seed, 1 << 12), hardCasePairs(), coreMathPairs());
   }
 
   @ParameterizedTest
@@ -907,6 +913,17 @@ class HypotTest {
   @EnumSource(VectorWidth.class)
   void publishedPairs(VectorWidth width) {
     assertHypot(width.species(), hardCasePairs());
+  }
+
+  /**
+   * {@code hard-cases/hypot-coremath.txt}: exact ties and results within {@code 2^-60} ulp of a
+   * midpoint or {@code 2^-105} ulp of a double, from CORE-MATH's list ({@link HardCasePairsTest}
+   * checks the claims).
+   */
+  @ParameterizedTest
+  @EnumSource(VectorWidth.class)
+  void coreMathListPairs(VectorWidth width) {
+    assertHypot(width.species(), coreMathPairs());
   }
 
   @ParameterizedTest

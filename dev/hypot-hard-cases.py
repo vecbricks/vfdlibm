@@ -8,12 +8,14 @@
 # limitations under the License.
 """The pairs of src/test/resources/.../hard-cases/hypot.txt, computed with exact integer arithmetic.
 
-No published table of hard cases for hypot is known (V. Lefevre's testlibm-data has tags of
-functions of one argument only), so these pairs are derived here, from number theory alone, with
-no outside data. Each base pair (x, y) is of integers below 2^54, so x*x + y*y is an exact
-integer s, and sqrt(s) is either an integer (an exact result) or lies within 2^-40 of an ulp of
-a midpoint between two doubles (a case hard to round). The families, each with its form of
-e_hypot.c's medium path (w = a-b > b is line 96's form, the other line 101's):
+V. Lefevre's testlibm-data has tags of functions of one argument only. A published list does
+exist, CORE-MATH's src/binary64/hypot/hypot.wc (MIT), from which dev/coremath-hard-cases.py takes
+hard-cases/hypot-coremath.txt (issue 144); these pairs are self-computed beside it, derived here
+from number theory alone, with no outside data. Each base pair (x, y) is of integers below 2^54,
+so x*x + y*y is an exact integer s, and sqrt(s) is either an integer (an exact result) or lies
+within 2^-50 of an ulp of a midpoint between two doubles (a case hard to round). The families,
+each with its form of e_hypot.c's medium path (w = a-b > b is line 96's form, the other line
+101's):
 
   near1  (n^2 + j, n), n in [2^26, 2^26.5), j in -1, 0, 1: s = M^2 + M - j with M = n^2 + j, so
          sqrt(s) is M + 1/2 less about (j + 1/4)/(2M), a midpoint of the ulp-1 binade. w > b.
@@ -27,7 +29,7 @@ e_hypot.c's medium path (w = a-b > b is line 96's form, the other line 101's):
          (v = 0 is hypot(u, u) = u sqrt 2). w <= b.
 
 Every base pair is checked here: an exact s is a square, and otherwise the distance from the
-nearest midpoint, measured exactly, is below 2^-40 ulp. Each is then written scaled by 2^k for
+nearest midpoint, measured exactly, is below 2^-50 ulp. Each is then written scaled by 2^k for
 each k of SCALES, which is exact (the legs are integers below 2^54, and the scaled values are
 doubles: checked by converting back), and carries the property to every scale whose result is
 of the same binade's spacing, normal or subnormal: the scales put the pair in each of
@@ -46,7 +48,7 @@ from fractions import Fraction
 
 SCALES = [0, -1074, -1070, -1050, -1000, -600, -560, -520, 450, 480, 520, 560, 900, 960]
 PER_FAMILY = 40
-MIN_BITS = 40
+MIN_BITS = 50
 
 
 def bits(d):

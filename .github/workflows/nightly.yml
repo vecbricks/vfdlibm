@@ -1,8 +1,9 @@
 name: Nightly
 
 # The nightly correctness run (SKILLS.md, "The nightly sweep and fuzz"): every arm of exp,
-# expm1, log, log10, log1p, sinh, cosh, atan, asin, acos, atan2 and hypot, unmasked and masked,
-# compared with StrictMath by raw bits (a lane of two NaNs of atan2 or hypot by PairBits).
+# expm1, log, log10, log1p, sinh, cosh, atan, asin, acos, atan2, hypot and pow, unmasked and
+# masked, compared with StrictMath by raw bits (a lane of two NaNs of atan2, hypot or pow by
+# PairBits).
 #
 # - sweep (x86): every one of the 2^32 high words with three low words each (Sweep.java) at
 #   every width the drawn runner has except 128 bits: 256 and max on every draw, 512 on an
@@ -27,7 +28,7 @@ name: Nightly
 # Every mismatch file is uploaded as an artifact, its inputs one per line as
 # hard-cases/<function>.txt takes them.
 #
-# A function of two arguments (`pairs` in the plan job: atan2 and hypot) is swept one
+# A function of two arguments (`pairs` in the plan job: atan2, hypot and pow) is swept one
 # argument at a time (Sweep.java, `--argument`). The input `pair-passes` says which a night sweeps:
 # `alternate` (the default) the first argument for a rotation of `nights` nights and the second for
 # the next (turned over every `slice-nights` nights when a rotation is shorter, so that a slice of
@@ -139,11 +140,11 @@ jobs:
         run: |
           # Every function of the night: each matrix and each check below reads this list, so a
           # new port is added here (and in `reach`, if it computes through another port).
-          all='exp expm1 log log10 log1p sinh cosh atan asin acos atan2 hypot'
-          # The functions of `all` that take two arguments: atan2 and hypot. A port of another is
-          # added here as well as to `all`, and each sweep matrix then has an entry for each
-          # argument the night sweeps (PAIR_PASSES).
-          pairs='atan2 hypot'
+          all='exp expm1 log log10 log1p sinh cosh atan asin acos atan2 hypot pow'
+          # The functions of `all` that take two arguments: atan2, hypot and pow. A port of another
+          # is added here as well as to `all`, and each sweep matrix then has an entry for each
+          # argument the night sweeps (PAIR_PASSES); one rotation serves them all.
+          pairs='atan2 hypot pow'
           # A dispatch's text is echoed in errors below: a line break in it would let a line of
           # the dispatcher's be read as a workflow command, so line breaks become spaces (which
           # every check below then refuses).
@@ -193,7 +194,9 @@ jobs:
           # which is cosh's small range, computed from expm1's lines and not from exp); atan2
           # through Atan.atan: Atan2Test, run by hand under each of atan's three faults (dropLo,
           # splitMoved, hiOneUlpOff), failed under each, so they are sent to atan2 too. Whether
-          # the night's own atan2 jobs find each is not checked.
+          # the night's own atan2 jobs find each is not checked. hypot and pow compute through no
+          # other port (Hypot.java and Pow.java call none), and no port computes through them, so
+          # each of their faults reaches its own function alone, by the default case.
           reach() {
             case "$1" in
               atan.*) echo 'atan atan2' ;;
@@ -230,13 +233,14 @@ jobs:
             fault_args="-Dvfdlibm.fault=$FAULT"
           fi
           # A matrix holds at most 256 jobs, one per function and shard of the run: with all of
-          # today's 12 functions (ten of one argument, and atan2 and hypot, of which a night sweeps
-          # one argument each, two with pair-passes both), 16 shards are 192 (224) and 32 shards
-          # are 384 (448), past the cap, so the 256-job check in the loop below refuses 32 shards
-          # of all twelve (eight functions fit at 32, nine do not). A function of two arguments is
-          # an entry for each argument a night sweeps (once or twice by PAIR_PASSES), so it counts
-          # for that many in the check. A stripe count (nights or slice-nights times shards) is at
-          # most Sweep's 4096 chunks.
+          # today's 13 functions (ten of one argument, and atan2, hypot and pow, of which a night
+          # sweeps one argument each, two with pair-passes both), 16 shards are 208 (256 with both,
+          # exactly the cap, so a further function of either kind is refused there), and 32 shards
+          # are 416 (480), past it, so the 256-job check in the loop below refuses 32 shards of all
+          # thirteen (eight functions fit at 32, nine do not). A function of two arguments is an
+          # entry for each argument a night sweeps (once or twice by PAIR_PASSES), so it counts for
+          # that many in the check. A stripe count (nights or slice-nights times shards) is at most
+          # Sweep's 4096 chunks.
           case "$PAIR_PASSES" in
             alternate | 1 | 2) pair_count=1 ;;
             both) pair_count=2 ;;

@@ -1026,9 +1026,9 @@ the inputs that differ about once in `2^29` and would not see a fold; this test 
 on a draw. **Planted fault.** `log1p.foldShortPath` (`Log1p.FOLD_SHORT_PATH`) sends the lanes
 with `hu == 0` and `f != 0` down the general path, as a port that dropped the short path would,
 and keeps lines 154-155's `f == 0` returns; `Log1pTest.faultCatchers` requires the blended
-arm, the guarded arm and the public one to fail on the witnesses with it planted, at every
-width. The finish arm finishes the `hu == 0` lanes with `StrictMath.log1p`, so it cannot see the
-fold and is not asked to. The nightly's fuzz is very unlikely to find this fault either (its
+arm and the guarded arm to fail on the witnesses with it planted, at every width. The finish
+arm, which the public one is, finishes the `hu == 0` lanes with `StrictMath.log1p`, so it cannot
+see the fold and is not asked to. The nightly's fuzz is very unlikely to find this fault either (its
 inputs that differ are about one in `2^29` of a window), so
 `NightlyTest.fuzzCatchesThePlantedFault` leaves it out. With the fold planted the rest of
 `Log1pTest` passes: no other case reaches a witness.
@@ -1077,9 +1077,14 @@ word.
   blends `k = 0`, `f = x` and `hu = 1` over the words computed from `u`, as the C sets them
   there and never computes `u`; on the tiny lanes (`|x| < 2^-29`, lines 118-123) and the
   non-finite ones (line 128) the C's early answers are blended over every other result. It is
-  needed: at `x = 2^-25`, a line-126 lane, `u = 1 + 2^-25` has `HU & 0x000fffff = 0`, so a
-  kernel that kept `HU` there would take the `hu == 0` path of lines 153-158 instead of the
-  general one, which L12 shows is not bit-identical.
+  needed: at `x = 2^-25`, a line-126 lane, `u = 1 + 2^-25` has `HU & 0x000fffff = 0` and `K =
+  0`, so a kernel that kept the words computed from `u` there, even with `f = x` blended, would
+  take the `hu == 0` short path of lines 153-158 with `k = 0` and `f = x`, a path the C never
+  takes (L12's rows are `k = 1` and `k = -1` lanes, so they do not cover it). At `2^-25` the
+  short path happens to give the C's bits; at `x = 0x3ea5a84a_dfba2358` (`1+x` in `(1, 1 +
+  2^-20)`) and `x = 0xbeaa4106_df3cfdd0` (`1+x` in `(1 - 2^-20, 1)`), where the kept `K` and
+  `hu` are 0 too, its result is one ulp off the C's, `0x3ea5a84a_6a776be3` against
+  `0x3ea5a84a_6a776be2` and `0xbeaa4107_8b8e7e29` against `0xbeaa4107_8b8e7e2a`.
 
 **Proof.**
 1. (a) As signed longs, `b = hx * 2^32 + lo` with `0 <= lo < 2^32`, and `h * 2^32` lies in
@@ -1132,6 +1137,24 @@ and `K` is in `[-53, 1024]`. With the kernel's `hu = 1` blend on line 126's lane
 every significand word from 0 to `0xfffff` checks the long `hu & 0x000fffff`, the compare with
 `0x6a09e`, both ORed words, the quarter word and the rebuilt bits of `u` against the C's ints, an
 integer identity, since the mask drops the sign.
+
+`ProofsTest.l18KeptWordsOnLine126LanesAreNotTheCs` is H20's witness, not a hinge test: no change
+to `Log1p` or to Varka's kernel can make it fail, since it checks the test's own model of a
+kernel that broke H20. Lines 152-164 from the C's `k = 0`, `f = x` and `hu = 1` give
+`StrictMath.log1p`'s bits on the two witnesses, `2^-25` and 2^12 sampled lanes of line 126's
+band, and from the C's words of lines 129-150 on L12's four rows (the short path with `k = 1` and
+`k = -1`) and the lanes of 2^13 sampled inputs that reach those lines, so its finish is the C's
+on both paths; the same model's words without line 126's two blends have `K = 0` and `hu = 0`
+at `2^-25` and at each witness, and with `f = x` the witnesses' results are the bits H20 quotes,
+one ulp off `StrictMath`'s, and `2^-25`'s are equal. **Vector tie, here.**
+`ProofsTest.l18Line126WitnessesThroughEveryArm` runs the witnesses, their neighbours and `2^-25`,
+each at every lane position among line-126 lanes, through every arm of `Log1p` at every width,
+unmasked and masked, against `StrictMath.log1p` by raw bits. The finish arm, which the public one
+is, cannot see a dropped `hu = 1` blend: the lane gets `hu == 0`, joins the rare mask and is
+finished by `StrictMath.log1p`, as for L12's fold; the blended and the guarded arm see it. With
+`Log1p`'s `hu = 1` blend on line 126's lanes dropped by hand (and reverted), the public arm passed
+and the blended arm, the next one checked, failed at every width, 48 of its 448 inputs differing.
+
 `ProofsTest.l18EarlyLanesAreAnsweredEarly` (H19): every lane of a set with `!(x > -1)` (one pattern
 at every exponent field from `0x3ff` up with the sign set, `-1` and its neighbours below, the
 specials and sampled patterns that are not above -1, the NaNs of both signs) meets the C's
@@ -1764,3 +1787,135 @@ sampled bit patterns, Varka's baseline range and every exponent; the 8,400 pairs
 of the C. The planted faults are `hypot.dropEarlyReturn` (line 63's return dropped),
 `hypot.refreshedWords` (L16), `hypot.dropT2` (line 99's `t2*(a+t1)` dropped) and
 `hypot.dropY2` (line 108's `t1*y2` dropped).
+
+## pow (`Pow.java`, from `e_pow.c`)
+
+e_pow.c returns early for a zero `y` (line 119), a NaN (122-124), the special `y` of lines
+147-164 (the infinities, +-1, 2, and 0.5 for `x >= +0`), the special `x` of lines 168-180 (the
+zeros, the infinities and +-1, by their words with a zero low word), a negative `x` with a
+non-integer `y` (185) and `|y| > 2^31` (191-207, which either returns or takes a short log for `x`
+beside 1). Otherwise it computes `log2(x)` as `t1 + t2` (208-256: a subnormal `x` scaled by 2^53 at
+212-213, the significand in one of three intervals at 218-220, `ss = (ax-bp[k])/(ax+bp[k])` and a
+polynomial in `ss^2`), `z = y*log2(x)` as `p_h + p_l` over `y` split at its high word (259-263),
+returns overflow or underflow from `z`'s words (266-278), and computes `2^z` as `2^n * 2^(z-n)`
+(282-307), sending a subnormal result to `scalbn` (306) and otherwise adding `n` to the high word
+(307); line 308 multiplies by the sign `s`.
+
+The port computes the common path alone in the vector (the owner's decisions of 23 November 2026
+on issue 34) and finishes every other lane per lane with `StrictMath.pow`, which is the C. The
+common path's operations are the C's, in the C's order, with no fused multiply-add and no
+reassociation; its choices are blends under the C's own compares (L13): `bp[k]`, `dp_h[k]` and
+`dp_l[k]` are operand blends of the C's constants (so `dp_h[0] = +0.0` and `dp_l[0] = +0.0` are
+still added, as the C adds them), `k<<18` is the blend of 0 and `0x40000`, line 220's `n += 1`
+and `ix -= 0x00100000` are blends of the int lanes, lines 285-293 are blends under `i >
+0x3fe00000` (their shifts, by per-lane counts, take garbage counts on the other lanes, which
+the Vector API masks to five bits and which are not kept, L13's H3), and line 291's sign is a
+blend under `j < 0`. Every `__LO(v) = 0` is an AND of `v`'s bits with the high word's mask, every
+`__HI(v) = word` an int word widened by `I2L` and shifted left by 32, or-ed with `v`'s low word
+(none, for `t_h` of line 231 and `t` of line 289, which start from `zero`), and `(double)n` is
+`I2D`, exact. Two things are not the C's text: the guard (L19), and line 307 with line 308 (L20).
+
+### L19. The guard admits only lanes on which the common path is the C
+
+**Statement.** Let a lane be admitted when none of these holds, the vector's rare mask being
+their union (and-ed with `live` in the masked form):
+
+1. `hx < 0x00100000` or `hx >= 0x7ff00000`, `hx` being `__HI(x)` as a signed `int` (so every
+   negative `x`, `-0` included, `+0`, the positive subnormals, `+inf` and the positive NaNs);
+2. `x` is `1.0`, by its 64 bits;
+3. `y` is a zero (`(iy|ly) == 0`, its bits with the sign cleared being zero);
+4. `iy > 0x41e00000`, line 191's own test (which holds for the infinities and the NaNs too);
+5. `y`'s 64 bits are those of 1, -1, 2 or 0.5;
+6. line 266's `j >= 0x40900000` or line 272's `(j&0x7fffffff) >= 0x4090cc00`, on `j = __HI(z)` of
+   line 264, each taken as a whole (the lanes of `z` exactly 1024 or -1075 that the C does not
+   return from are finished too);
+7. line 306's `(j>>20) <= 0`, on `j` of line 305.
+
+On an admitted lane the C takes no return before line 308, takes line 208's branch and not line
+212's, does not take line 306, and has `s = one`; so the C's result is line 307's `z` times `s`,
+and every operation the vector computes on the lane is the C's, so the lane is the C's result
+(by L13 and L20). A lane that is not admitted is overwritten by `StrictMath.pow` on its own
+arguments.
+
+**Hypotheses.** The input domain is every pair of doubles. The hinge conditions are the seven
+tests, each the C's compare on the C's words (H1 of L13), or a test of 64 bits that is the same
+predicate as the C's word tests: 5 is line 147's `ly == 0` with line 156's `iy == 0x3ff00000`
+(`+-1`), line 159's `hy == 0x40000000` (`+2`, since `hy` keeps the sign) and line 160's `hy ==
+0x3fe00000` (`+0.5`); 3 is line 119's; 2 is line 169's `ix == 0x3ff00000` with line 168's `lx ==
+0` for a positive `x`.
+
+**Proof.** Fix an admitted lane. By 1, `0x00100000 <= hx < 0x7ff00000`, so `x` is positive,
+finite and normal, and `ix = hx`, `lx` any. By 3, line 119 does not return. No argument is NaN
+(1 for `x`; 4, since a NaN `y` has `iy >= 0x7ff00000 > 0x41e00000`), so line 122 does not.
+`hx >= 0`, so lines 132-144 leave `yisint = 0`. Line 147 with `ly == 0`: `iy == 0x7ff00000` is
+excluded by 4, `iy == 0x3ff00000` (then `y` is +-1) by 5, `hy == 0x40000000` (`y = 2`) by 5, and
+`hy == 0x3fe00000` (`y = 0.5`) returns since `hx >= 0`, and is excluded by 5; so lines 148-164
+do not return. Line 168 with `lx == 0`: `ix` is neither `0x7ff00000` nor 0 by 1, and `ix ==
+0x3ff00000` with `lx == 0` is `x = 1.0`, excluded by 2; so lines 169-179 do not return. Line 182
+gives `n = (hx>>31)+1 = 1`, so `(n|yisint) = 1` and line 185 does not return, and `(n|(yisint-1)) =
+1|-1 = -1 != 0`, so line 188 leaves `s = one`. By 4 line 191's test is false and the `else` of
+line 208 is taken, and since `ix >= 0x00100000` line 212's is not. The lane then runs lines
+210-265 as the vector does. By 6 neither line 266's nor line 272's branch is entered, so lines
+267-278 do not return. Lines 282-305 run as the vector does, and by 7 line 306's test is false,
+so line 307 is taken. QED.
+
+Two parts are **redundant**, kept because the C returns early there and not because the common
+path would be wrong: on `x = 1.0` (2) and on a zero `y` (3) the common path's operations give
+`1.0`, the C's result, on every pair drawn (with `x = 1`, `ss` and every term after it are zeros
+and `z` is `+-0`; with `y` a zero, `z` is a zero). The proof does not use that. Every other part
+is a hinge: on pairs that part alone keeps out, the common path differs from `StrictMath.pow` on
+some (one run of `l19EachPartOfTheGuardIsAHingeOrNamedRedundant`, pairs differing of pairs drawn:
+a negative `x` 59,285 of 64,197, `+0` or a subnormal `x` 15,726 of 16,323, `+inf` or a NaN `x`
+2,677 of 2,677, `|y|` past 2^31 beside `x` within 2^-40 of 1 42 of 5,952, the special `y` 457 of
+7,821, `z` out of bounds 10,249 of 10,367, a subnormal result 19,707 of 19,707; `x = 1` 0 of 4,255
+and a zero `y` 0 of 4,166).
+
+**Test (scalar).** `PowTest.l19TheGuardAdmitsOnlyTheCommonPath` runs the C as written (`cPow`,
+which the gate holds equal to `StrictMath.pow` in every JIT mode) on the gate's inputs and the
+guard's boundaries, and on every admitted pair asserts that the C took only the common path's ways
+out (the three intervals, either side of `|z| = 0.5` and line 307; none of the returns, no
+subnormal `x`, no short log, no scalbn, no negative result) and that the common path transcribed
+alone (`commonPath`, lines 210-307 with every return left out) is the C's result, bit for bit.
+`l19EachPartOfTheGuardIsAHingeOrNamedRedundant` draws pairs on which one part alone holds and
+requires the common path to differ from `StrictMath.pow` on some of them, for each part but the
+two redundant ones, on which it requires no difference; so a guard without a hinge part fails it.
+**Vector tie.** `PowTest.guardBoundaries` runs the guard's boundaries (the words of the smallest
+normal, the largest finite and 1 and their neighbours, either sign, beside `y` at `0x41e00000`
+with three low words, at the special values, their neighbours, -2 and -0.5) and the pairs of each
+part alone through `VFdlibm.pow` at every width, unmasked and masked;
+`lanesAreTheTranscription` requires every admitted lane to equal `commonPath` bit for bit; and
+`everySubsetOfLanesRare` puts a lane of each part beside common lanes in every position. **Planted
+faults.** `pow.guardAdmitsNegativeX` tests `ix` instead of `hx` in part 1, and
+`pow.guardMissesSubnormal` drops part 7; `PowTest.faultCatchers` requires each to fail.
+
+**Encoding.** None: a case analysis of the C's tests, informal, not machine-checked.
+
+### L20. Line 307 is `__HI(z) = j`, and line 308's `s*z` is `z`
+
+**Statement.** On an admitted lane (L19) the vector's result, `z` with its high word replaced by
+`j` of line 305, is the C's `s*z` after line 307.
+
+**Proof.** Line 307's `__HI(z) += (n<<20)` sets `z`'s high word to `__HI(z) + (n<<20)` modulo
+2^32 and keeps its low word; line 304-305's `j` is that same `int` sum, so writing `j` as the high
+word is the same operation. By L19 `s = one`, and `fl(1 * z) = z` for every `z` (R3), so line 308
+returns `z`. QED.
+
+**Test.** The vector tie of L19 (`lanesAreTheTranscription` compares the lanes with `commonPath`,
+which writes line 307 as the C does and returns `z` without `s`); `pow.guardAdmitsNegativeX`
+shows that a lane with `s = -one` let through gives other bits (a negative `x` with an odd `y`).
+
+**Encoding.** None.
+
+**The lane of two NaNs** is finished per lane, so it is `StrictMath.pow`'s own result, a candidate
+of `OPERANDS`; one NaN beside anything else is finished too.
+
+**Checks.** `PowTest`: `VFdlibm.pow` against `StrictMath.pow` by `PairBits.matches` (`OPERANDS`)
+and against `cPow` at every width and `SPECIES_MAX`, unmasked and masked, on every pair of the
+special values, the exact powers, the fuzz's draws at the C's words and points, negative `x` beside
+integer and half-integer `y`, huge `y` beside `x` near 1, `y*log2(x)` near 1024, -1075, the
+subnormal results and +-0.5, pairs either side of `MIN_NORMAL`, NaN pairs, sampled bits, Varka's
+baseline range and every exponent, the guard's boundaries, and every subset of a vector's lanes
+rare, and the 4,168 pairs of `hard-cases/pow.txt` (exact results, ties, results within 2^-28 ulp
+of a midpoint and the doubles beside the result's thresholds, computed by
+`dev/pow-hard-cases.py`). The constants are pinned to the C's hexadecimal
+(`constantsAreTheSourcesBits`, `portConstantsAreTheSources`).

@@ -25,6 +25,7 @@ import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.function.BiFunction;
@@ -52,8 +53,11 @@ class Log1pTest {
   private static final double TWO52 = 0x1p52;
   private static final double TWO53 = 0x1p53;
 
-  /** The arms, by name, each a masked form; a null mask computes every lane. */
-  private static final Map<String, BiFunction<DoubleVector, VectorMask<Double>, DoubleVector>>
+  /**
+   * The arms, by name, each a masked form; a null mask computes every lane. ProofsTest's L18
+   * tie uses them too.
+   */
+  static final Map<String, BiFunction<DoubleVector, VectorMask<Double>, DoubleVector>>
       ARMS = arms();
 
   private static Map<String, BiFunction<DoubleVector, VectorMask<Double>, DoubleVector>> arms() {
@@ -64,7 +68,7 @@ class Log1pTest {
     arms.put("Log1p.log1pBlended", Log1p::log1pBlended);
     arms.put("Log1p.log1pGuarded", Log1p::log1pGuarded);
     arms.put("Log1p.log1pFinish", Log1p::log1pFinish);
-    return arms;
+    return Collections.unmodifiableMap(arms);
   }
 
   /** Every arm, unmasked, at {@code species}, over {@code xs}. */
@@ -435,8 +439,11 @@ class Log1pTest {
     assertTrue(shortPath > 1 << 12, "too few inputs on the hu == 0 path: " + shortPath);
   }
 
-  /** The four inputs of {@link #shortPathIsNotTheGeneralPath}: two of k = 1, two of k = -1. */
-  private static final long[] SHORT_PATH_WITNESS_BITS = {
+  /**
+   * The four inputs of {@link #shortPathIsNotTheGeneralPath}: two of k = 1, two of k = -1.
+   * ProofsTest's L18 witness checks its finish on them too.
+   */
+  static final long[] SHORT_PATH_WITNESS_BITS = {
       0x3feffffd_05263833L, 0x3ff00001_6fcd0162L, 0xbfe00001_2cac6e81L, 0xbfdffffe_92ae1567L};
 
   /**
@@ -516,7 +523,7 @@ class Log1pTest {
    * has, over the thresholds, dense draws over (-1, 4) and draws from 2^52 to 2^53. The same
    * inputs pass in the normal run, through {@link #faultRunInputsPass}. Two are narrower: the
    * guarded arm's own fault, caught on lone NaNs, and {@link Log1p#FOLD_SHORT_PATH}, caught on
-   * the four witnesses by the three arms that compute the {@code hu == 0} path, which the
+   * the four witnesses by the two arms that compute the {@code hu == 0} path, which the
    * nightly's fuzz and sweep almost certainly miss (dispatching it there normally reports a
    * missed fault).
    */
@@ -535,12 +542,11 @@ class Log1pTest {
             "Log1p.log1pGuarded", species, x -> Log1p.log1pGuarded(x, null), StrictMath::log1p,
             loneNaNInputs()))));
     // The fold of the hu == 0 path reaches the arms that compute that path, the blended and the
-    // guarded arm and so the public one. The finish arm finishes those lanes with StrictMath, so
-    // it cannot see the fold and is left out; the check is the four inputs where the two paths
+    // guarded arm. The finish arm, and so the public one, finishes those lanes with StrictMath,
+    // so it cannot see the fold and is left out; the check is the four inputs where the two paths
     // differ, which no draw finds in a fault run's time.
     catchers.put(Log1p.FOLD_SHORT_PATH, () -> forEachWidth(species -> {
-      for (String name : new String[] {
-          "VFdlibm.log1p", "Log1p.log1pBlended", "Log1p.log1pGuarded"}) {
+      for (String name : new String[] {"Log1p.log1pBlended", "Log1p.log1pGuarded"}) {
         BiFunction<DoubleVector, VectorMask<Double>, DoubleVector> arm = ARMS.get(name);
         PlantedFaultTest.assertCaught(Log1p.FOLD_SHORT_PATH, () -> Oracle.assertUnary(
             name, species, x -> arm.apply(x, null), StrictMath::log1p, shortPathWitnessInputs()));

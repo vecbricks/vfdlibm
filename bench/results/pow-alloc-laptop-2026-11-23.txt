@@ -1,0 +1,76 @@
+# The allocation check of PowBenchmark against its oracle baseline, rareOracle, on the owner's
+# laptop, 23 November 2026
+#
+# LAPTOP NUMBERS, NOT HEADLINES, AND ALLOCATION READINGS, NOT TIMINGS. gc.alloc.rate.norm in
+# B/op, one op being 1024 doubles, as bench/alloc-check.py reads it; no speed is claimed here.
+#
+# Why:         issue 34 (pow): StrictMath.pow, which finishes pow's rare lanes, allocates on
+#              some of them itself (a negative x with an integer y, a subnormal x, overflow,
+#              underflow, a subnormal result), so pow's mixed rows cannot read under the
+#              check's 1 B/op whether they box or not. By the owner's decision of 23 November
+#              2026 the check judges them against rareOracle, a scalar loop of StrictMath.pow on
+#              the same lanes (#157), and its docstring asks a port with a baseline to record,
+#              at each flag setting the check runs, that its arms read what the baseline reads.
+#              This file is that record.
+# Commit:      1853ee0 (branch port-pow, pull request #160)
+# JDK:         OpenJDK 64-Bit Server VM, 25.0.5.1+2-1-26.04.1-Ubuntu
+# CPU:         AMD Ryzen AI 9 HX PRO 370 w/ Radeon 890M (24 logical cores, two core types)
+# CPU flags:   avx2, avx512f and avx512dq present
+# Vector:      default flags: MaxVectorSize=64 UseAVX=3 (SPECIES_MAX is 512 bits, 8 lanes);
+#              as AVX2: -XX:UseAVX=2 -XX:MaxVectorSize=32 (SPECIES_MAX is 256 bits, 4 lanes)
+# Datapath:    41.2 / 61.1 / 68.9 lane-ops/ns at 128 / 256 / 512 bits;
+#              256:128 = 1.48 (control), 512:256 = 1.13; unusable, the control is not about 2
+#              (bench/datapath.sh, run just before the checks; unusable under this load, and no
+#              reading here depends on it)
+# Kernel:      7.0.0-43-generic
+# Load:        14.47, 22.55, 22.22 (15:41) at the start,
+#              19.25, 19.31, 20.73 (15:48) when the checks started and
+#              19.43, 19.57, 20.66 (15:50) when they ended,
+#              on 24 logical cores: a heavily loaded machine (other jobs ran). An allocation
+#              reading is a count of bytes, not a time, so the load does not move it beyond
+#              JMH's own spread; earlier runs of the same rows that day read within 0.2 B/op of
+#              these.
+# Command:     bench/alloc-check.py --mvn <mvn> --include 'PowBenchmark\.\w+(256|Preferred|Max)$'
+#              bench/alloc-check.py --mvn <mvn> --jvm-args="-XX:UseAVX=2 -XX:MaxVectorSize=32" \
+#                --include 'PowBenchmark\.\w+(256|Preferred|Max)$'
+#              (-f 1 -wi 3 -w 1s -i 3 -r 1s -prof gc -p inputs=common,mixed -foe true, the body
+#              inlined; the check adds PowBenchmark.rareOracle to the run as the class's baseline)
+#
+# Reading:
+# - Every arm passes at both settings. On mixed data each arm reads what rareOracle reads,
+#   within 0.21 B/op (the check's band is 1.0 B/op above the baseline's lowest): rareOracle
+#   1824.024 to 1824.025 at the default flags and 1824.028 to 1824.032 as an AVX2 host, the
+#   arms 1824.110 to 1824.227 and 1824.145 to 1824.222. 1824 B/op is 19 lanes of mixed data
+#   that reach the oracle's main path at 96 bytes a call; the vector body adds nothing a box
+#   would (one boxed 256-bit vector is about 64 bytes).
+# - On common data rareOracle runs no lane and reads 0.001 to 0.002, and every arm stays under
+#   the absolute bound: at most 0.196 at the default flags and 0.205 as an AVX2 host.
+# - Not read: 128 bits, the Arm runner (CI's alloc job reads its *Preferred rows there), and the
+#   scalar StrictMath.pow loop, which the check's default rows leave out.
+#
+# This file holds the check's own verdict lines and no JMH summary table, which
+# bench/alloc-check.py does not keep except in target/alloc-check.json; so bench/record.py, which
+# reads a host run's artifact, does not apply to it, as it did not to
+# max-finish-alloc-free-laptop-2026-11-21.txt.
+
+# 1. default flags, 512 bits
+ok    PowBenchmark.finish256 [inputs=common]: max 0.196 B/op over 3 iterations, the absolute bound (rareOracle's lowest 0.001 is under 1.0)
+ok    PowBenchmark.finish256 [inputs=mixed]: 1824.169 to 1824.227 B/op over 3 iterations, against rareOracle's 1824.024 to 1824.025, bound 1825.024
+ok    PowBenchmark.finishMax [inputs=common]: max 0.104 B/op over 3 iterations, the absolute bound (rareOracle's lowest 0.001 is under 1.0)
+ok    PowBenchmark.finishMax [inputs=mixed]: 1824.128 to 1824.140 B/op over 3 iterations, against rareOracle's 1824.024 to 1824.025, bound 1825.024
+ok    PowBenchmark.finishPreferred [inputs=common]: max 0.099 B/op over 3 iterations, the absolute bound (rareOracle's lowest 0.001 is under 1.0)
+ok    PowBenchmark.finishPreferred [inputs=mixed]: 1824.110 to 1824.131 B/op over 3 iterations, against rareOracle's 1824.024 to 1824.025, bound 1825.024
+base  PowBenchmark.rareOracle [inputs=common]: 0.001 to 0.001 B/op over 3 iterations, the oracle's own allocation (a baseline, not bounded)
+base  PowBenchmark.rareOracle [inputs=mixed]: 1824.024 to 1824.025 B/op over 3 iterations, the oracle's own allocation (a baseline, not bounded)
+No vector body allocates 1.0 B/op or more; the arms of a class with rareOracle were judged against it instead (inputs=common,mixed).
+
+# 2. as an AVX2 host: -XX:UseAVX=2 -XX:MaxVectorSize=32, 256 bits
+ok    PowBenchmark.finish256 [inputs=common]: max 0.178 B/op over 3 iterations, the absolute bound (rareOracle's lowest 0.001 is under 1.0)
+ok    PowBenchmark.finish256 [inputs=mixed]: 1824.145 to 1824.197 B/op over 3 iterations, against rareOracle's 1824.028 to 1824.032, bound 1825.028
+ok    PowBenchmark.finishMax [inputs=common]: max 0.173 B/op over 3 iterations, the absolute bound (rareOracle's lowest 0.001 is under 1.0)
+ok    PowBenchmark.finishMax [inputs=mixed]: 1824.168 to 1824.206 B/op over 3 iterations, against rareOracle's 1824.028 to 1824.032, bound 1825.028
+ok    PowBenchmark.finishPreferred [inputs=common]: max 0.205 B/op over 3 iterations, the absolute bound (rareOracle's lowest 0.001 is under 1.0)
+ok    PowBenchmark.finishPreferred [inputs=mixed]: 1824.184 to 1824.222 B/op over 3 iterations, against rareOracle's 1824.028 to 1824.032, bound 1825.028
+base  PowBenchmark.rareOracle [inputs=common]: 0.001 to 0.002 B/op over 3 iterations, the oracle's own allocation (a baseline, not bounded)
+base  PowBenchmark.rareOracle [inputs=mixed]: 1824.028 to 1824.032 B/op over 3 iterations, the oracle's own allocation (a baseline, not bounded)
+No vector body allocates 1.0 B/op or more; the arms of a class with rareOracle were judged against it instead (inputs=common,mixed).
