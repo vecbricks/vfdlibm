@@ -863,7 +863,8 @@ mnemonic); the other operations count the same at both widths.
   (`log1p-epyc7763-2026-11-20.txt`, two runs, `Log1p` as of a5683c3, before a fault constant and a
   mask local were added), the Xeon's of 21 November (`log1p-xeon8573c-2026-11-21.txt`, one run,
   as of a1db6df) and of 3 November (`log1p-xeon8573c-2026-11-03.txt`, one run, at another commit
-  and on a draw whose datapath read higher, `HARDWARE.md`), which had guarded lowest on every row.
+  and on a draw whose datapath read higher, `HARDWARE.md`); the last of them alone had guarded
+  lowest on every row.
   A port whose rare paths are cheap in vector form should measure this shape beside the other two.
 - **The in-body finish allocates nothing in log1p too.** log1p's finish was first a call,
   `finishPerLane(x, result, rare)`, and boxed: 52,928 B/op on mixed data at 256 bits under

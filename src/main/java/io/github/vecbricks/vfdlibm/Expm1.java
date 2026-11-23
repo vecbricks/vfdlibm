@@ -83,11 +83,11 @@ import jdk.incubator.vector.VectorSpecies;
  * ({@code bench/results/expm1-epyc7763-2026-11-23.txt}, a run and a re-run) at 256 bits, the
  * preferred species and {@code SPECIES_MAX} (its 512-bit rows run in the Java fallback and are
  * left out). It is a tie, not a speed-up: on the Xeon's mixed data the guarded arm reads lower,
- * inside 1.3x.
- * Both files time the arms as they are now, after the finish's first eight lanes were written out
- * with constant indices (issue #37); {@code SKILLS.md} reads the earlier host files, of the code
- * before it. Like every default, it stays provisional until a host run revises it, and the other
- * two arms are kept, tested, so the choice can be re-measured.
+ * inside 1.3x. Both files time the arms' bodies as they are now (each called by name), after the
+ * finish's first eight lanes were written out with constant indices (issue #37); {@code
+ * SKILLS.md} reads the earlier host files, of the code before it. Like every default, it stays
+ * provisional until a host run revises it, and the other two arms are kept, tested, so the choice
+ * can be re-measured.
  *
  * <p>{@link #expm1Core} and {@link #expm1Rare} split the finish arm into its branch-free part and
  * its rare-lane mask, as {@code Exp.expCore} and {@code Exp.expRare} do, so that a port that
@@ -207,7 +207,7 @@ final class Expm1 {
   /**
    * expm1 with the rare lanes finished per lane by {@code StrictMath.expm1}, read and written in
    * the vector with {@code lane} and {@code withLane}, as {@link #expm1(DoubleVector, VectorMask)}
-   * does.
+   * does. {@code live} is as for {@link #expm1(DoubleVector, VectorMask)}.
    */
   static DoubleVector expm1Finish(DoubleVector x, VectorMask<Double> live) {
     return expm1(x, live, FINISH);

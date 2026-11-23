@@ -32,8 +32,11 @@ two NaNs with different bits in a function of two arguments (`AGENTS.md`, "Relea
 
 - `VFdlibm.expm1` and `VFdlibm.log1p` run the finish arm, which finishes their rare lanes per lane
   by `StrictMath`, instead of the guarded arm; every lane gives the same bits as before (issue
-  #30's rule 1: a tie within 1.3x goes to the finish arm, and on both benchmark hosts' files no
-  other arm is lower than it by more than 1.3x).
+  #30's rule 1: a tie within 1.3x goes to the finish arm, and on both hosts that have a file, the
+  Xeon 8573C and the EPYC 7763, no other arm is lower than it by more than 1.3x). Like the other
+  finish arms, it writes its first eight lanes with constant indices and any past the eighth at a
+  variable index, so at `DoubleVector.SPECIES_MAX` it is read as allocation-free up to eight lanes
+  only.
 
 ## [0.2.0] - 2026-11-22
 

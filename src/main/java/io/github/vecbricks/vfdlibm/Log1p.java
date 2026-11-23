@@ -82,12 +82,11 @@ import jdk.incubator.vector.VectorSpecies;
  * ({@code bench/results/log1p-epyc7763-2026-11-23.txt}, a run and a re-run) at 256 bits, the
  * preferred species and {@code SPECIES_MAX} (its 512-bit rows run in the Java fallback and are
  * left out). It is a tie, not a speed-up: on mixed data the guarded arm reads lower on both hosts,
- * inside 1.3x.
- * Both files time the arms as they are now, after the finish's first eight lanes were written out
- * with constant indices (issue #37); {@code SKILLS.md} reads the earlier host files, of the code
- * before it. Like every default, it stays provisional until a host run revises it, and the other
- * two arms are kept, tested, so the choice can be re-measured, on other hosts and as the JDK
- * changes.
+ * inside 1.3x. Both files time the arms' bodies as they are now (each called by name), after the
+ * finish's first eight lanes were written out with constant indices (issue #37); {@code
+ * SKILLS.md} reads the earlier host files, of the code before it. Like every default, it stays
+ * provisional until a host run revises it, and the other two arms are kept, tested, so the choice
+ * can be re-measured, on other hosts and as the JDK changes.
  */
 final class Log1p {
 
@@ -196,7 +195,7 @@ final class Log1p {
   /**
    * log1p with the rare lanes finished per lane by {@code StrictMath.log1p}, read and written in
    * the vector with {@code lane} and {@code withLane}, Exp's way, as {@link #log1p(DoubleVector,
-   * VectorMask)} does.
+   * VectorMask)} does. {@code live} is as for {@link #log1p(DoubleVector, VectorMask)}.
    */
   static DoubleVector log1pFinish(DoubleVector x, VectorMask<Double> live) {
     return log1p(x, live, FINISH);
