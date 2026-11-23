@@ -1657,7 +1657,10 @@ mnemonic); the other operations count the same at both widths.
   on exactly those lanes of the `mixed` data, so a threshold on the finish rows alone cannot tell
   those calls from a box. By the owner's decision of 23 November 2026 (issue 34) the check compares
   such rows with an oracle baseline: `PowBenchmark.rareOracle` calls `StrictMath.pow` on the lanes
-  the finish takes, over the same arrays, and no timing is claimed of it.
+  the finish takes, over the same arrays, and no timing is claimed of it. Its reading, at the
+  laptop's flags and as an AVX2 host: every arm reads what `rareOracle` reads, about 1,824 B/op on
+  `mixed` data, 19 lanes at 96 bytes a call (`bench/results/pow-alloc-laptop-2026-11-23.txt`, an
+  allocation reading, no timing and no headline).
 - **Which guard parts are hinges.** Run through the common path alone, every part of the guard but
   two changes results on pairs it alone keeps out (`PROOFS.md`, L19, with the counts): a `|y|` past
   2^31 beside `x` within 2^-40 of 1 only rarely (42 of 5,952 pairs), where the C's short log and the

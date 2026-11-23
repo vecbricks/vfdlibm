@@ -36,8 +36,9 @@ import jdk.incubator.vector.VectorMask;
  * bench/results/} reads {@code hypot} or {@code pow} yet: every file the list below cites predates
  * them, and of the list only the allocation check that CI runs covers them. On its mixed data
  * {@code StrictMath.pow}, which finishes {@code pow}'s rare lanes, allocates on some of them
- * itself, so that check reads {@code pow}'s rows against an oracle baseline ({@code SKILLS.md},
- * "What the pow port taught").
+ * itself, so that check reads {@code pow}'s rows against an oracle baseline, which they match
+ * at the laptop's flags and as an AVX2 host ({@code
+ * bench/results/pow-alloc-laptop-2026-11-23.txt}, an allocation reading, no timing).
  *
  * <ul>
  *   <li>Covered by {@code bench/alloc-check.py}, which CI runs and which fails a body that
