@@ -48,7 +48,7 @@ import org.openjdk.jmh.annotations.Warmup;
  * allocates, which means the body boxed. The {@code *Max} row is at {@code
  * DoubleVector.SPECIES_MAX}; {@link Pow#pow}'s finish writes out its first eight lanes with
  * constant indices, as the other ports' do. pow has one arm, so there is no comparison to make
- * between arms. {@link #rareOracle} is the check's baseline: the finish calls {@code
+ * between arms. The oracle row below is the check's baseline: the finish calls {@code
  * StrictMath.pow}, which allocates on some rare lanes itself.
  */
 @State(Scope.Thread)
@@ -126,7 +126,7 @@ public class PowBenchmark {
   public double[] rareOracle() {
     for (int i = 0; i < N; i++) {
       if (rare[i]) {
-        out[i] = StrictMath.pow(xs[i], ys[i]);
+        out[i] = java.lang.StrictMath.pow(xs[i], ys[i]);
       }
     }
     return out;
