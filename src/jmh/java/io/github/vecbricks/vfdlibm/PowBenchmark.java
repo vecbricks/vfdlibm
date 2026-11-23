@@ -48,7 +48,8 @@ import org.openjdk.jmh.annotations.Warmup;
  * allocates, which means the body boxed. The {@code *Max} row is at {@code
  * DoubleVector.SPECIES_MAX}; {@link Pow#pow}'s finish writes out its first eight lanes with
  * constant indices, as the other ports' do. pow has one arm, so there is no comparison to make
- * between arms.
+ * between arms. {@link #rareOracle} is the check's baseline: the finish calls {@code
+ * StrictMath.pow}, which allocates on some rare lanes itself.
  */
 @State(Scope.Thread)
 @BenchmarkMode(Mode.AverageTime)
@@ -69,6 +70,8 @@ public class PowBenchmark {
   private double[] xs;
   private double[] ys;
   private double[] out;
+  /** The lanes {@code mixed} replaced from {@link #RARE}, which the finish sends to the oracle. */
+  private boolean[] rare;
 
   /** The pairs {@code mixed} puts in one place in 16: each takes another way out of the C. */
   private static final double[][] RARE = {
@@ -87,6 +90,7 @@ public class PowBenchmark {
     xs = new double[N];
     ys = new double[N];
     out = new double[N];
+    rare = new boolean[N];
     for (int i = 0; i < N; i++) {
       xs[i] = random.nextDouble(1e-6, 1e6);
       ys[i] = random.nextDouble(-10.0, 10.0);
@@ -94,9 +98,10 @@ public class PowBenchmark {
         throw new IllegalStateException("a special y in the common data: " + ys[i]);
       }
       if (inputs.equals("mixed") && random.nextInt(16) == 0) {
-        double[] rare = RARE[random.nextInt(RARE.length)];
-        xs[i] = rare[0];
-        ys[i] = rare[1];
+        double[] pick = RARE[random.nextInt(RARE.length)];
+        xs[i] = pick[0];
+        ys[i] = pick[1];
+        this.rare[i] = true;
       }
     }
   }
@@ -105,6 +110,24 @@ public class PowBenchmark {
   public double[] scalarStrictMath() {
     for (int i = 0; i < N; i++) {
       out[i] = StrictMath.pow(xs[i], ys[i]);
+    }
+    return out;
+  }
+
+  /**
+   * The oracle baseline for the allocation check, and no timing claim: {@code StrictMath.pow} on
+   * the lanes {@link Pow#pow}'s per-lane finish computes ({@code mixed}'s pairs from {@link
+   * #RARE}, each a lane its guard sends to the finish; {@code common} has none), over the same
+   * arrays, into the same {@code out}. {@code StrictMath.pow} allocates on some of those lanes
+   * itself (SKILLS.md, "What the pow port taught"), so the finish rows allocate as much as this
+   * row does without boxing anything, and the check compares them with it.
+   */
+  @Benchmark
+  public double[] rareOracle() {
+    for (int i = 0; i < N; i++) {
+      if (rare[i]) {
+        out[i] = StrictMath.pow(xs[i], ys[i]);
+      }
     }
     return out;
   }
