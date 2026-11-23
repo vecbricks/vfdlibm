@@ -8,7 +8,7 @@
 # limitations under the License.
 #
 # Builds hsdis, the disassembler plugin HotSpot loads to print compiled code, so that the
-# assembly check (ExpAsmTest, SKILLS.md "The assembly check") can read what C2 emits for a port's
+# assembly check (AsmTest, SKILLS.md "The assembly check") can read what C2 emits for a port's
 # arms. The idea is Varka's dev/varka_hsdis_build.sh; this script is written for vfdlibm.
 #
 #   dev/hsdis-build.sh                    # fetch the two pinned source files, build, check

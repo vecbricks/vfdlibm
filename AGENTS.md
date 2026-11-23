@@ -52,9 +52,10 @@ vfdlibm ports fdlibm's double functions to the Java Vector API, each lane bit-id
   `PairBits` for two arguments), `Inputs` makes the inputs, `VectorWidth` runs a test at 128, 256
   and 512 bits and the preferred species, and `PlantedFaultTest` requires each fault planted through
   `Faults` (in the main sources) to be caught by its check. `HarnessSelfTest` tests them.
-- The assembly check: `ExpAsmTest` reads the C2 code of exp's arms through hsdis and asserts the
-  width, no fused multiply-add and, from 256 bits up, no call but uncommon traps and the entry
-  barrier (`AsmCheckSelfTest` shows each rule failing). `dev/hsdis-build.sh` builds hsdis into
+- The assembly check: `AsmTest` reads the C2 code of every port's arms through hsdis and asserts
+  the width, no fused multiply-add and, from 256 bits up, no call but uncommon traps and the entry
+  barrier (`AsmCheckSelfTest` shows each rule failing). A new port's arms go in `AsmProbe`, with
+  its common data, and in `AsmTest.ARMS`; `AsmTest` fails if the two differ. `dev/hsdis-build.sh` builds hsdis into
   `target/hsdis`; it is OpenJDK's GPL source compiled as a tool, never committed or shipped. Without
   it the check skips and says why; CI's x86 rows build it and set `VFDLIBM_ASM_REQUIRED=true`, so
   there a skip fails. See `SKILLS.md`, "The assembly check".

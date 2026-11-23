@@ -228,32 +228,54 @@ stops the next port re-trying a settled question.
 
 ## The assembly check
 
-`ExpAsmTest` reads the machine code C2 emits for each of exp's vector arms and asserts on it
-(issue #139; the idea is Varka's assembly suite, the code vfdlibm's own). `ExpAsmProbe` runs in a
-JVM of its own per `VectorWidth` the host has, under `-Xbatch` and the row's `-XX` options, with
-vfdlibm forced inline and `-XX:CompileCommand=print` on its loops; `AsmCheck` parses the last
-standard `C2-compiled nmethod` of each, from its entry point to its stubs, in Intel syntax.
-`AsmCheckSelfTest` shows each rule failing on crafted disassembly. To run it here:
-`dev/hsdis-build.sh`, then `mvn -q test -Dtest='ExpAsmTest,AsmCheckSelfTest'`.
+`AsmTest` reads the machine code C2 emits for each vector arm of every port and asserts on it
+(issue #139; the idea is Varka's assembly suite, the code vfdlibm's own). `AsmProbe` runs in a JVM
+of its own per function and per fixed `VectorWidth` the host has, under `-Xbatch` and the row's
+`-XX` options, with vfdlibm forced inline, the probe's own methods kept out of line and
+`-XX:CompileCommand=print` on its loops; `AsmCheck` parses the last standard `C2-compiled nmethod`
+of each, from its entry point to its stubs, in Intel syntax. `AsmCheckSelfTest` shows each rule
+failing on crafted disassembly. To run it here: `dev/hsdis-build.sh`, then `mvn -q test
+-Dtest='AsmTest,AsmCheckSelfTest'`. A new port's arms go in `AsmProbe` (static methods named
+`<function><Arm>`, with the function's common data in `fill`) and in `AsmTest.ARMS`, which must
+agree.
 
-- **The rules.** Every byte decoded; packed-double arithmetic (`v(add|sub|mul|div)pd`) present
-  and on the width's registers only (`xmm`, `ymm`, `zmm`), no scalar `*sd` arithmetic; no fused
-  multiply-add of any form (`vfmadd*`, `vfmsub*`, `vfnmadd*`, `vfnmsub*`, `vfmaddsub*`,
-  `vfmsubadd*`); no call but `{runtime_call UncommonTrapBlob}` and `{runtime_call
-  Stub::method_entry_barrier}`; no inlined frame of `StrictMath` or `FdLibm`. Narrower registers
-  elsewhere are allowed: a 512-bit body keeps its int lanes in a `ymm`. Counts are not asserted
-  (Varka: a register-allocation roll moves them with nothing wrong).
-- **Common data makes the call rule exact.** On `[-20, 20]` no lane is rare, so C2 compiles the
-  per-lane finish as an uncommon trap, a deoptimizing exit the common path never takes; any other
-  call anywhere in the method fails. The same data keep `StrictMath`'s code out of the C2 body
-  that is read (no rare lane, no call to compile), which the licence rule needs; the last rule is a
-  backstop, since HotSpot names inlined frames only at calls, traps and safepoints. The output
-  also holds each loop's C1 compile, which is not read: it keeps the finish, with `StrictMath.exp`'s
-  one-line wrapper inlined and a call into `FdLibm`, whose code is not in it.
+- **The arms.** Each port's benchmark arms, unmasked and masked, and the cores the benchmarks call:
+  exp (finish, blended, core), expm1 (guarded, blended, finish, core), log and log10 (finish,
+  blended), log1p (guarded, blended, finish), sinh, asin, atan, acos and hypot (finish), cosh
+  (slice, finish, each by name rather than through `VFdlibm.cosh`'s default) and atan2 (guarded,
+  blended); the default arm goes through `VFdlibm`, the others through the port's class.
+- **The rules.** Every byte decoded; packed-double arithmetic (`v(add|sub|mul|div|sqrt)pd`)
+  present and on the width's registers only (`xmm`, `ymm`, `zmm`), no scalar `*sd` arithmetic or
+  square root; no fused multiply-add of any form (`vfmadd*`, `vfmsub*`, `vfnmadd*`, `vfnmsub*`,
+  `vfmaddsub*`, `vfmsubadd*`); no call but `{runtime_call UncommonTrapBlob}` and `{runtime_call
+  Stub::method_entry_barrier}`, and no other instruction with a call's relocation (`{runtime_call
+  ...}`, `{static_call}`, `{optimized virtual_call}`, `{virtual_call}`) but the safepoint poll
+  stub's `jmp` to `{runtime_call SafepointBlob}`, which C2 places after the body and the return's
+  poll enters only when a safepoint is pending; no inlined frame of `StrictMath` or `FdLibm`.
+  Prefixes (`notrack`, `lock`, `data16`, ...) are read off before the mnemonic, so `notrack call`
+  is a call. Each relocation is matched whole: a call naming an allowed stub and another fails.
+  Narrower registers elsewhere are allowed: a 512-bit body keeps its int lanes in a `ymm`. Counts
+  are not asserted (Varka: a register-allocation roll moves them with nothing wrong).
+- **Common data makes the call rule exact.** On each benchmark's common data no lane is rare, so
+  C2 compiles the per-lane finish as an uncommon trap, a deoptimizing exit the common path never
+  takes; any other call anywhere in the method fails. The same data keep `StrictMath`'s code out of
+  the C2 body that is read (no rare lane, no call to compile), which the licence rule needs; the
+  last rule is a backstop, since HotSpot names inlined frames only at calls, traps and safepoints.
+  The output also holds each loop's C1 compile, which is not read: it keeps the finish, with a
+  call into `StrictMath`, whose code is not in it. One range is not its benchmark's: cosh's
+  common data hold 0.6% of lanes in the small range `|x| < 0.5*ln2`, which `coshFinish`
+  finishes per lane, so the probe draws `0.5 <= |x| < 60`.
 - **At 128 bits on x86 the call rule is not asserted.** Every arm calls the Vector API's Java
-  fallback, 60 to 132 calls per method (the census below), as "At two 64-bit lanes x86 C2 lowers
-  no mask" predicts. Width and FMA are asserted there; the width is the child's species, so the
-  preferred species of the `MaxVectorSize=16` row counts as 128 bits.
+  fallback, 60 to 444 calls per method (the census below), as "At two 64-bit lanes x86 C2 lowers
+  no mask" predicts. Width, FMA and the rest are asserted there.
+- **The preferred species is not run again.** It is the same species object as one of the fixed
+  widths, and exp's census read the same at both; a second run would add a third to a row's time.
+- **Keep the probe's own methods out of line.** The forced `inline,io.github.vecbricks.vfdlibm.*::*`
+  covers the probe too, so a compile of whatever calls an arm could take the arm's loop in, and
+  the arm's own compile, the one read, might never come. With `dontinline` on the probe, given
+  after the forced inline (the later command wins), `PrintInlining` shows the reflective caller's
+  `@ 18 AsmProbe::expBlended ... failed to inline: disallowed by CompileCommand`, while `Exp::exp`
+  still inlines into the arm.
 - **Print the caller's loop, not exp's methods.** Without the forced inline, `Exp`'s shared
   three-argument body compiles as a method of its own whose `arm` is no constant; it takes and
   returns heap vectors, calls `blend` and `convert` unintrinsified and allocates (`C2 Runtime
@@ -337,6 +359,196 @@ others. The blended arm has 6 more blends than the finish on AVX-512 and 5 more 
 more broadcasts, its filter's constants. AVX2 has no mask registers, so its masks are vector
 compares and `vblendvps`, 2 to 3 more blends per arm than AVX-512's `vpblendmq`. Masking adds one
 blend and 10 to 23 instructions. At 128 bits the bodies are 8 to 16 times longer: the Java fallback.
+
+**The census of the other ports' arms, 23 November 2026, on the laptop** (the same machine, JDK
+and hsdis as exp's). Not a headline and no timing: counts of instructions only, one run each, read
+as exp's are, with one column more, `vsqrtpd` (sqrt), which the width rule counts as packed-double
+arithmetic since this run. The rows are the test's output (`grep '^| <function> '`), less its width
+column; exp's rows of this run matched its census above in every column but the instruction count, which moved by 1 to 13 on four masked arms. Every
+arm below passed every rule, at every width, under all three flag sets.
+
+On the host's own flags (AVX-512, `MaxVectorSize=64`), 256 and 512 bits:
+
+| function | bits | arm | insns | pd | div | sqrt | blend | bcast | cmp | k | cvt | stack | calls | fma |
+| :--- | ---: | :--- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| expm1 | 256 | blended | 227 | 50 | 1 | 0 | 15 | 39 | 21 | 27 | 6 | 16 | 2 | 0 |
+| expm1 | 256 | blendedMasked | 252 | 50 | 1 | 0 | 16 | 39 | 21 | 31 | 6 | 22 | 2 | 0 |
+| expm1 | 256 | core | 185 | 45 | 1 | 0 | 9 | 28 | 13 | 15 | 6 | 8 | 2 | 0 |
+| expm1 | 256 | finish | 235 | 45 | 1 | 0 | 9 | 33 | 19 | 32 | 6 | 24 | 3 | 0 |
+| expm1 | 256 | finishMasked | 253 | 45 | 1 | 0 | 10 | 33 | 19 | 37 | 6 | 30 | 3 | 0 |
+| expm1 | 256 | guarded | 258 | 45 | 1 | 0 | 9 | 33 | 19 | 38 | 6 | 35 | 3 | 0 |
+| expm1 | 256 | guardedMasked | 280 | 45 | 1 | 0 | 10 | 33 | 19 | 41 | 6 | 40 | 3 | 0 |
+| expm1 | 512 | blended | 223 | 50 | 1 | 0 | 15 | 39 | 21 | 24 | 6 | 16 | 2 | 0 |
+| expm1 | 512 | blendedMasked | 244 | 50 | 1 | 0 | 16 | 39 | 21 | 28 | 6 | 22 | 2 | 0 |
+| expm1 | 512 | core | 187 | 45 | 1 | 0 | 9 | 28 | 13 | 18 | 6 | 12 | 2 | 0 |
+| expm1 | 512 | finish | 224 | 45 | 1 | 0 | 9 | 33 | 19 | 23 | 6 | 18 | 3 | 0 |
+| expm1 | 512 | finishMasked | 240 | 45 | 1 | 0 | 10 | 33 | 19 | 25 | 6 | 20 | 3 | 0 |
+| expm1 | 512 | guarded | 250 | 45 | 1 | 0 | 9 | 33 | 19 | 35 | 6 | 32 | 3 | 0 |
+| expm1 | 512 | guardedMasked | 272 | 45 | 1 | 0 | 10 | 33 | 19 | 40 | 6 | 38 | 3 | 0 |
+| log | 256 | blended | 181 | 46 | 2 | 0 | 7 | 31 | 7 | 14 | 0 | 8 | 2 | 0 |
+| log | 256 | blendedMasked | 198 | 46 | 2 | 0 | 8 | 31 | 7 | 17 | 0 | 13 | 2 | 0 |
+| log | 256 | finish | 170 | 42 | 1 | 0 | 3 | 26 | 4 | 7 | 0 | 8 | 3 | 0 |
+| log | 256 | finishMasked | 191 | 42 | 1 | 0 | 4 | 26 | 4 | 8 | 0 | 10 | 3 | 0 |
+| log | 512 | blended | 182 | 46 | 2 | 0 | 7 | 31 | 7 | 14 | 0 | 8 | 2 | 0 |
+| log | 512 | blendedMasked | 195 | 46 | 2 | 0 | 8 | 31 | 7 | 17 | 0 | 13 | 2 | 0 |
+| log | 512 | finish | 169 | 42 | 1 | 0 | 3 | 26 | 4 | 7 | 0 | 8 | 3 | 0 |
+| log | 512 | finishMasked | 189 | 42 | 1 | 0 | 4 | 26 | 4 | 8 | 0 | 10 | 3 | 0 |
+| log10 | 256 | blended | 187 | 51 | 2 | 0 | 7 | 34 | 8 | 3 | 3 | 2 | 2 | 0 |
+| log10 | 256 | blendedMasked | 207 | 51 | 2 | 0 | 8 | 34 | 8 | 3 | 3 | 3 | 2 | 0 |
+| log10 | 256 | finish | 195 | 47 | 1 | 0 | 3 | 31 | 5 | 8 | 3 | 8 | 3 | 0 |
+| log10 | 256 | finishMasked | 227 | 47 | 1 | 0 | 4 | 31 | 5 | 16 | 3 | 16 | 3 | 0 |
+| log10 | 512 | blended | 192 | 51 | 2 | 0 | 7 | 34 | 8 | 3 | 3 | 2 | 2 | 0 |
+| log10 | 512 | blendedMasked | 202 | 51 | 2 | 0 | 8 | 34 | 8 | 3 | 3 | 3 | 2 | 0 |
+| log10 | 512 | finish | 195 | 47 | 1 | 0 | 3 | 31 | 5 | 8 | 3 | 8 | 3 | 0 |
+| log10 | 512 | finishMasked | 222 | 47 | 1 | 0 | 4 | 31 | 5 | 12 | 3 | 12 | 3 | 0 |
+| log1p | 256 | blended | 190 | 48 | 2 | 0 | 19 | 31 | 14 | 8 | 4 | 6 | 2 | 0 |
+| log1p | 256 | blendedMasked | 206 | 48 | 2 | 0 | 20 | 31 | 14 | 8 | 4 | 7 | 2 | 0 |
+| log1p | 256 | finish | 186 | 36 | 2 | 0 | 10 | 26 | 11 | 14 | 4 | 12 | 3 | 0 |
+| log1p | 256 | finishMasked | 211 | 36 | 2 | 0 | 11 | 26 | 11 | 17 | 4 | 16 | 3 | 0 |
+| log1p | 256 | guarded | 215 | 36 | 2 | 0 | 10 | 26 | 11 | 17 | 4 | 26 | 3 | 0 |
+| log1p | 256 | guardedMasked | 237 | 36 | 2 | 0 | 11 | 26 | 11 | 19 | 4 | 31 | 3 | 0 |
+| log1p | 512 | blended | 193 | 48 | 2 | 0 | 19 | 31 | 14 | 8 | 4 | 6 | 2 | 0 |
+| log1p | 512 | blendedMasked | 209 | 48 | 2 | 0 | 20 | 31 | 14 | 8 | 4 | 7 | 2 | 0 |
+| log1p | 512 | finish | 185 | 36 | 2 | 0 | 10 | 26 | 11 | 15 | 4 | 12 | 3 | 0 |
+| log1p | 512 | finishMasked | 209 | 36 | 2 | 0 | 11 | 26 | 11 | 17 | 4 | 16 | 3 | 0 |
+| log1p | 512 | guarded | 212 | 36 | 2 | 0 | 10 | 26 | 11 | 17 | 4 | 26 | 3 | 0 |
+| log1p | 512 | guardedMasked | 235 | 36 | 2 | 0 | 11 | 26 | 11 | 19 | 4 | 31 | 3 | 0 |
+| sinh | 256 | finish | 241 | 52 | 2 | 0 | 12 | 30 | 16 | 26 | 7 | 20 | 3 | 0 |
+| sinh | 256 | finishMasked | 259 | 52 | 2 | 0 | 13 | 30 | 16 | 29 | 7 | 24 | 3 | 0 |
+| sinh | 512 | finish | 240 | 52 | 2 | 0 | 12 | 30 | 16 | 26 | 7 | 22 | 3 | 0 |
+| sinh | 512 | finishMasked | 259 | 52 | 2 | 0 | 13 | 30 | 16 | 28 | 7 | 24 | 3 | 0 |
+| cosh | 256 | finish | 160 | 27 | 2 | 0 | 3 | 20 | 8 | 10 | 5 | 10 | 3 | 0 |
+| cosh | 256 | finishMasked | 182 | 27 | 2 | 0 | 4 | 20 | 8 | 14 | 5 | 14 | 3 | 0 |
+| cosh | 256 | slice | 207 | 56 | 3 | 0 | 8 | 30 | 10 | 11 | 5 | 12 | 3 | 0 |
+| cosh | 256 | sliceMasked | 221 | 56 | 3 | 0 | 9 | 30 | 10 | 13 | 5 | 14 | 3 | 0 |
+| cosh | 512 | finish | 158 | 27 | 2 | 0 | 3 | 20 | 8 | 12 | 5 | 12 | 3 | 0 |
+| cosh | 512 | finishMasked | 177 | 27 | 2 | 0 | 4 | 20 | 8 | 14 | 5 | 14 | 3 | 0 |
+| cosh | 512 | slice | 205 | 56 | 3 | 0 | 8 | 30 | 10 | 11 | 5 | 12 | 3 | 0 |
+| cosh | 512 | sliceMasked | 226 | 56 | 3 | 0 | 9 | 30 | 10 | 18 | 5 | 19 | 3 | 0 |
+| asin | 256 | finish | 160 | 44 | 2 | 1 | 5 | 22 | 5 | 5 | 1 | 8 | 3 | 0 |
+| asin | 256 | finishMasked | 179 | 44 | 2 | 1 | 6 | 22 | 5 | 6 | 1 | 10 | 3 | 0 |
+| asin | 512 | finish | 159 | 44 | 2 | 1 | 5 | 22 | 5 | 5 | 1 | 8 | 3 | 0 |
+| asin | 512 | finishMasked | 173 | 44 | 2 | 1 | 6 | 22 | 5 | 6 | 1 | 10 | 3 | 0 |
+| atan | 256 | finish | 174 | 37 | 1 | 0 | 16 | 30 | 7 | 7 | 1 | 10 | 3 | 0 |
+| atan | 256 | finishMasked | 193 | 37 | 1 | 0 | 17 | 30 | 7 | 8 | 1 | 12 | 3 | 0 |
+| atan | 512 | finish | 168 | 37 | 1 | 0 | 16 | 30 | 7 | 7 | 1 | 10 | 3 | 0 |
+| atan | 512 | finishMasked | 187 | 37 | 1 | 0 | 17 | 30 | 7 | 8 | 1 | 12 | 3 | 0 |
+| acos | 256 | finish | 153 | 42 | 2 | 1 | 5 | 21 | 4 | 5 | 1 | 8 | 3 | 0 |
+| acos | 256 | finishMasked | 172 | 42 | 2 | 1 | 6 | 21 | 4 | 6 | 1 | 10 | 3 | 0 |
+| acos | 512 | finish | 153 | 42 | 2 | 1 | 5 | 21 | 4 | 5 | 1 | 8 | 3 | 0 |
+| acos | 512 | finishMasked | 168 | 42 | 2 | 1 | 6 | 21 | 4 | 6 | 1 | 10 | 3 | 0 |
+| atan2 | 256 | blended | 299 | 42 | 2 | 0 | 38 | 43 | 19 | 43 | 3 | 42 | 3 | 0 |
+| atan2 | 256 | blendedMasked | 347 | 42 | 2 | 0 | 39 | 43 | 19 | 47 | 3 | 49 | 3 | 0 |
+| atan2 | 256 | guarded | 359 | 41 | 2 | 0 | 23 | 37 | 19 | 71 | 3 | 77 | 4 | 0 |
+| atan2 | 256 | guardedMasked | 381 | 41 | 2 | 0 | 24 | 37 | 19 | 78 | 3 | 91 | 4 | 0 |
+| atan2 | 512 | blended | 293 | 42 | 2 | 0 | 38 | 43 | 19 | 44 | 3 | 43 | 3 | 0 |
+| atan2 | 512 | blendedMasked | 348 | 42 | 2 | 0 | 39 | 43 | 19 | 51 | 3 | 50 | 3 | 0 |
+| atan2 | 512 | guarded | 351 | 41 | 2 | 0 | 23 | 37 | 19 | 69 | 3 | 75 | 4 | 0 |
+| atan2 | 512 | guardedMasked | 410 | 41 | 2 | 0 | 24 | 37 | 19 | 82 | 3 | 90 | 4 | 0 |
+| hypot | 256 | finish | 212 | 23 | 0 | 1 | 21 | 14 | 9 | 17 | 8 | 18 | 3 | 0 |
+| hypot | 256 | finishMasked | 236 | 23 | 0 | 1 | 22 | 14 | 9 | 21 | 8 | 22 | 3 | 0 |
+| hypot | 512 | finish | 202 | 23 | 0 | 1 | 21 | 14 | 9 | 10 | 8 | 15 | 3 | 0 |
+| hypot | 512 | finishMasked | 245 | 23 | 0 | 1 | 22 | 14 | 9 | 11 | 8 | 17 | 3 | 0 |
+
+As an AVX2 host (`-XX:UseAVX=2 -XX:MaxVectorSize=32`), 256 bits:
+
+| function | bits | arm | insns | pd | div | sqrt | blend | bcast | cmp | k | cvt | stack | calls | fma |
+| :--- | ---: | :--- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| expm1 | 256 | blended | 281 | 50 | 1 | 0 | 17 | 48 | 30 | 0 | 15 | 26 | 2 | 0 |
+| expm1 | 256 | blendedMasked | 299 | 50 | 1 | 0 | 18 | 48 | 30 | 0 | 16 | 32 | 2 | 0 |
+| expm1 | 256 | core | 212 | 45 | 1 | 0 | 11 | 36 | 19 | 0 | 10 | 8 | 2 | 0 |
+| expm1 | 256 | finish | 267 | 45 | 1 | 0 | 12 | 41 | 28 | 0 | 12 | 24 | 3 | 0 |
+| expm1 | 256 | finishMasked | 296 | 45 | 1 | 0 | 13 | 41 | 28 | 0 | 13 | 31 | 3 | 0 |
+| expm1 | 256 | guarded | 311 | 45 | 1 | 0 | 13 | 41 | 28 | 0 | 12 | 36 | 3 | 0 |
+| expm1 | 256 | guardedMasked | 339 | 45 | 1 | 0 | 14 | 41 | 28 | 0 | 13 | 45 | 3 | 0 |
+| log | 256 | blended | 184 | 46 | 2 | 0 | 8 | 33 | 8 | 0 | 0 | 10 | 2 | 0 |
+| log | 256 | blendedMasked | 203 | 46 | 2 | 0 | 9 | 33 | 8 | 0 | 1 | 16 | 2 | 0 |
+| log | 256 | finish | 176 | 42 | 1 | 0 | 4 | 28 | 5 | 0 | 0 | 8 | 3 | 0 |
+| log | 256 | finishMasked | 193 | 42 | 1 | 0 | 5 | 28 | 5 | 0 | 1 | 13 | 3 | 0 |
+| log10 | 256 | blended | 226 | 51 | 2 | 0 | 8 | 38 | 9 | 0 | 4 | 14 | 2 | 0 |
+| log10 | 256 | blendedMasked | 244 | 51 | 2 | 0 | 9 | 38 | 9 | 0 | 5 | 19 | 2 | 0 |
+| log10 | 256 | finish | 221 | 47 | 1 | 0 | 4 | 35 | 7 | 0 | 3 | 14 | 3 | 0 |
+| log10 | 256 | finishMasked | 238 | 47 | 1 | 0 | 5 | 35 | 7 | 0 | 4 | 19 | 3 | 0 |
+| log1p | 256 | blended | 233 | 48 | 2 | 0 | 19 | 38 | 19 | 0 | 11 | 10 | 2 | 0 |
+| log1p | 256 | blendedMasked | 258 | 48 | 2 | 0 | 20 | 38 | 19 | 0 | 12 | 13 | 2 | 0 |
+| log1p | 256 | finish | 213 | 36 | 2 | 0 | 11 | 31 | 16 | 0 | 7 | 8 | 3 | 0 |
+| log1p | 256 | finishMasked | 240 | 36 | 2 | 0 | 12 | 31 | 16 | 0 | 8 | 14 | 3 | 0 |
+| log1p | 256 | guarded | 259 | 36 | 2 | 0 | 12 | 32 | 16 | 0 | 7 | 24 | 3 | 0 |
+| log1p | 256 | guardedMasked | 283 | 36 | 2 | 0 | 13 | 32 | 16 | 0 | 8 | 32 | 3 | 0 |
+| sinh | 256 | finish | 282 | 52 | 2 | 0 | 15 | 44 | 23 | 0 | 14 | 24 | 3 | 0 |
+| sinh | 256 | finishMasked | 303 | 52 | 2 | 0 | 16 | 44 | 23 | 0 | 15 | 28 | 3 | 0 |
+| cosh | 256 | finish | 168 | 27 | 2 | 0 | 6 | 20 | 10 | 0 | 6 | 8 | 3 | 0 |
+| cosh | 256 | finishMasked | 187 | 27 | 2 | 0 | 7 | 20 | 10 | 0 | 7 | 10 | 3 | 0 |
+| cosh | 256 | slice | 220 | 56 | 3 | 0 | 11 | 36 | 12 | 0 | 8 | 10 | 3 | 0 |
+| cosh | 256 | sliceMasked | 239 | 56 | 3 | 0 | 12 | 36 | 12 | 0 | 9 | 15 | 3 | 0 |
+| asin | 256 | finish | 166 | 44 | 2 | 1 | 6 | 23 | 7 | 0 | 5 | 8 | 3 | 0 |
+| asin | 256 | finishMasked | 186 | 44 | 2 | 1 | 7 | 24 | 7 | 0 | 6 | 10 | 3 | 0 |
+| atan | 256 | finish | 182 | 37 | 1 | 0 | 17 | 32 | 8 | 0 | 7 | 8 | 3 | 0 |
+| atan | 256 | finishMasked | 199 | 37 | 1 | 0 | 18 | 35 | 8 | 0 | 8 | 10 | 3 | 0 |
+| acos | 256 | finish | 159 | 42 | 2 | 1 | 6 | 22 | 6 | 0 | 4 | 8 | 3 | 0 |
+| acos | 256 | finishMasked | 183 | 42 | 2 | 1 | 7 | 23 | 6 | 0 | 5 | 10 | 3 | 0 |
+| atan2 | 256 | blended | 354 | 42 | 2 | 0 | 40 | 63 | 23 | 0 | 12 | 39 | 3 | 0 |
+| atan2 | 256 | blendedMasked | 407 | 42 | 2 | 0 | 41 | 63 | 23 | 0 | 12 | 55 | 3 | 0 |
+| atan2 | 256 | guarded | 461 | 41 | 2 | 0 | 36 | 52 | 23 | 0 | 12 | 68 | 4 | 0 |
+| atan2 | 256 | guardedMasked | 527 | 41 | 2 | 0 | 37 | 52 | 23 | 0 | 13 | 88 | 4 | 0 |
+| hypot | 256 | finish | 256 | 23 | 0 | 1 | 22 | 24 | 13 | 0 | 14 | 33 | 3 | 0 |
+| hypot | 256 | finishMasked | 301 | 23 | 0 | 1 | 23 | 24 | 13 | 0 | 14 | 36 | 3 | 0 |
+
+At 128 bits, the ranges over each function's arms (all instructions, packed-double arithmetic, calls, operands on `[rsp`, FMA), on the host's own flags:
+
+| function | arms | insns | pd | calls | stack | fma |
+| :--- | ---: | ---: | ---: | ---: | ---: | ---: |
+| expm1 | 7 | 4327 to 5760 | 45 to 50 | 199 to 268 | 1609 to 2290 | 0 |
+| log | 4 | 1597 to 2672 | 42 to 46 | 70 to 134 | 551 to 867 | 0 |
+| log10 | 4 | 1987 to 3094 | 47 to 51 | 88 to 151 | 684 to 899 | 0 |
+| log1p | 6 | 3779 to 5350 | 36 to 48 | 166 to 243 | 1334 to 1986 | 0 |
+| sinh | 2 | 6906 to 7418 | 52 | 255 to 264 | 2897 to 3367 | 0 |
+| cosh | 4 | 2239 to 3542 | 27 to 56 | 99 to 152 | 724 to 1219 | 0 |
+| asin | 2 | 1645 to 1808 | 44 | 86 to 95 | 468 to 554 | 0 |
+| atan | 2 | 3402 to 3694 | 37 | 163 to 172 | 1111 to 1309 | 0 |
+| acos | 2 | 1555 to 1716 | 49 | 78 to 89 | 436 to 509 | 0 |
+| atan2 | 4 | 8138 to 10288 | 41 to 42 | 360 to 444 | 3093 to 4197 | 0 |
+| hypot | 2 | 4171 to 4300 | 23 | 217 to 226 | 1321 to 1330 | 0 |
+
+As an AVX2 host:
+
+| function | arms | insns | pd | calls | stack | fma |
+| :--- | ---: | ---: | ---: | ---: | ---: | ---: |
+| expm1 | 7 | 4287 to 5730 | 45 to 50 | 199 to 268 | 1599 to 2290 | 0 |
+| log | 4 | 1423 to 2542 | 42 to 46 | 70 to 134 | 411 to 771 | 0 |
+| log10 | 4 | 1928 to 3045 | 47 to 51 | 88 to 151 | 654 to 878 | 0 |
+| log1p | 6 | 3659 to 5291 | 36 to 48 | 166 to 243 | 1273 to 1968 | 0 |
+| sinh | 2 | 6850 to 7375 | 52 | 255 to 264 | 2896 to 3367 | 0 |
+| cosh | 4 | 2206 to 3526 | 27 to 56 | 99 to 152 | 703 to 1218 | 0 |
+| asin | 2 | 1539 to 1728 | 44 | 86 to 95 | 386 to 491 | 0 |
+| atan | 2 | 3382 to 3640 | 37 | 163 to 172 | 1110 to 1266 | 0 |
+| acos | 2 | 1523 to 1628 | 49 | 78 to 89 | 413 to 439 | 0 |
+| atan2 | 4 | 8098 to 10228 | 41 to 42 | 360 to 444 | 3094 to 4197 | 0 |
+| hypot | 2 | 4029 to 4134 | 23 | 217 to 226 | 1233 to 1252 | 0 |
+
+With `-XX:MaxVectorSize=16`:
+
+| function | arms | insns | pd | calls | stack | fma |
+| :--- | ---: | ---: | ---: | ---: | ---: | ---: |
+| expm1 | 7 | 4280 to 5722 | 45 to 50 | 199 to 268 | 1600 to 2290 | 0 |
+| log | 4 | 1583 to 2656 | 42 to 46 | 70 to 134 | 569 to 869 | 0 |
+| log10 | 4 | 1965 to 3075 | 47 to 51 | 88 to 151 | 684 to 907 | 0 |
+| log1p | 6 | 3737 to 5352 | 36 to 48 | 166 to 243 | 1334 to 2009 | 0 |
+| sinh | 2 | 6854 to 7375 | 52 | 255 to 264 | 2896 to 3368 | 0 |
+| cosh | 4 | 2224 to 3520 | 27 to 56 | 99 to 152 | 724 to 1220 | 0 |
+| asin | 2 | 1624 to 1790 | 44 | 86 to 95 | 468 to 555 | 0 |
+| atan | 2 | 3387 to 3673 | 37 | 163 to 172 | 1115 to 1297 | 0 |
+| acos | 2 | 1591 to 1701 | 49 | 78 to 89 | 474 to 510 | 0 |
+| atan2 | 4 | 8098 to 10228 | 41 to 42 | 360 to 444 | 3094 to 4197 | 0 |
+| hypot | 2 | 4081 to 4176 | 23 | 217 to 226 | 1285 to 1295 | 0 |
+
+What it reads: no FMA and no scalar double arithmetic in any arm at any width under any of the
+three flag sets. From 256 bits up each arm is one copy of its body and calls only its uncommon
+traps and the entry barrier: 2 calls for the blended arms of log, log10, log1p and expm1 and for
+expm1's core, 4 for atan2's guarded arm, 3 for every other. asin, acos and hypot take their
+square root as one `vsqrtpd`. Masking adds one blend and 10 to 59 instructions on AVX-512, 17 to
+66 on AVX2, which has no mask registers (its `k` column is 0). At 128 bits every arm runs the
+Java fallback, 60 to 444 calls per method, as for exp.
 
 ## Where headline numbers come from: four named hosts
 
