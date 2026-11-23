@@ -154,20 +154,24 @@ five are a later, optional set; the large-argument reduction of the trigonometri
   out of both rules; a later run's `*Max` rows time today's finish. On the other rows no function
   needs rule 2 yet, so `VFdlibm` runs one arm at every species. Every default stays provisional
   until a host run revises it. Meanwhile `VFdlibm` calls the finish arm of `exp`, `log` and `log10`;
-  the guarded arm of `expm1` and `log1p`, by the owner's deferral of rule 1 until the 8573C's second
-  run (issue #30, 21 November); the slice arm of `cosh`, provisionally, as the rule's exception,
-  whose arm a host run decides ([issue #30's
-  comment](https://github.com/vecbricks/vfdlibm/issues/30#issuecomment-7091848602)): on
-  `CoshBenchmark`'s common data the EPYC 7763's two runs read the finish arm lower, near 1.3x
-  (`bench/results/cosh-epyc7763-2026-11-21.txt`); on `CoshKindsBench` the finish arm reads lower at
-  3.5% of small lanes and the slice arm at 17%, inside 1.3x on both hosts; the Xeon 8573C has one
-  cosh run (`cosh-xeon8573c-2026-11-21.txt`), and a re-run is dispatched; and the guarded arm of
-  `atan2`, which has no finish arm,
-  so rule 1 does not pick between its two ([issue #30's corrected
+  the guarded arm of `expm1` and `log1p`, by the owner's deferral of rule 1 (issue #30, 21 November)
+  until a second run, on the 8573C, of the code the 22 November files time (those files are the
+  first run of it); the slice arm of `cosh`, provisionally, as the rule's exception, whose arm a
+  host run decides ([issue #30's
+  comment](https://github.com/vecbricks/vfdlibm/issues/30#issuecomment-7091848602); its readings are
+  under the list); and the guarded arm of `atan2`, which has no finish arm, so rule 1 does not pick
+  between its two ([issue #30's corrected
   comment](https://github.com/vecbricks/vfdlibm/issues/30#issuecomment-7085437272)). Each host has
   timed atan2's arms in a run and a re-run (`atan2-xeon8573c-2026-11-22.txt`,
   `atan2-epyc7763-2026-11-22.txt`), and neither file gives them a direction, so guarded stays the
   default at every species by the owner's decision of 22 November.
+  cosh's readings, by minimums: on `CoshBenchmark` the EPYC 7763's two runs agree, outside 1.3x, on
+  the finish arm lower on common data (slice over finish 1.33 to 1.37), a direction, and give no
+  direction on mixed data (`bench/results/cosh-epyc7763-2026-11-21.txt`); on `CoshKindsBench` the
+  finish arm reads lower outside 1.3x with no small lane (1.46 to 1.70 on both hosts), lower inside
+  1.3x at 3.5% of small lanes, and the slice arm lower inside 1.3x at 17%
+  (`cosh-kinds-epyc7763-2026-11-21.txt`, `cosh-kinds-xeon8573c-2026-11-21.txt`). The Xeon 8573C has
+  one `CoshBenchmark` run (`cosh-xeon8573c-2026-11-21.txt`); a second run decides.
 
 ## 6. Rules
 

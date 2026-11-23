@@ -1112,11 +1112,13 @@ blend and 10 to 23 instructions. At 128 bits the bodies are 8 to 16 times longer
   kept. The slice arm stays the default, provisionally, as the named exception to issue #30's tie
   rule (its per-lane set is not rare, so a host run decides; [issue #30's
   comment](https://github.com/vecbricks/vfdlibm/issues/30#issuecomment-7091848602)). The readings,
-  by minimums: on `CoshBenchmark`'s common data the EPYC 7763's two runs read the finish arm lower,
-  near 1.3x (`bench/results/cosh-epyc7763-2026-11-21.txt`); on `CoshKindsBench` the finish arm reads
-  lower at 3.5% of small lanes and the slice arm at 17%, inside 1.3x on both hosts
-  (`cosh-kinds-epyc7763-2026-11-21.txt`, `cosh-kinds-xeon8573c-2026-11-21.txt`). The Xeon 8573C has
-  one cosh run (`cosh-xeon8573c-2026-11-21.txt`), and a re-run is dispatched.
+  by minimums: on `CoshBenchmark` the EPYC 7763's two runs agree, outside 1.3x, on the finish arm
+  lower on common data (slice over finish 1.33 to 1.37), a direction, and give no direction on mixed
+  data (`bench/results/cosh-epyc7763-2026-11-21.txt`); on `CoshKindsBench` the finish arm reads
+  lower outside 1.3x with no small lane (1.46 to 1.70 on both hosts), lower inside 1.3x at 3.5% of
+  small lanes, and the slice arm lower inside 1.3x at 17% (`cosh-kinds-epyc7763-2026-11-21.txt`,
+  `cosh-kinds-xeon8573c-2026-11-21.txt`). The Xeon 8573C has one `CoshBenchmark` run
+  (`cosh-xeon8573c-2026-11-21.txt`); a second run decides.
 - **Which exp faults reach cosh.** `exp.dropCorrection` and `exp.constantOffByOneUlp`, which
   change `expCore`'s lanes of `|x| >= 0.5 ln2`. `exp.thresholdMoved` moves the subnormal
   scale-back, which `expCore` leaves out, and `exp.dropKForcing` the lanes of the word of 0.5

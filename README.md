@@ -187,7 +187,8 @@ fdlibm's own sequence of operations, lane by lane. That is this library.
   hosts disagree the files say so. The rules are set (issue #30): a tie within 1.3x on every host
   that has a file goes to the finish arm, except for `cosh`, whose arm a host run decides, and where
   hosts disagree each species keeps its own arm (no function needs that yet). `expm1` and `log1p`
-  stay on their guarded arm by the owner's deferral of the rule until the 8573C's second run. The
+  stay on their guarded arm by the owner's deferral of the rule until a second run, on the 8573C, of
+  the code its files of 22 November time. The
   `*Max` rows of the host files of 3 to 21 November for `exp`, `expm1`, `log`, `log10` and `log1p`
   (`exp-onediv-xeon8573c-2026-11-03.txt` and those of 20 and 21 November;
   `log1p-xeon8573c-2026-11-03.txt` and `expm1-xeon8573c-2026-11-04.txt` have no `*Max` row) time the
