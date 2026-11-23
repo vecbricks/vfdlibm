@@ -8,8 +8,8 @@ and each hinge condition, with the range where it holds and why the lanes are in
 property it rests on, the proof, and the test that checks its hinges; that test fails if a hinge
 were false. The code carries a pointer to the lemma. A port with no departure of its own (log10,
 log1p) has a section saying so; log10's names the lemmas it rests on through `log` and holds
-L17, on Varka's form of it, and log1p's holds a counter-example, a statement and not a proof of a
-fold.
+L17, on Varka's form of it, and log1p's holds L12, a counter-example (a statement and not a proof
+of a fold), and L18, on Varka's form of it.
 
 The tests are of two kinds, and each lemma names both. Hinge tests in `ProofsTest` mostly check a
 lemma's hypotheses on scalar Java, where each operation is the same single rounding as a vector
@@ -1036,6 +1036,129 @@ inputs that differ are about one in `2^29` of a window), so
 **Encoding.** None. The two results are Java's evaluation of the transcription, not a solver's,
 and the search is a program, so nothing here is machine-checked in `proofs/`; an evaluation of
 the chain like L4's is not written.
+
+### L18. log1p's signed compares and words in long lanes, as Varka emits them
+
+Varka's emitted kernel (`VarkaMathPort.log1p`, in vecbricks/varka, not in this repository)
+computes `Log1p.log1pBlended`'s doubles in the same order, with the C's `int` words in long
+lanes, as `Log` holds its own (L8): the tests of the signed `hx` are signed compares of the raw
+bits, those of `ax` are L3's compares of `|x|`'s bits, `u`'s words are read by logical shifts, and
+`k` is a long lane whose `(double)k` is L7's exact conversion. `Log1p` here keeps those words in
+`IntVector` lanes, so this lemma is about Varka's kernel only, and the section above, that
+`Log1p` itself has no departure to prove, still holds.
+
+**Statement.** Write `b` for a lane's raw bits and `hx = (int) (b >> 32)` for the C's signed high
+word.
+- (a) For every int `h`, `hx < h` iff the signed long compare `b < h * 2^32` holds, and for every
+  `h > Integer.MIN_VALUE`, `hx >= h` iff `b > h * 2^32 - 1`; `h * 2^32` is `Lanes.fromHiBits(h)`
+  as a signed long. So `hx < 0x3FDA827A` (line 113), `hx > 0` (`hx >= 1`), `hx <= 0xbfd2bec3`
+  (`hx < 0xbfd2bec4`, line 125), `hx >= 0x7ff00000` (line 128) and `hx >= 0x43400000` (line 130)
+  are each one signed compare of `b`.
+- (b) Let `u` be `1.0+x`, or `x` for `x >= 2^53` (the C's `u` of lines 131 and 137), `HU =
+  bits(u) >>> 32` and `K = (HU >>> 20) - 1023`, computed on every lane. On every lane that reaches
+  lines 129-150 (`x > -1`, finite, `|x| >= 2^-29`, and not on line 126's `k = 0` path, so `x <=
+  -0.2929` or `x >= 0.41422`), `HU` is the C's `hu = __HI(u)` widened, `K` is the C's `k` of
+  lines 133 and 139, `K + 1` is line 146's, and the long forms of `hu & 0x000fffff`, `hu <
+  0x6a09e`, `hu|0x3ff00000`, `hu|0x3fe00000` and `(0x00100000-hu)>>2` (the last by a logical
+  shift) are the C's ints and compares widened. A word `w` so formed, shifted left by 32 and ORed
+  over `bits(u)`'s low word, is the C's `__HI(u) = w`. Every `K` there, after line 146, lies in
+  `[-53, 1024]`. On every bit pattern, kept lane or not, `K` and `K + 1` lie in `[-1023, 3073]`,
+  since `HU < 2^32`; that is inside L7's domain, which discharges L7's H11 for this kernel.
+
+**Hypotheses.**
+- (H19) The words of (b) are kept only on lanes with `x > -1`. A lane with `x <= -1` (`-inf`
+  among them) or a NaN of either sign is answered early by the C: `-two54/zero` (`-inf`) for `x
+  == -1`, `(x-x)/(x-x)` (a NaN) for the other `x <= -1` and the NaNs with the sign set (lines
+  114-116), and `x+x` for the NaNs with it clear (line 128); the kernel blends those answers over
+  every other result. It is needed: for `x < -1`, `u` is negative, `HU` holds the sign bit and
+  is at least `2^31`, where the C's `hu` is negative, so `HU` is not `hu` widened.
+- (H20) The words of (b) are kept only on lanes that reach lines 129-150. On line 126's lanes
+  (`hx < 0x3FDA827A`, `hx > 0` or `hx <= 0xbfd2bec3`, so `-0.2929 < x < 0.41422`) the kernel
+  blends `k = 0`, `f = x` and `hu = 1` over the words computed from `u`, as the C sets them
+  there and never computes `u`; on the tiny lanes (`|x| < 2^-29`, lines 118-123) and the
+  non-finite ones (line 128) the C's early answers are blended over every other result. It is
+  needed: at `x = 2^-25`, a line-126 lane, `u = 1 + 2^-25` has `HU & 0x000fffff = 0`, so a
+  kernel that kept `HU` there would take the `hu == 0` path of lines 153-158 instead of the
+  general one, which L12 shows is not bit-identical.
+
+**Proof.**
+1. (a) As signed longs, `b = hx * 2^32 + lo` with `0 <= lo < 2^32`, and `h * 2^32` lies in
+   `[-2^63, 2^63)`. If `hx < h`, then `hx <= h - 1` and `b <= (h - 1) * 2^32 + 2^32 - 1 < h *
+   2^32`; if `hx >= h`, `b >= h * 2^32`. `(h & 0xffffffffL) << 32` keeps `h`'s 32 bits as the
+   high word, which is `h * 2^32` modulo `2^64`, its two's-complement value. The second compare
+   is the first negated, and `h * 2^32 - 1` does not wrap for `h > Integer.MIN_VALUE`. This is
+   L3's argument on the raw bits, without the sign mask, for any `h`.
+2. (b) On a lane that reaches lines 129-150, `x > -1`; for `x < 2^53`, `x >= nextUp(-1) = -1 +
+   2^-53`, so `u = fl(1 + x) >= fl(2^-53)
+   = 2^-53` by R2; for `x >= 2^53`, `u = x`. So `u > 0` and its sign bit is clear: `HU` lies in
+   `[0, 2^31)`, is `hu` widened, and the logical shifts of `HU` are the C's arithmetic ones on
+   `hu` (JLS 15.19). `u`'s exponent field lies in `[0x3ca, 0x7ff]`, so `K` lies in `[-53, 1024]`;
+   line 146's `K + 1` is taken only when `hu & 0x000fffff >= 0x6a09e`, which field `0x7ff` has
+   only for a NaN `u`, and a NaN `u` comes only from a NaN `x`; so after it `K` is at most `0x7fe
+   - 1023 + 1 = 1024`. `hu & 0x000fffff` is the same 20 bits in both; ORed with `0x3ff00000` or
+   `0x3fe00000` it lies in `[0, 2^30)`, and `0x00100000 - (hu & 0x000fffff)` lies in `(0, 2^20]`,
+   positive, so the logical and the arithmetic shift by 2 agree. A word in `[0, 2^31)` shifted
+   left by 32 is the high word with zero low bits, as in L15 (b) and L8's proof. On any bit
+   pattern, `HU` lies in `[0, 2^32)`, so `HU >>> 20` lies in `[0, 0xfff]` and `K` and `K + 1` in
+   `[-1023, 3073]`.
+
+No IEEE property is used but R2, in (b)'s bound on `u`, and L7's exact conversion. With H19 and
+H20, (b) gives the C's `k`, `u` and `hu` on every lane that reaches lines 129-150, and H20's
+blends give the C's `k = 0`, `f = x` and `hu = 1` on line 126's lanes; (a) holds on every lane,
+so the masks are the C's.
+
+**Hinge tests (scalar).** `ProofsTest.l18SignedComparesAreTheCs` (a): for each of s_log1p.c's words
+above and the int range's ends, the two long compares against the C's int compares on every high
+word within `2^16` of that word, with five low words each, and on 2^20 sampled patterns against
+every one of those words. `ProofsTest.l18LongWordsAreLog1psInts` (b): a loop over every exponent
+field from 0 to `0x7ff` with the sign bit clear and set, read from `u`'s raw bits by a logical
+shift as the kernel reads them, checks that `HU` and `K` are the C's `hu` and `k` exactly when the
+sign is clear, so a reading that matched the C on a sign-set word (one H19 keeps out) fails there;
+with the logical shift replaced by hand by an arithmetic one (and reverted), it failed at the first
+sign-set word, `0x800`. On every pattern it checks `K` and `K + 1` in `[-1023, 3073]`. With the
+sign clear, which by step 2 is every value `HU >>> 20` takes on a kept lane (the words depend on
+`HU` only through its field and its significand word), it checks that `K + 1` is the C's and that
+`K` and `K + 1` lie in `[-53, 1024]` from field `0x3ca` (below `0x7ff` for `K + 1`); these are
+arithmetic restatements of `K = field - 1023` and cannot fail, so only the sign-set half of the
+loop can. It checks that `1.0 + nextUp(-1.0)` has field `0x3ca`, the smallest `u`, and that field
+`0x7ff` reaches line 146 only for a NaN. On the lanes above -1 among 2^17 sampled inputs, 2^14
+drawn over line 126's band and nineteen edges (from `nextUp(-1)` to `+inf`, `2^-25` and the tiny
+band's among them), it checks H20: it runs the C's control flow on int words (the tiny and
+non-finite lanes answered early, `k = 0` and `hu = 1` on line 126's lanes, lines 129-149
+otherwise) against the kernel's long words with its blends, the final `k` and `hu` of each lane
+that is not answered early, and where lines 129-150 run, that `u`'s sign is clear, `HU` is `hu`
+and `K` is in `[-53, 1024]`. With the kernel's `hu = 1` blend on line 126's lanes dropped by hand
+(and reverted), it failed at `x = -0.25`, `hu` 131072 against the C's 1. And a loop over
+every significand word from 0 to `0xfffff` checks the long `hu & 0x000fffff`, the compare with
+`0x6a09e`, both ORed words, the quarter word and the rebuilt bits of `u` against the C's ints, an
+integer identity, since the mask drops the sign.
+`ProofsTest.l18EarlyLanesAreAnsweredEarly` (H19): every lane of a set with `!(x > -1)` (one pattern
+at every exponent field from `0x3ff` up with the sign set, `-1` and its neighbours below, the
+specials and sampled patterns that are not above -1, the NaNs of both signs) meets the C's
+early-return test of line 114 or line 128, and `StrictMath.log1p` answers it `-inf` at `-1` and a
+NaN elsewhere; and on every non-NaN lane of the set below -1, `HU` is not the C's `hu` widened,
+which shows H19 is needed. It is a witness for H19 and the oracle's own check, not a hinge test:
+it runs s_log1p.c's scalar tests and `StrictMath` on inputs not above -1 by construction, so it
+checks the C, not that a kernel keeps words only on lanes above -1. The checks of H19 are
+`l18EarlyLanesAreBlendedOver` below and Varka's suite. **Vector tie, here.**
+`ProofsTest.l18EarlyLanesAreBlendedOver` checks H19 on `Log1p`'s own masks, whose blends Varka's
+kernel emits in the same order: `Log1p.log1pBlended`, at every width, against `StrictMath.log1p` by
+raw bits on that set, each lane beside a kept twin above -1 (its magnitude, or 0.25 for a NaN or
+`-inf`, whose magnitude `+inf` is answered early too), so that a vector mixes early and kept
+lanes. With the `x <= -1` blend dropped by hand from `Log1p.log1p` (and reverted), it failed at
+every width, 17447 of its 34946 inputs differing. **Vector tie, in Varka.** Where L18's own claim,
+the kernel, is checked: Varka's `VarkaMathPortSuite` (vecbricks/varka, the pull request that adds
+`VarkaMathPort.log1p`, branch `varka-345e-log1p-r`) runs the emitted `VarkaMathPort.log1p` against
+`VFdlibm.log1p` and `Log1p.log1pBlended` by raw bits, on 2^24 sampled inputs and the fixed vectors
+of s_log1p.c's words and L12's witnesses, and holds its two signed compares to (a)'s definitions.
+That Varka's kernel uses these compares and long words is not checked here.
+
+**Encoding.** None, no machine-checked file: (b) is an integer identity checked by the Java loops
+above over every exponent field and every significand word, with the bound on `K` from step 2
+(R2 and the smallest `u`), and H20 is checked on samples, not over every input; (a) is step 1's
+argument, checked at its boundaries and on samples, not over every word. Informal: that Varka's
+kernel is `log1pBlended`'s operations with these compares and long words, which only Varka's
+vector tie checks.
 
 ## Blends (the argument sinh and cosh share)
 

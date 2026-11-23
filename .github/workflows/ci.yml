@@ -153,8 +153,10 @@ jobs:
   # shows that the Vector API fell back to Java. bench/alloc-check.py runs every vector
   # benchmark named *256, *Preferred or *Max of a class named *Benchmark (ExpKindsBench is left
   # out by its name, SKILLS.md; the Arm row runs *Preferred only) under JMH's -prof gc, with the
-  # body inlined, and fails if any row allocates 1 B/op or more. It runs at the runner's own
-  # flags (AVX2 on an EPYC 7763,
+  # body inlined, and fails if any row allocates 1 B/op or more; the arms of a class with a
+  # rareOracle baseline are judged against it instead, within 1 B/op of its lowest iteration
+  # (SKILLS.md, "An oracle that allocates gets a baseline").
+  # It runs at the runner's own flags (AVX2 on an EPYC 7763,
   # AVX-512 on the draws that have it, where the preferred arm is 512 bits) and as an AVX2 host
   # on every draw, where D2L and L2D box.
   #
@@ -233,7 +235,8 @@ jobs:
 
   # The self-tests of the benchmark scripts, which no build runs: bench/host.sh's table of
   # benchmark hosts against the machines the runner pool gives (the CPU check of
-  # benchmark.yml), and bench/pair.py's verdicts. No JVM.
+  # benchmark.yml), bench/pair.py's verdicts, and bench/alloc-check.py's on made-up results
+  # (an oracle baseline's among them). No JVM.
   bench-scripts:
     name: bench scripts
     runs-on: ubuntu-latest
@@ -243,3 +246,5 @@ jobs:
         run: bench/host.sh --self-test
       - name: Check the pair's verdicts
         run: bench/pair.py --selftest
+      - name: Check the allocation check's verdicts
+        run: bench/alloc-check.py --selftest

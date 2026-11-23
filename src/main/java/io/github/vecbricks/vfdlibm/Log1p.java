@@ -46,7 +46,9 @@ import jdk.incubator.vector.VectorSpecies;
  * from the long view ({@code Lanes.hiInt}), goes back through {@code I2L} (written out, as
  * {@code Lanes.withHi} would be refused inlining that late in the body), and {@code k} becomes a
  * double through {@code I2D}: all three are vector instructions on every AVX2 host, where {@code
- * L2D} and {@code D2L} are not (SKILLS.md).
+ * L2D} and {@code D2L} are not (SKILLS.md). Varka's emitted kernel holds these words in long
+ * lanes instead and tests {@code hx} by signed compares of the raw bits (PROOFS.md, L18, checked
+ * in Varka's {@code VarkaMathPortSuite}).
  *
  * <p>The C's branches become lane masks. Every lane computes the reduction (both forms of {@code
  * u}, both normalisations, the {@code k == 0} lanes' {@code f = x}) and both results of the
