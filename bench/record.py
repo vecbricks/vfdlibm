@@ -48,9 +48,11 @@ CPUs are refused, since a file is of one CPU, and so are runs with other JMH opt
 settings; so is a pair among them, whose re-run is a file of its own. A class that a later run
 lacks, or that the first run lacks, is named in a note.
 
-A later run at another commit than the first run's joins the file only if the JDK is the same
-and so is the code under the benchmark, but for comments and whitespace; otherwise it is
-refused, with the files that differ named, and is a first run of new code, a file of its own.
+A later run at another commit than the first run's joins the file only if the JDK and the
+command are the same and so is the code under the file's benchmark, but for comments and
+whitespace. Otherwise it is refused: another JDK or command refuses the write; other code leaves
+the run out of that class's file, in a note that names the files that differ (it is a first run
+of new code, a file of its own), and check refuses a file that holds such a run.
 The code under a benchmark class is its file in src/jmh/java and, transitively, every file of
 src/main/java, src/jmh/java and src/test/java that declares at its top level a type whose name
 is a word of that code (comments dropped, literals emptied), taken at both commits: the files
@@ -58,9 +60,12 @@ must be the same set, each the same once its comments are dropped and its whites
 dropped where no two tokens could join across it, literals kept verbatim. A \\u escape that
 could open or close a comment or a literal is refused, not decoded. pom.xml must be the same as
 XML but for the project's own version, project.build.outputTimestamp, the executions whose id
-starts with fault- and the profile release; src/main/resources must be the same, and
-src/test/resources too if a test class is under the benchmark. git reads the files at both
-commits, in this script's clone, fetching a commit from origin that it lacks. A line "# Code:"
+starts with fault- and the profile release. src/main/resources, src/jmh/resources, every file
+under src/main/java and src/jmh/java that is not Java source, and module-info.java and
+package-info.java there, must be the same too, and src/test/resources if a test class is under
+the benchmark. git reads the files at both commits, in this script's clone, which must hold
+both commits; one it lacks is fetched from origin (a network call), and if that fails the runs
+are refused. A line "# Code:"
 under the run's line says which commits and files were compared, and check computes it again.
 
 `check` reads a results file's header lines, tables and raw section and compares them with what
@@ -530,13 +535,14 @@ def joined_files(directories, name=None):
                      " ".join((header.get("JMH") or "").split()), header.get("Vector"),
                      header.get("Run") or lines[0],  # an older run: its title, with its time
                      (header.get("Commit") or "").split(" ")[0],
-                     " ".join((header.get("JDK") or "").split())))
+                     (" ".join((header.get("JDK") or "").split()),
+                      " ".join((header.get("Command") or "").split()))))
     runs = [x[4] for x in seen]
     if len({x[:4] for x in seen}) > 1 or len(set(runs)) < len(runs) or any(
             x[5] != seen[0][5] and x[6] != seen[0][6] for x in seen):
         raise Problem("several runs go in one file only if they are different runs of one host"
                       " and CPU, with the same JMH options and vector settings, and, at"
-                      " different commits, the same JDK; these are %s"
+                      " different commits, the same JDK and command; these are %s"
                       % "; ".join(" ".join(map(str, x)) for x in seen))
     commits = [x[5] for x in seen]
     # A later run joins the file of its class, whatever the files are named; a class that a
@@ -562,7 +568,13 @@ def joined_files(directories, name=None):
                 title = block[0]
                 block = [l for l in block[block.index(header_block(block)[0]):]
                          if MARKER not in l]
-                note = code_note(n, commits[0], commits[n - 1], cls)
+                # The note numbers the run by its place in this file, as RUN_LINE does.
+                try:
+                    note = code_note(len(blocks[of_class[cls]]) + 2, commits[0],
+                                     commits[n - 1], cls)
+                except CodeDiffers as e:
+                    NOTES.append("run %d is not in %s: %s" % (n, of_class[cls], e))
+                    continue
                 blocks[of_class[cls]].append(note + [title, "#"] + [
                     l for i, l in enumerate(block) if not (l == "#" and block[i - 1] == "#")])
     out = {}
@@ -582,7 +594,7 @@ REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 ROOTS = ("src/main/java", "src/jmh/java", "src/test/java")
 POM_NS = "{http://maven.apache.org/POM/4.0.0}"
 # A character that, written as a \u escape, could open or close a comment or a literal.
-HIDING = set("/*\"'\\\n\r")
+HIDING = set("/*\"'\\\n\r{}")
 UNICODE = re.compile(r"\\+u+([0-9A-Fa-f]{4})")
 # Characters that join with a neighbour of their kind into another token, so that a space
 # between two of them is kept: words, and the characters of Java's operators.
@@ -631,8 +643,8 @@ def java_code(text, what):
 
     while i < n:
         if text.startswith("//", i):
-            j = text.find("\n", i)
-            i = n if j < 0 else j
+            # Java ends a line at CR, LF or both.
+            i = min([k for k in (text.find("\n", i), text.find("\r", i)) if k >= 0] or [n])
             pieces.append(("code", " "))
         elif text.startswith("/*", i):
             j = text.find("*/", i + 2)
@@ -699,18 +711,33 @@ def have_commit(sha):
                           " origin: the code of the runs cannot be compared" % (sha, REPO))
 
 
+RESOURCES = ("src/main/resources", "src/jmh/resources", "src/test/resources")
+
+
 def tree(sha):
-    """{path: bytes} of the files under ROOTS, src/main/resources and src/test/resources, and
-    pom.xml, at a commit."""
-    paths = [p for p in git("ls-tree", "-r", "-z", "--name-only", sha, "--", *ROOTS,
-                            "src/main/resources", "src/test/resources", "pom.xml"
-                            ).stdout.decode("utf-8").split("\0") if p]
+    """{path: bytes} of the files under ROOTS and RESOURCES, and pom.xml, at a commit."""
+    entries = [e for e in git("ls-tree", "-r", "-z", sha, "--", *ROOTS, *RESOURCES, "pom.xml"
+                              ).stdout.decode("utf-8").split("\0") if e]
+    paths = []
+    for entry in entries:
+        meta, _, path = entry.partition("\t")
+        if meta.split()[1] != "blob":
+            raise Problem("%s at %s is a %s, not a file: bench/record.py compares files only"
+                          % (path, sha[:7], meta.split()[1]))
+        paths.append(path)
     done = subprocess.run(["git", "-C", REPO, "cat-file", "--batch"], capture_output=True,
                           input="".join("%s:%s\n" % (sha, p) for p in paths).encode("utf-8"))
+    if done.returncode != 0:
+        raise Problem("git cat-file --batch failed at %s: %s"
+                      % (sha[:7], done.stderr.decode("utf-8", "replace").strip()))
     out, data = {}, done.stdout
     for path in paths:
         head, _, data = data.partition(b"\n")
-        size = int(head.split()[2])
+        parts = head.split()
+        if len(parts) != 3 or parts[1] != b"blob":
+            raise Problem("git cat-file gave '%s' for %s at %s"
+                          % (head.decode("utf-8", "replace"), path, sha[:7]))
+        size = int(parts[2])
         out[path], data = data[:size], data[size + 1:]
     return out
 
@@ -740,6 +767,19 @@ def pom_shape(data, what):
 CODE_CACHE = {}
 
 
+class CodeDiffers(Problem):
+    """The code under a benchmark is not the same at two commits."""
+
+
+def always_compared(path):
+    """A file compared whatever the closure: a module's or a package's declarations, and
+    anything but Java source under src/main/java or src/jmh/java, which the build may copy."""
+    if path.startswith(("src/main/java/", "src/jmh/java/")):
+        return not path.endswith(".java") or os.path.basename(path) in (
+            "module-info.java", "package-info.java")
+    return path.startswith(("src/main/resources/", "src/jmh/resources/"))
+
+
 def code_compared(first, later, classes):
     """The files under the benchmark classes compared between two commits, sorted: their
     closures (each class's src/jmh/java file and every type its code names, transitively) at
@@ -753,10 +793,20 @@ def code_compared(first, later, classes):
         have_commit(sha)
         trees[sha] = tree(sha)
         declares = {}
+        unread = {}
         for path, data in trees[sha].items():
             if path.endswith(".java") and path.startswith(ROOTS):
-                code[sha, path] = java_code(data.decode("utf-8"), "%s at %s" % (path, sha[:7]))
-                for name in top_level_types(code[sha, path][1]):
+                what = "%s at %s" % (path, sha[:7])
+                try:
+                    code[sha, path] = java_code(data.decode("utf-8"), what)
+                    names = top_level_types(code[sha, path][1])
+                except (Problem, UnicodeDecodeError) as e:
+                    # A file this script cannot read is refused only if the closure needs it;
+                    # until then it declares every name it holds, so that it is not missed.
+                    unread[path] = ("%s is not UTF-8" % what) if isinstance(
+                        e, UnicodeDecodeError) else str(e)
+                    names = DECLARATION.findall(data.decode("utf-8", "replace"))
+                for name in names:
                     declares.setdefault(name, set()).add(path)
         todo = set()
         for cls in classes:
@@ -767,15 +817,16 @@ def code_compared(first, later, classes):
         mine = set()
         while todo:
             path = todo.pop()
+            if path in unread:
+                raise Problem(unread[path])
             mine.add(path)
             for name in set(IDENTIFIER.findall(code[sha, path][1])):
                 todo |= declares.get(name, set()) - mine
         closure |= mine
     compared = sorted(closure) + ["pom.xml"]
-    for resources in ("src/main/resources/", "src/test/resources/"):
-        if resources == "src/main/resources/" or any(
-                p.startswith("src/test/") for p in closure):
-            compared += sorted({p for t in trees.values() for p in t if p.startswith(resources)})
+    compared += sorted({p for t in trees.values() for p in t if always_compared(p)
+                        or (p.startswith("src/test/resources/")
+                            and any(c.startswith("src/test/") for c in closure))} - closure)
     differ = []
     for path in compared:
         a, b = (trees[sha].get(path) for sha in (first, later))
@@ -791,10 +842,11 @@ def code_compared(first, later, classes):
         elif a != b:
             differ.append(path)
     if differ:
-        raise Problem("the runs are at %s and %s, and the code under %s differs between them"
-                      " in more than comments, so they do not go in one file (the later run is"
-                      " a first run of new code, a file of its own): %s"
-                      % (first[:7], later[:7], ", ".join(sorted(classes)), ", ".join(differ)))
+        raise CodeDiffers("the runs are at %s and %s, and the code under %s differs between"
+                          " them in more than comments, so they do not go in one file (the"
+                          " later run is a first run of new code, a file of its own): %s"
+                          % (first[:7], later[:7], ", ".join(sorted(classes)),
+                             ", ".join(differ)))
     CODE_CACHE[key] = compared
     return compared
 
@@ -868,6 +920,9 @@ def check(path, directories):
         directories = [d for d in directories
                        if any(classes_of(v) == mine for v in files_of(
                            d, "x" if artifact_lines(d)[1] else None, False).values())]
+        # Nor is one whose code under the file's class is not the first run's (write noted it).
+        directories = directories[:1] + [d for d in directories[1:]
+                                         if not code_differs(directories[0], d, mine)]
     if len(starts) != len(directories):
         return ["the file holds %d run%s (a later one starts at a '# Run N of M of this file:'"
                 " line), and %d artifact%s given"
@@ -899,15 +954,24 @@ def commit_of(directory):
     return (dict((k, v) for k, v in plain_header(lines)).get("Commit") or "").split(" ")[0]
 
 
+def code_differs(first, directory, classes):
+    try:
+        code_note(2, commit_of(first), commit_of(directory), classes)
+        return False
+    except CodeDiffers:
+        return True
+
+
 def check_note(part, n, first, directory):
     """A later run's lines between its RUN_LINE and its title: the code note, recomputed from
     git at the two runs' commits, its words compared; nothing if they are at one commit."""
+    # The code is compared first: a re-run of other code is refused whatever the file holds.
+    want = " ".join(" ".join(code_note(n, commit_of(first), commit_of(directory),
+                                       classes_of(part))).split())
     title = artifact_lines(directory)[0][0]
     if title not in part:
         return []  # check_run says the title is missing
     have = " ".join(" ".join(part[1:part.index(title)]).split())
-    want = " ".join(" ".join(code_note(n, commit_of(first), commit_of(directory),
-                                       classes_of(part))).split())
     if have != want:
         return ["the lines between the run's first line and its title are '%s'; bench/record.py"
                 " gives '%s'" % (have, want)]
@@ -1122,6 +1186,10 @@ def selftest_code(repo):
     refused("// \\u000a int b;", "escape \\u000a")
     assert same('s = "\\u0041";', 's = "\\u0041";')
     assert java_code('s = "\\\\u002f";', "e")[0] == 's="\\\\u002f";'  # an escaped backslash
+    refused("class A { \\u007d class B {}", "escape \\u007d")  # a brace sets what is top level
+    # A line comment ends at CR as at LF, so code after it on the next line is code.
+    assert not same("int a; // c\rint b = 1;", "int a; // c\rint b = 2;")
+    assert same("int a; // c\r\nint b;", "int a;\nint b;")
     refused("int a; /* open", "comment opened")
     refused('s = "open\n";', "literal opened")
     # The top-level types, not the nested ones, and not a name in a literal.
@@ -1199,6 +1267,30 @@ def selftest_code(repo):
         raise AssertionError("a new file under the benchmark")
     except Problem as e:
         assert "Helper.java (only at %s)" % c4[:7] in str(e) and "Exp.java" in str(e), e
+    # A file outside the closure that cannot be read refuses nothing, and one in it does; a
+    # module's declarations are compared whatever the closure.
+    c5 = commit({main + "Lanes.java": files[main + "Lanes.java"],
+                 main + "Exp.java": files[main + "Exp.java"],
+                 "src/test/java/p/Odd.java": 'final class Odd { String s = "\\u0022"; }\n'},
+                "unread")
+    assert code_compared(c1, c5, ["ExpBenchmark"])[-1] == "pom.xml"
+    c6 = commit({"src/test/java/p/Odd.java": 'final class Odd { String s = "\\u0022"; }\n'
+                                            "final class Lanes2 {}\n",
+                 main + "Exp.java": files[main + "Exp.java"].replace("Lanes.one()",
+                                                                     "Odd.one()")}, "read")
+    try:
+        code_compared(c1, c6, ["ExpBenchmark"])
+        raise AssertionError("an unreadable file under the benchmark")
+    except Problem as e:
+        assert "Odd.java at %s" % c6[:7] in str(e) and "escape" in str(e), e
+    c7 = commit({main + "Exp.java": files[main + "Exp.java"],
+                 main + "module-info.java": "module p { requires jdk.incubator.vector; }\n"},
+                "module")
+    try:
+        code_compared(c1, c7, ["ExpBenchmark"])
+        raise AssertionError("a new module-info.java")
+    except CodeDiffers as e:
+        assert "module-info.java (only at %s)" % c7[:7] in str(e), e
     note = code_note(2, c1, c2, {"ExpBenchmark"})
     assert note[0].startswith("# Code:        Run 1 is at %s and run 2 at %s" % (c1[:7], c2[:7]))
     assert all(len(l) <= WIDTH for l in note) and "src/main/java/p: Exp.java, Lanes.java" in \
@@ -1239,22 +1331,51 @@ def selftest_code(repo):
         assert len(found) == 1 and "between the run's first line and its title" in found[0], found
         found = check(written([l for l in two if l not in note[1:]]), [d, again])
         assert len(found) == 1 and "between the run's first line and its title" in found[0], found
-        # Run at c3, whose Lanes.java differs in code: refused, by write and by check.
+        # Run at c3, whose Lanes.java differs in code under ExpBenchmark only: write leaves it
+        # out of exp's file, naming the file, and still joins it to log1p's; check refuses it.
         artifact(again, c3, "r2")
-        for attempt in (lambda: joined_files([d, again]),
-                        lambda: check(written(two), [d, again])):
-            try:
-                attempt()
-                raise AssertionError("a re-run of other code")
-            except Problem as e:
-                assert "src/main/java/p/Lanes.java" in str(e), e
-        # At different commits the JDK must be the same too.
-        artifact(again, c2, "r2", lambda t: t.replace("# Load:", "# JDK:         25.0.6\n# Load:"))
+        del NOTES[:]
+        mixed = joined_files([d, again])
+        assert mixed["exp-xeon8573c-2026-11-20.txt"] == files_of(d)[
+            "exp-xeon8573c-2026-11-20.txt"]
+        assert RUN_LINE % (2, 2) in mixed["log1p-xeon8573c-2026-11-20.txt"]
+        assert len(NOTES) == 1 and NOTES[0].startswith(
+            "run 2 is not in exp-xeon8573c-2026-11-20.txt") and \
+            "src/main/java/p/Lanes.java" in NOTES[0], NOTES
+        del NOTES[:]
+        assert check(written(mixed["log1p-xeon8573c-2026-11-20.txt"]), [d, again]) == []
+        assert check(written(mixed["exp-xeon8573c-2026-11-20.txt"]), [d, again]) == []
         try:
-            joined_files([d, again])
-            raise AssertionError("another JDK at another commit")
-        except Problem as e:
-            assert "the same JDK" in str(e), e
+            check(written(two), [d, again])
+            raise AssertionError("a re-run of other code")
+        except CodeDiffers as e:
+            assert "src/main/java/p/Lanes.java" in str(e), e
+        # A middle run that lacks the class: the note numbers the run by its place in the file,
+        # and the file checks against all three runs.
+        with tempfile.TemporaryDirectory() as middle:
+            artifact(middle, c1, "r-mid")
+            path = os.path.join(middle, "bench-results.txt")
+            with open(path, encoding="utf-8") as f:
+                text = f.read()
+            cut = text.index("# JMH version: 1.37\n# Benchmark: %sExpBenchmark" % PACKAGE)
+            end = text.index("# JMH version: 1.37\n# Benchmark: %sLog1p" % PACKAGE)
+            with open(path, "w", encoding="utf-8") as f:
+                f.write("\n".join(l for l in (text[:cut] + text[end:]).split("\n")
+                                  if "ExpBenchmark" not in l))
+            artifact(again, c2, "r2", lambda t: t.replace("2026-11-20", "2026-11-21"))
+            three = joined_files([d, middle, again])["exp-xeon8573c-2026-11-20.txt"]
+            del NOTES[:]
+            assert three == two, [l for l in three if l not in two]
+            assert check(written(three), [d, middle, again]) == []
+        # At different commits the JDK and the command must be the same too.
+        for old, new in (("# Load:", "# JDK:         25.0.6\n# Load:"),
+                         ("exec:exec", "exec:exec -Dother")):
+            artifact(again, c2, "r2", lambda t: t.replace(old, new))
+            try:
+                joined_files([d, again])
+                raise AssertionError("another JDK or command at another commit")
+            except Problem as e:
+                assert "the same JDK and command" in str(e), e
 
 
 def selftest():
