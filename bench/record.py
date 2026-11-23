@@ -52,7 +52,8 @@ A later run at another commit than the first run's joins the file only if the JD
 command are the same and so is the code under the file's benchmark, but for comments and
 whitespace. Otherwise it is refused: another JDK or command refuses the write; other code leaves
 the run out of that class's file, in a note that names the files that differ (it is a first run
-of new code, a file of its own), and check refuses a file that holds such a run.
+of new code, a file of its own), a run that so joins no file refuses the write, and check
+refuses a file that holds such a run.
 The code under a benchmark class is its file in src/jmh/java and, transitively, every file of
 src/main/java, src/jmh/java and src/test/java that declares at its top level a type whose name
 is a word of that code (comments dropped, literals emptied), taken at both commits: the files
@@ -561,6 +562,7 @@ def joined_files(directories, name=None):
         if not set(later) & set(of_class):
             raise Problem("run %d has none of the first run's classes (%s), so it joins no file"
                           % (n, "; ".join(", ".join(sorted(c)) for c in of_class)))
+        joined, refused = 0, []
         for cls, block in later.items():
             if cls in of_class:
                 # The later run's lines from its header on, without the places for
@@ -575,9 +577,15 @@ def joined_files(directories, name=None):
                 except CodeDiffers as e:
                     NOTES.append("the run given %s is not in %s: %s"
                                  % (ordinal(n), of_class[cls], e))
+                    refused.append(str(e))
                     continue
+                joined += 1
                 blocks[of_class[cls]].append(note + [title, "#"] + [
                     l for i, l in enumerate(block) if not (l == "#" and block[i - 1] == "#")])
+        if not joined:
+            # A run that joins no file is refused, as one that shares no class is.
+            raise CodeDiffers("the run given %s joins no file: %s"
+                              % (ordinal(n), "; ".join(refused)))
     out = {}
     for file_name, lines in first.items():
         out[file_name] = list(lines)
@@ -602,10 +610,14 @@ UNICODE = re.compile(r"\\+u+([0-9A-Fa-f]{4})")
 OPERATOR = set("+-*/%=<>!&|^~:.?")
 DECLARATION = re.compile(r"\b(?:class|interface|enum|record)\s+([A-Za-z_$][\w$]*)")
 IDENTIFIER = re.compile(r"[A-Za-z_$][\w$]*")
-CODE_RULE = ("{seed} and every type it names in %s and %s, transitively, without comments and"
-             " whitespace, and pom.xml without the project's version,"
-             " project.build.outputTimestamp, the fault-* executions and the release profile"
-             % (", ".join(ROOTS[:-1]), ROOTS[-1]))
+CODE_RULE = ("{seed} and every type it names in %s and %s, transitively, and any"
+             " module-info.java and package-info.java of src/main/java and src/jmh/java, without"
+             " comments and with whitespace dropped only where no two tokens could join,"
+             " literals verbatim; pom.xml as XML without the project's version,"
+             " project.build.outputTimestamp, the fault-* executions and the release profile;"
+             " and byte for byte src/main/resources, src/jmh/resources, the other files of"
+             " src/main/java and src/jmh/java, and src/test/resources if a test class is under"
+             " the benchmark" % (", ".join(ROOTS[:-1]), ROOTS[-1]))
 
 
 def char_kind(c):
@@ -693,8 +705,19 @@ def top_level_types(names):
     return found
 
 
-def git(*args, check=True):
-    done = subprocess.run(["git", "-C", REPO] + list(args), capture_output=True)
+FETCH_TIMEOUT = 120  # seconds
+
+
+def git(*args, check=True, timeout=None):
+    """git in REPO, never asking for credentials on a terminal or reading stdin."""
+    env = dict(os.environ, GIT_TERMINAL_PROMPT="0")
+    try:
+        done = subprocess.run(["git", "-C", REPO] + list(args), capture_output=True, env=env,
+                              stdin=subprocess.DEVNULL, timeout=timeout)
+    except subprocess.TimeoutExpired:
+        if check:
+            raise Problem("git %s took more than %d seconds" % (" ".join(args), timeout))
+        return subprocess.CompletedProcess(args, 124, b"", b"timed out")
     if check and done.returncode != 0:
         raise Problem("git %s failed: %s" % (" ".join(args),
                                              done.stderr.decode("utf-8", "replace").strip()))
@@ -706,7 +729,7 @@ def have_commit(sha):
     if not re.fullmatch(r"[0-9a-f]{7,40}", sha or ""):
         raise Problem("a run's Commit line names no commit: '%s'" % sha)
     if git("cat-file", "-e", sha + "^{commit}", check=False).returncode != 0:
-        git("fetch", "--quiet", "origin", sha, check=False)
+        git("fetch", "--quiet", "origin", sha, check=False, timeout=FETCH_TIMEOUT)
         if git("cat-file", "-e", sha + "^{commit}", check=False).returncode != 0:
             raise Problem("commit %s is not in the clone at %s, nor can it be fetched from"
                           " origin: the code of the runs cannot be compared" % (sha, REPO))
@@ -933,7 +956,10 @@ def check(path, directories):
                 % (len(starts), "" if len(starts) == 1 else "s", len(directories),
                    " was" if len(directories) == 1 else "s were")]
     if len(directories) > 1:
-        joined_files(directories)  # refuses runs that do not belong in one file
+        try:
+            joined_files(directories)  # refuses runs that do not belong in one file
+        except CodeDiffers:
+            pass  # a run of other code: check_note says so, as a difference
         del NOTES[:]
     diffs, of_first = [], None
     for n, (start, end, d) in enumerate(zip(starts, starts[1:] + [len(actual)], directories), 1):
@@ -1313,8 +1339,18 @@ def selftest_code(repo):
     note = code_note(2, c1, c2, {"ExpBenchmark"})
     assert note[0].startswith("# Code:        Run 1 is at %s and run 2 at %s" % (c1[:7], c2[:7]))
     assert all(len(l) <= WIDTH for l in note) and "src/main/java/p: Exp.java, Lanes.java" in \
-        " ".join(" ".join(note).split()), note
+        " ".join(" ".join(l[1:] for l in note).split()), note
     assert code_note(2, c1, c1, {"ExpBenchmark"}) == []
+    # git never reads this script's stdin nor asks for a password; a fetch from an origin that
+    # cannot answer fails with the clone's message.
+    assert git("cat-file", "--batch", timeout=10).stdout == b""
+    git("remote", "add", "origin", os.path.join(repo, "no-such-origin"))
+    try:
+        have_commit("e" * 40)
+        raise AssertionError("a commit no origin has")
+    except Problem as e:
+        assert "nor can it be fetched from origin" in str(e), e
+    git("remote", "remove", "origin")
 
     # A run and its re-run at those commits go in one file, under a note that check
     # recomputes; at a commit whose code differs they are refused, naming the files.
@@ -1366,6 +1402,23 @@ def selftest_code(repo):
         assert check(written(mixed["exp-xeon8573c-2026-11-20.txt"]), [d, again]) == []
         found = check(written(two), [d, again])
         assert any("run 2: " in x and "src/main/java/p/Lanes.java" in x for x in found), found
+        # A re-run that joins no file, since its code differs under each class it shares, is
+        # refused by write, as one that shares no class is.
+        with tempfile.TemporaryDirectory() as only:
+            artifact(only, c3, "r-only")
+            path = os.path.join(only, "bench-results.txt")
+            with open(path, encoding="utf-8") as f:
+                text = f.read()
+            cut = text.index("# JMH version: 1.37\n# Benchmark: %sLog1p" % PACKAGE)
+            with open(path, "w", encoding="utf-8") as f:
+                f.write("\n".join(l for l in (text[:cut] + text[text.index("# Run complete."):]
+                                              ).split("\n") if "Log1pBenchmark" not in l))
+            try:
+                joined_files([d, only])
+                raise AssertionError("a re-run that joins no file")
+            except CodeDiffers as e:
+                assert "joins no file" in str(e) and "Lanes.java" in str(e), e
+            del NOTES[:]
         # A middle run that lacks the class: the note numbers the run by its place in the file,
         # and the file checks against all three runs.
         with tempfile.TemporaryDirectory() as middle:
