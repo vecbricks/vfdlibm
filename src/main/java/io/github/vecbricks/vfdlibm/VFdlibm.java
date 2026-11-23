@@ -30,7 +30,7 @@ import jdk.incubator.vector.VectorMask;
  * under {@code bench/results/}, in the source repository and not in the jar, read what the body
  * allocates at each, in bytes per op, an op being one pass over 1024 doubles. The arm that {@code
  * exp}, {@code log} and {@code log10} call is the finish arm, the one {@code expm1}, {@code
- * log1p} and {@code atan2} call is the guarded arm, and the one {@code cosh} calls is the finish
+ * log1p} and {@code atan2} call is the guarded arm, and the one {@code cosh} calls is the slice
  * arm; {@code hypot} has one arm, the finish. No file under {@code bench/results/} reads {@code
  * hypot} yet: every file the list below cites predates it, and of the list only the allocation
  * check that CI runs covers it.

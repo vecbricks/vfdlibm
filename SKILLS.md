@@ -1103,9 +1103,8 @@ blend and 10 to 23 instructions. At 128 bits the bodies are 8 to 16 times longer
   graph (above). With one `expCore` and about 35 more operations, `CoshBenchmark`'s rows are
   held by `bench/alloc-check.py` (CI runs it, and it was run locally before any test was
   written), at the runner's flags and as AVX2.
-- **Two arms; the finish arm is the default.** `coshSlice` computes the small range in the vector
-  and `coshFinish` finishes its lanes per lane; the default arm was the slice arm until 23 November,
-  and is the finish arm since, by the owner's decision. The arms differ
+- **Two arms, one provisional default.** `coshSlice` computes the small range in the vector and
+  `coshFinish` finishes its lanes per lane; the default arm is the slice arm. The arms differ
   only on `|x| < 0.5*ln2`, so their cost follows the share of that range, which is 3.5% in
   Varka's baseline benchmark and 17% in Spark's unit tests (issue #32): at 8 lanes a vector
   holds one in 27% and 82% of the cases. `CoshKindsBench` has those two shares, and
@@ -1118,11 +1117,9 @@ blend and 10 to 23 instructions. At 128 bits the bodies are 8 to 16 times longer
   runs, and `cosh-kinds-xeon8573c-2026-11-21.txt`, one) the finish arm reads lower by more than 1.3x
   only on data with no small lane, and at 3.5% and 17% of small lanes, Varka's and Spark's shares,
   the arms read within 1.3x of each other, with no direction. cosh is the named exception to issue
-  #30's tie rule (its per-lane set is not rare, so a host run decides), and the owner made the
-  finish arm its default on 23 November: no measured row favours slice, the EPYC 7763's two runs
-  read finish lower on common data near 1.3x, neither host gives a direction at Varka's and Spark's
-  shares of small lanes, and rule 1's tie goes to the finish arm. It is not read as faster, and the
-  slice arm stays, tested, so the choice can be re-measured.
+  #30's tie rule (its per-lane set is not rare, so a host run decides), so the default is still the
+  plan's baseline design, not a measurement, and stays provisional; which arm it keeps is the
+  owner's call.
 - **Which exp faults reach cosh.** `exp.dropCorrection` and `exp.constantOffByOneUlp`, which
   change `expCore`'s lanes of `|x| >= 0.5 ln2`. `exp.thresholdMoved` moves the subnormal
   scale-back, which `expCore` leaves out, and `exp.dropKForcing` the lanes of the word of 0.5

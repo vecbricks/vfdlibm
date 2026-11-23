@@ -21,12 +21,6 @@ two NaNs with different bits in a function of two arguments (`AGENTS.md`, "Relea
   varies by JIT tier. Lanes with an infinity or a NaN in either argument are finished per lane by
   `StrictMath.hypot`.
 
-### Changed
-
-- `VFdlibm.cosh` runs the finish arm, which finishes the small range (`|x| < 0.5*ln2`) per lane by
-  `StrictMath.cosh`, instead of the slice arm, which computed it in the vector; every lane gives the
-  same bits as before (issue #30, the owner's decision of 23 November 2026).
-
 ## [0.2.0] - 2026-11-22
 
 ### Added

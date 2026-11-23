@@ -27,11 +27,11 @@ import org.openjdk.jmh.annotations.Warmup;
 /**
  * cosh's two arms at a share of small-range lanes, to decide which of them {@link VFdlibm#cosh}
  * runs: the scalar {@code StrictMath.cosh} loop, {@link Cosh#coshSlice} (the small range, {@code
- * |x| < 0.5*ln2}, computed in the vector) and {@link Cosh#coshFinish} (finished per lane, the
- * default arm), each vector form at 256 bits and at the host's preferred species, over an array of
- * 1024 doubles. The arms differ only in that range, and {@code CoshBenchmark}'s {@code common} data
- * has 0.6% of its lanes there, which says little: a vector holds a small lane with probability
- * {@code 1 -
+ * |x| < 0.5*ln2}, computed in the vector, the default arm) and {@link
+ * Cosh#coshFinish} (finished per lane), each
+ * vector form at 256 bits and at the host's preferred species, over an array of 1024 doubles.
+ * The arms differ only in that range, and {@code CoshBenchmark}'s {@code common} data has 0.6% of
+ * its lanes there, which says little: a vector holds a small lane with probability {@code 1 -
  * (1-p)^n}, so at 3.5% 13% of the 4-lane and 25% of the 8-lane vectors do (the share of Varka's
  * baseline benchmark, {@code x} in [-10, 10)), and at 17% (the share of Spark's unit tests,
  * -2.0 to 2.0 in steps of 0.1) 52% and 77% (the survey on issue #32). Those are the shares in
@@ -60,8 +60,7 @@ import org.openjdk.jmh.annotations.Warmup;
  * -XX:CompileCommand=inline,io.github.vecbricks.vfdlibm.*::*}.
  *
  * <p>bench/results/cosh-kinds-xeon8573c-2026-11-21.txt (one run) and
- * cosh-kinds-epyc7763-2026-11-21.txt (a run and a re-run) read these rows, and give no direction
- * at either share; the finish arm is the default by the owner's decision of 23 November.
+ * cosh-kinds-epyc7763-2026-11-21.txt (a run and a re-run) read these rows, and decide no arm.
  */
 @State(Scope.Thread)
 @BenchmarkMode(Mode.AverageTime)

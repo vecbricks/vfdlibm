@@ -27,8 +27,8 @@ import org.openjdk.jmh.annotations.Warmup;
 /**
  * cosh over an array of 1024 doubles: the scalar {@code StrictMath.cosh} loop and {@code
  * Cosh}'s two arms, {@link Cosh#coshSlice} (the small range, {@code |x| < 0.5*ln2}, computed in
- * the vector) and {@link Cosh#coshFinish} (the small range finished per lane, the default
- * arm), each vector form at 256 and 512 bits and at the host's preferred species,
+ * the vector, the default arm) and {@link Cosh#coshFinish} (the small range
+ * finished per lane), each vector form at 256 and 512 bits and at the host's preferred species,
  * and at {@code SPECIES_MAX}. 128 bits is left out: on x86 C2 lowers no mask at two 64-bit lanes,
  * so every 128-bit arm boxes (SKILLS.md). On a host without 512-bit vectors the 512-bit
  * benchmarks run in software and measure nothing useful.
@@ -52,8 +52,7 @@ import org.openjdk.jmh.annotations.Warmup;
  * indices and a loop takes any past eight; the rows read under 0.1 B/op in the laptop reading of
  * bench/results/max-finish-alloc-free-laptop-2026-11-21.txt (allocation only, no timing). No
  * file reads the finish they replaced. bench/results/cosh-xeon8573c-2026-11-21.txt (one run) and
- * cosh-epyc7763-2026-11-21.txt (a run and a re-run) read these rows; the finish arm is
- * the default by the owner's decision of 23 November.
+ * cosh-epyc7763-2026-11-21.txt (a run and a re-run) read these rows; no file decides the arm.
  */
 @State(Scope.Thread)
 @BenchmarkMode(Mode.AverageTime)

@@ -80,19 +80,20 @@ import jdk.incubator.vector.VectorSpecies;
  * exists; after it there are only Vector API operations and the per-lane finish written out in
  * the body.
  *
- * <p>{@link #cosh(DoubleVector, VectorMask)}, which {@code VFdlibm.cosh} calls, is the finish arm,
- * the default by the owner's decision of 23 November 2026 (issue #30): no measured row favours
- * slice, the EPYC 7763's two runs read finish lower on common data near 1.3x, neither host gives a
- * direction at Varka's and Spark's shares of small lanes, and rule 1's tie goes to the finish arm.
- * It is not read as faster. On {@code CoshBenchmark} the EPYC 7763's run and re-run ({@code
- * bench/results/cosh-epyc7763-2026-11-21.txt}) agree on the finish arm lower on common data and
- * give no direction on mixed data; the Xeon 8573C's one run ({@code cosh-xeon8573c-2026-11-21.txt})
- * is near 1.3x or inside it, with no direction. On {@code CoshKindsBench} ({@code
+ * <p>{@link #cosh(DoubleVector, VectorMask)}, which {@code VFdlibm.cosh} calls, is the slice
+ * arm, provisionally: the choice is the design's, not a measurement's. On {@code CoshBenchmark} the
+ * EPYC 7763's run and re-run ({@code bench/results/cosh-epyc7763-2026-11-21.txt}) both read the
+ * finish arm lower outside 1.3x on common data and agree, a direction on common data, and give no
+ * direction on mixed data; the Xeon 8573C has one run ({@code cosh-xeon8573c-2026-11-21.txt}),
+ * whose ratios are near 1.3x or inside it and give no direction. On {@code CoshKindsBench} ({@code
  * cosh-kinds-epyc7763-2026-11-21.txt}, two runs, and {@code cosh-kinds-xeon8573c-2026-11-21.txt},
  * one) the finish arm reads lower by more than 1.3x only on data with no small lane, and at 3.5%
- * and 17% of small lanes the arms read within 1.3x of each other ({@code SKILLS.md}). The slice arm
- * stays, tested, so the choice can be re-measured. The default is chosen in {@code cosh(x, live)};
- * other places say "the default arm".
+ * and 17% of small lanes the arms read within 1.3x of each other, with no direction ({@code
+ * SKILLS.md}). So the one direction is the EPYC's on common data, where 0.6% of the lanes are
+ * small. cosh is the named exception to issue #30's tie rule, since its per-lane set is not rare: a
+ * host run decides its arm, by the owner's call, and the slice default stays provisional until
+ * then. The default is chosen in {@code cosh(x,
+ * live)}; other places say "the default arm".
  */
 final class Cosh {
 
@@ -162,25 +163,25 @@ final class Cosh {
   private Cosh() {}
 
   /**
-   * cosh as {@code VFdlibm.cosh} computes it, the finish arm. {@code live} is null for every
+   * cosh as {@code VFdlibm.cosh} computes it, the slice arm. {@code live} is null for every
    * lane; otherwise only live lanes are computed, inactive lanes return {@code x}'s lane
    * untouched, and an inactive lane never takes the per-lane finish.
    */
   static DoubleVector cosh(DoubleVector x, VectorMask<Double> live) {
-    return cosh(x, live, FINISH);
+    return cosh(x, live, SLICE);
   }
 
   /**
-   * cosh with the small range computed in the vector, the arm that is not the default. {@code
-   * live} is as for {@link #cosh(DoubleVector, VectorMask)}.
+   * cosh with the small range computed in the vector, as {@link #cosh(DoubleVector,
+   * VectorMask)} does.
    */
   static DoubleVector coshSlice(DoubleVector x, VectorMask<Double> live) {
     return cosh(x, live, SLICE);
   }
 
   /**
-   * cosh with the small range finished per lane, as {@link #cosh(DoubleVector, VectorMask)}
-   * does.
+   * cosh with the small range finished per lane. {@code live} is as for {@link
+   * #cosh(DoubleVector, VectorMask)}.
    */
   static DoubleVector coshFinish(DoubleVector x, VectorMask<Double> live) {
     return cosh(x, live, FINISH);
