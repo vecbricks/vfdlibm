@@ -1,7 +1,12 @@
 ---
 layout: post
 title: "StrictMath at SIMD speed: the same bits as Spark's exp, log and pow, {{N}}× faster"
+date: 2026-11-24
+published: false
 ---
+
+<!-- Set `date` to the real date when the post is published, and remove `published: false` at the
+     release; until then Jekyll does not publish the post even if Pages is enabled. -->
 
 <!-- A draft for vfdlibm 0.3.0. Every link to github.com/vecbricks/vfdlibm/blob/v0.3.0/ and
      tree/v0.3.0/ resolves only once the tag v0.3.0 exists, and the link to docs/blog/NanTier.java
@@ -155,14 +160,15 @@ generated from committed benchmark files and checked by CI. Its `exp` figures fo
 {% endraw %}
 
 Each figure is `StrictMath` called once per lane against vfdlibm at the host's preferred species, by
-the minimum time of the run. The hosts are GitHub-hosted virtual machines. The benchmarks run with
-vfdlibm's body inlined into the loop (`-XX:CompileCommand=inline,io.github.vecbricks.vfdlibm.*::*`),
-the project's fixed method: a function body is large, and a call that C2 does not inline passes its
-vectors as objects ([`PLAN.md`](https://github.com/vecbricks/vfdlibm/blob/v0.3.0/PLAN.md), section
-2), as the third surprise below explains. "Common" data is data on which no lane takes a rare path
-of the function, and "mixed" data has rare lanes in it (huge arguments, subnormals, special cases).
-They are timings of a kernel, not of a query: what a Spark query gains depends on how much of its
-time it spends in these functions.
+minimum time; where a file holds a run and its re-run, the lower of the two ratios. The hosts are
+GitHub-hosted virtual machines. The benchmarks run with vfdlibm's body inlined into the loop
+(`-XX:CompileCommand=inline,io.github.vecbricks.vfdlibm.*::*`), the project's fixed method: a
+function body is large, and a call that C2 does not inline passes its vectors as objects
+([`PLAN.md`](https://github.com/vecbricks/vfdlibm/blob/v0.3.0/PLAN.md), section 2), as the third
+surprise below explains. "Common" data is data on which no lane takes a rare path of the function,
+and "mixed" data has rare lanes in it (huge arguments, subnormals, special cases). They are timings
+of a kernel, not of a query: what a Spark query gains depends on how much of its time it spends in
+these functions.
 
 ## Why not `VectorOperators.EXP`?
 
@@ -252,8 +258,10 @@ pins the four pairs, and a planted fault that refreshes the words must fail it.
 
 If the JIT cannot compile a vector body as vectors, it falls back to objects in memory and Java
 loops. That is called boxing, and the results stay right, so every test still passes. Only the
-allocation shows it: `SKILLS.md` records `exp`'s 128-bit rows on x86, where the masks box,
-allocating 1.36 to 1.90 MB per 1024 doubles. So CI runs an allocation check on every benchmark at
+allocation shows it: at 128 bits on x86, where the masks box, `exp`'s finish rows allocate 528,384
+bytes per operation of 1024 doubles on common data and 531,552 on mixed data, in the Xeon 8573C's
+file of 21 November
+([`exp-xeon8573c-2026-11-21.txt`](https://github.com/vecbricks/vfdlibm/blob/v0.3.0/bench/results/exp-xeon8573c-2026-11-21.txt)). So CI runs an allocation check on every benchmark at
 256 bits, the preferred species and `SPECIES_MAX`, and fails a row that reaches one byte per
 operation. 128 bits on x86 is known to box and is left out. `pow` is held to a baseline instead,
 since `StrictMath.pow`, which finishes its rare lanes, allocates itself.
