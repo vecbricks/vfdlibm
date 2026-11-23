@@ -1427,7 +1427,9 @@ class ProofsTest {
    * L18's H20 is needed (a witness, not the hinge test, which is l18LongWordsAreLog1psInts's
    * sampled loop): on line 126's lanes the C's k = 0, f = x and hu = 1 through lines 152-164
    * give StrictMath.log1p's bits (checked on the witnesses, 2^-25 and 2^12 sampled lanes of the
-   * band, so the finish is the C's); a kernel that blends f = x but keeps the computed k and hu
+   * band), as do the C's words of lines 129-150 on L12's rows, which take the short path with
+   * k = 1 and k = -1, and on the lanes of 2^13 sampled inputs that reach those lines, so the finish is the C's
+   * on both of its paths; a kernel that blends f = x but keeps the computed k and hu
    * (l18KernelWords without line 126's blends) has k = 0 and hu = 0 at 2^-25 and at each
    * witness, so it takes the short path, and at each witness, one of each sign, its result is
    * one ulp off StrictMath's. At 2^-25 the rerouted lane happens to give the same bits.
@@ -1446,6 +1448,31 @@ class ProofsTest {
       line126++;
     }
     assertTrue(line126 > 1 << 11, "line-126 lanes " + line126);
+    // The same finish from the C's lines 129-150 words, on L12's rows (the short path with k = 1
+    // and k = -1) and sampled lanes that reach lines 129-150 (mostly the general path).
+    int shortPath = 0;
+    double[] reduced = Inputs.concat(Inputs.uniform(1807L, 1 << 12, -0.99, 8.0),
+        Inputs.sampled(1808L, 1 << 12));
+    double[] rows = new double[Log1pTest.SHORT_PATH_WITNESS_BITS.length];
+    for (int j = 0; j < rows.length; j++) {
+      rows[j] = Double.longBitsToDouble(Log1pTest.SHORT_PATH_WITNESS_BITS[j]);
+    }
+    for (double x : Inputs.concat(rows, reduced)) {
+      int[] c = x > -1.0 ? l18CWords(x) : null;
+      if (c == null || c[2] != 1) {
+        continue;
+      }
+      double u = x >= 0x1p53 ? x : 1.0 + x;
+      // Lines 133-135 (c from line 133's k, before line 146) and 140; then 142-150.
+      int k133 = (int) (bits(u) >>> 52) - 1023;
+      double cc = x >= 0x1p53 ? 0.0 : (k133 > 0 ? 1.0 - (u - x) : x - (u - 1.0)) / u;
+      long hum = bits(u) >>> 32 & 0x000fffffL;
+      long word = hum < Log1p.HU_SQRT2 ? hum | 0x3ff00000L : hum | 0x3fe00000L;
+      double f = Double.longBitsToDouble(word << 32 | (bits(u) & 0xffff_ffffL)) - 1.0;
+      assertEquals(bits(StrictMath.log1p(x)), bits(l18Finish(c[0], f, c[1], cc)), Oracle.hex(x));
+      shortPath += c[1] == 0 ? 1 : 0;
+    }
+    assertTrue(shortPath >= rows.length, "short-path lanes " + shortPath);
     for (double x : Inputs.concat(L18_LINE126_WITNESSES, new double[] {0x1p-25})) {
       String at = Oracle.hex(x);
       assertArrayEquals(new int[] {0, 1, 0}, l18CWords(x), at);
@@ -1468,7 +1495,9 @@ class ProofsTest {
   /**
    * L18's H20 witnesses, their neighbours and 2^-25, each at every position of a block of the
    * widest vector's lanes filled with 0.25 (a line-126 lane), through every arm of Log1p at every
-   * width, unmasked and masked, against StrictMath.log1p by raw bits.
+   * width, unmasked and masked, against StrictMath.log1p by raw bits. The finish arm, the public
+   * one, cannot see a dropped hu = 1 blend: the lane gets hu == 0, joins the rare mask and is
+   * finished by StrictMath.log1p, as for L12's fold; the blended and guarded arms see it.
    */
   @ParameterizedTest
   @EnumSource(VectorWidth.class)

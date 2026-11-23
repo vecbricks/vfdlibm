@@ -1142,14 +1142,17 @@ integer identity, since the mask drops the sign.
 to `Log1p` or to Varka's kernel can make it fail, since it checks the test's own model of a
 kernel that broke H20. Lines 152-164 from the C's `k = 0`, `f = x` and `hu = 1` give
 `StrictMath.log1p`'s bits on the two witnesses, `2^-25` and 2^12 sampled lanes of line 126's
-band, so its finish is the C's; the same model's words without line 126's two blends have `K =
+band, and from the C's words of lines 129-150 on L12's four rows (the short path with `k = 1` and
+`k = -1`) and the lanes of 2^13 sampled inputs that reach those lines, so its finish is the C's on both paths; the same model's words without line 126's two blends have `K =
 0` and `hu = 0` at `2^-25` and at each witness, and with `f = x` the witnesses' results are the
 bits H20 quotes, one ulp off `StrictMath`'s, and `2^-25`'s are equal. **Vector tie, here.**
 `ProofsTest.l18Line126WitnessesThroughEveryArm` runs the witnesses, their neighbours and `2^-25`,
 each at every lane position among line-126 lanes, through every arm of `Log1p` at every width,
-unmasked and masked, against `StrictMath.log1p` by raw bits. With `Log1p`'s `hu = 1` blend on
-line 126's lanes dropped by hand (and reverted), it failed at every width, 48 of its 448 inputs
-differing in the public arm, the first one checked.
+unmasked and masked, against `StrictMath.log1p` by raw bits. The finish arm, which the public one
+is, cannot see a dropped `hu = 1` blend: the lane gets `hu == 0`, joins the rare mask and is
+finished by `StrictMath.log1p`, as for L12's fold; the blended and the guarded arm see it. With
+`Log1p`'s `hu = 1` blend on line 126's lanes dropped by hand (and reverted), the public arm passed
+and the blended arm, the next one checked, failed at every width, 48 of its 448 inputs differing.
 
 `ProofsTest.l18EarlyLanesAreAnsweredEarly` (H19): every lane of a set with `!(x > -1)` (one pattern
 at every exponent field from `0x3ff` up with the sign set, `-1` and its neighbours below, the

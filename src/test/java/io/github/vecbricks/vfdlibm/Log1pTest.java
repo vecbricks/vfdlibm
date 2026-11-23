@@ -25,6 +25,7 @@ import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.function.BiFunction;
@@ -67,7 +68,7 @@ class Log1pTest {
     arms.put("Log1p.log1pBlended", Log1p::log1pBlended);
     arms.put("Log1p.log1pGuarded", Log1p::log1pGuarded);
     arms.put("Log1p.log1pFinish", Log1p::log1pFinish);
-    return arms;
+    return Collections.unmodifiableMap(arms);
   }
 
   /** Every arm, unmasked, at {@code species}, over {@code xs}. */
@@ -438,8 +439,11 @@ class Log1pTest {
     assertTrue(shortPath > 1 << 12, "too few inputs on the hu == 0 path: " + shortPath);
   }
 
-  /** The four inputs of {@link #shortPathIsNotTheGeneralPath}: two of k = 1, two of k = -1. */
-  private static final long[] SHORT_PATH_WITNESS_BITS = {
+  /**
+   * The four inputs of {@link #shortPathIsNotTheGeneralPath}: two of k = 1, two of k = -1.
+   * ProofsTest's L18 witness checks its finish on them too.
+   */
+  static final long[] SHORT_PATH_WITNESS_BITS = {
       0x3feffffd_05263833L, 0x3ff00001_6fcd0162L, 0xbfe00001_2cac6e81L, 0xbfdffffe_92ae1567L};
 
   /**
