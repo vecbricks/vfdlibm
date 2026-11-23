@@ -74,8 +74,10 @@ stops the next port re-trying a settled question.
   lowest iteration is not within 1 B/op of the baseline's lowest, either way, or whose worst
   reaches the baseline's worst plus 1 B/op, printing both. A box adds a whole vector on top; an
   arm that does not finish with the oracle reads under it; both fail, so every arm of such a
-  class must finish with it. The script refuses a `rareOracle` whose source calls anything but
-  `StrictMath`, creates an object or names the Vector API, and fails a run without its row.
+  class must finish with it. The script refuses a `rareOracle` of any other shape than its one
+  template, `ORACLE_SHAPE` in the script (the loop `for (int i = 0; i < N; i++) { if (rare[i]) {
+  out[i] = java.lang.StrictMath.<method>(xs[i]); } }` or with `(xs[i], ys[i])`, then `return
+  out;`, comments and spacing free), and fails a run without its row.
 - **On Arm the check runs the preferred rows, and they pass.** GitHub's Arm runners have 128-bit
   vectors (`MaxVectorSize=16 UseSVE=2` on all 332 Arm jobs of `HARDWARE.md`, "What the pool
   gives"), so the preferred species is 128 bits there and a `*256` row would run in the Java

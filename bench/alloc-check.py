@@ -35,10 +35,11 @@ and its highest under the baseline's highest plus THRESHOLD. Above is a box; bel
 does not finish those lanes with the oracle, or allocates less for it than the loop does, where a
 box could hide in the difference. So every arm of such a class must finish with the oracle on the
 same lanes. The baseline is reported (its lowest and highest iteration) and not bounded itself.
-When the class has one, a run without its row fails, and so does a baseline whose source is not a
-scalar loop: oracle_source_problem() reads the method in src/jmh/java and allows in it no call but
-StrictMath's, no `new`, no lambda or method reference, no name of the Vector API or of a vector
-species, and no StrictMath declared in the file. That the lanes it calls the oracle on are the
+When the class has one, a run without its row fails, and so does a baseline whose source is not
+ORACLE_SHAPE: oracle_source_problem() reads the class in src/jmh/java and requires the method,
+comments and spacing aside, to be that one loop token for token, calling java.lang.StrictMath
+with one argument or two, and the file to declare nothing named java. That the lanes it calls the
+oracle on are the
 lanes the arms finish with it is a contract the script cannot read: the class's Javadoc states it,
 and its review holds it, with the lower side of the comparison above. A class without the method
 is judged by the absolute bound as before.
@@ -232,56 +233,60 @@ def run_regex(include, oracles):
     return f"(?:{include})|^(?:{'|'.join(re.escape(name) for name in oracles)})$"
 
 
-# What oracle_source_problem() reads: Java's comments and literals, blanked first; a call (a name,
-# qualified or after a dot, before a parenthesis); and the words that name the Vector API.
+# The one shape a baseline's source may have (oracle_source_problem()), as Java tokens: the
+# oracle, java.lang.StrictMath fully qualified, called on the rare lanes of one argument (xs) or
+# two (xs, ys), in one loop, and nothing else. The names are fixed: N the lane count, rare the
+# rare lanes, xs and ys the arguments, out the result, i the lane. NAME is the oracle's method.
+ORACLE_SHAPE = ("public double[] rareOracle() {"
+                " for (int i = 0; i < N; i++) {"
+                " if (rare[i]) { out[i] = java.lang.StrictMath.NAME(ARGS); } }"
+                " return out; }")
+ORACLE_ARGS = ("xs[i]", "xs[i], ys[i]")
+# Java's comments, blanked, and its string and character literals, each left as one quote, which
+# no shape holds; then its tokens: a word, or any one other character.
 JAVA_NOISE = re.compile(r"//[^\n]*|/\*.*?\*/|\"(?:\\.|[^\"\\\n])*\"|'(?:\\.|[^'\\\n])*'", re.S)
-JAVA_CALL = re.compile(r"(\.?\s*(?:\w+\s*\.\s*)*\w+)\s*\(")
-JAVA_VECTOR = re.compile(r"\w*(?:Vector|Species|SPECIES|vfdlibm)\w*")
-ORACLE_CALL = re.compile(r"StrictMath\.\w+")
-LOOPS = ("for", "while")
+JAVA_TOKEN = re.compile(r"\w+|[^\s\w]")
+
+
+def java_tokens(text):
+    blanked = JAVA_NOISE.sub(lambda m: " " if m.group(0)[0] == "/" else ' " ', text)
+    return JAVA_TOKEN.findall(blanked)
+
+
+def oracle_shapes():
+    """ORACLE_SHAPE's token lists, one per ORACLE_ARGS, NAME standing for any method name."""
+    return [java_tokens(ORACLE_SHAPE.replace("ARGS", args)) for args in ORACLE_ARGS]
 
 
 def oracle_source_problem(name, root=SOURCES):
-    """Why the baseline method name is not a scalar loop that calls StrictMath, or None.
+    """Why the baseline method name is not of ORACLE_SHAPE, or None.
 
-    It reads the class's source under root and fails closed: no file, no method, a call to
-    anything but StrictMath (a chained or a qualified call, a constructor, a helper of the class),
-    a lambda or a method reference, or a word naming the Vector API or a species, are each a
-    problem. What it cannot read is on which lanes the method calls the oracle."""
+    It reads the class's source under root and fails closed: no file, a name ORACLE_METHOD
+    other than once, a declaration and body that are not ORACLE_SHAPE token for token (comments
+    and spacing aside) for one of ORACLE_ARGS, or a `java` in the file that is no package name
+    (a field or a class named so would obscure java.lang.StrictMath) are each a problem. What
+    it cannot read is that rare marks the lanes the arms finish with the oracle."""
     path = os.path.join(root, *class_of(name).split(".")) + ".java"
+    expected = (f"{ORACLE_METHOD}() must read, comments and spacing aside: "
+                + ORACLE_SHAPE.replace("NAME", "<method>").replace("ARGS", "xs[i] or xs[i], ys[i]"))
     try:
         with open(path, encoding="utf-8") as f:
-            text = JAVA_NOISE.sub(" ", f.read())
+            tokens = java_tokens(f.read())
     except OSError:
         return f"no source {path} to read {ORACLE_METHOD}() from"
-    start = re.search(r"\b%s\s*\(\s*\)\s*\{" % ORACLE_METHOD, text)
-    if not start:
-        return f"{path} has no method {ORACLE_METHOD}()"
-    depth, end = 1, start.end()
-    while depth and end < len(text):
-        depth += {"{": 1, "}": -1}.get(text[end], 0)
-        end += 1
-    if depth:
-        return f"{ORACLE_METHOD}() in {path} does not close"
-    shadow = re.search(r"\b(?:class|interface|enum|record)\s+StrictMath\b", text)
-    if shadow:
-        return f"{path} declares a StrictMath of its own"
-    body = text[start.end():end - 1]
-    if re.search(r"\bnew\b", body):
-        return f"{ORACLE_METHOD}() creates an object or an array"
-    for word in JAVA_VECTOR.findall(body):
-        return f"{ORACLE_METHOD}() names {word}, of the Vector API"
-    if "->" in body or "::" in body:
-        return f"{ORACLE_METHOD}() holds a lambda or a method reference"
-    calls = ["".join(m.group(1).split()) for m in JAVA_CALL.finditer(body)]
-    for call in calls:
-        if call not in LOOPS + ("if", "switch") and not ORACLE_CALL.fullmatch(call):
-            return f"{ORACLE_METHOD}() calls {call}, and a baseline calls StrictMath only"
-    if not any(call in LOOPS for call in calls):
-        return f"{ORACLE_METHOD}() has no loop"
-    if not any(ORACLE_CALL.fullmatch(call) for call in calls):
-        return f"{ORACLE_METHOD}() calls no StrictMath method"
-    return None
+    places = [k for k, token in enumerate(tokens) if token == ORACLE_METHOD]
+    if len(places) != 1:
+        return f"{path} names {ORACLE_METHOD} {len(places)} times, not once; {expected}"
+    if any(token == "java" and tokens[k + 1:k + 2] != ["."] for k, token in enumerate(tokens)):
+        return f"{path} declares a java of its own, which obscures java.lang.StrictMath"
+    for shape in oracle_shapes():
+        start = places[0] - shape.index(ORACLE_METHOD)
+        got = tokens[max(start, 0):start + len(shape)]
+        if start >= 0 and len(got) == len(shape) and all(
+                g == s or (s == "NAME" and re.fullmatch(r"[a-z]\w*", g))
+                for g, s in zip(got, shape)):
+            return None
+    return f"not of the one shape a baseline may have; {expected}"
 
 
 def row_key(row):
@@ -291,8 +296,9 @@ def row_key(row):
 
 
 def judge(rows, threshold, root=SOURCES):
-    """The verdict on each row: (row, ok, line), line being what check() prints after the
-    verdict, and the row's bound in B/op (None for a baseline, which is not bounded)."""
+    """The verdict on each row: (row, ok, line, bound, under), line being what check() prints
+    after the verdict, bound the row's upper bound in B/op (None for a baseline, which is not
+    bounded), and under, for an arm that failed for reading under its baseline, by how much."""
     baselines, problems = {}, {}
     for row in rows:
         name = row["benchmark"]
@@ -309,7 +315,7 @@ def judge(rows, threshold, root=SOURCES):
         iterations = alloc_iterations(row)
         if not iterations:
             verdicts.append((row, False, f"{label}: no gc.alloc.rate.norm (was -prof gc on?)",
-                             None))
+                             None, None))
             continue
         worst = max(iterations)
         counted_over = f"over {len(iterations)} iterations"
@@ -317,16 +323,16 @@ def judge(rows, threshold, root=SOURCES):
             problem = problems[name]
             if problem:
                 verdicts.append((row, False, f"{label}: not a scalar oracle baseline: {problem}",
-                                 None))
+                                 None, None))
             else:
                 verdicts.append((row, True, f"{label}: {min(iterations):.3f} to {worst:.3f} B/op"
                                  f" {counted_over}, the oracle's own allocation (a baseline,"
-                                 " not bounded)", None))
+                                 " not bounded)", None, None))
             continue
         baseline = baselines.get(row_key(row))
         if baseline is None:
             verdicts.append((row, worst < threshold, f"{label}: max {worst:.3f} B/op"
-                             f" {counted_over}", threshold))
+                             f" {counted_over}", threshold, None))
             continue
         # Like with like: the arm's settled iteration against the baseline's, within the
         # threshold either way, and its worst against the baseline's worst. Above, a box; below,
@@ -336,17 +342,21 @@ def judge(rows, threshold, root=SOURCES):
         lowest, highest = min(alloc_iterations(baseline)), max(alloc_iterations(baseline))
         least = min(iterations)
         ok = abs(least - lowest) < threshold and worst < highest + threshold
+        under = lowest - least if least <= lowest - threshold else None
+        reason = (f"; under the baseline by {under:.3f} B/op: the arm does not finish those lanes"
+                  " with the oracle" if under is not None else "")
         verdicts.append((row, ok, f"{label}: {least:.3f} to {worst:.3f} B/op {counted_over},"
                          f" against {ORACLE_METHOD}'s {lowest:.3f} to {highest:.3f} within"
-                         f" {threshold}", lowest + threshold))
+                         f" {threshold}{reason}", lowest + threshold, under))
     return verdicts
 
 
 def failing(path, threshold, root=SOURCES):
-    """The arm rows at path that check() fails for their allocation, each with its bound."""
+    """The arm rows at path that check() fails for their allocation, each with its bound and,
+    for one under its baseline, by how much (judge())."""
     with open(path, encoding="utf-8") as f:
         rows = json.load(f)
-    return [(row, bound) for row, ok, _, bound in judge(rows, threshold, root)
+    return [(row, bound, under) for row, ok, _, bound, under in judge(rows, threshold, root)
             if not ok and bound is not None]
 
 
@@ -390,15 +400,20 @@ def why(mvn, path, threshold):
     if len(rows) > WHY_ROWS:
         # One row of each benchmark method first, its last (mixed data, which runs the rare
         # paths too), so that eight slots reach as many bodies as they can.
-        last = {row["benchmark"]: (row, bound) for row, bound in rows}
+        last = {failed[0]["benchmark"]: failed for failed in rows}
         first = list(last.values())
         rows = first + [pair for pair in rows if all(pair[0] is not chosen[0]
                                                      for chosen in first)]
         print(f"{len(rows)} rows failed; asking about {WHY_ROWS} of them, one of each"
               " benchmark method first.")
-    for row, bound in rows[:WHY_ROWS]:
+    for row, bound, under in rows[:WHY_ROWS]:
         name, inputs = row["benchmark"], row.get("params", {}).get("inputs")
         print(f"\n== {name} [inputs={inputs}]", flush=True)
+        if under is not None:
+            # No box to explain: C2's account would not say why the arm allocates too little.
+            print(f"Under the baseline by {under:.3f} B/op: the arm does not finish those lanes"
+                  f" with the oracle as {ORACLE_METHOD} does. Not rerun.")
+            continue
         param = f" -p inputs={inputs}" if inputs else ""
         jvm_args = row.get("jvmArgs", [])
         small_code = tiered_inline_small_code(row.get("jvm", "java"), jvm_args)
@@ -477,7 +492,7 @@ def check(path, threshold, expected=None, inputs=INPUTS, root=SOURCES):
                 else:
                     print(f"FAIL  {name} [inputs={value}]: no row in {path}")
                 ok = False
-    for row, row_ok, line, bound in judge(rows, threshold, root):
+    for row, row_ok, line, bound, _ in judge(rows, threshold, root):
         verdict = "FAIL" if not row_ok else ("ok  " if bound is not None else "base")
         print(f"{verdict}  {line}")
         ok = ok and row_ok
@@ -493,14 +508,14 @@ def selftest():
     pkg = "io.github.vecbricks.vfdlibm"
     arm, oracle, plain = f"{pkg}.PowBenchmark.finish256", f"{pkg}.PowBenchmark.rareOracle", \
         f"{pkg}.ExpBenchmark.finish256"
-    # The body the pow port's baseline is to have, verbatim.
+    # The pow port's baseline, of ORACLE_SHAPE with two arguments.
     scalar = """
   /** The oracle on the rare lanes alone, which the arms finish with it. */
   @Benchmark
   public double[] rareOracle() {
     for (int i = 0; i < N; i++) {
       if (rare[i]) {
-        out[i] = StrictMath.pow(xs[i], ys[i]);
+        out[i] = java.lang.StrictMath.pow(xs[i], ys[i]); // the oracle
       }
     }
     return out;
@@ -520,7 +535,8 @@ def selftest():
                 os.remove(source)
             else:
                 with open(source, "w", encoding="utf-8") as f:
-                    f.write("class PowBenchmark {\n  // rareOracle() { DoubleVector }\n"
+                    f.write("import java.util.SplittableRandom;\n"
+                            "class PowBenchmark {\n  // rareOracle() { DoubleVector }\n"
                             f"{body}\n  String s = \"}}\";\n}}\n")
             path = os.path.join(scratch, "alloc-check.json")
             with open(path, "w", encoding="utf-8") as f:
@@ -547,7 +563,8 @@ def selftest():
         # Under it by the bound, it fails too: an arm that does not finish those lanes with
         # the oracle, or that allocates less for it than the loop, could hide a box there.
         ok, out = verdict([row(arm, [64.0, 64.0]), row(oracle, [1824.0, 1824.0])])
-        assert not ok and "FAIL  PowBenchmark.finish256" in out, out
+        assert not ok and "FAIL  PowBenchmark.finish256" in out \
+            and "under the baseline by 1760.000 B/op: the arm does not finish" in out, out
         # The baseline missing from a run that lists it fails loudly, and the arms fall back
         # to the absolute bound.
         ok, out = verdict([row(arm, [1824.0])], expected=[arm, oracle])
@@ -564,30 +581,40 @@ def selftest():
         assert not ok, out
         ok, out = verdict([row(arm, [1824.0]), row(oracle, [1824.0], jvm_args=())])
         assert not ok, out
-        # A baseline that is no scalar loop of StrictMath is refused, and covers nothing.
+        # A baseline of any other shape is refused, shows the shape, and covers nothing.
+        call = "java.lang.StrictMath.pow(xs[i], ys[i])"
         for body, why_not in (
-                (scalar.replace("StrictMath.pow(xs[i], ys[i])",
-                                "Pow.pow(DoubleVector.fromArray(SP, xs, i),"
-                                " DoubleVector.fromArray(SP, ys, i), null).lane(0)"), "Vector"),
-                (scalar.replace("StrictMath.pow", "pow"), "calls pow"),
-                (scalar.replace("StrictMath.pow(xs[i], ys[i])", "f.applyAsDouble(xs[i])"),
-                 "calls f.applyAsDouble"),
-                (scalar.replace("out[i] = StrictMath.pow(xs[i], ys[i])",
-                                "StrictMath.pow(xs[i], ys[i]); g(x -> x)"), "lambda"),
-                (scalar.replace("for (int i = 0; i < N; i++)", "{"), "no loop"),
-                (scalar.replace("return out;", "return new double[N];"), "creates"),
-                (scalar + "\n  static class StrictMath {}\n", "StrictMath of its own"),
-                (scalar.replace("rareOracle", "rareOracles"), "no method")):
+                (scalar.replace(call, "Pow.pow(DoubleVector.fromArray(SP, xs, i),"
+                                " DoubleVector.fromArray(SP, ys, i), null).lane(0)"), "shape"),
+                (scalar.replace(call, "StrictMath.pow(xs[i], ys[i])"), "shape"),
+                (scalar.replace(call, "java.lang.StrictMath.pow(xs[i] + 0.5, ys[i])"), "shape"),
+                (scalar.replace(call, "java.lang.StrictMath.pow(ys[i], xs[i])"), "shape"),
+                (scalar.replace("out[i] =", "Object o = out[i] ="), "shape"),
+                (scalar.replace("return out;", "out[0] = 0; return out;"), "shape"),
+                (scalar.replace("for (int i = 0; i < N; i++)", "while (true)"), "shape"),
+                (scalar.replace("i < N", "i < xs.length"), "shape"),
+                (scalar.replace("return out;", "return new double[N];"), "shape"),
+                (scalar.replace("double[] rareOracle", "Object rareOracle"), "shape"),
+                (scalar.replace("rareOracle", "rareOracles"), "0 times"),
+                (scalar + "\n  // rareOracle\n  String t = rareOracle().toString();\n", "2 times"),
+                (scalar + "\n  static double[] java;\n", "java of its own"),
+                (scalar + "\n  static class java {}\n", "java of its own")):
             ok, out = verdict([row(arm, [1824.0]), row(oracle, [1824.0])], body)
             assert not ok and why_not in out and "not a scalar oracle baseline" in out, (why_not,
                                                                                          out)
+            assert why_not != "shape" or "out[i] = java.lang.StrictMath.<method>(xs[i] or" in out
             assert "FAIL  PowBenchmark.finish256" in out, out
         ok, out = verdict([row(oracle, [1824.0])], None)
         assert not ok and "no source" in out, out
-        # The comment and the string literal in the source above are not read as code, and the
+        # One argument is the other shape; spacing, line breaks and comments are free, and the
         # method ends at its own brace: an arm after it is not read as part of it.
-        ok, out = verdict([row(oracle, [1824.0])], scalar + "\n  public double[] finish256() {"
-                          "\n    return Pow.pow(DoubleVector.zero(SP), null).toArray();\n  }\n")
+        ok, out = verdict([row(oracle, [1824.0])], scalar.replace(call, "java.lang.StrictMath"
+                                                                  ".sinh(xs[i])"))
+        assert ok, out
+        one_line = " ".join(scalar.replace("// the oracle", "").split())
+        ok, out = verdict([row(oracle, [1824.0])], one_line.replace(
+            "i++", "i /* lane */ ++") + "\n  public double[] finish256() {"
+            "\n    return Pow.pow(DoubleVector.zero(SP), null).toArray();\n  }\n")
         assert ok, out
 
         # --why reruns the arms over their bound, each with it, and never a baseline or an arm
@@ -597,9 +624,9 @@ def selftest():
             json.dump([row(arm, [1824.0]), row(oracle, [1824.0]), row(plain, [64.0]),
                        row(arm, [1900.0], inputs="common"), row(oracle, [0.02], inputs="common")],
                       f)
-        rerun = [(r["benchmark"], r["params"]["inputs"], round(bound, 3))
-                 for r, bound in failing(path, THRESHOLD, scratch)]
-        assert rerun == [(plain, "mixed", 1.0), (arm, "common", 1.02)], rerun
+        rerun = [(r["benchmark"], r["params"]["inputs"], round(bound, 3), under)
+                 for r, bound, under in failing(path, THRESHOLD, scratch)]
+        assert rerun == [(plain, "mixed", 1.0, None), (arm, "common", 1.02, None)], rerun
 
     # The listing: a class's baseline joins the rows include names, under any include, and
     # only for the classes that have one of them; the run's regex reaches exactly those.

@@ -94,8 +94,10 @@ vfdlibm ports fdlibm's double functions to the Java Vector API, each lane bit-id
   A port whose oracle allocates on the lanes it finishes (the reason is `pow`) adds an oracle
   baseline, a method `rareOracle` that calls `StrictMath` in a scalar loop on exactly those
   lanes and does nothing else; the check runs it in the same run and holds each arm of the class
-  within 1 B/op of the baseline's own allocation, refuses a baseline whose source calls anything
-  but `StrictMath`, and fails if its row is missing (`--selftest` shows each).
+  within 1 B/op of the baseline's own allocation, refuses a baseline that is not, comments and
+  spacing aside, exactly `public double[] rareOracle() { for (int i = 0; i < N; i++) { if
+  (rare[i]) { out[i] = java.lang.StrictMath.<method>(xs[i]); } } return out; }` (or with
+  `(xs[i], ys[i])`), and fails if its row is missing (`--selftest` shows each).
   A class that measures a port's bodies on other data and is not the port's benchmark is named
   otherwise (`ExpKindsBench`), so CI leaves it out; check it by name and on its own inputs
   before reading its times (`--include` with `--inputs`; the command is in its Javadoc). Its
