@@ -7,8 +7,9 @@ same double for every input (`PLAN.md` section 6). Each lemma names its hypothes
 and each hinge condition, with the range where it holds and why the lanes are in it), the IEEE 754
 property it rests on, the proof, and the test that checks its hinges; that test fails if a hinge
 were false. The code carries a pointer to the lemma. A port with no departure of its own (log10,
-log1p) has a section saying so; log10's names the lemmas it rests on through `log`, log1p's holds a
-counter-example, a statement and not a proof of a fold.
+log1p) has a section saying so; log10's names the lemmas it rests on through `log` and holds
+L17, on Varka's form of it, and log1p's holds a counter-example, a statement and not a proof of a
+fold.
 
 The tests are of two kinds, and each lemma names both. Hinge tests in `ProofsTest` mostly check a
 lemma's hypotheses on scalar Java, where each operation is the same single rounding as a vector
@@ -884,6 +885,85 @@ exponent field are as above (the expression of line 86, read off the code), that
 of the new high word, `I2L` then a shift left by 32, is the C's `__HI(x) =` because that word is
 never negative (so sign extension and zero extension agree, as in L8's proof), the
 commutativity of the product, and that the port computes these steps, the code's text.
+
+### L17. log10's words in long lanes, as Varka emits them
+
+Varka's emitted kernel (`VarkaMathPort.log10`, in vecbricks/varka, not in this repository)
+computes `Log10.log10Blended`'s doubles in the same order, with the C's `int` words in long
+lanes, as `Log` holds its own (L8), so the kernel needs no `I2L` or `L2I`; its `log` of the
+rescaled lane is `Log.logCore`'s nodes. `Log10` here keeps those words in `IntVector` lanes and
+takes `y` by an exact `I2D`, so this lemma is about Varka's kernel only, and the section above,
+that `Log10` needs no lemma of its own, still holds. The subnormal mask, `0 < x < MIN_NORMAL`,
+is the same IEEE compare in both.
+
+**Statement.** Let `b` be a lane's bits after the subnormal scaling (`xs` of line 80) and `s` 1
+on a scaled lane, 0 otherwise. Write `hx = (int) (b >> 32)` for the C's signed high word, `k =
+(hx >> 20) - 1023 - 54s` and `i = ((unsigned)k&0x80000000)>>31` for the C's, and `HX = b >>> 32`
+for the long one.
+- (a) If `b`'s sign bit is clear, the long `K = (HX >>> 20) - 1023 - 54s` is `k` widened, the
+  long `I = K >>> 63` is `i` widened, and the long `(HX & 0xfffff) | ((0x3ff - I) << 20)` is the
+  C's new `hx` of line 86 widened, a value in `[0, 2^31)`, so the long shift by 32 that writes
+  it back is the C's `__HI(x) = hx`.
+- (b) For every `K` with `-1077 <= K <= 1024` and `I = K >>> 63`, `fromBits(K + I +
+  0x43380000_00000000) - 0x1.8p52` is the double `K + I`, the C's `(double)(k+i)` (L7).
+- (c) For every `b`, either sign, the signed long compares `b > 0x7ff00000_00000000 - 1` and `b <
+  0` are the C's `hx >= 0x7ff00000` and `hx < 0` (lines 83 and 79).
+
+**Hypotheses.**
+- (H18) The sign bit of `b` is clear on every lane whose result is kept. A lane with it set is
+  `x < 0` or `-0`, which the C answers at line 79 with `(x-x)/zero` (a NaN) or at line 78 with
+  `-two54/zero` (`-inf`), and the kernel blends those two answers over every earlier result.
+  It is needed: for a negative `b`, `HX >>> 20` holds the sign bit and `K` is not the C's `k`.
+
+**Proof.**
+1. (a) With the sign clear, `b >> 32 = b >>> 32 = HX` lies in `[0, 2^31)`, so `HX` is `hx`
+   widened and `HX >>> 20` is the C's `hx >> 20` (JLS 15.19: on a non-negative value the two
+   shifts agree). `HX >>> 20` lies in `[0, 0x7ff]`, so `K` lies in `[-1077, 1024]` and is `k`
+   widened. A long's bit 63 is its sign, so `K >>> 63` is 1 exactly when `K < 0`, and so is the
+   C's `i` for the int `k`. `HX & 0xfffff` keeps the bits that `hx & 0x000fffff` keeps, and
+   `0x3ff - I` is `0x3ff` or `0x3fe`, whose shift by 20 is below `2^30`: the OR lies in `[0,
+   2^31)`, the int has no overflow, and the long is the int widened. A non-negative word below
+   `2^31` shifted left by 32 is the C's high word with zero low bits, which the kernel ORs over
+   `b`'s low word, as L8's proof does.
+2. (b) `K + I` lies in `[-1076, 1024]`, inside L7's `[-2^51, 2^51)`, so the add of the bits of
+   `0x1.8p52` and the subtract of `0x1.8p52` are exact (L7), and give the same double as the
+   exact `I2D` of the int `k + i`.
+3. (c) `b = hx * 2^32 + lo` with `0 <= lo < 2^32` as signed longs, so for any int `h`, `hx >= h`
+   iff `b >= h * 2^32`, which for `h = 0x7ff00000` is `b > 0x7ff00000_00000000 - 1`; and `hx < 0`
+   iff `b < 0`. This is L9's argument on the raw bits.
+
+No IEEE property is used but L7's exact conversion. With H18, (a) and (b) give the C's words and
+`y` on every kept lane; (c) holds on every lane, so the rare lanes are the C's.
+
+**Hinge tests (scalar).** `ProofsTest.l17LongWordsAreLog10sInts` (a, b): a loop over every
+exponent field from 0 to `0x7ff`, scaled and not, which by step 1 is every value `K` takes (the
+words depend on `b` only through `HX >>> 20` and `HX & 0xfffff`), checks `K`, `I` and `y`
+against the C's int `k`, `i` and `I2D`, and `K` in `[-1077, 1024]`; it also checks, from the
+smallest and the largest subnormal, that a scaled lane's field is 3 to 54, so a kept lane's `K`
+is in `[-1074, 1024]`. A second loop runs every significand word from 0 to `0xfffff`, for both
+`I` and the exponent fields 0, 1, `0x3ff`, `0x7fe` and `0x7ff`, the long new high word against
+the C's and below `2^31`. `ProofsTest.l17RareComparesAreTheCs` (c): the two long compares against
+the C's on every high word within `2^16` of 0, `0x7ff00000`, `0x7fffffff` and `0x80000000` (where
+an answer changes or the int wraps), with five low words each, and on 2^20 sampled patterns.
+`ProofsTest.l17NegativeLanesAreAnsweredEarly` (H18): on every sign-set pattern of a set of
+specials, sampled patterns and every exponent field, `StrictMath.log10` is a NaN, or `-inf` for
+`-0`, so it fails if the C kept a negative lane; and for some of those patterns `K` is not the
+C's `k`, which shows H18 is needed. **Vector tie, here.**
+`ProofsTest.l17NegativeLanesAreBlendedOver` checks H18 on `Log10`'s own masks, whose blends
+Varka's kernel emits in the same order: `Log10.log10Blended`, at every width, against
+`StrictMath.log10` by raw bits on those sign-set patterns, each beside its positive twin so that
+a vector mixes rare and kept lanes; a rare blend dropped or placed before the general form fails
+there. **Vector tie, in Varka.** Where L17's own claim, the kernel, is checked: Varka's
+`VarkaMathPortSuite` (vecbricks/varka, the pull request that adds `VarkaMathPort.log10`, branch
+`varka-345d-log-r`) runs the emitted `VarkaMathPort.log10` against `VFdlibm.log10` and
+`Log10.log10Blended` by raw bits, on 2^24 sampled inputs and the fixed vectors of e_log.c's and
+e_log10.c's words. That Varka's kernel uses these long words is not checked here.
+
+**Encoding.** None, no machine-checked file: (a) is an integer identity checked by the Java
+loops above over every exponent field and every significand word; (c) is step 3's argument,
+checked at its boundaries and on samples, not over every word; and (b) is L7's file,
+`proofs/log_exact_dk.smt2`, over a range that holds `[-1076, 1024]`. Informal: that Varka's
+kernel is `log10Blended`'s operations with these long words, which only Varka's vector tie checks.
 
 ## log1p (`Log1p.java`, from `s_log1p.c`)
 

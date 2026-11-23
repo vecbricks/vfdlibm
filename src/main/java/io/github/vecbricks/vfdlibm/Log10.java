@@ -48,7 +48,8 @@ import jdk.incubator.vector.VectorSpecies;
  * <p>The C's {@code int} words stay in int lanes, as in {@code Log}: {@code hx}, {@code k} and
  * {@code i} are an {@link IntVector} with the double vector's lane count at half its bits, every
  * test on them is the C's signed {@code int} compare, and {@code y = (double)(k+i)} is an exact
- * {@code I2D}, which every AVX2 host lowers.
+ * {@code I2D}, which every AVX2 host lowers. Varka's emitted kernel holds these words in long
+ * lanes instead (PROOFS.md, L17, checked in Varka's {@code VarkaMathPortSuite}).
  *
  * <p>C2 stops inlining once the compiled graph passes {@code NodeCountInliningCutoff}, and a
  * refused call passes its vectors boxed ({@code SKILLS.md}, "What the log10 port taught"). So
