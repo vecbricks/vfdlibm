@@ -268,6 +268,13 @@ agree.
 - **At 128 bits on x86 the call rule is not asserted.** Every arm calls the Vector API's Java
   fallback, 60 to 444 calls per method (the census below), as "At two 64-bit lanes x86 C2 lowers
   no mask" predicts. Width, FMA and the rest are asserted there.
+- **CI splits the widths between its x86 rows.** `VFDLIBM_ASM_WIDTHS` (ci.yml's `asm-widths`)
+  names the widths a run checks: `256,512` on the default and the AVX2 rows, `128` on the
+  `MaxVectorSize=16` row, where the 128-bit cases, about three quarters of the check's time, run
+  once. A width left out skips with the row that checks it; `AsmTest.ciRowsCoverEveryWidth` fails
+  if the rows together leave one out. Unset, as here, every width runs. So 128 bits is read on one
+  flag set in CI, `MaxVectorSize=16` on whatever runner is drawn; the census above has it under
+  all three.
 - **The preferred species is not run again.** It is the same species object as one of the fixed
   widths, and exp's census read the same at both; a second run would add a third to a row's time.
 - **Keep the probe's own methods out of line.** The forced `inline,io.github.vecbricks.vfdlibm.*::*`

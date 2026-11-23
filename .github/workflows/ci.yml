@@ -34,7 +34,11 @@ jobs:
             jvm-args: ""
             # The one row that also runs the jar check's self-test.
             jar-self-test: true
+            # The assembly check's widths are split between the x86 rows (AsmTest checks the
+            # split leaves none out): 256 and 512 here and on the AVX2 row, 128 on the 128-bit
+            # row, where the 128-bit cases, three quarters of the check's time, run once.
             asm: true
+            asm-widths: "256,512"
           # x86 compiled as an AVX2 host, the headline EPYC 7763, whatever runner is drawn:
           # UseAVX=2 caps vectors at 256 bits and takes AVX-512's instructions away, so the
           # preferred species is 256 bits on every draw, and an operation C2 lowers only with
@@ -43,12 +47,14 @@ jobs:
             os: ubuntu-latest
             jvm-args: -XX:UseAVX=2 -XX:MaxVectorSize=32
             asm: true
+            asm-widths: "256,512"
           # x86 with vectors capped at 16 bytes: every case runs at 128 bits (the preferred
           # species is 128 bits too), and the 256- and 512-bit cases are skipped.
           - name: x86 128 bits
             os: ubuntu-latest
             jvm-args: -XX:MaxVectorSize=16
             asm: true
+            asm-widths: "128"
           # Arm: GitHub's Arm runners have 128-bit vectors, so the 128-bit and preferred cases
           # run there and the 256- and 512-bit cases are skipped.
           - name: Arm 128 bits
@@ -83,6 +89,7 @@ jobs:
       - name: Build and test
         env:
           VFDLIBM_ASM_REQUIRED: ${{ matrix.asm }}
+          VFDLIBM_ASM_WIDTHS: ${{ matrix.asm-widths }}
         run: >-
           mvn -B --no-transfer-progress verify
           "-Dvfdlibm.test.jvmArgs=${{ matrix.jvm-args }}"

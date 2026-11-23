@@ -141,6 +141,43 @@ final class AsmCheck {
     return null;
   }
 
+  /**
+   * The environment variable that names the widths, in bits, this run checks ({@code 128}, or
+   * {@code 256,512}); unset or empty, every width. CI's x86 rows split the widths between them
+   * ({@code asm-widths} in ci.yml), and {@code AsmTest} checks that together they cover all.
+   */
+  static final String WIDTHS_ENV = "VFDLIBM_ASM_WIDTHS";
+  /** The widths the check knows. */
+  static final List<Integer> ALL_WIDTHS = List.of(128, 256, 512);
+
+  /** The widths {@link #WIDTHS_ENV} names. */
+  static List<Integer> widths() {
+    return widths(System.getenv(WIDTHS_ENV));
+  }
+
+  /** {@link #widths()} for the value {@code env}: every width when null or blank. */
+  static List<Integer> widths(String env) {
+    if (env == null || env.isBlank()) {
+      return ALL_WIDTHS;
+    }
+    List<Integer> widths = new ArrayList<>();
+    for (String part : env.split(",")) {
+      int bits;
+      try {
+        bits = Integer.parseInt(part.trim());
+      } catch (NumberFormatException e) {
+        throw new IllegalArgumentException(WIDTHS_ENV + "='" + env + "': '" + part.trim()
+            + "' is not a width in bits");
+      }
+      if (!ALL_WIDTHS.contains(bits) || widths.contains(bits)) {
+        throw new IllegalArgumentException(WIDTHS_ENV + "='" + env + "': " + bits
+            + " is not one of " + ALL_WIDTHS + " or is named twice");
+      }
+      widths.add(bits);
+    }
+    return List.copyOf(widths);
+  }
+
   /** Whether {@link #REQUIRED_ENV} turns a skip into a failure. */
   static boolean required() {
     return "true".equals(System.getenv(REQUIRED_ENV));

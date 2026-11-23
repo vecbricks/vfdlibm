@@ -47,7 +47,9 @@ import org.junit.jupiter.params.provider.MethodSource;
  * <p>Skipped, with the reason, on a host that is not Linux on x86-64, when no hsdis is found
  * ({@link AsmCheck#findHsdis}), when the JDK has one of its own that HotSpot would load first, and
  * when one is found but HotSpot printed no disassembly with it; with {@code
- * VFDLIBM_ASM_REQUIRED=true}, as CI's x86 rows set, the last three fail instead.
+ * VFDLIBM_ASM_REQUIRED=true}, as CI's x86 rows set, the last three fail instead. A width that
+ * {@code VFDLIBM_ASM_WIDTHS} leaves out is skipped with the CI row that checks it; {@link
+ * #ciRowsCoverEveryWidth} fails if ci.yml's rows leave a width out.
  */
 class AsmTest {
 
@@ -101,6 +103,103 @@ class AsmTest {
         .toList(), listed.stream().sorted().toList(), "the probe's arms");
   }
 
+  /** ci.yml's build workflow, read from the project's directory, where surefire runs. */
+  static final java.nio.file.Path CI = java.nio.file.Path.of(".github", "workflows", "ci.yml");
+
+  /**
+   * The assembly check's rows of ci.yml's build matrix ({@code asm: true}), each name with the
+   * widths its {@code asm-widths} names. Read line by line: an entry starts at {@code - name:}
+   * and its keys follow, one per line, as ci.yml writes them.
+   */
+  static Map<String, List<Integer>> ciAsmRows(List<String> lines) {
+    Map<String, List<Integer>> rows = new LinkedHashMap<>();
+    String name = null;
+    boolean asm = false;
+    String widths = null;
+    for (String line : lines) {
+      String t = line.trim();
+      if (t.startsWith("- name:") || t.equals("steps:")) {
+        if (name != null && asm) {
+          rows.put(name, widths == null ? List.of() : AsmCheck.widths(widths));
+        }
+        name = t.startsWith("- name:") ? unquote(t.substring("- name:".length())) : null;
+        asm = false;
+        widths = null;
+        if (t.equals("steps:")) {
+          break;
+        }
+      } else if (name != null && t.equals("asm: true")) {
+        asm = true;
+      } else if (name != null && t.startsWith("asm-widths:")) {
+        widths = unquote(t.substring("asm-widths:".length()));
+      }
+    }
+    if (name != null && asm) {
+      rows.put(name, widths == null ? List.of() : AsmCheck.widths(widths));
+    }
+    return rows;
+  }
+
+  private static String unquote(String value) {
+    String v = value.trim();
+    return v.length() >= 2 && v.startsWith("\"") && v.endsWith("\"")
+        ? v.substring(1, v.length() - 1) : v;
+  }
+
+  /** The names of ci.yml's rows that check {@code bits}, for a skip's message. */
+  static String rowsCovering(int bits) {
+    try {
+      List<String> names = ciAsmRows(java.nio.file.Files.readAllLines(CI)).entrySet().stream()
+          .filter(e -> e.getValue().contains(bits)).map(e -> "'" + e.getKey() + "'").toList();
+      return names.isEmpty() ? "(none: ciRowsCoverEveryWidth fails)" : String.join(", ", names);
+    } catch (IOException | RuntimeException e) {
+      return "(" + CI + " not read: " + e + ")";
+    }
+  }
+
+  /**
+   * The split of the widths between ci.yml's rows leaves none out: every row that runs the check
+   * names its widths, and together they are 128, 256 and 512 bits.
+   */
+  @Test
+  void ciRowsCoverEveryWidth() throws IOException {
+    Map<String, List<Integer>> rows = ciAsmRows(java.nio.file.Files.readAllLines(CI));
+    assertTrue(rows.size() >= 2, "ci.yml's assembly check rows: " + rows);
+    java.util.Set<Integer> covered = new java.util.TreeSet<>();
+    for (Map.Entry<String, List<Integer>> row : rows.entrySet()) {
+      assertTrue(!row.getValue().isEmpty(), "ci.yml's row '" + row.getKey()
+          + "' runs the assembly check but names no asm-widths");
+      covered.addAll(row.getValue());
+    }
+    assertEquals(new java.util.TreeSet<>(AsmCheck.ALL_WIDTHS), covered, "widths checked in CI: "
+        + rows);
+  }
+
+  /** The parser on a matrix like ci.yml's, and a split that leaves a width out. */
+  @Test
+  void ciRowsAreReadAsCiWritesThem() {
+    List<String> matrix = List.of("      matrix:", "        include:",
+        "          - name: x86 wide", "            os: ubuntu-latest", "            asm: true",
+        "            asm-widths: \"256,512\"", "          - name: x86 128 bits",
+        "            asm: true", "            asm-widths: \"128\"",
+        "          - name: Arm 128 bits", "            os: ubuntu-24.04-arm", "    steps:", "      - name: Build",
+        "        asm: true");
+    assertEquals(Map.of("x86 wide", List.of(256, 512), "x86 128 bits", List.of(128)),
+        ciAsmRows(matrix));
+    // without the 128-bit row, 128 bits is covered nowhere
+    assertEquals(Map.of("x86 wide", List.of(256, 512)),
+        ciAsmRows(matrix.subList(0, 6)));
+    // a row that runs the check and names no widths is read as covering none
+    assertEquals(Map.of("x86 wide", List.of()), ciAsmRows(matrix.subList(0, 5)));
+    assertEquals(List.of(128, 256, 512), AsmCheck.widths(null));
+    assertEquals(List.of(128, 256, 512), AsmCheck.widths(" "));
+    assertEquals(List.of(256, 512), AsmCheck.widths("256, 512"));
+    for (String bad : List.of("64", "128,128", "wide", "128;256")) {
+      org.junit.jupiter.api.Assertions.assertThrows(IllegalArgumentException.class,
+          () -> AsmCheck.widths(bad), bad);
+    }
+  }
+
   /** What leaving the preferred species out rests on: it is one of the fixed widths' species. */
   @Test
   void thePreferredSpeciesIsAFixedWidths() {
@@ -127,6 +226,13 @@ class AsmTest {
   void eachArmIsVectorAtItsWidthWithNoFmaAndNoCall(String function, VectorWidth width)
       throws Exception {
     int bits = width.species().vectorBitSize();
+    List<Integer> widths = AsmCheck.widths();
+    if (!widths.contains(bits)) {
+      // Not a failure even when required: ci.yml's rows split the widths, and
+      // ciRowsCoverEveryWidth checks that the rows together leave none out.
+      abort(bits + " bits is not checked here (" + AsmCheck.WIDTHS_ENV + "=" + widths
+          + "); in CI it is checked on " + rowsCovering(bits));
+    }
     String output = probe(function, width);
     assertTrue(output.contains("asm-probe start: " + function + ", width " + width + ", " + bits
         + " bits"), "the probe ran another function or species than " + function + " at "
