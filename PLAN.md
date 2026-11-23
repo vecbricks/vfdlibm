@@ -41,9 +41,8 @@ row order decides which comes first. `exp` is the first port and is done (`VFdli
 own logarithm and exponential and calls only `sqrt`, `fabs` and `scalbn`. `sinh` is done
 (`VFdlibm.sinh`, from `e_sinh.c`, computing through `expm1`'s common path below 22 and finishing
 the rest per lane), and so is `cosh` (`VFdlibm.cosh`, from `e_cosh.c`, through `exp`'s common path
-and expm1's `k == 0` lines, with two arms for its small range: the default arm is the slice arm,
-provisionally: the EPYC 7763's run and re-run read the finish arm lower on common data, the Xeon
-8573C's one run gives no direction, and the arm is the owner's call, section 5). `asin` is done
+and expm1's `k == 0` lines, with two arms for its small range: the default arm is the finish arm, by
+the owner's decision of 23 November, section 5). `asin` is done
 too (`VFdlibm.asin`, from `e_asin.c`, with `sqrt` as the Vector API's `SQRT`, one arm, and the
 lanes of `|x| >= 1` finished per lane), and so is `atan` (`VFdlibm.atan`, from `s_atan.c`, five
 ranges through one division on blended operands, the lanes from `2^66` up finished per lane), and
@@ -156,11 +155,13 @@ five are a later, optional set; the large-argument reduction of the trigonometri
   needs rule 2 yet, so `VFdlibm` runs one arm at every species. Every default stays provisional
   until a host run revises it. Meanwhile `VFdlibm` calls the finish arm of `exp`, `log` and `log10`;
   the guarded arm of `expm1` and `log1p`, by the owner's deferral of rule 1 until the 8573C's second
-  run (issue #30, 21 November); the slice arm of `cosh`, provisionally, as the rule's exception,
-  whose arm is the owner's call: `bench/results/cosh-epyc7763-2026-11-21.txt` holds a run and a
-  re-run, which agree on the finish arm lower on common data and give no direction on mixed data,
-  `cosh-xeon8573c-2026-11-21.txt` one run with no direction, and the `cosh-kinds-` files no
-  direction at 3.5% or 17% of small lanes; and the guarded arm of `atan2`, which has no finish arm,
+  run (issue #30, 21 November); the finish arm of `cosh`, the rule's exception, by the owner's
+  decision of 23 November (issue #30): no measured row favours slice, the EPYC 7763's two runs read
+  finish lower on common data near 1.3x, neither host gives a direction at Varka's and Spark's
+  shares of small lanes, and rule 1's tie goes to the finish arm
+  (`bench/results/cosh-epyc7763-2026-11-21.txt`, a run and a re-run;
+  `cosh-xeon8573c-2026-11-21.txt`, one run; the `cosh-kinds-` files), and the slice arm stays,
+  tested, so the choice can be re-measured; and the guarded arm of `atan2`, which has no finish arm,
   so rule 1 does not pick between its two ([issue #30's corrected
   comment](https://github.com/vecbricks/vfdlibm/issues/30#issuecomment-7085437272)). Each host has
   timed atan2's arms in a run and a re-run (`atan2-xeon8573c-2026-11-22.txt`,
