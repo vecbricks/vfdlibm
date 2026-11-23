@@ -16,18 +16,22 @@
 The table describes one release, named by its git tag in the README's first marker,
 "<!-- speedup-table: v<version> -->". Its code is the tag's: the functions are those of
 VFdlibm.java at the tag, each function's default arm is read from the tag's code, and a figure
-is shown only from a results file that times the tag's code. So nothing on main but a results
-file or the README itself changes the output: a port, a new function or a Dependabot bump of
-pom.xml leaves it as it is.
+is shown only from a results file that times the tag's code. So once the tag exists, nothing
+on main but a results file or the README itself changes the output: a port, a new function or
+a Dependabot bump of pom.xml leaves it as it is. The tag must be the latest v<version> tag.
 
 The release flow (AGENTS.md, "Releases", step 1): the release pull request, made before
 dev/release.sh tags, sets the marker to the coming tag with --write --tag v<version>, after a
 benchmark pass on both hosts against the release candidate. While the tag does not exist (in
 this clone, nor at origin, from which it is fetched), the code compared is HEAD's, and HEAD's
 pom.xml must say <version> or <version>-SNAPSHOT, or the script refuses: so a marker cannot
-name a tag that is not coming next. Once dev/release.sh has made the tag, the code compared is
-the tag's; the release commit changes only the pom's version and <scm><tag>, which the
-comparison leaves out, so the table is the same in both states and needs no rewrite.
+name a tag that is not coming next. In that window, from the release pull request's merge to
+the tag, a change to the code under a benchmark or to pom.xml merged to main moves the table and
+fails --check: main takes nothing but the release until the tag is pushed. Once dev/release.sh
+has made the tag, the code compared is the tag's; the release commit changes only the pom's
+version, <scm><tag> and project.build.outputTimestamp, which the comparison leaves out, so the
+table is the same in both states and needs no rewrite. A failed fetch of the tag from origin is
+an error, not a tag to come.
 
 The table has a row per function and a column per host: xeon8573c (AVX-512) and epyc7763 (AVX2)
 always, and xeon6973p, epyc9v45 and neoversen2 once a results file of theirs exists. A cell
@@ -45,7 +49,7 @@ rule (code_compared: the benchmark's closure the same but for comments and white
 but for its version and the parts no benchmark runs; here <scm><tag> too, which the release
 commit sets). With no such file, a cell says "not measured" if the function and host have no
 file, and otherwise "newer code" or "older code" by whether the newest file's commit is newer
-than the tag's; a file with no Commit line (from before the workflow wrote one) is older code.
+than the tag's (by ancestry, or by commit time when neither holds the other); a file with no Commit line (from before the workflow wrote one) is older code.
 A file without the rows says which it lacks. A commit that git can neither find nor fetch is an
 error, never a cell.
 
@@ -129,11 +133,21 @@ def reference(tag, version):
     """The commit whose code the table describes: the tag's, fetched from origin if this clone
     lacks it; while the tag does not exist, HEAD's, if HEAD's pom.xml is that version's."""
     sha = rev("refs/tags/" + tag)
-    if not sha:
-        record.git("fetch", "--quiet", "origin", "refs/tags/%s:refs/tags/%s" % (tag, tag),
-                   check=False, timeout=record.FETCH_TIMEOUT)
+    if not sha and record.git("remote", "get-url", "origin", check=False).returncode == 0:
+        done = record.git("fetch", "--quiet", "origin", "refs/tags/%s:refs/tags/%s" % (tag, tag),
+                          check=False, timeout=record.FETCH_TIMEOUT)
+        error = done.stderr.decode("utf-8", "replace").strip()
+        if done.returncode != 0 and "couldn't find remote ref" not in error:
+            raise record.Problem("the tag %s is not in this clone, and origin could not be asked"
+                                 " for it: %s" % (tag, error))
         sha = rev("refs/tags/" + tag)
     if sha:
+        tags = [t for t in record.git("tag", "-l", "v*").stdout.decode().split()
+                if re.fullmatch(r"v\d+\.\d+\.\d+", t)]
+        newest = max(tags, key=lambda t: tuple(int(x) for x in t[1:].split(".")))
+        if newest != tag:
+            raise record.Problem("%s is not the latest release, %s is: the table is of the"
+                                 " latest" % (tag, newest))
         return sha, False
     head = rev("HEAD")
     have = pom_version(record.tree(head)["pom.xml"])
@@ -162,6 +176,9 @@ def functions(src):
     return out
 
 
+CONSTANT = r"[A-Z][A-Z0-9_]*"
+
+
 def arm_of_constant(constant):
     arm = constant.lower()
     return "blended" if arm == "blend" else arm
@@ -171,13 +188,18 @@ def default_arm(src, name):
     """The function's default arm, read from its code, and its benchmark's row checked to be
     that arm's."""
     cls = class_of(name)
+    front = java(src, "src/main/java/%s/VFdlibm.java" % PACKAGE_DIR)
+    # What each public VFdlibm.<name> calls in <Function>.java.
+    through = set(re.findall(r"public static DoubleVector %s\([^)]*\)\{return %s\.(\w+)\("
+                             % (name, cls), front))
     main = java(src, "src/main/java/%s/%s.java" % (PACKAGE_DIR, cls))
     bench = java(src, "src/jmh/java/%s/%sBenchmark.java" % (PACKAGE_DIR, cls))
     # Every method of <Function>.java that is one call of the private body with a constant.
     delegates = dict(re.findall(
-        r"static DoubleVector (\w+)\([^)]*\)\{return %s\([^;]*,([A-Z]+)\);\}" % name, main))
+        r"static DoubleVector (\w+)\([^)]*\)\{return %s\([^;]*,(%s)\);\}" % (name, CONSTANT),
+        main))
     entry = re.search(r"static DoubleVector %s\([^)]*VectorMask<Double>live\)\{"
-                      r"(?:return %s\([^;]*,([A-Z]+)\);\})?" % (name, name), main)
+                      r"(?:return %s\([^;]*,(%s)\);\})?" % (name, name, CONSTANT), main)
     if not entry:
         raise record.Problem("%s.java has no %s(..., VectorMask<Double> live)" % (cls, name))
     vector_arms = sorted(set(re.findall(r"public double\[\](\w+)Preferred\(\)", bench))
@@ -193,7 +215,13 @@ def default_arm(src, name):
     if not body:
         raise record.Problem("%sBenchmark has no %sPreferred(), the default arm's row"
                              % (cls, arm))
-    calls = set(re.findall(r"\b(?:%s|VFdlibm)\.(\w+)\(" % cls, body.group(1)))
+    calls = set(re.findall(r"\b%s\.(\w+)\(" % cls, body.group(1)))
+    if re.search(r"\bVFdlibm\.%s\(" % name, body.group(1)):
+        if not through:
+            raise record.Problem("VFdlibm.%s calls no method of %s.java" % (name, cls))
+        calls |= through  # VFdlibm.<name> is what it calls
+    elif re.search(r"\bVFdlibm\.\w+\(", body.group(1)):
+        calls.add("VFdlibm." + re.search(r"\bVFdlibm\.(\w+)\(", body.group(1)).group(1))
     right = {m for m in calls if m == name or (entry.group(1)
                                                and delegates.get(m) == entry.group(1))}
     if not right or calls - right:
@@ -277,6 +305,17 @@ def commit_time(sha):
     return int(record.git("show", "-s", "--format=%ct", sha).stdout.decode().strip())
 
 
+def is_newer(sha, ref):
+    """Whether the commit is newer than the release's: by ancestry where one holds the other
+    (a commit merged after the tag is newer, whatever its date), else by commit time."""
+    record.have_commit(sha)
+    if record.git("merge-base", "--is-ancestor", sha, ref, check=False).returncode == 0:
+        return False
+    if record.git("merge-base", "--is-ancestor", ref, sha, check=False).returncode == 0:
+        return True
+    return commit_time(sha) > commit_time(ref)
+
+
 def table(root, tag):
     """The README's text between the markers, the markers included, for the release tag."""
     return table_and_state(root, tag)[0]
@@ -321,7 +360,7 @@ def table_and_state(root, tag):
                     break
             else:
                 if newest:
-                    text = NEWER if commit_time(newest) > commit_time(ref) else OLDER
+                    text = NEWER if is_newer(newest, ref) else OLDER
             cells.append(text)
         rows.append("| `%s` | %s |" % (name, " | ".join(cells)))
     for host, seen in widths.items():
@@ -638,6 +677,11 @@ def selftest_in(repo):
     assert body("v0.1.1")[2] == "| `exp` | 2.00x / 2.20x | older code |", body("v0.1.1")
     commit({main + "Exp.java": EXP, res + "exp-xeon8573c-2026-11-21.txt": None}, "undo")
 
+    # An arm constant of digits and underscores is read, not taken for a body in place.
+    commit({main + "Exp.java": EXP.replace("FINISH", "ONE_DIV")}, "constant")
+    refused("v0.1.1", "ExpBenchmark has no one_divPreferred()")
+    commit({main + "Exp.java": EXP}, "undo")
+
     # dev/release.sh: the release commit (version and <scm><tag>), the tag, the next snapshot.
     rel = commit({"pom.xml": POM.replace("0.1.1-SNAPSHOT", "0.1.1").replace(
         "<tag>HEAD</tag>", "<tag>v0.1.1</tag>")}, "Release 0.1.1")
@@ -647,6 +691,20 @@ def selftest_in(repo):
     # README of the release pull request, which dev/release.sh leaves as it is, still checks.
     assert body("v0.1.1") == coming, body("v0.1.1")
     assert check(repo, "README.md") == []
+
+    # An older release's tag is refused: the table is of the latest.
+    subprocess.run(["git", "-C", repo, "tag", "v0.1.0", c0], check=True)
+    refused("v0.1.0", "v0.1.0 is not the latest release, v0.1.1 is")
+    # VFdlibm.exp that takes another arm than Exp.exp's default: its row is refused.
+    undo = {main + "VFdlibm.java": VFDLIBM}
+    commit({main + "VFdlibm.java": VFDLIBM.replace("return Exp.exp(x, null)",
+                                                   "return Exp.expBlended(x, null)")}, "front")
+    rel2 = commit({"pom.xml": POM.replace("0.1.1-SNAPSHOT", "0.1.2").replace(
+        "<tag>HEAD</tag>", "<tag>v0.1.2</tag>")}, "Release 0.1.2")
+    subprocess.run(["git", "-C", repo, "tag", "v0.1.2", rel2], check=True)
+    refused("v0.1.2", "ExpBenchmark.finishPreferred calls exp, expBlended")
+    subprocess.run(["git", "-C", repo, "tag", "-d", "v0.1.2"], check=True, capture_output=True)
+    commit(dict(undo, **{"pom.xml": POM.replace("0.1.1-SNAPSHOT", "0.1.2-SNAPSHOT")}), "undo")
 
     # On main after the tag: a code change, a new function and another JMH change nothing.
     c3 = commit({main + "Exp.java": EXP.replace("return x;", "return x.abs();"),

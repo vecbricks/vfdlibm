@@ -231,8 +231,10 @@ and pass `dev/jar-check.sh --release`. The steps:
    --write --tag v<version>`. Until the tag exists the script compares the files with HEAD's code
    and requires HEAD's pom version to be `<version>` or `<version>-SNAPSHOT` (a minor's release
    pull request sets the pom to `<version>-SNAPSHOT` for it); once `dev/release.sh` has tagged,
-   with the tag's, which gives the same table, since the release commit's version and
-   `<scm><tag>` are left out of the comparison.
+   with the tag's, which gives the same table, since the release commit's version, `<scm><tag>`
+   and `project.build.outputTimestamp` are left out of the comparison. Between the merge of
+   this pull request and the tag, `main` takes no change to code under a benchmark or to
+   `pom.xml`, which would move the table and fail its check.
 2. On an up-to-date `main`, `dev/release.sh <version>` checks the tree, sets the pom's version
    (from any `-SNAPSHOT`, so a minor is released the same way),
    its `<scm><tag>` and `project.build.outputTimestamp` (so that the jars are reproducible), runs

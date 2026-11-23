@@ -20,10 +20,10 @@ files:
 | Function | xeon8573c (AVX-512): common / mixed | epyc7763 (AVX2): common / mixed |
 |---|---|---|
 | `exp` | older code | older code |
-| `expm1` | 3.82x / 3.39x | older code |
+| `expm1` | 3.82x / 3.39x | 1.86x / 1.65x |
 | `log` | 4.12x / 2.38x | older code |
 | `log10` | 4.64x / 2.82x | older code |
-| `log1p` | 3.61x / 3.28x | older code |
+| `log1p` | 3.61x / 3.28x | 1.97x / 1.68x |
 | `sinh` | 3.57x / 2.71x | 2.12x / 1.69x |
 | `cosh` | 3.34x / 1.88x | 2.15x / 1.70x |
 | `asin` | 2.31x / 2.10x | 2.09x / 1.52x |
