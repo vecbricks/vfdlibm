@@ -141,8 +141,10 @@ bits, on GitHub's Arm runner. The files under `bench/results/` read as allocatin
 does not cover: `exp` and `log` at 128 bits on x86, and every function but `atan2`, which has no
 512-bit row, at 512 bits on an AVX2 host. `SPECIES_MAX` of today's `exp`, `expm1`, `log`, `log10`
 and `log1p` was read on a laptop (`max-finish-alloc-free-laptop-2026-11-21.txt`), and on a host
-only for `exp` and `log10`, at 256 bits, by the EPYC 7763 pair
-(`exp-log10-pair-epyc7763-2026-11-21.txt` and its re-run); the other host files that have a
+for `exp` and `log10` at 256 bits by the EPYC 7763 pair (`exp-log10-pair-epyc7763-2026-11-21.txt`
+and its re-run), and under 0.05 bytes per op for `expm1`, `log`, `log10` and `log1p` at 512 bits
+by the Xeon 8573C's files of 22 November and for `expm1` and `log1p` at 256 bits by the EPYC
+7763's of 23 November; the other host files that have a
 `*Max` row of those five (the Xeon's of 21 November for all five, the EPYC's of
 20 November for `exp` and `log10` and of 21 November for all five, and
 `exp-onediv-xeon8573c-2026-11-03.txt`) read the old finish. The host files of 21 November for
@@ -187,9 +189,10 @@ fdlibm's own sequence of operations, lane by lane. That is this library.
   `SKILLS.md`; where two arms are within 1.3x of each other no direction is read, and where the
   hosts disagree the files say so. The rules are set (issue #30): a tie within 1.3x on every host
   that has a file goes to the finish arm, except for `cosh`, whose arm a host run decides, and where
-  hosts disagree each species keeps its own arm (no function needs that yet). `expm1` and `log1p`
-  stay on their guarded arm by the owner's deferral of the rule until a second run, on the 8573C, of
-  the code its files of 22 November time. The
+  hosts disagree each species keeps its own arm (no function needs that yet). By that rule `expm1`
+  and `log1p` run the finish arm: their files of today's code (`expm1-xeon8573c-2026-11-22.txt`, a
+  run and a re-run, `expm1-epyc7763-2026-11-23.txt`, and the same for `log1p`) read no arm lower
+  than the finish by more than 1.3x at any species, a tie and not a speed-up. The
   `*Max` rows of the host files of 3 to 21 November for `exp`, `expm1`, `log`, `log10` and `log1p`
   (`exp-onediv-xeon8573c-2026-11-03.txt` and those of 20 and 21 November;
   `log1p-xeon8573c-2026-11-03.txt` and `expm1-xeon8573c-2026-11-04.txt` have no `*Max` row) time the

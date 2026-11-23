@@ -208,7 +208,12 @@ belongs here too, since it stops the next port re-trying a settled question.
   The cause is not known: the re-run's file names the eight tests that replace a bit walk and
   code placement, and decides neither. Only exp and log10 were paired, on that one host: no
   AVX-512 host and no other port
-  (`expm1`, `log`, `log1p`, `sinh`, `cosh`) has a pair, so the other ports' cost is unread.
+  (`expm1`, `log`, `log1p`, `sinh`, `cosh`) has a pair, so the other ports' cost is unread. The
+  host files of today's finish read its `*Max` rows on mixed data as allocation-free too: the Xeon
+  Platinum 8573C's of 22 November for expm1, log, log10 and log1p (`expm1-xeon8573c-2026-11-22.txt`
+  and its three siblings, a run and a re-run) and the EPYC 7763's of 23 November for expm1 and
+  log1p (`expm1-epyc7763-2026-11-23.txt`, `log1p-epyc7763-2026-11-23.txt`), every `finishMax` row
+  under 0.05 B/op.
 - **At two 64-bit lanes x86 C2 lowers no mask.** Compare to mask, blend, mask cast, mask
   broadcast, logic and test are `not supported` at `vlen=2` for double and long masks, and fine
   at four lanes. So on x86 every 128-bit double port that branches through masks runs per lane
@@ -253,8 +258,8 @@ failing on crafted disassembly. To run it here: `dev/hsdis-build.sh`, then `mvn 
 agree.
 
 - **The arms.** Each port's benchmark arms, unmasked and masked, and the cores the benchmarks call:
-  exp (finish, blended, core), expm1 (guarded, blended, finish, core), log and log10 (finish,
-  blended), log1p (guarded, blended, finish), sinh, asin, atan, acos and hypot (finish), cosh
+  exp (finish, blended, core), expm1 (finish, guarded, blended, core), log and log10 (finish,
+  blended), log1p (finish, guarded, blended), sinh, asin, atan, acos and hypot (finish), cosh
   (slice and finish by name, and `VFdlibm.cosh`, the default, as `default`) and atan2 (guarded,
   blended); the default arm goes through `VFdlibm`, the others through the port's class.
 - **The rules.** Every byte decoded; packed-double arithmetic (`v(add|sub|mul|div|sqrt)pd`)
@@ -783,11 +788,15 @@ mnemonic); the other operations count the same at both widths.
   512-bit rows run in the Java fallback), so the files show no disagreement between the hosts at
   equal width. Both files time the `log` of a5683c3 and a1db6df, before the finish's first eight
   lanes written out with constant indices (issue #37); `LogBenchmark` gained its `finishMax` row
-  after the EPYC run, which is why that file has none. `VFdlibm.log` keeps the finish arm by the
-  rules issue #30 set (a tie within 1.3x goes to the finish arm), provisionally until a host run
-  revises it: a second Xeon run or a pair. The 8573C's mixed rows at 512 bits and the preferred
-  species read the blend lower by 1.29 to 1.30x, on the 1.3x line, and wait for that second run
-  like the rest. Measure the finish only once it allocates nothing.
+  after the EPYC run, which is why that file has none. The Xeon's file of today's `log`
+  (`bench/results/log-xeon8573c-2026-11-22.txt`, a run and a re-run) reads no direction between
+  the arms: blended over finish at 256 bits is 1.29 and 1.30 on common data and 0.97 on mixed
+  data; at 512 bits, which its preferred species is, 1.28 to 1.36 on common data, the preferred row
+  of the re-run inside 1.3x, and on mixed data the finish 1.13 to 1.17 times the blend, inside the
+  line the 21 November file sat on. `VFdlibm.log` keeps the finish arm by the rules issue #30 set
+  (a tie within 1.3x goes to the finish arm), provisionally until a host run revises it: an EPYC
+  run of today's code, a first of the other AVX-512 hosts or a pair. Measure the finish only once
+  it allocates nothing.
 
 - **Int words can live in long lanes, with an exact dk.** log first kept its words in int lanes
   for the `I2D`; moving them to the long lanes of the bits drops `L2I`, `I2L`, `I2D` and the
@@ -834,27 +843,26 @@ mnemonic); the other operations count the same at both widths.
   2952), and the blend's minimums are 3189 to 3264
   (`bench/results/log1p-laptop-avx2-2026-11-02.txt`). The laptop's AVX-512 build was measured the
   same way at 256 and 512 bits (`bench/results/log1p-laptop-2026-11-02.txt`). In both files the arms
-  are within 1.3x of each other on every row, and no direction is read. The host files read the
-  three arms by minimums at 256 bits, the preferred species and, on the Xeon, 512 bits. On the EPYC
-  7763 (`bench/results/log1p-epyc7763-2026-11-20.txt`, two runs) blended over finish is 1.20 on
-  common data and 1.07 to 1.08 on mixed data, and guarded over finish 1.00 to 1.04 on common data
-  and 0.99 to 1.02 on mixed data. On the Xeon Platinum 8573C
-  (`bench/results/log1p-xeon8573c-2026-11-21.txt`, one run) blended over finish is 1.13 to 1.17 on
-  common data and 0.99 to 1.01 on mixed data, and guarded over finish 0.99 to 1.03 on common data
-  and 0.91 to 0.96 on mixed data. Every arm is within 1.3x of the others on every one of those rows,
-  so no direction is read on either host, and the lowest minimum moves between finish and guarded
-  from row to row (on the Xeon: finish at 256 and 512 bits and guarded at the preferred species on
-  common data, guarded at all three on mixed data); the Xeon file of 3 November
-  (`bench/results/log1p-xeon8573c-2026-11-03.txt`, one run, at another commit and on a draw whose
-  datapath read higher, `HARDWARE.md`) had guarded lowest on every row. The EPYC file times `Log1p`
-  as of a5683c3, before a fault constant and a mask local were added; the Xeon file of 21 November
-  times it as of a1db6df; neither times it after the finish's first eight lanes written out with
-  constant indices (issue #37). `VFdlibm.log1p` uses the guarded arm provisionally: by the rules
-  issue #30 set, a tie within 1.3x goes to the finish arm, so rule 1 would move log1p to it at the
-  Xeon 8573C's second run unless the guarded arm wins by more than 1.3x there (the `*Max` rows of
-  the files committed so far time the finish that boxed before issue #37 and are left out); a first
-  run of the other AVX-512 hosts or a pair may revise the choice. A port whose rare paths are
-  cheap in vector form should measure this shape beside the other two.
+  are within 1.3x of each other on every row, and no direction is read. The host files of today's
+  `Log1p` read the three arms by minimums at 256 bits, the preferred species and `SPECIES_MAX`,
+  and on the Xeon 512 bits. On the Xeon Platinum 8573C
+  (`bench/results/log1p-xeon8573c-2026-11-22.txt`, a run and a re-run) guarded over finish is 0.96
+  to 1.02 on common data and 0.85 to 0.93 on mixed data, and blended over finish 1.13 to 1.22 and
+  0.93 to 1.00; on the EPYC 7763 (`bench/results/log1p-epyc7763-2026-11-23.txt`) guarded over
+  finish is 0.98 to 1.03 and 0.92 to 0.93, and blended over finish 1.19 to 1.20 and 0.99 to 1.00.
+  Every arm is within 1.3x of the finish on every one of those rows, so no direction is read, and
+  the guarded arm reads lower on mixed data on both hosts, inside 1.3x. By issue #30's rule 1 (a
+  tie within 1.3x on every host that has a file goes to the finish arm) `VFdlibm.log1p` runs the
+  finish arm since then: the owner had deferred the rule for log1p until the 8573C's second run,
+  and neither file reads the guarded arm lower by more than 1.3x at any species. That is a tie,
+  not a speed-up; a first run of the other AVX-512 hosts or a pair may revise the choice. The
+  earlier host files time the code before the finish's first eight lanes were written out with
+  constant indices (issue #37), and read the arms within 1.3x too: the EPYC 7763's
+  (`log1p-epyc7763-2026-11-20.txt`, two runs, `Log1p` as of a5683c3, before a fault constant and a
+  mask local were added), the Xeon's of 21 November (`log1p-xeon8573c-2026-11-21.txt`, one run,
+  as of a1db6df) and of 3 November (`log1p-xeon8573c-2026-11-03.txt`, one run, at another commit
+  and on a draw whose datapath read higher, `HARDWARE.md`), which had guarded lowest on every row.
+  A port whose rare paths are cheap in vector form should measure this shape beside the other two.
 - **The in-body finish allocates nothing in log1p too.** log1p's finish was first a call,
   `finishPerLane(x, result, rare)`, and boxed: 52,928 B/op on mixed data at 256 bits under
   `UseAVX=2`, 2.0x slower than the guarded arm there (the superseded runs kept at the end of
@@ -933,10 +941,12 @@ mnemonic); the other operations count the same at both widths.
   of a5683c3 and a1db6df, before the finish's first eight lanes written out with constant indices
   (issue #37); the pair of that change (the exp entry above) reads log10's mixed finish rows 2.6%
   to 4.0% slower by median and 3.7% to 4.1% by best on the EPYC 7763, the cause not known.
-  `VFdlibm.log10` calls the finish arm by the rules issue #30 set (a tie within 1.3x goes to the
-  finish arm; its `*Max` rows, where the blend reads lower on mixed data, time the finish that boxed
-  before issue #37 and are left out), provisionally until a host run revises it: a second run of the
-  Xeon 8573C, a first of the other AVX-512 hosts or a pair.
+  The Xeon's file of today's `Log10` (`bench/results/log10-xeon8573c-2026-11-22.txt`, a run and a
+  re-run, with `*Max` rows of today's finish) reads blended over finish 1.15 to 1.26 on common data
+  and 0.89 to 1.01 on mixed data, all inside 1.3x in both runs: no direction. `VFdlibm.log10` calls
+  the finish arm by the rules issue #30 set (a tie within 1.3x goes to the finish arm),
+  provisionally until a host run revises it: an EPYC run of today's code, a first of the other
+  AVX-512 hosts or a pair.
 
 ## What the expm1 port taught
 
@@ -992,22 +1002,34 @@ mnemonic); the other operations count the same at both widths.
   arm has the lowest minimum on mixed data (finish on the EPYC, guarded on the Xeon). The Xeon file
   of 4 November (`bench/results/expm1-xeon8573c-2026-11-04.txt`, one run, at another commit) had
   guarded lowest on the preferred rows of both kinds of data; the file of 21 November has finish
-  lowest there on common data. `VFdlibm.expm1` keeps the guarded arm provisionally: by the rules
-  issue #30 set, a tie within 1.3x goes to the finish arm, so rule 1 would move expm1 to it at the
-  Xeon 8573C's second run unless the guarded arm wins by more than 1.3x there (the `*Max` rows of
-  the files committed so far time the finish that boxed before issue #37 and are left out); a first
-  run of the other AVX-512 hosts or a pair may revise the choice. Both files time `Expm1`
+  lowest there on common data. Both files time `Expm1`
   before its core entry (below) and before the finish's first eight lanes written out with
   constant indices (issue #37), and `Expm1.java` changed between their two commits too (a fault
   constant and a local in the k conversion, as for `Exp`), so the cross-host comparison rests on
   two code versions, and the EPYC file below on a third. The EPYC 7763's run of 21 November at 9b9cc7b
-  (`bench/results/expm1-epyc7763-2026-11-21.txt`, one run) is the only one with core rows
+  (`bench/results/expm1-epyc7763-2026-11-21.txt`, one run) was the first with core rows
   (`expm1Core`, no arm of `VFdlibm`); it still times the finish before the eight lanes, and reads
   blended over finish 1.19, guarded over finish 1.02 on common data and 1.07 to 1.08 on mixed
   data, all within 1.3x, so no direction either. Its guarded arm reads about 12% lower on common
   data than in the 20 November runs, which no pair or re-run backs and the file does not
   attribute to the code. The EPYC files' 512-bit rows run in the Java fallback and measure no
   expm1.
+- **expm1 on the benchmark hosts, 22 and 23 November 2026: the finish arm by rule 1.** The files
+  of today's `Expm1`, after the finish's first eight lanes were written out, read the three arms
+  by minimums at 256 bits, the preferred species and `SPECIES_MAX`, and on the Xeon 512 bits. On
+  the Xeon Platinum 8573C (`bench/results/expm1-xeon8573c-2026-11-22.txt`, a run and a re-run)
+  guarded over finish is 0.93 to 1.07 on common data and 0.84 to 0.92 on mixed data, and blended
+  over finish 1.08 to 1.18 and 0.90 to 1.00; on the EPYC 7763
+  (`bench/results/expm1-epyc7763-2026-11-23.txt`) guarded over finish is 1.02 to 1.03 and 1.04,
+  and blended over finish 1.18 to 1.20 and 1.14, the finish lowest on every row there. Every arm is
+  within 1.3x of the finish on every one of those rows, so no direction is read, and the hosts
+  still differ in which arm is lowest on mixed data (guarded on the Xeon, finish on the EPYC). By
+  issue #30's rule 1 (a tie within 1.3x on every host that has a file goes to the finish arm)
+  `VFdlibm.expm1` runs the finish arm since then: the owner had deferred the rule for expm1 until
+  the 8573C's second run, and neither file reads the guarded arm lower by more than 1.3x at any
+  species. That is a tie, not a speed-up; a first run of the other AVX-512 hosts or a pair may
+  revise the choice. Both files have core rows: finish over core is 0.99 to 1.08 on the Xeon and
+  1.17 to 1.18 on the EPYC on common data, inside 1.3x.
 - **Lefevre's direction bit is the 54th bit of the exact |result|.** testlibm-data's last field
   agreed with that for all 7578 `em1` lines (3836 ones, 3742 zeros), not with "the exact
   result is above the rounded one", which splits about evenly.

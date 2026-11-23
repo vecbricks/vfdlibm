@@ -71,28 +71,21 @@ import jdk.incubator.vector.VectorSpecies;
  * of {@code bench/results/max-finish-alloc-free-laptop-2026-11-21.txt} (allocation only, no
  * timing): the finish writes out its first eight lanes with constant indices, which C2
  * intrinsifies there, where a variable index it does not (SKILLS.md). {@link #log1p}, which
- * {@code VFdlibm.log1p} calls, is the guarded arm, provisionally. On the laptop ({@code
+ * {@code VFdlibm.log1p} calls, is the finish arm, by issue #30's rule 1: a tie within 1.3x on
+ * every host that has a file goes to the finish arm. On the laptop ({@code
  * bench/results/log1p-laptop-avx2-2026-11-02.txt}, under {@code -XX:UseAVX=2} as C2 compiles for
  * the AVX2 hosts, and {@code log1p-laptop-2026-11-02.txt}, AVX-512; laptop numbers, not
- * headlines) the three arms are within 1.3x of each other at both widths and on both mixes. The
- * host files read the same, by minimums at 256 bits, the preferred species and, on the Xeon, 512
- * bits: on the AMD EPYC 7763 ({@code bench/results/log1p-epyc7763-2026-11-20.txt}, two runs, the
- * code of a5683c3) and on the Xeon Platinum 8573C ({@code
- * bench/results/log1p-xeon8573c-2026-11-21.txt}, one run, the code of a1db6df; the class changed
- * between their two commits by a fault constant, a local in the blend and a branch on the
- * constant, which is expected to fold away with no fault planted (no pair has shown it), and
- * since both by the finish's first eight lanes written out with constant indices (issue #37))
- * every arm is within 1.3x of the others on
- * every one of those rows (the EPYC's 512-bit rows run in the Java fallback and are left out),
- * so no direction is read, and the lowest minimum moves between the finish and the guarded arm
- * from row to row. The Xeon file of 3 November ({@code log1p-xeon8573c-2026-11-03.txt}) had the
- * guarded arm lowest on every 256-bit, 512-bit and preferred row. The rules for a tie within 1.3x
- * and for hosts that disagree are set (issue #30): a tie goes to the finish arm, so rule 1 would
- * move log1p to the finish arm at the Xeon 8573C's second run unless the guarded arm wins by more
- * than 1.3x there (the {@code *Max} rows of the files committed so far time the finish that boxed
- * before issue #37 and are left out); until then the guarded arm stays, provisionally, and a first
- * run of the other AVX-512 hosts ({@code HARDWARE.md}) or a pair may revise the choice. The other
- * two are kept so the choice can be re-measured, on other hosts and as the JDK changes.
+ * headlines) the three arms are within 1.3x of each other at both widths and on both mixes. By
+ * minimums neither other arm is lower than the finish by more than 1.3x at any species: on the
+ * Xeon Platinum 8573C ({@code bench/results/log1p-xeon8573c-2026-11-22.txt}, a run and a re-run)
+ * at 256 bits, 512 bits, the preferred species and {@code SPECIES_MAX}, and on the AMD EPYC 7763
+ * ({@code bench/results/log1p-epyc7763-2026-11-23.txt}) at 256 bits, the preferred species and
+ * {@code SPECIES_MAX} (its 512-bit rows run in the Java fallback and are left out). It is a tie,
+ * not a speed-up: on mixed data the guarded arm reads lower on both hosts, inside 1.3x. Both files
+ * time the arms as they are now, after the finish's first eight lanes were written out with
+ * constant indices (issue #37); {@code SKILLS.md} reads the earlier host files, of the code before
+ * it. Like every default, it stays provisional until a host run revises it, and the other two arms
+ * are kept, tested, so the choice can be re-measured, on other hosts and as the JDK changes.
  */
 final class Log1p {
 
@@ -174,12 +167,12 @@ final class Log1p {
   private Log1p() {}
 
   /**
-   * log1p as {@code VFdlibm.log1p} computes it, the guarded arm. {@code live} is null for every
+   * log1p as {@code VFdlibm.log1p} computes it, the finish arm. {@code live} is null for every
    * lane; otherwise only live lanes are computed, inactive lanes return {@code x}'s lane untouched,
    * and an inactive lane never sends the vector down a rare path.
    */
   static DoubleVector log1p(DoubleVector x, VectorMask<Double> live) {
-    return log1p(x, live, GUARDED);
+    return log1p(x, live, FINISH);
   }
 
   /**
@@ -200,8 +193,8 @@ final class Log1p {
 
   /**
    * log1p with the rare lanes finished per lane by {@code StrictMath.log1p}, read and written in
-   * the vector with {@code lane} and {@code withLane}, Exp's way. {@code live} is as for {@link
-   * #log1p(DoubleVector, VectorMask)}.
+   * the vector with {@code lane} and {@code withLane}, Exp's way, as {@link #log1p(DoubleVector,
+   * VectorMask)} does.
    */
   static DoubleVector log1pFinish(DoubleVector x, VectorMask<Double> live) {
     return log1p(x, live, FINISH);

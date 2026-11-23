@@ -129,7 +129,8 @@ five are a later, optional set; the large-argument reduction of the trigonometri
   vector form never trades exactness for speed. Whether a given branch is blended or finished per
   lane is decided by measurement and recorded in the function's pull request. A rare path that is
   only a few vector operations can instead be computed and blended only for a vector that holds a
-  rare lane, behind one `anyTrue`, as `log1p` does. The readings are in `SKILLS.md`, port by port.
+  rare lane, behind one `anyTrue`, as the guarded arms of `log1p` and `expm1` do. The readings
+  are in `SKILLS.md`, port by port.
   For `exp` the per-lane finish allocates nothing at 256 bits, 512 bits and `SPECIES_MAX` of up to
   eight lanes in the laptop reading `bench/results/max-finish-alloc-free-laptop-2026-11-21.txt`
   (allocation only, no timing; it boxed at `SPECIES_MAX` before its first eight lanes were written
@@ -158,10 +159,13 @@ five are a later, optional set; the large-argument reduction of the trigonometri
   have no `*Max` row) time the finish that boxed at `SPECIES_MAX` before issue #37, so they are left
   out of both rules; a later run's `*Max` rows time today's finish. On the other rows no function
   needs rule 2 yet, so `VFdlibm` runs one arm at every species. Every default stays provisional
-  until a host run revises it. Meanwhile `VFdlibm` calls the finish arm of `exp`, `log` and `log10`;
-  the guarded arm of `expm1` and `log1p`, by the owner's deferral of rule 1 (issue #30, 21 November)
-  until a second run, on the 8573C, of the code the 22 November files time (those files are the
-  first run of it); the slice arm of `cosh`, provisionally, as the rule's exception, whose arm a
+  until a host run revises it. Meanwhile `VFdlibm` calls the finish arm of `exp`, `log`, `log10`,
+  `expm1` and `log1p`, the last two by rule 1 since the 8573C's second run of their code, which the
+  owner's deferral of 21 November waited for: by minimums neither other arm is lower than the
+  finish by more than 1.3x at any species, in both runs of `expm1-xeon8573c-2026-11-22.txt` and
+  `log1p-xeon8573c-2026-11-22.txt` and in `expm1-epyc7763-2026-11-23.txt` and
+  `log1p-epyc7763-2026-11-23.txt`, a tie, with the guarded arm lower inside 1.3x on some mixed rows;
+  the slice arm of `cosh`, provisionally, as the rule's exception, whose arm a
   host run decides ([issue #30's
   comment](https://github.com/vecbricks/vfdlibm/issues/30#issuecomment-7091848602); its readings are
   under the list); and the guarded arm of `atan2`, which has no finish arm, so rule 1 does not pick

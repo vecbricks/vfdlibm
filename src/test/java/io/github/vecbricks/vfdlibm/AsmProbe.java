@@ -136,19 +136,19 @@ final class AsmProbe {
   }
 
   // ---------------------------------------------------------------------------------------------
-  // expm1: Expm1Benchmark's arms, [-30, 30]. VFdlibm.expm1 is the guarded arm.
+  // expm1: Expm1Benchmark's arms, [-30, 30]. VFdlibm.expm1 is the finish arm.
 
   static void expm1Guarded(double[] a, double[] b, double[] out, boolean[] live,
       boolean[] flags) {
     for (int i = 0; i < N; i += S.length()) {
-      VFdlibm.expm1(DoubleVector.fromArray(S, a, i)).intoArray(out, i);
+      Expm1.expm1Guarded(DoubleVector.fromArray(S, a, i), null).intoArray(out, i);
     }
   }
 
   static void expm1GuardedMasked(double[] a, double[] b, double[] out, boolean[] live,
       boolean[] flags) {
     for (int i = 0; i < N; i += S.length()) {
-      VFdlibm.expm1(DoubleVector.fromArray(S, a, i), VectorMask.fromArray(S, live, i))
+      Expm1.expm1Guarded(DoubleVector.fromArray(S, a, i), VectorMask.fromArray(S, live, i))
           .intoArray(out, i);
     }
   }
@@ -171,14 +171,14 @@ final class AsmProbe {
   static void expm1Finish(double[] a, double[] b, double[] out, boolean[] live,
       boolean[] flags) {
     for (int i = 0; i < N; i += S.length()) {
-      Expm1.expm1Finish(DoubleVector.fromArray(S, a, i), null).intoArray(out, i);
+      VFdlibm.expm1(DoubleVector.fromArray(S, a, i)).intoArray(out, i);
     }
   }
 
   static void expm1FinishMasked(double[] a, double[] b, double[] out, boolean[] live,
       boolean[] flags) {
     for (int i = 0; i < N; i += S.length()) {
-      Expm1.expm1Finish(DoubleVector.fromArray(S, a, i), VectorMask.fromArray(S, live, i))
+      VFdlibm.expm1(DoubleVector.fromArray(S, a, i), VectorMask.fromArray(S, live, i))
           .intoArray(out, i);
     }
   }
@@ -255,19 +255,19 @@ final class AsmProbe {
   }
 
   // ---------------------------------------------------------------------------------------------
-  // log1p: Log1pBenchmark's arms, [-0.9, 20]. VFdlibm.log1p is the guarded arm.
+  // log1p: Log1pBenchmark's arms, [-0.9, 20]. VFdlibm.log1p is the finish arm.
 
   static void log1pGuarded(double[] a, double[] b, double[] out, boolean[] live,
       boolean[] flags) {
     for (int i = 0; i < N; i += S.length()) {
-      VFdlibm.log1p(DoubleVector.fromArray(S, a, i)).intoArray(out, i);
+      Log1p.log1pGuarded(DoubleVector.fromArray(S, a, i), null).intoArray(out, i);
     }
   }
 
   static void log1pGuardedMasked(double[] a, double[] b, double[] out, boolean[] live,
       boolean[] flags) {
     for (int i = 0; i < N; i += S.length()) {
-      VFdlibm.log1p(DoubleVector.fromArray(S, a, i), VectorMask.fromArray(S, live, i))
+      Log1p.log1pGuarded(DoubleVector.fromArray(S, a, i), VectorMask.fromArray(S, live, i))
           .intoArray(out, i);
     }
   }
@@ -290,14 +290,14 @@ final class AsmProbe {
   static void log1pFinish(double[] a, double[] b, double[] out, boolean[] live,
       boolean[] flags) {
     for (int i = 0; i < N; i += S.length()) {
-      Log1p.log1pFinish(DoubleVector.fromArray(S, a, i), null).intoArray(out, i);
+      VFdlibm.log1p(DoubleVector.fromArray(S, a, i)).intoArray(out, i);
     }
   }
 
   static void log1pFinishMasked(double[] a, double[] b, double[] out, boolean[] live,
       boolean[] flags) {
     for (int i = 0; i < N; i += S.length()) {
-      Log1p.log1pFinish(DoubleVector.fromArray(S, a, i), VectorMask.fromArray(S, live, i))
+      VFdlibm.log1p(DoubleVector.fromArray(S, a, i), VectorMask.fromArray(S, live, i))
           .intoArray(out, i);
     }
   }
