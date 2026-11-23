@@ -214,9 +214,9 @@ class PowTest {
    * Path#ordinal()}, when not null) the ways out the lane took. The line numbers are e_pow.c's.
    * The C's {@code sqrt} is {@code Math.sqrt}, the correctly rounded square root (PROOFS.md, R4),
    * and its {@code scalbn}, which {@code reference/} does not hold, is {@code Math.scalb}
-   * ({@link #scalbn}). The C's {@code lx} and {@code ly} are unsigned: they are only compared
-   * with zero and with each other, and shifted right without sign (line 137), so an {@code int}
-   * holds their bits. Line 113's {@code i0} and {@code i1} are unused in the C and left out.
+   * ({@link #scalbn}). The C's {@code lx} and {@code ly} are unsigned: they are tested against
+   * zero (alone or ORed, lines 119-168), compared for equality with {@code j<<(52-k)} (line 138)
+   * and shifted right without sign (line 137), so an {@code int} holds their bits. Line 113's {@code i0} and {@code i1} are unused in the C and left out.
    */
   static double cPow(double x, double y, Variant variant, long[] paths) {
     double z;
@@ -710,10 +710,11 @@ class PowTest {
   }
 
   /**
-   * An {@code |y|} above 2^31 (lines 191-207): {@code x}'s high word at or beside {@code
-   * 0x3fefffff} and {@code 0x3ff00000}, either sign, and {@code |y|} up to 2^66, half the time
-   * sized so that {@code y*log2(x)} lands from overflow to underflow (the short log of lines
-   * 201-207, through to the subnormal results), and odd integers below 2^53 for {@code s = -1}.
+   * {@code x} near 1 beside a large {@code |y|} (lines 191-207): {@code x}'s high word at or
+   * beside {@code 0x3fefffff} and {@code 0x3ff00000}, either sign; half the time {@code |y|} from
+   * 2^31 to 2^66, half the time sized so that {@code y*log2(x)} lands from overflow to underflow
+   * (above 2^31 it takes the short log of lines 201-207 through to the subnormal results, below it
+   * the main log), and odd integers below 2^53 for {@code s = -1}.
    */
   static Inputs.Pairs hugeYPairs(long seed, int n) {
     SplittableRandom random = new SplittableRandom(seed);
@@ -906,24 +907,34 @@ class PowTest {
     return new Inputs.Pairs(xs, ys);
   }
 
-  /** Random bits, uniform draws of Varka's baseline range, and every exponent. */
+  /**
+   * Random bits, uniform draws of Varka's baseline range, every normal exponent of {@code x}, and
+   * subnormal {@code x} (line 213), each beside a {@code |y|} from 2^-12 to 2^12.
+   */
   static Inputs.Pairs densePairs(long seed, int n) {
+    SplittableRandom random = new SplittableRandom(seed + 6);
+    double[] subnormals = new double[n];
+    for (int i = 0; i < n; i++) {
+      double x = Double.longBitsToDouble(random.nextLong(1L, 0x0010000000000000L));
+      subnormals[i] = random.nextBoolean() ? x : -x;
+    }
     return concat(
         new Inputs.Pairs(Inputs.sampled(seed, n), Inputs.sampled(seed + 1, n)),
         new Inputs.Pairs(Inputs.uniform(seed + 2, n, 1e-6, 1e6),
             Inputs.uniform(seed + 3, n, -10.0, 10.0)),
-        new Inputs.Pairs(Inputs.magnitudes(seed + 4, n, -1074, 1023),
-            Inputs.magnitudes(seed + 5, n, -12, 12)));
+        new Inputs.Pairs(Inputs.magnitudes(seed + 4, n, -1022, 1023),
+            Inputs.magnitudes(seed + 5, n, -12, 12)),
+        new Inputs.Pairs(subnormals, Inputs.magnitudes(seed + 7, n, -12, 12)));
   }
 
   /**
    * The gate's inputs: the special and the exact pairs, {@code n} pairs of each generator but two,
-   * {@code n/32} pairs either side of {@code MIN_NORMAL} ({@code n/64} searches) and {@code 3n}
-   * dense pairs.
+   * pairs either side of {@code MIN_NORMAL} from {@code n/64} searches (at least one) and {@code
+   * 4n} dense pairs.
    */
   static Inputs.Pairs everything(long seed, int n) {
     return concat(specialPairs(), exactPairs(), fuzzPairs(seed, n), integerPairs(seed + 1, n),
-        hugeYPairs(seed + 2, n), targetPairs(seed + 3, n), minNormalPairs(seed + 4, n >> 6),
+        hugeYPairs(seed + 2, n), targetPairs(seed + 3, n), minNormalPairs(seed + 4, Math.max(1, n >> 6)),
         nanPairs(seed + 5, n), densePairs(seed + 6, n));
   }
 
