@@ -1637,14 +1637,11 @@ mnemonic); the other operations count the same at both widths.
   the scalar `StrictMath.pow` loop of `PowBenchmark` allocates, and in a standalone probe only the
   calls that reach the oracle's main path did (a negative `x` with an integer `y`, a subnormal `x`,
   overflow, underflow, a subnormal result), and not a common-path call there, so the allocation
-  depends on how the JIT compiled the oracle; its cause is not read. The vector rows on `mixed` data
-  allocate what the finish's calls on those lanes do: with those kinds left out of the data every
-  row passed, and a scratch row calling `StrictMath.pow` on the same lanes alone allocated as much
-  as the finish rows, at the laptop's flags and as an AVX2 host (local readings, not committed). So
-  `bench/alloc-check.py` fails pow's `mixed` rows though the body does not box. By the owner's
-  decision of 23 November 2026 (issue 34) the check compares such rows with an oracle baseline:
-  `PowBenchmark.rareOracle` calls `StrictMath.pow` on the lanes the finish takes, over the same
-  arrays, and no timing is claimed of it.
+  depends on how the JIT compiled the oracle; its cause is not read. pow's finish calls the oracle
+  on exactly those lanes of the `mixed` data, so a threshold on the finish rows alone cannot tell
+  those calls from a box. By the owner's decision of 23 November 2026 (issue 34) the check compares
+  such rows with an oracle baseline: `PowBenchmark.rareOracle` calls `StrictMath.pow` on the lanes
+  the finish takes, over the same arrays, and no timing is claimed of it.
 - **Which guard parts are hinges.** Run through the common path alone, every part of the guard but
   two changes results on pairs it alone keeps out (`PROOFS.md`, L18, with the counts): a `|y|` past
   2^31 beside `x` within 2^-40 of 1 only rarely (42 of 5,952 pairs), where the C's short log and the
