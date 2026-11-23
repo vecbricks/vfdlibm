@@ -34,10 +34,11 @@ import jdk.incubator.vector.VectorSpecies;
  *
  * <p>The data are each benchmark's common inputs, on which no lane takes a rare path: the per-lane
  * finish is compiled as an uncommon trap, and no {@code StrictMath} code is compiled into the C2
- * loops (AGENTS.md, licence). One range differs from its benchmark's: cosh's leaves out the small
- * range {@code |x| < 0.5*ln2}, 0.6% of {@code CoshBenchmark}'s common lanes, which {@code
- * coshFinish} finishes per lane. The C1 compiles printed beside the C2 ones keep the finish, with
- * a call into {@code StrictMath}, and are not read.
+ * loops (AGENTS.md, licence). One range differs from its benchmark's: cosh's is {@code 0.35 <=
+ * |x| < 60}, which leaves out the small range {@code |x| < 0.5*ln2} (0.3466), 0.6% of {@code
+ * CoshBenchmark}'s common lanes, which {@code coshFinish} finishes per lane, and the lanes up to
+ * 0.35 with it. The C1 compiles printed beside the C2 ones keep the finish, with a call into
+ * {@code StrictMath}, and are not read.
  */
 final class AsmProbe {
 
@@ -57,7 +58,8 @@ final class AsmProbe {
 
   /**
    * The arms of {@code function}, sorted: the static methods whose name is {@code function}
-   * followed by a capital letter. Reflection does not run this class's static initializer.
+   * followed by a capital letter. A call from {@link AsmTest} initializes this class, which is why
+   * {@link #WIDTH} has a default.
    */
   static List<Method> arms(String function) {
     return allArms().stream()
@@ -318,7 +320,7 @@ final class AsmProbe {
 
   // ---------------------------------------------------------------------------------------------
   // cosh: CoshBenchmark's arms, each by name (not through VFdlibm.cosh's default), on
-  // 0.5 <= |x| < 60.
+  // 0.35 <= |x| < 60.
 
   static void coshSlice(double[] a, double[] b, double[] out, boolean[] live, boolean[] flags) {
     for (int i = 0; i < N; i += S.length()) {
@@ -349,7 +351,8 @@ final class AsmProbe {
   }
 
   // ---------------------------------------------------------------------------------------------
-  // asin, atan, acos: their benchmarks' arm, on (-0.99, 0.99), (-4, 4) and (-0.99, 0.99).
+  // asin, atan, acos: their benchmarks' arm, on (-0.99, 0.99) with one lane in 64
+  // below 2^-27 (asin and acos) and (-4, 4) (atan).
 
   static void asinFinish(double[] a, double[] b, double[] out, boolean[] live, boolean[] flags) {
     for (int i = 0; i < N; i += S.length()) {
@@ -463,8 +466,13 @@ final class AsmProbe {
         }
         case "log1p" -> a[i] = random.nextDouble(-0.9, 20.0);
         case "sinh" -> a[i] = random.nextDouble(-21.5, 21.5);
-        case "cosh" -> a[i] = (random.nextBoolean() ? 1 : -1) * random.nextDouble(0.5, 60.0);
-        case "asin", "acos" -> a[i] = random.nextDouble(-0.99, 0.99);
+        case "cosh" -> a[i] = (random.nextBoolean() ? 1 : -1) * random.nextDouble(0.35, 60.0);
+        case "asin", "acos" -> {
+          // as their benchmarks: one lane in 64 below 2^-27, a common lane of their own
+          a[i] = random.nextInt(64) == 0
+              ? Math.scalb(random.nextDouble(-1.0, 1.0), -random.nextInt(28, 60))
+              : random.nextDouble(-0.99, 0.99);
+        }
         case "atan" -> a[i] = random.nextDouble(-4.0, 4.0);
         case "atan2" -> {
           a[i] = random.nextDouble(-4.0, 4.0);

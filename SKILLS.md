@@ -264,7 +264,7 @@ agree.
   The output also holds each loop's C1 compile, which is not read: it keeps the finish, with a
   call into `StrictMath`, whose code is not in it. One range is not its benchmark's: cosh's
   common data hold 0.6% of lanes in the small range `|x| < 0.5*ln2`, which `coshFinish`
-  finishes per lane, so the probe draws `0.5 <= |x| < 60`.
+  finishes per lane, so the probe draws `0.35 <= |x| < 60`.
 - **At 128 bits on x86 the call rule is not asserted.** Every arm calls the Vector API's Java
   fallback, 60 to 444 calls per method (the census below), as "At two 64-bit lanes x86 C2 lowers
   no mask" predicts. Width, FMA and the rest are asserted there.
@@ -364,8 +364,9 @@ blend and 10 to 23 instructions. At 128 bits the bodies are 8 to 16 times longer
 and hsdis as exp's). Not a headline and no timing: counts of instructions only, one run each, read
 as exp's are, with one column more, `vsqrtpd` (sqrt), which the width rule counts as packed-double
 arithmetic since this run. The rows are the test's output (`grep '^| <function> '`), less its width
-column; exp's rows of this run matched its census above in every column but the instruction count, which moved by 1 to 13 on four masked arms. Every
-arm below passed every rule, at every width, under all three flag sets.
+column. exp's rows of the same run matched its census above in every column but the instruction
+count, which moved by 1 to 13 on four masked arms. Every arm below passed every rule, at every
+width, under all three flag sets.
 
 On the host's own flags (AVX-512, `MaxVectorSize=64`), 256 and 512 bits:
 
@@ -494,7 +495,8 @@ As an AVX2 host (`-XX:UseAVX=2 -XX:MaxVectorSize=32`), 256 bits:
 | hypot | 256 | finish | 256 | 23 | 0 | 1 | 22 | 24 | 13 | 0 | 14 | 33 | 3 | 0 |
 | hypot | 256 | finishMasked | 301 | 23 | 0 | 1 | 23 | 24 | 13 | 0 | 14 | 36 | 3 | 0 |
 
-At 128 bits, the ranges over each function's arms (all instructions, packed-double arithmetic, calls, operands on `[rsp`, FMA), on the host's own flags:
+At 128 bits, the ranges over each function's arms (all instructions, packed-double arithmetic,
+calls, operands on `[rsp`, FMA), on the host's own flags:
 
 | function | arms | insns | pd | calls | stack | fma |
 | :--- | ---: | ---: | ---: | ---: | ---: | ---: |
@@ -546,7 +548,7 @@ What it reads: no FMA and no scalar double arithmetic in any arm at any width un
 three flag sets. From 256 bits up each arm is one copy of its body and calls only its uncommon
 traps and the entry barrier: 2 calls for the blended arms of log, log10, log1p and expm1 and for
 expm1's core, 4 for atan2's guarded arm, 3 for every other. asin, acos and hypot take their
-square root as one `vsqrtpd`. Masking adds one blend and 10 to 59 instructions on AVX-512, 17 to
+square root as one `vsqrtpd`. Masking adds one blend and 10 to 59 instructions on AVX-512, 15 to
 66 on AVX2, which has no mask registers (its `k` column is 0). At 128 bits every arm runs the
 Java fallback, 60 to 444 calls per method, as for exp.
 

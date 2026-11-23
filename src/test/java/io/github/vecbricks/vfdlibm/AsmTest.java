@@ -53,7 +53,10 @@ class AsmTest {
 
   private static final String PROBE = AsmProbe.class.getName();
 
-  /** Each function's arms, as the probe names them; the probe must hold these and no others. */
+  /**
+   * Each function's arms, as the probe names them, in any order; the probe must hold these and no
+   * others.
+   */
   static final Map<String, List<String>> ARMS = arms();
 
   private static Map<String, List<String>> arms() {
@@ -75,19 +78,34 @@ class AsmTest {
     return arms;
   }
 
-  /** The probe's arms are this test's: none missing, and none that no function here lists. */
+  /**
+   * The probe's arms are this test's: none missing, and none that no function here lists; and
+   * every public function of {@link VFdlibm} is here, so a new port fails until it is checked.
+   */
   @Test
   void theProbeHoldsEveryListedArm() {
+    assertEquals(java.util.Arrays.stream(VFdlibm.class.getDeclaredMethods())
+        .filter(m -> java.lang.reflect.Modifier.isPublic(m.getModifiers()))
+        .map(java.lang.reflect.Method::getName).collect(java.util.stream.Collectors.toSet()),
+        ARMS.keySet(), "VFdlibm's functions");
     List<String> listed = new ArrayList<>();
     for (Map.Entry<String, List<String>> function : ARMS.entrySet()) {
       List<String> methods = AsmProbe.arms(function.getKey()).stream()
           .map(java.lang.reflect.Method::getName).toList();
-      assertEquals(function.getValue(), methods.stream()
-          .map(m -> AsmProbe.armName(function.getKey(), m)).toList(), function.getKey());
+      assertEquals(function.getValue().stream().sorted().toList(), methods.stream()
+          .map(m -> AsmProbe.armName(function.getKey(), m)).sorted().toList(),
+          function.getKey());
       listed.addAll(methods);
     }
     assertEquals(AsmProbe.allArms().stream().map(java.lang.reflect.Method::getName).sorted()
         .toList(), listed.stream().sorted().toList(), "the probe's arms");
+  }
+
+  /** What leaving the preferred species out rests on: it is one of the fixed widths' species. */
+  @Test
+  void thePreferredSpeciesIsAFixedWidths() {
+    int bits = jdk.incubator.vector.DoubleVector.SPECIES_PREFERRED.vectorBitSize();
+    assertTrue(bits == 128 || bits == 256 || bits == 512, bits + " bits");
   }
 
   /**
