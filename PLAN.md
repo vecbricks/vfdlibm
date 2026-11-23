@@ -85,8 +85,10 @@ five are a later, optional set; the large-argument reduction of the trigonometri
     `Inputs.hardCases("<function>")`, and for a function of two arguments a file of pairs loaded
     with `Inputs.hardCasePairs` (`atan2`, derived from atan's inputs, `hypot`, computed by
     `dev/hypot-hard-cases.py` with exact integer arithmetic, since no published table of hypot's
-    hard cases is known, and `pow`, computed the same way by `dev/pow-hard-cases.py`: exact
-    results, ties, results near a midpoint and the doubles beside the result's thresholds). The
+    hard cases is known, and `pow`, self-computed the same way by `dev/pow-hard-cases.py`
+    (exact results, ties, results near a midpoint and the doubles beside the result's
+    thresholds), while a published binary64 pow list, CORE-MATH's `src/binary64/pow/pow.wc`
+    (MIT), is evaluated as a follow-up, issue #144). The
     inputs of Lefevre's list come out of `dev/testlibm-extract.py`, which rechecks each line with
     400-digit arithmetic against exact values it derives itself (`sinh`'s, `cosh`'s, `atan`'s,
     `asin`'s and `acos`'s files were written by it). A port that keeps fdlibm's

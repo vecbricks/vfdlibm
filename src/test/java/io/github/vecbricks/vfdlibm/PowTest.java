@@ -55,6 +55,19 @@ import org.junit.jupiter.params.provider.EnumSource;
  * rounded multiply by a power of two, and the gate counts how line 306's lanes round
  * ({@link Path#SCALB_INEXACT} and the paths after it) so that its agreement with {@code
  * StrictMath} there is not that of lanes the scale leaves exact.
+ *
+ * <p>The vector port, {@link VFdlibm#pow}, is checked against {@code StrictMath.pow} by {@link
+ * PairBits#matches} at every {@link VectorWidth} the host has and at {@code SPECIES_MAX}, unmasked
+ * and masked (a lane that is not live keeps {@code x}), on the gate's inputs and on {@code
+ * hard-cases/pow.txt}; against the transcription {@link #cPow} on every lane, and against the
+ * common path transcribed alone ({@link #commonPath}) on every lane the guard admits. L19's ties
+ * ({@code PROOFS.md}) are the scalar check that an admitted lane takes only the common path's ways
+ * out of the C, the test that each part of the guard is a hinge or named redundant, and the
+ * guard's boundaries through the vector; L20's is the same comparison with {@link #commonPath},
+ * which writes line 307 as the C does and returns {@code z} without {@code s}. Every subset of a
+ * vector's lanes is put rare beside common lanes; the constants are pinned to the C's
+ * hexadecimal; and {@link #faultCatchers} requires each of pow's three planted faults to fail the
+ * vector at every width.
  */
 class PowTest {
 

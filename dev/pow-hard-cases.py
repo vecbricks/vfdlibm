@@ -8,8 +8,9 @@
 # limitations under the License.
 """The pairs of src/test/resources/.../hard-cases/pow.txt, computed with exact integer arithmetic.
 
-No published table of hard cases for pow is known (V. Lefevre's testlibm-data has tags of
-functions of one argument only), so these pairs are derived here with no outside data. Every
+V. Lefevre's testlibm-data has tags of functions of one argument only. A published binary64 pow
+list does exist, CORE-MATH's src/binary64/pow/pow.wc (MIT), and is being evaluated as a follow-up
+(issue 144); these pairs are self-computed, derived here with no outside data. Every
 pair's y is an integer, or x is a power of two and x**y one too, so x**y is an exact rational
 and every claim below is checked on it with integers alone (no floating-point arithmetic decides
 anything; floats only name the doubles, and each is converted back and compared). A double is
@@ -184,11 +185,11 @@ def exact_family():
         for t in (1023, 1000, 500, 1, -500, -1000, -1022, -1023, -1060, -1074):
             if t % a == 0 and t // a not in (0, 1, -1, 2):
                 pairs.append((bits_from(1, a), float(t // a)))
-    for a, denominator in ((4, 4), (8, 8), (-4, 4), (-8, 8)):
+    for a in (4, 8, -4, -8):
         for t in (1023, 1001, 3, -3, -1021, -1023, -1049, -1073, -1074):
             # x = 2^a, y = t / a, with a * y = t: y a multiple of 1/4 or 1/8
             y = t / a
-            if y * a != t or bits_of(y) != bits_of(float(y)):
+            if Fraction(y) * a != t:
                 fail(f"2^{a} ** {t}/{a} is not exact")
             pairs.append((bits_from(1, a), y))
     return pairs
@@ -343,8 +344,7 @@ def main():
                     continue
                 seen.add(key)
                 got = claim(v & ((1 << 63) - 1), y)
-                if family != "bound" and got != family and not (family == "exact"
-                                                                 and got == "exact"):
+                if family != "bound" and got != family:
                     fail(f"0x{v:016x} 0x{yb:016x} of {family} is {got}")
                 counts[got] = counts.get(got, 0) + 1
                 lines.append(f"0x{v:016x} 0x{yb:016x}")

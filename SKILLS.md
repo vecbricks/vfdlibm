@@ -1629,8 +1629,11 @@ mnemonic); the other operations count the same at both widths.
 - **Hard cases, computed.** No published table holds hypot's; `dev/hypot-hard-cases.py` derives
   8,400 pairs with exact integer arithmetic (near-midpoint families of both forms of the medium
   path, exact triples with nearly equal legs, scaled into each range), and
-  `HardCasePairsTest` rechecks the claim on the committed file with `BigDecimal`. Whether
-  self-computed files are acceptable is the owner's question on #34, not answered yet.
+  `HardCasePairsTest` rechecks the claim on the committed file with `BigDecimal`. The owner
+  accepted self-computed files for hypot on 23 November 2026
+  ([issue 34](https://github.com/vecbricks/vfdlibm/issues/34#issuecomment-7088116761)) and asked
+  for one for pow the same day
+  ([issue 34](https://github.com/vecbricks/vfdlibm/issues/34#issuecomment-7100457001)).
 
 ## What the pow port taught
 
@@ -1669,13 +1672,14 @@ mnemonic); the other operations count the same at both widths.
   `pow.dropT2` (line 261's `y*t2` dropped): 4,194,304 of Varka's range, 1,329,994 of the target
   pairs, 8,669 of the special pairs. The fault run's inputs (`PowTest.faultRunInputs`) hold the
   special pairs, integer and target pairs, the pairs of each guard part and dense draws.
-- **Hard cases, computed** (the owner's decision of 23 November 2026, issue 34). No published table
-  holds pow's, so `dev/pow-hard-cases.py` derives `hard-cases/pow.txt` with exact integer
-  arithmetic: exact results (integer powers below 2^53 scaled into each binade, and powers of two
-  with integer, quarter and eighth exponents down to 2^-1074), exact ties (odd 54-bit powers, and
-  odd multiples of 2^-1075 among the subnormals), results within 2^-28 ulp of a midpoint, and the
-  doubles either side of the overflow, smallest-normal and zero thresholds. `HardCasePairsTest`
-  rechecks each pair's claim with `BigInteger` arithmetic. The near family stops at 2^-28 and not
-  hypot's 2^-40: from `x = 2^52 + d` the distance is `|C(e,2) d^2 - (2j+1) 2^51| / 2^52` to leading
-  order, and the squares are too sparse modulo 2^51 for it to come nearer (about 2^-30 at best over
-  20,000 steps); a nearer family needs another construction.
+- **Hard cases, computed** (the owner's decision of 23 November 2026, issue 34). A published
+  binary64 pow list exists, CORE-MATH's `src/binary64/pow/pow.wc` (MIT), and is being evaluated as a
+  follow-up (#144); this file is self-computed: `dev/pow-hard-cases.py` derives `hard-cases/pow.txt`
+  with exact integer arithmetic: exact results (integer powers below 2^53 scaled into each binade,
+  and powers of two with integer, quarter and eighth exponents down to 2^-1074), exact ties (odd
+  54-bit powers, and odd multiples of 2^-1075 among the subnormals), results within 2^-28 ulp of a
+  midpoint, and the doubles either side of the overflow, smallest-normal and zero thresholds.
+  `HardCasePairsTest` rechecks each pair's claim with `BigInteger` arithmetic. The near family stops
+  at 2^-28 and not hypot's 2^-40: from `x = 2^52 + d` the distance is `|C(e,2) d^2 - (2j+1) 2^51| /
+  2^52` to leading order, and the squares are too sparse modulo 2^51 for it to come nearer (about
+  2^-30 at best over 20,000 steps); a nearer family needs another construction.
