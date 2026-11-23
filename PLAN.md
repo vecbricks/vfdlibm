@@ -156,9 +156,10 @@ five are a later, optional set; the large-argument reduction of the trigonometri
   until a host run revises it. Meanwhile `VFdlibm` calls the finish arm of `exp`, `log` and `log10`;
   the guarded arm of `expm1` and `log1p`, by the owner's deferral of rule 1 until the 8573C's second
   run (issue #30, 21 November); the finish arm of `cosh`, the rule's exception, by the owner's
-  decision of 23 November (issue #30): no measured row favours slice, the EPYC 7763's two runs read
-  finish lower on common data near 1.3x, neither host gives a direction at Varka's and Spark's
-  shares of small lanes, and rule 1's tie goes to the finish arm
+  decision of 23 November (issue #30): no row gives slice a direction (at 17% of small lanes it
+  reads lower, inside 1.3x), the EPYC 7763's two runs give finish one on common data, neither host
+  gives a direction at Varka's and Spark's shares of small lanes, and the owner applied rule 1's
+  tie-break to cosh
   (`bench/results/cosh-epyc7763-2026-11-21.txt`, a run and a re-run;
   `cosh-xeon8573c-2026-11-21.txt`, one run; the `cosh-kinds-` files), and the slice arm stays,
   tested, so the choice can be re-measured; and the guarded arm of `atan2`, which has no finish arm,

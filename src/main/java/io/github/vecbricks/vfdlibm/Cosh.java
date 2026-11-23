@@ -81,9 +81,10 @@ import jdk.incubator.vector.VectorSpecies;
  * the body.
  *
  * <p>{@link #cosh(DoubleVector, VectorMask)}, which {@code VFdlibm.cosh} calls, is the finish arm,
- * the default by the owner's decision of 23 November 2026 (issue #30): no measured row favours
- * slice, the EPYC 7763's two runs read finish lower on common data near 1.3x, neither host gives a
- * direction at Varka's and Spark's shares of small lanes, and rule 1's tie goes to the finish arm.
+ * the default by the owner's decision of 23 November 2026 (issue #30): no row gives slice a
+ * direction (at 17% of small lanes it reads lower, inside 1.3x), the EPYC 7763's two runs give
+ * finish one on common data, neither host gives a direction at Varka's and Spark's shares of small
+ * lanes, and the owner applied rule 1's tie-break to cosh.
  * It is not read as faster. On {@code CoshBenchmark} the EPYC 7763's run and re-run ({@code
  * bench/results/cosh-epyc7763-2026-11-21.txt}) agree on the finish arm lower on common data and
  * give no direction on mixed data; the Xeon 8573C's one run ({@code cosh-xeon8573c-2026-11-21.txt})
