@@ -51,9 +51,8 @@ import org.openjdk.jmh.annotations.Warmup;
  * DoubleVector.SPECIES_MAX}, where the finish writes out its first eight lanes with constant
  * indices and a loop takes any past eight; the rows read under 0.1 B/op in the laptop reading of
  * bench/results/max-finish-alloc-free-laptop-2026-11-21.txt (allocation only, no timing). No
- * file reads the finish they replaced. bench/results/cosh-xeon8573c-2026-11-21.txt and
- * cosh-epyc7763-2026-11-21.txt read these rows, one run on each host, and give the two arms no
- * direction.
+ * file reads the finish they replaced. bench/results/cosh-xeon8573c-2026-11-21.txt (one run) and
+ * cosh-epyc7763-2026-11-21.txt (a run and a re-run) read these rows; no file decides the arm.
  */
 @State(Scope.Thread)
 @BenchmarkMode(Mode.AverageTime)

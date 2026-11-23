@@ -59,8 +59,8 @@ import org.openjdk.jmh.annotations.Warmup;
  * (AGENTS.md); by hand that is {@code -f 2 -wi 3 -w 2s -i 5 -r 2s -prof gc -jvmArgsAppend
  * -XX:CompileCommand=inline,io.github.vecbricks.vfdlibm.*::*}.
  *
- * <p>bench/results/cosh-kinds-xeon8573c-2026-11-21.txt and cosh-kinds-epyc7763-2026-11-21.txt
- * read these rows, one run on each host, and decide no arm.
+ * <p>bench/results/cosh-kinds-xeon8573c-2026-11-21.txt (one run) and
+ * cosh-kinds-epyc7763-2026-11-21.txt (a run and a re-run) read these rows, and decide no arm.
  */
 @State(Scope.Thread)
 @BenchmarkMode(Mode.AverageTime)

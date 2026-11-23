@@ -1108,18 +1108,17 @@ blend and 10 to 23 instructions. At 128 bits the bodies are 8 to 16 times longer
   only on `|x| < 0.5*ln2`, so their cost follows the share of that range, which is 3.5% in
   Varka's baseline benchmark and 17% in Spark's unit tests (issue #32): at 8 lanes a vector
   holds one in 27% and 82% of the cases. `CoshKindsBench` has those two shares, and
-  `CoshBenchmark`'s common data 0.6% of them. A laptop run under load read no direction and was
-  not kept. Each host has since run both classes once
-  (`bench/results/cosh-xeon8573c-2026-11-21.txt`, `cosh-epyc7763-2026-11-21.txt`,
-  `cosh-kinds-xeon8573c-2026-11-21.txt` and `cosh-kinds-epyc7763-2026-11-21.txt`), and no file
-  decides the arm: on `CoshBenchmark` the finish arm reads lower on every row, slice over finish
-  1.24 to 1.35 on the Xeon 8573C and 1.29 to 1.35 on the EPYC 7763, ratios near 1.3x or inside
-  it that give no direction until a re-run; on `CoshKindsBench` the finish arm reads lower by
-  more than 1.3x only on data with no small lane, and the arms read within 1.3x of each other,
-  with no direction, at 3.5% and 17% of small lanes, Varka's and Spark's shares. cosh is the
-  named exception to issue #30's tie rule (its per-lane set is not rare, so a host run decides),
-  so the default is still the plan's baseline design, not a measurement, and stays provisional
-  until a host run decides it.
+  `CoshBenchmark`'s common data 0.6% of them. A laptop run under load read no direction and was not
+  kept. The slice arm stays the default, provisionally, as the named exception to issue #30's tie
+  rule (its per-lane set is not rare, so a host run decides; [issue #30's
+  comment](https://github.com/vecbricks/vfdlibm/issues/30#issuecomment-7091848602)). The readings,
+  by minimums: on `CoshBenchmark` the EPYC 7763's two runs agree, outside 1.3x, on the finish arm
+  lower on common data (slice over finish 1.33 to 1.37), a direction, and give no direction on mixed
+  data (`bench/results/cosh-epyc7763-2026-11-21.txt`); on `CoshKindsBench` the finish arm reads
+  lower outside 1.3x with no small lane (1.46 to 1.70 on both hosts), lower inside 1.3x at 3.5% of
+  small lanes, and the slice arm lower inside 1.3x at 17% (`cosh-kinds-epyc7763-2026-11-21.txt`,
+  `cosh-kinds-xeon8573c-2026-11-21.txt`). The Xeon 8573C has one `CoshBenchmark` run
+  (`cosh-xeon8573c-2026-11-21.txt`); a second run decides.
 - **Which exp faults reach cosh.** `exp.dropCorrection` and `exp.constantOffByOneUlp`, which
   change `expCore`'s lanes of `|x| >= 0.5 ln2`. `exp.thresholdMoved` moves the subnormal
   scale-back, which `expCore` leaves out, and `exp.dropKForcing` the lanes of the word of 0.5
@@ -1269,15 +1268,13 @@ blend and 10 to 23 instructions. At 128 bits the bodies are 8 to 16 times longer
   `bench/alloc-check.py` passes on the `Atan2Benchmark` rows (`blended` and `guarded`, at 256 bits,
   the preferred species and `SPECIES_MAX`, common and mixed data) at this laptop's flags and as an
   AVX2 host, and CI runs it. Those local readings are not committed, so no figure of them is
-  quoted. Each host has timed both arms once (`bench/results/atan2-xeon8573c-2026-11-22.txt` and
-  `atan2-epyc7763-2026-11-22.txt`): on the Xeon they read within 1.3x of each other at every
-  width, and on the EPYC 7763 near 1.3x or inside it, so neither file gives them a direction.
-  atan2 has no finish arm (both arms compute the special lanes in the vector; blended runs their
-  blends in every vector, guarded behind a test), so rule 1 of issue #30 does not pick between
-  them ([the issue's corrected
-  comment](https://github.com/vecbricks/vfdlibm/issues/30#issuecomment-7085437272)).
-  So guarded stays the default at every species by the owner's decision of 22 November until a
-  re-run of each host.
+  quoted. Each host has timed both arms in a run and a re-run
+  (`bench/results/atan2-xeon8573c-2026-11-22.txt` and `atan2-epyc7763-2026-11-22.txt`), and neither
+  file gives them a direction. atan2 has no finish arm (both arms compute the special lanes in the
+  vector; blended runs their blends in every vector, guarded behind a test), so rule 1 of issue #30
+  does not pick between them ([the issue's corrected
+  comment](https://github.com/vecbricks/vfdlibm/issues/30#issuecomment-7085437272)). So guarded
+  stays the default at every species by the owner's decision of 22 November.
 - **A lane the core must not see.** A NaN, an infinity or a huge `t` in a lane the special blends
   overwrite would send the vector to atan's per-lane finish. The mask `t < 2^66` keeps them out
   (a NaN compares false), and a vector with no special lane never reaches the finish.
