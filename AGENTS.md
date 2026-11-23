@@ -160,11 +160,11 @@ port teaches.
   otherwise refuses: then the later run is a first run of new code, in a file of its own.
 - When a change moves committed numbers, measure again and commit the new file, then requote
   every document from it, rather than patching quoted figures one by one.
-- The README's speedup table is generated, never edited: `bench/readme-table.py --write` puts
-  it between its markers, from the newest results file per function and host that times this
-  commit's code, and CI's `--check` fails when it differs, so a new results file, or a change to
-  the code under a benchmark (`pom.xml` included), is followed by `--write` in the same pull
-  request.
+- The README's speedup table is generated, never edited, and describes the release its marker
+  names (`<!-- speedup-table: v<version> -->`): `bench/readme-table.py --write` puts it between
+  its markers, from the newest results file per function and host that times that tag's code,
+  and CI's `--check` fails when it differs. Code on `main` does not move it; a pull request that
+  adds a results file runs `--write`, and the release pull request moves it (step 1 below).
 
 ## Papers are transcribed, not paraphrased from memory
 
@@ -225,7 +225,14 @@ and pass `dev/jar-check.sh --release`. The steps:
 1. In a pull request, move the `Unreleased` lines under a `## [<version>]` heading of
    `CHANGELOG.md`, add its `[<version>]:` link line, and update `README.md`: its status
    paragraph and the sentence "Released in ...: ..." name the release's functions, and the
-   sentence "On `main`, unreleased: ..." goes when nothing is left on `main` only.
+   sentence "On `main`, unreleased: ..." goes when nothing is left on `main` only. The same pull
+   request regenerates the README's speedup table for the coming tag, after a benchmark pass on
+   both hosts against the release candidate (its files committed first): `bench/readme-table.py
+   --write --tag v<version>`. Until the tag exists the script compares the files with HEAD's code
+   and requires HEAD's pom version to be `<version>` or `<version>-SNAPSHOT` (a minor's release
+   pull request sets the pom to `<version>-SNAPSHOT` for it); once `dev/release.sh` has tagged,
+   with the tag's, which gives the same table, since the release commit's version and
+   `<scm><tag>` are left out of the comparison.
 2. On an up-to-date `main`, `dev/release.sh <version>` checks the tree, sets the pom's version
    (from any `-SNAPSHOT`, so a minor is released the same way),
    its `<scm><tag>` and `project.build.outputTimestamp` (so that the jars are reproducible), runs
