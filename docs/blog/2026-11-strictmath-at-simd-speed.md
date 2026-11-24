@@ -23,7 +23,8 @@ published: false
 **In short.** vfdlibm computes `exp`, `log`, `pow` and ten more functions on whole vectors of
 doubles, and every result has the same bits as `java.lang.StrictMath`, which Spark calls for
 `exp`, `ln`, `power` and their relatives. That matters because the bits differ elsewhere: on 32
-test inputs on my Databricks warehouse, Photon's results matched glibc's, not Spark's.
+test inputs on my Databricks Free Edition warehouse, Photon's results matched glibc's, not
+Spark's.
 
 </div>
 
@@ -80,7 +81,7 @@ between a double and the next one. So it may return either neighbour, and the JI
 inside the JVM, may use code written for your CPU. `StrictMath` promises one algorithm, Sun's fdlibm 5.3, a C library. The same
 input gives the same 64 bits on every JVM and every CPU.
 
-## Photon returns other doubles
+## Photon returned other doubles on my warehouse
 
 On a SQL warehouse of mine on [Databricks Free Edition](https://www.databricks.com/learn/free-edition), Photon, Databricks' native query
 engine, returned results that matched the C library's, not Spark's.
@@ -99,11 +100,11 @@ two libraries disagree? On my random inputs, about one `exp` in ten.
 ### Check your own engine
 
 Which doubles does your SQL engine return? Each row below holds an input and both libraries'
-results, and `matches` says which one your engine returned. This is the form I ran on Databricks;
-[Free Edition](https://www.databricks.com/learn/free-edition), which Databricks says "is provided at no cost to all users", is enough to
-run it there;
-on Apache Spark without Delta, replace the first line with `DROP TABLE IF EXISTS tmp_photon_math`
-and `CREATE TABLE tmp_photon_math (...) USING parquet`. Four of the 32 rows are shown;
+results, and `matches` says which one your engine returned. This is the form I ran on Databricks.
+For personal use, [Free Edition](https://www.databricks.com/learn/free-edition), which Databricks says "is provided at no cost to all
+users", is enough to run it; to check your company's engine, use your own workspace. On Apache
+Spark without Delta, replace the first line with `DROP TABLE IF EXISTS tmp_photon_math` and
+`CREATE TABLE tmp_photon_math (...) USING parquet`. Four of the 32 rows are shown;
 [`photon-check.sql`](https://github.com/vecbricks/vfdlibm/blob/v0.3.0/docs/blog/photon-check.sql)
 has them all.
 
@@ -332,7 +333,8 @@ java --add-modules jdk.incubator.vector -cp "target/classes:$(cat cp.txt)" examp
   it equals the file's `libm` column.
 - Apache Spark 4.3.0's `spark-sql` (the official `spark-4.3.0-bin-hadoop3.tgz`, checked against
   Apache's SHA-512) in local mode on JDK 21, on my laptop, ran the same file with a parquet table;
-  every row matched `StrictMath` (`strictmath-vs-libm/data/spark-4.3.0-local-2026-11-24.csv`).
+  every row matched `StrictMath` (`strictmath-vs-libm/data/spark-4.3.0-local-2026-11-24.csv`, with
+  the download, hash check and run in `spark-4.3.0-local-provenance.txt` beside it).
 
 **Narrowing it down: all 32 inputs**
 
@@ -348,7 +350,7 @@ java --add-modules jdk.incubator.vector -cp "target/classes:$(cat cp.txt)" examp
   `_ZGVdN4vv_pow`; they differ from scalar glibc on 17 of the 32 (5 `exp`, 4 `ln`, 3 `expm1`, 5
   `pow`). For `pow(2, 0.4983392062672662)`, libmvec gives 1.4125864924923173 and scalar glibc
   1.412586492492317. Photon matched the scalar values on all 32.
-- So Photon's results on my workspace are consistent with a call to glibc's scalar functions for
+- So Photon's results on my Free Edition warehouse are consistent with a call to glibc's scalar functions for
   each element, and inconsistent with `StrictMath`, with a correctly rounded library, and with glibc
   2.43's AVX2 libmvec. They do not exclude another library, or another glibc version, that returns
   the same doubles on these inputs, a hand-vectorized port of glibc's algorithms, libmvec at another

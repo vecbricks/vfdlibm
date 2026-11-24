@@ -13,7 +13,7 @@ python3 compare.py < gen.txt
 
 On JDK 25.0.5.1 and glibc 2.43 (Python 3.14.4, x86-64) it printed:
 
-```
+```text
 200000 inputs, libc glibc 2.43, Python 3.14.4
           exp(x): StrictMath and libm differ on 19,720
          ln(|x|): StrictMath and libm differ on 4,047
@@ -45,7 +45,7 @@ cc -O1 -mavx2 -o libmvec "$d/libmvec.c" -lmvec -lm
 
 On glibc 2.43, x86-64 with AVX2, Python 3.14.4, their last lines read:
 
-```
+```text
 32 rows; the correctly rounded result is libm's on 29, StrictMath's on 3, neither on 0, too close to call on 0
 libmvec (AVX2) equals scalar glibc on 15, differs on 17; scalar glibc differs from the libm column on 0
 ```
@@ -64,8 +64,8 @@ The three where `StrictMath`'s result is the correctly rounded one are all `expm
 - `correctly-rounded.csv` and `libmvec-glibc-2.43-avx2.csv`: the files `rounding.py` and
   `libmvec` write, from the run above.
 - `spark-4.3.0-local-2026-11-24.csv`: `photon-check.sql` run by Apache Spark 4.3.0's `spark-sql`
-  (the official `spark-4.3.0-bin-hadoop3.tgz`, checked against Apache's SHA-512) in local mode on
-  JDK 21, with the table created `USING parquet` (the first statement replaced by
+  (the official `spark-4.3.0-bin-hadoop3.tgz`, checked against Apache's SHA-512; the steps are in
+  `spark-4.3.0-local-provenance.txt`) in local mode on JDK 21, with the table created `USING parquet` (the first statement replaced by
   `DROP TABLE IF EXISTS tmp_photon_math` and `CREATE TABLE ... USING parquet`); its output, tab
   separated, as comma-separated columns.
 - `nantier-jdk-25.0.5.1.txt`: `../NanTier.java`'s output, one run under `-Xint` and one under the
