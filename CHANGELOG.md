@@ -11,6 +11,8 @@ two NaNs with different bits in a function of two arguments (`AGENTS.md`, "Relea
 
 ## [Unreleased]
 
+## [0.3.0]
+
 ### Added
 
 - `VFdlibm.hypot`, in the two forms `hypot(x, y)` and `hypot(x, y, live)`, over `DoubleVector`
@@ -37,6 +39,16 @@ two NaNs with different bits in a function of two arguments (`AGENTS.md`, "Relea
   finish arms, it writes its first eight lanes with constant indices and any past the eighth at a
   variable index, so at `DoubleVector.SPECIES_MAX` it is read as allocation-free up to eight lanes
   only.
+
+### Known issues
+
+- `hypot` can be slower than `StrictMath.hypot` on an AVX2 host, on data where some lanes hold a
+  NaN or an infinity. On the AMD EPYC 7763, `HypotBenchmark`'s vector rows on such data run at
+  about 0.75x `StrictMath`, about 31% slower than the same benchmark before `hypot` was made to
+  order its arguments by magnitude, as `StrictMath` does
+  (`bench/results/hypot-order-pair-epyc7763-2026-11-24.txt`). The results are not affected, only
+  the speed. The Intel Xeon 8573C (AVX-512) shows no such slowdown
+  (`bench/results/hypot-xeon8573c-2026-11-24-2.txt`).
 
 ## [0.2.0] - 2026-11-22
 
@@ -96,6 +108,7 @@ two NaNs with different bits in a function of two arguments (`AGENTS.md`, "Relea
   module `io.github.vecbricks.vfdlibm`. A client needs the incubating Vector API module
   (`--add-modules jdk.incubator.vector`) at compile time and at run time.
 
-[Unreleased]: https://github.com/vecbricks/vfdlibm/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/vecbricks/vfdlibm/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/vecbricks/vfdlibm/releases/tag/v0.3.0
 [0.2.0]: https://github.com/vecbricks/vfdlibm/releases/tag/v0.2.0
 [0.1.0]: https://github.com/vecbricks/vfdlibm/releases/tag/v0.1.0
