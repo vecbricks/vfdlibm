@@ -150,8 +150,12 @@ five are a later, optional set; the large-argument reduction of the trigonometri
   (`bench/results/exp-xeon8573c-2026-11-21.txt`, one run) 1.23 to 1.37 on common data, a ratio that
   straddles 1.3x, and 1.70 to 1.84 on mixed data, at 256 bits, 512 bits and the preferred species.
   The code has changed since both runs (a fault constant and a local in the k conversion, and the
-  finish's first eight lanes written out with constant indices), so no run has timed today's `exp`
-  but for the rows of that pair.
+  finish's first eight lanes written out with constant indices). Of today's `Exp.java`, one run each
+  reads finish over blend too (`exp-epyc7763-2026-11-23.txt` and `exp-epyc7763-2026-11-24.txt`,
+  before and after #174 changed `Hypot.java`, which is under `ExpBenchmark` by `bench/record.py`'s
+  rule, and `exp-xeon8573c-2026-11-24.txt`, before #174): the blend over the finish 1.98 to 2.12 on
+  common data and 1.37 to 1.44 on mixed data on the EPYC, 1.25 to 1.34 and 1.73 to 1.81 on the Xeon,
+  at every vector row of 256 bits or more.
   Which arm each function keeps follows the two rules issue #30 set on 21 November 2026: a tie
   within 1.3x on every host that has a file goes to the finish arm, except for `cosh`, whose
   per-lane set is not rare, so a host run decides its arm; and where hosts disagree, each species
@@ -173,7 +177,7 @@ five are a later, optional set; the large-argument reduction of the trigonometri
   under the list); and the guarded arm of `atan2`, which has no finish arm, so rule 1 does not pick
   between its two ([issue #30's corrected
   comment](https://github.com/vecbricks/vfdlibm/issues/30#issuecomment-7085437272)). The Xeon has
-  timed atan2's arms in a run and a re-run (`atan2-xeon8573c-2026-11-22.txt`) and the EPYC in a
+  timed atan2's arms in three runs (`atan2-xeon8573c-2026-11-22.txt`) and the EPYC in a
   run and two re-runs (`atan2-epyc7763-2026-11-22.txt`, whose third run reads blended over guarded
   at 1.27 at the preferred species on common data), and neither file gives them a direction, so
   guarded stays the
@@ -183,8 +187,11 @@ five are a later, optional set; the large-argument reduction of the trigonometri
   direction on mixed data (`bench/results/cosh-epyc7763-2026-11-21.txt`); on `CoshKindsBench` the
   finish arm reads lower outside 1.3x with no small lane (1.46 to 1.70 on both hosts), lower inside
   1.3x at 3.5% of small lanes, and the slice arm lower inside 1.3x at 17%
-  (`cosh-kinds-epyc7763-2026-11-21.txt`, `cosh-kinds-xeon8573c-2026-11-21.txt`). The Xeon 8573C has
-  one `CoshBenchmark` run (`cosh-xeon8573c-2026-11-21.txt`); a second run decides.
+  (`cosh-kinds-epyc7763-2026-11-21.txt`, `cosh-kinds-xeon8573c-2026-11-21.txt`). Of the code as it
+  is now, each host has one `CoshBenchmark` run (`cosh-xeon8573c-2026-11-24.txt`,
+  `cosh-epyc7763-2026-11-23.txt`): both read the finish arm lower on every row, slice over finish
+  1.29 to 1.38 on the Xeon and 1.28 to 1.36 on the EPYC, no direction from one run; a second run on
+  each host decides.
 
 ## 6. Rules
 
@@ -221,11 +228,14 @@ five are a later, optional set; the large-argument reduction of the trigonometri
   has the same three arms for `expm1`, `SinhBenchmark` one for `sinh`, `CoshBenchmark` two for
   `cosh`, `AsinBenchmark` one for `asin`, `AtanBenchmark` one for `atan`, `AcosBenchmark` one for
   `acos`, `Atan2Benchmark` two for `atan2` (the blended and the guarded arm, over two arrays) and
-  `HypotBenchmark` one for `hypot` (over two arrays; `hypot-epyc7763-2026-11-23.txt` reads it,
-  a run and its re-run: no direction against the scalar loop at the preferred species, and
-  `finishMax` 1.6x slower than `finishPreferred` on common data in both), and `PowBenchmark` one
-  for `pow` (the same; `pow-epyc7763-2026-11-23.txt` reads it, one run, its `rareOracle` row the
-  allocation baseline).
+  `HypotBenchmark` one for `hypot` (over two arrays; `hypot-epyc7763-2026-11-23.txt` reads it
+  before #174 ordered its arguments, a run and its re-run: no direction against the scalar loop at
+  the preferred species, and `finishMax` 1.6x slower than `finishPreferred` on common data in both;
+  `hypot-epyc7763-2026-11-24.txt` reads it after #174, one run, the scalar loop lower on mixed data
+  by 1.43 to 1.44, which wants a re-run, and `finishMax` at the level of the other rows), and
+  `PowBenchmark` one for `pow` (the same; `pow-epyc7763-2026-11-23.txt` and
+  `pow-xeon8573c-2026-11-24.txt` read it, one run each, its `rareOracle` row the allocation
+  baseline).
   Each of the thirteen has rows at `SPECIES_MAX` (`*Max`), which the allocation check covers: the
   finish of `exp`, `expm1`, `log`, `log10` and `log1p` boxed there on mixed data until its first
   eight lanes were written out (`bench/results/max-finish-laptop-2026-11-20.txt`, then
