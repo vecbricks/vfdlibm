@@ -1741,8 +1741,9 @@ words of the unscaled values, and lines 97, 103 and 106 split the scaled values 
 words. Reading the words again from the scaled values, as a port that kept words and values
 together would, is not bit-identical.
 
-**Counter-example.** Four of the pairs found, `C` the C as written, which is `StrictMath.hypot` at
-each, and `refreshed` the same C with `ha = __HI(a)`, `hb = __HI(b)` after line 84; the first two
+**Counter-example.** Four of the pairs found, `C` the C ordered by magnitude (L21), which is
+`StrictMath.hypot` at each (their high words differ, so it is the C as written there too), and
+`refreshed` the same C with `ha = __HI(a)`, `hb = __HI(b)` after line 84; the first two
 take the form `w <= b`, the last two `w > b`:
 
 | `x` | `y` | `C` | `refreshed` |
@@ -1756,21 +1757,23 @@ On those lanes the stale `t1` is the leading part of the unscaled `a`, about `2^
 scaled `a`, so `t2 = a-t1` is nearly all of `a`, and the sums of lines 99 and 108 round at other
 places than they would with the scaled words. How far either result is from the exact value is
 not measured here; that they are different doubles is the claim. Of 1,048,576 pairs of
-`HypotTest.subnormalPairs` (seed 42), 914,446 took the `2^1022` path and 42,876 differ (33,515 of the form `w > b`, 9,361 of `w <= b`), counted by a scratch
-program over `HypotTest.cHypot`, not committed. So the port keeps the words apart from the values
-and reads them stale, as the C does.
+`HypotTest.subnormalPairs` (seed 42), 914,446 took the `2^1022` path and 42,876 differ (33,515 of
+the form `w > b`, 9,361 of `w <= b`), counted by a scratch program over `HypotTest.cHypot`, not
+committed, when it was the C as written, before L21. So the port keeps the words apart from the
+values and reads them stale, as the C does.
 
 **Test (scalar).** `HypotTest.staleWordWitnesses` asserts the four rows through `cHypot`, e_hypot.c
-in scalar Java checked against `StrictMath.hypot` (`scalarTranscriptionIsStrictMath`, in every JIT
-mode), and that each takes the `2^1022` path; it fails if the refreshed words gave the C's bits
-there. `theInputsSeeAChangedTranscription` requires the refreshed variant to differ on the gate's
-inputs. **Vector tie.** `HypotTest.staleWordWitnessesInEveryLane` puts each witness at every lane
-of a vector beside lanes of the other ways out of the C, at every width the host has, unmasked and
-masked; `theStaleWordsAreRead` requires the port's lanes to equal `cHypot` as written on 65,536
-subnormal-`b` pairs per width, and the refreshed variant to differ from `StrictMath` on some of
-them. **Planted fault.** `hypot.refreshedWords` (`Hypot.REFRESHED_WORDS`) reads the words again
-from the scaled values after line 84; `HypotTest.faultCatchers` requires the port to fail on the
-fault run's inputs with it planted, at every width.
+in scalar Java ordered by magnitude (L21; the witnesses' high words differ, so line 60 as written
+orders them the same) and checked against `StrictMath.hypot` (`scalarTranscriptionIsStrictMath`,
+in every JIT mode), and that each takes the `2^1022` path; it fails if the refreshed words gave the
+C's bits there. `theInputsSeeAChangedTranscription` requires the refreshed variant to differ on the
+gate's inputs. **Vector tie.** `HypotTest.staleWordWitnessesInEveryLane` puts each witness at every
+lane of a vector beside lanes of the other ways out of the C, at every width the host has, unmasked
+and masked; `theStaleWordsAreRead` requires the port's lanes to equal `cHypot`, the C ordered by
+magnitude, on 65,536 subnormal-`b` pairs per width, and the refreshed variant to differ from
+`StrictMath` on some of them. **Planted fault.** `hypot.refreshedWords` (`Hypot.REFRESHED_WORDS`)
+reads the words again from the scaled values after line 84; `HypotTest.faultCatchers` requires the
+port to fail on the fault run's inputs with it planted, at every width.
 
 **Encoding.** None: the results are Java's evaluation of the transcription, and the count is a
 program's, so nothing here is machine-checked in `proofs/`.
@@ -1804,7 +1807,8 @@ pair the port's lane is `StrictMath`'s. Line 60 as written is not: with equal hi
 = x` whichever is larger, and on some such pairs that changes the result. So this lemma does not
 prove the port equal to `StrictMath` for every input, as the others prove it equal to the C: (a) and
 (b) are proven, and (c) is the oracle's evidence, on which the departure rests by the owner's
-decision on issue 173 (order by magnitude). The C as written is proven different from `StrictMath`
+decision on issue 173 (order by magnitude), under `AGENTS.md`'s rule for a `StrictMath` that
+departs from the C ("Same result, proven"). The C as written is proven different from `StrictMath`
 at the witness, so following it was no option either.
 
 **Hypotheses.** H1: the inputs are any two doubles, the lanes of `x` and `y`. H2: `ha` and `hb` are
@@ -1858,7 +1862,8 @@ words, the C as written different by order, and `StrictMath` the same in both or
 the C ordered by magnitude. The gate (`scalarTranscriptionIsStrictMath`, in every JIT mode) compares
 the ordered C with `StrictMath` on its inputs, the file's included;
 `theInputsSeeAChangedTranscription` requires the C as written to differ from `StrictMath` on them,
-and the gate requires the path of an equal-word swap (`Path.EQUAL_WORDS_SWAPPED`) to be taken.
+and the gate requires the path of an equal-word swap that reaches lines 101-108, the split where
+the order decides bits (`Path.EQUAL_WORDS_SWAPPED`), to be taken.
 **Vector tie.** `HypotTest.orderPairsInEveryLane` puts the witness, in both orders, and each of the
 file's pairs at every lane of a vector beside lanes of the other ways out of the C, at every width
 the host has and at `SPECIES_MAX`, unmasked and masked; a port that swapped by the high words alone

@@ -116,7 +116,8 @@ class HypotTest {
     W_NOT_ABOVE_B,
     /**
      * Line 60 with equal high words and {@code |y| > |x|}: swapped by magnitude, where line 60 as
-     * written keeps {@code a = x} (L21), on a lane that reaches the medium path.
+     * written keeps {@code a = x} (L21), on a lane that takes lines 101-108, the split where the
+     * order decides bits.
      */
     EQUAL_WORDS_SWAPPED,
     /** Lines 80-84 then lines 96-99: the stale {@code ha} split at line 97. */
@@ -238,10 +239,6 @@ class HypotTest {
       }
     }
     w = a - b; // 94
-    if (equalWordsSwapped) {
-      // counted at the medium path, so only finite lanes that reach lines 101-108 count
-      took(paths, Path.EQUAL_WORDS_SWAPPED);
-    }
     if (w > b) { // 95
       t1 = 0; // 96
       t1 = withHi(t1, ha); // 97
@@ -261,6 +258,10 @@ class HypotTest {
       t2 = a - t1; // 107
       w = Math.sqrt(t1 * y1 - (w * (-w) - (t1 * y2 + t2 * b))); // 108
       took(paths, Path.W_NOT_ABOVE_B);
+      if (equalWordsSwapped) {
+        // the split where the order of a and b decides bits (L21)
+        took(paths, Path.EQUAL_WORDS_SWAPPED);
+      }
       if (k == -1022) {
         took(paths, Path.SUBNORMAL_B_W_NOT_ABOVE_B);
       }
@@ -1050,8 +1051,8 @@ class HypotTest {
    * scaling, and that reading decides bits. On the subnormal-{@code b} pairs the C (ordered by
    * magnitude, L21) is {@code StrictMath} (the gate), the C with the words read again from the
    * scaled values differs from it on some of them, and the port's vector lanes equal the C, bit
-   * for bit, at
-   * every width: so the port keeps the words stale, and a port that refreshed them would fail.
+   * for bit, at every width: so the port keeps the words stale, and a port that refreshed them
+   * would fail.
    */
   @ParameterizedTest
   @EnumSource(VectorWidth.class)
