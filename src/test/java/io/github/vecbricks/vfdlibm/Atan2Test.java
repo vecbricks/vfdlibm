@@ -323,9 +323,9 @@ class Atan2Test {
   }
 
   /**
-   * Pairs of one high word with both low words random ({@link Inputs#sharedWordPairs}), which
-   * found hypot's order of the arguments (PROOFS.md, L21), at the words of 0, 1 and the
-   * infinities among others.
+   * Pairs of one high word with both low words random ({@link Inputs#sharedWordPairs}), the kind
+   * of pair on which hypot's order of the arguments showed (PROOFS.md, L21), a quarter at the
+   * words of 0, 1, 2^66 and the largest finite one.
    */
   @ParameterizedTest
   @EnumSource(VectorWidth.class)

@@ -40,9 +40,10 @@ import jdk.incubator.vector.VectorSpecies;
  * 63); above {@code 2^500} both are scaled by {@code 2^-600} through their words (lines 65-76),
  * and where {@code b < 2^-500} by {@code 2^600} through their words (lines 86-90), or, where
  * {@code b} is subnormal or zero, a zero {@code b} returns {@code a} (line 79) and any other is
- * scaled by {@code 2^1022} through a multiplication (lines 80-84); then {@code sqrt(t1*t1-(b*(-b)-t2*(a+t1)))} where {@code w = a-b > b} and
- * {@code sqrt(t1*y1-(w*(-w)-(t1*y2+t2*b)))} otherwise, over operands split at the high word
- * (lines 94-109), times {@code 2^k} where {@code k != 0} (lines 110-114).
+ * scaled by {@code 2^1022} through a multiplication (lines 80-84); then {@code
+ * sqrt(t1*t1-(b*(-b)-t2*(a+t1)))} where {@code w = a-b > b} and {@code
+ * sqrt(t1*y1-(w*(-w)-(t1*y2+t2*b)))} otherwise, over operands split at the high word (lines
+ * 94-109), times {@code 2^k} where {@code k != 0} (lines 110-114).
  *
  * <p>The one departure from the C is on purpose: line 60 swaps where {@code hb > ha}, by the high
  * words alone, so with equal high words {@code a} is {@code x} even where {@code |y|} is the
@@ -69,9 +70,10 @@ import jdk.incubator.vector.VectorSpecies;
  * 66-70, and the lanes of line 63 whose {@code a} is not finite), finished per lane with {@code
  * StrictMath.hypot}, which is the C on those lanes. Every finite lane is computed in the vector.
  * One arm: the finish. The C's {@code int} words are int lanes of half the double vector's size,
- * as in atan2; every call this body makes comes first ({@code Lanes.intSpecies}, {@code
- * Lanes.hiInt}), and the high-word writes are written out, since C2 stops inlining once the graph is large
- * (NodeCountInliningCutoff) and a refused call boxes its vectors.
+ * as in atan2; every call this body makes ({@code Lanes.intSpecies}, and {@code Lanes.hiInt} on
+ * the swapped values) comes before the scalings and the medium path, with only the views, one
+ * compare and two blends ahead of it, and the high-word writes are written out, since C2 stops
+ * inlining once the graph is large (NodeCountInliningCutoff) and a refused call boxes its vectors.
  */
 final class Hypot {
 

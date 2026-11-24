@@ -1531,8 +1531,9 @@ class PowTest {
   }
 
   /**
-   * Pairs of one high word with both low words random ({@link Inputs#sharedWordPairs}), which
-   * found hypot's order of the arguments (PROOFS.md, L21), a quarter at pow's words.
+   * Pairs of one high word with both low words random ({@link Inputs#sharedWordPairs}), the kind
+   * of pair on which hypot's order of the arguments showed (PROOFS.md, L21), a quarter at pow's
+   * words (the finite ones).
    */
   @ParameterizedTest
   @EnumSource(VectorWidth.class)

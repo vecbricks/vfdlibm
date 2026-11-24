@@ -50,12 +50,12 @@ import org.junit.jupiter.params.provider.EnumSource;
  * The entry gate of the hypot port (issue 34): {@code e_hypot.c} in scalar Java, line by line but
  * for line 60, which orders the arguments by magnitude as the port does (PROOFS.md, L21; issue
  * 173), against {@code StrictMath.hypot} by {@link PairBits#matches} with hypot's declared
- * candidates ({@link PairBits.Candidates#MAGNITUDES}), so raw bits on every lane but one of two NaNs with
- * different bits. The inputs reach every way out of the C ({@link Path}, each asserted taken): the
- * ratio word {@code 0x3c00000} (2^60), the scalings at {@code 2^500}, {@code 2^-500} and the
- * subnormal {@code b} (times 2^1022, with the words the C leaves stale), equal high words with
- * either low word larger, {@code a} near {@code 2b}, the zeros, infinities beside NaNs, NaNs of
- * every kind and sampled bits. The same check runs in a JVM of its own per JIT mode ({@link
+ * candidates ({@link PairBits.Candidates#MAGNITUDES}), so raw bits on every lane but one of two
+ * NaNs with different bits. The inputs reach every way out of the C ({@link Path}, each asserted
+ * taken): the ratio word {@code 0x3c00000} (2^60), the scalings at {@code 2^500}, {@code 2^-500}
+ * and the subnormal {@code b} (times 2^1022, with the words the C leaves stale), equal high words
+ * with either low word larger, {@code a} near {@code 2b}, the zeros, infinities beside NaNs, NaNs
+ * of every kind and sampled bits. The same check runs in a JVM of its own per JIT mode ({@link
  * JitMode}), since which candidate a sum of two NaNs keeps varies with the tier; that run asserts
  * the results, and prints which candidate won in each mode without asserting it, since which one
  * is not specified.
@@ -116,7 +116,7 @@ class HypotTest {
     W_NOT_ABOVE_B,
     /**
      * Line 60 with equal high words and {@code |y| > |x|}: swapped by magnitude, where line 60 as
-     * written keeps {@code a = x} (L21).
+     * written keeps {@code a = x} (L21), on a lane that reaches the medium path.
      */
     EQUAL_WORDS_SWAPPED,
     /** Lines 80-84 then lines 96-99: the stale {@code ha} split at line 97. */
@@ -175,9 +175,7 @@ class HypotTest {
     boolean swap = variant == Variant.AS_WRITTEN ? hb > ha
         : (Double.doubleToRawLongBits(y) & Long.MAX_VALUE)
             > (Double.doubleToRawLongBits(x) & Long.MAX_VALUE);
-    if (swap && hb == ha) {
-      took(paths, Path.EQUAL_WORDS_SWAPPED);
-    }
+    boolean equalWordsSwapped = swap && hb == ha;
     if (swap) { // 60
       a = y;
       b = x;
@@ -240,6 +238,10 @@ class HypotTest {
       }
     }
     w = a - b; // 94
+    if (equalWordsSwapped) {
+      // counted at the medium path, so only finite lanes that reach lines 101-108 count
+      took(paths, Path.EQUAL_WORDS_SWAPPED);
+    }
     if (w > b) { // 95
       t1 = 0; // 96
       t1 = withHi(t1, ha); // 97
@@ -935,7 +937,9 @@ class HypotTest {
 
   /**
    * Pairs of one high word with both low words random ({@link Inputs#sharedWordPairs}), a quarter
-   * at e_hypot.c's words: where line 60 and the port's order differ (L21).
+   * at e_hypot.c's words: the lanes of one high word in general. The pairs where line 60 and the
+   * port's order differ are about 2 in 10^8 of these, so what catches L21's fault is {@link
+   * #orderPairsInEveryLane}, not this.
    */
   @ParameterizedTest
   @EnumSource(VectorWidth.class)

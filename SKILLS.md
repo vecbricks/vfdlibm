@@ -1139,7 +1139,9 @@ mnemonic); the other operations count the same at both widths.
   the swept value's high word; `PairHarnessTest` checks it), so a pass checks about 10^9 such
   pairs, and in the unit tests `Inputs.sharedWordPairs` (`sharedHighWords` in `Atan2Test`,
   `HypotTest` and `PowTest`). The same black box found no such pair for atan2 or pow in 2 * 10^6
-  each.
+  each. The change moved every pair function's streams: a fuzz seed or a sweep slice of a pair
+  function recorded before it (issue 173's night included) draws other pairs now, so replay an
+  old night's failures by their bits (its mismatch file), not by its seed.
 - **One comparator for a function of two arguments** (`PairBits.matches(candidates, x, y, want,
   got)`, test code). Every comparison of a pair function's lane goes through it: `Oracle.assertPair`
   and the live lanes of `assertPairMasked` (a lane that is not live keeps `x`'s raw bits), and the
