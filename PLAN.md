@@ -172,9 +172,11 @@ five are a later, optional set; the large-argument reduction of the trigonometri
   comment](https://github.com/vecbricks/vfdlibm/issues/30#issuecomment-7091848602); its readings are
   under the list); and the guarded arm of `atan2`, which has no finish arm, so rule 1 does not pick
   between its two ([issue #30's corrected
-  comment](https://github.com/vecbricks/vfdlibm/issues/30#issuecomment-7085437272)). Each host has
-  timed atan2's arms in a run and a re-run (`atan2-xeon8573c-2026-11-22.txt`,
-  `atan2-epyc7763-2026-11-22.txt`), and neither file gives them a direction, so guarded stays the
+  comment](https://github.com/vecbricks/vfdlibm/issues/30#issuecomment-7085437272)). The Xeon has
+  timed atan2's arms in a run and a re-run (`atan2-xeon8573c-2026-11-22.txt`) and the EPYC in a
+  run and two re-runs (`atan2-epyc7763-2026-11-22.txt`, whose third run reads blended over guarded
+  at 1.27 at the preferred species on common data), and neither file gives them a direction, so
+  guarded stays the
   default at every species by the owner's decision of 22 November.
   cosh's readings, by minimums: on `CoshBenchmark` the EPYC 7763's two runs agree, outside 1.3x, on
   the finish arm lower on common data (slice over finish 1.33 to 1.37), a direction, and give no
@@ -219,8 +221,10 @@ five are a later, optional set; the large-argument reduction of the trigonometri
   has the same three arms for `expm1`, `SinhBenchmark` one for `sinh`, `CoshBenchmark` two for
   `cosh`, `AsinBenchmark` one for `asin`, `AtanBenchmark` one for `atan`, `AcosBenchmark` one for
   `acos`, `Atan2Benchmark` two for `atan2` (the blended and the guarded arm, over two arrays) and
-  `HypotBenchmark` one for `hypot` (over two arrays; no results file reads it yet), and
-  `PowBenchmark` one for `pow` (the same; no results file reads it either).
+  `HypotBenchmark` one for `hypot` (over two arrays; `hypot-epyc7763-2026-11-23.txt` reads it,
+  one run whose reading wants a re-run), and `PowBenchmark` one for `pow` (the same;
+  `pow-epyc7763-2026-11-23.txt` reads it, one run, its `rareOracle` row the allocation
+  baseline).
   Each of the thirteen has rows at `SPECIES_MAX` (`*Max`), which the allocation check covers: the
   finish of `exp`, `expm1`, `log`, `log10` and `log1p` boxed there on mixed data until its first
   eight lanes were written out (`bench/results/max-finish-laptop-2026-11-20.txt`, then

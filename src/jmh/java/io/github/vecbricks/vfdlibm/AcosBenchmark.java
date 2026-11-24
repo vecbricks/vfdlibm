@@ -48,8 +48,8 @@ import org.openjdk.jmh.annotations.Warmup;
  * <p>{@code bench/alloc-check.py} runs the vector benchmarks named {@code *256}, {@code
  * *Preferred} and {@code *Max} on {@code common} and {@code mixed} inputs and fails if any
  * allocates, which means the body boxed. bench/results/acos-xeon8573c-2026-11-22.txt and
- * acos-epyc7763-2026-11-22.txt read these rows, one run on each host. acos has one arm, so there
- * is no comparison to make between arms.
+ * acos-epyc7763-2026-11-22.txt read these rows, one run on the Xeon and a run and its re-run on
+ * the EPYC. acos has one arm, so there is no comparison to make between arms.
  */
 @State(Scope.Thread)
 @BenchmarkMode(Mode.AverageTime)

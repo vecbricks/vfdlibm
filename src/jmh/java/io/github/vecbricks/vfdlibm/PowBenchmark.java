@@ -29,7 +29,8 @@ import org.openjdk.jmh.annotations.Warmup;
  * StrictMath.pow} loop and {@link Pow#pow}, the one arm ({@code VFdlibm.pow} runs it, with every
  * lane off the common path finished per lane), at 256 bits, at the host's preferred species and
  * at {@code SPECIES_MAX}. 128 bits is left out: on x86 C2 lowers no mask at two 64-bit lanes, so
- * every 128-bit arm boxes (SKILLS.md). No results file times it yet.
+ * every 128-bit arm boxes (SKILLS.md). bench/results/pow-epyc7763-2026-11-23.txt times it, one
+ * run on the EPYC 7763; its rareOracle row is the allocation baseline, no timing.
  *
  * <p>{@code inputs} picks the data: {@code common} draws {@code x} from {@code [1e-6, 1e6)} and
  * {@code y} from {@code [-10, 10)}, Varka's baseline range, where every lane takes the common

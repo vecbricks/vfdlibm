@@ -1491,9 +1491,9 @@ mnemonic); the other operations count the same at both widths.
   that are a constant or `x+x`, so a guarded arm that blends them is possible; none is built,
   because the tie-break rule of #30 sends a tie to the finish arm and no timing says otherwise.
   The host files of 22 November (`bench/results/atan-xeon8573c-2026-11-22.txt` and
-  `atan-epyc7763-2026-11-22.txt`, one run each) time the one arm against the scalar loop, and
-  read every vector row at 0.02 B/op or less, but for the EPYC's 512-bit rows, which run in Java
-  there.
+  `atan-epyc7763-2026-11-22.txt`, one run on the Xeon, a run and a re-run on the EPYC) time
+  the one arm against the scalar loop, and read every vector row at 0.02 B/op or less, but for
+  the EPYC's 512-bit rows, which run in Java there.
 - **Sizes of its faults, each of 2^22 uniform draws from its own interval.** `atan.dropLo`:
   855028 changed of 2^22 draws from `(-5, 5)`, none of those below 7/16. `atan.splitMoved`
   (19/16 moved to 2): 431802 changed of 2^22 draws from `[19/16, 2)`, none from the ranges
@@ -1542,9 +1542,10 @@ mnemonic); the other operations count the same at both widths.
   has no `SPECIES_MAX` arm), at this laptop's flags and as an AVX2 host (`-XX:UseAVX=2
   -XX:MaxVectorSize=32`); CI runs it. Those local readings are not committed, so no figure of
   them is quoted. The host files of 22 November (`bench/results/asin-xeon8573c-2026-11-22.txt`
-  and `asin-epyc7763-2026-11-22.txt`, one run each) read every vector row at 0.02 B/op or less,
-  but for the EPYC's 512-bit rows, which run in Java there, and time the arm against the scalar
-  loop. None of it says anything of 128 bits or of the masked form's lowering.
+  and `asin-epyc7763-2026-11-22.txt`, one run on the Xeon, a run and a re-run on the EPYC) read
+  every vector row at 0.02 B/op or less, but for the EPYC's 512-bit rows, which run in Java
+  there, and time the arm against the scalar loop. None of it says anything of 128 bits or of
+  the masked form's lowering.
 - **One arm, no tie to break.** The three ranges below 1 share `t`'s polynomials and the one
   division `p/q`, and the split range's second division is computed on every lane; the rare lanes
   (`|x| >= 1`, NaN) are finished per lane. There is no second body to compare, so the arm needs
@@ -1590,8 +1591,9 @@ mnemonic); the other operations count the same at both widths.
 - **Allocation.** CI runs `bench/alloc-check.py` on `AcosBenchmark`'s rows (`finish256`,
   `finishPreferred`, `finishMax`, common and mixed data). The host files of 22 November
   (`bench/results/acos-xeon8573c-2026-11-22.txt` and `acos-epyc7763-2026-11-22.txt`, one run
-  each) read every vector row at 0.02 B/op or less, but for the EPYC's 512-bit rows, which run
-  in Java there, and time the arm against the scalar loop.
+  on the Xeon, a run and a re-run on the EPYC) read every vector row at 0.02 B/op or less, but
+  for the EPYC's 512-bit rows, which run in Java there, and time the arm against the scalar
+  loop.
 
 ## What the atan2 port taught
 
@@ -1611,11 +1613,12 @@ mnemonic); the other operations count the same at both widths.
   `bench/alloc-check.py` passes on the `Atan2Benchmark` rows (`blended` and `guarded`, at 256 bits,
   the preferred species and `SPECIES_MAX`, common and mixed data) at this laptop's flags and as an
   AVX2 host, and CI runs it. Those local readings are not committed, so no figure of them is
-  quoted. Each host has timed both arms in a run and a re-run
+  quoted. The Xeon has timed both arms in a run and a re-run and the EPYC in a run and two re-runs
   (`bench/results/atan2-xeon8573c-2026-11-22.txt` and `atan2-epyc7763-2026-11-22.txt`), and neither
-  file gives them a direction. atan2 has no finish arm (both arms compute the special lanes in the
-  vector; blended runs their blends in every vector, guarded behind a test), so rule 1 of issue #30
-  does not pick between them ([the issue's corrected
+  file gives them a direction (the EPYC's third run reads blended over guarded at 1.27 at the
+  preferred species on common data). atan2 has no finish arm (both arms compute the special lanes
+  in the vector; blended runs their blends in every vector, guarded behind a test), so rule 1 of
+  issue #30 does not pick between them ([the issue's corrected
   comment](https://github.com/vecbricks/vfdlibm/issues/30#issuecomment-7085437272)). So guarded
   stays the default at every species by the owner's decision of 22 November.
 - **A lane the core must not see.** A NaN, an infinity or a huge `t` in a lane the special blends

@@ -41,15 +41,17 @@ The table has a row per function and a column per host: xeon8573c (AVX-512) and 
 always, and xeon6973p, epyc9v45 and neoversen2 once a results file of theirs exists. A cell
 holds two ratios, for the inputs common and mixed: the minimum of the file's scalarStrictMath row
 over the minimum of the default arm at the preferred species (its <arm>Preferred row), both of
-one run, in ns/op as the file's min/avg/max table gives them. Where a file holds a run and its
-re-run, the ratio is taken within each run and the lower one is shown. From a file of one run,
-a ratio from 1.30 to under 1.40 is marked "(one run, near 1.3x)", and one under 1.30 shows no
+one run, in ns/op as the file's min/avg/max table gives them. Where a file holds several runs
+(a run and its re-runs), the ratio is taken within each run and the lowest is shown. From a
+file of one run, a ratio from 1.30 to under 1.40 is marked "(one run, near 1.3x)", and one under 1.30 shows no
 figure but "re-run needed", since AGENTS.md asks a claim under about 1.3x to be re-run.
 
-The file of a function and host is bench/results/<function>-<host>-<date>.txt whose benchmark
-class is <Function>Benchmark (so -kinds, -pair, -onediv and laptop files are not read): the
-newest one whose every run times the code of the tag for that benchmark, by bench/record.py's
-rule (code_compared: the benchmark's closure the same but for comments and whitespace, pom.xml
+The file of a function and host is bench/results/<function>-<host>-<date>.txt, or
+<function>-<host>-<date>-<n>.txt (n from 2, a later file of that date that times other code,
+which bench/record.py numbers so), whose benchmark class is <Function>Benchmark (so -kinds,
+-pair, -onediv and laptop files are not read): by date and then n, the newest one whose
+every run times the code of the tag for that benchmark, by bench/record.py's rule
+(code_compared: the benchmark's closure the same but for comments and whitespace, pom.xml
 but for its version and the parts no benchmark runs; here <scm><tag> too, which the release
 commit sets). With no such file, a cell says "not measured" if the function and host have no
 file, and otherwise "newer code" or "older code" by whether the newest file's commit is newer
@@ -311,7 +313,7 @@ def cell(runs, cls, arm):
     return " / ".join(out)
 
 
-NAME = re.compile(r"^([a-z0-9]+)-([a-z0-9]+)-(\d{4}-\d{2}-\d{2})\.txt$")
+NAME = re.compile(r"^([a-z0-9]+)-([a-z0-9]+)-(\d{4}-\d{2}-\d{2})(?:-([2-9]|[1-9]\d+))?\.txt$")
 
 
 def files(root, names):
@@ -322,7 +324,7 @@ def files(root, names):
         m = NAME.match(name)
         if m and m.group(1) in names and m.group(2) in hosts:
             out.setdefault((m.group(1), m.group(2)), []).append(
-                (m.group(3), "bench/results/" + name))
+                ((m.group(3), int(m.group(4) or 1)), "bench/results/" + name))
     return {k: [p for _, p in sorted(v, reverse=True)] for k, v in out.items()}
 
 
@@ -410,7 +412,7 @@ def table_and_state(root, tag):
         "For vfdlibm %s (tag %s). Each figure is `StrictMath` called once per lane (the"
         " `scalarStrictMath` row) over the function's default arm at the host's preferred"
         " species (its `<arm>Preferred` row), by minimum ns/op within one run; where a file"
-        " holds a run and its re-run, the lower of the two runs' ratios is shown; from one run, a"
+        " holds several runs, the lowest of their ratios is shown; from one run, a"
         " ratio under 1.4x is marked, and one under 1.3x says \"re-run needed\". `common`: no lane takes a"
         " rare path; `mixed`: rare lanes run. The preferred species is %s. \"older code\" and"
         " \"newer code\": the files of that function and host time code older or newer than"
@@ -461,7 +463,25 @@ def write(root, readme, tag=None):
 
 # The self-test: a scratch repository with three functions, their code and results files.
 
+def selftest_names():
+    """A second file of one date, -<n>, is newer than the plain one, by n, not by its text."""
+    with tempfile.TemporaryDirectory(prefix="readme-table-names-") as root:
+        os.makedirs(os.path.join(root, "bench/results"))
+        for name in ("exp-epyc7763-2026-11-23.txt", "exp-epyc7763-2026-11-23-2.txt",
+                     "exp-epyc7763-2026-11-23-10.txt", "exp-epyc7763-2026-11-22.txt",
+                     "exp-epyc7763-2026-11-24-1.txt", "exp-epyc7763-2026-11-24-02.txt",
+                     "exp-kinds-epyc7763-2026-11-25.txt", "exp-epyc7763-2026-11-25-x.txt"):
+            open(os.path.join(root, "bench/results", name), "w").close()
+        got = files(root, {"exp"})
+        assert got == {("exp", "epyc7763"): [
+            "bench/results/exp-epyc7763-2026-11-23-10.txt",
+            "bench/results/exp-epyc7763-2026-11-23-2.txt",
+            "bench/results/exp-epyc7763-2026-11-23.txt",
+            "bench/results/exp-epyc7763-2026-11-22.txt"]}, got
+
+
 def selftest():
+    selftest_names()
     saved = record.REPO
     try:
         with tempfile.TemporaryDirectory(prefix="readme-table-") as repo:

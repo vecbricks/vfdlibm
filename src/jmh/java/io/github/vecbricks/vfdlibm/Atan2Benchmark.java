@@ -32,7 +32,9 @@ import org.openjdk.jmh.annotations.Warmup;
  * on x86 C2 lowers no mask at two 64-bit lanes, so every 128-bit arm boxes (SKILLS.md). {@code
  * bench/alloc-check.py} reads it for what the bodies allocate, and
  * bench/results/atan2-xeon8573c-2026-11-22.txt and atan2-epyc7763-2026-11-22.txt time it, a run and
- * a re-run on each host, which give the two arms no direction.
+ * a re-run on the Xeon and a run and two re-runs on the EPYC, which give the two arms no direction
+ * (the EPYC's third run reads blended over guarded at 1.27 at the preferred species on common
+ * data).
  *
  * <p>{@code inputs} picks the data: {@code common} draws {@code y} and {@code x} from {@code
  * (-4, 4)}, where no lane is special (NaN, zero, infinite), none has {@code x = 1.0} and none
