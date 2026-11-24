@@ -125,7 +125,9 @@ port teaches.
 - A results file is named `bench/results/<function>-<host>-<date>.txt`, one CPU per file, the host
   being the workflow's host key (`xeon8573c`, `xeon6973p`, `epyc9v45`, `epyc7763`, `neoversen2`)
   or `laptop` with a suffix for its flags (`laptop-avx2`); `<function>` may name the comparison
-  too (`exp-finish`, `exp-onediv`). The files written before the newer hosts keep their names. An
+  too (`exp-finish`, `exp-onediv`); a second file of one name, host and date, whose run times other
+  code than the first's, is `<function>-<host>-<date>-<n>.txt` from n = 2, which `bench/record.py
+  write` picks. The files written before the newer hosts keep their names. An
   allocation reading from GitHub's Arm runner, whose key is `neoversen2`, is
   `alloc-neoversen2-<date>.txt`; the one written before the key is `alloc-arm-2026-11-20.txt`. It
   is no timing, and says so.

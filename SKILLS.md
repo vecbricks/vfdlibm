@@ -1491,9 +1491,9 @@ mnemonic); the other operations count the same at both widths.
   that are a constant or `x+x`, so a guarded arm that blends them is possible; none is built,
   because the tie-break rule of #30 sends a tie to the finish arm and no timing says otherwise.
   The host files of 22 November (`bench/results/atan-xeon8573c-2026-11-22.txt` and
-  `atan-epyc7763-2026-11-22.txt`, one run each) time the one arm against the scalar loop, and
-  read every vector row at 0.02 B/op or less, but for the EPYC's 512-bit rows, which run in Java
-  there.
+  `atan-epyc7763-2026-11-22.txt`, one run on the Xeon, a run and a re-run on the EPYC) time
+  the one arm against the scalar loop, and read every vector row at 0.02 B/op or less, but for
+  the EPYC's 512-bit rows, which run in Java there.
 - **Sizes of its faults, each of 2^22 uniform draws from its own interval.** `atan.dropLo`:
   855028 changed of 2^22 draws from `(-5, 5)`, none of those below 7/16. `atan.splitMoved`
   (19/16 moved to 2): 431802 changed of 2^22 draws from `[19/16, 2)`, none from the ranges
@@ -1542,9 +1542,10 @@ mnemonic); the other operations count the same at both widths.
   has no `SPECIES_MAX` arm), at this laptop's flags and as an AVX2 host (`-XX:UseAVX=2
   -XX:MaxVectorSize=32`); CI runs it. Those local readings are not committed, so no figure of
   them is quoted. The host files of 22 November (`bench/results/asin-xeon8573c-2026-11-22.txt`
-  and `asin-epyc7763-2026-11-22.txt`, one run each) read every vector row at 0.02 B/op or less,
-  but for the EPYC's 512-bit rows, which run in Java there, and time the arm against the scalar
-  loop. None of it says anything of 128 bits or of the masked form's lowering.
+  and `asin-epyc7763-2026-11-22.txt`, one run on the Xeon, a run and a re-run on the EPYC) read
+  every vector row at 0.02 B/op or less, but for the EPYC's 512-bit rows, which run in Java
+  there, and time the arm against the scalar loop. None of it says anything of 128 bits or of
+  the masked form's lowering.
 - **One arm, no tie to break.** The three ranges below 1 share `t`'s polynomials and the one
   division `p/q`, and the split range's second division is computed on every lane; the rare lanes
   (`|x| >= 1`, NaN) are finished per lane. There is no second body to compare, so the arm needs
@@ -1590,8 +1591,9 @@ mnemonic); the other operations count the same at both widths.
 - **Allocation.** CI runs `bench/alloc-check.py` on `AcosBenchmark`'s rows (`finish256`,
   `finishPreferred`, `finishMax`, common and mixed data). The host files of 22 November
   (`bench/results/acos-xeon8573c-2026-11-22.txt` and `acos-epyc7763-2026-11-22.txt`, one run
-  each) read every vector row at 0.02 B/op or less, but for the EPYC's 512-bit rows, which run
-  in Java there, and time the arm against the scalar loop.
+  on the Xeon, a run and a re-run on the EPYC) read every vector row at 0.02 B/op or less, but
+  for the EPYC's 512-bit rows, which run in Java there, and time the arm against the scalar
+  loop.
 
 ## What the atan2 port taught
 

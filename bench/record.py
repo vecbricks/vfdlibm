@@ -24,7 +24,12 @@ number by hand, and checks them in a file that is about to be committed.
 `write` gives one file per benchmark class of a plain run, <function>-<host>-<date>.txt, each
 with its own class's blocks and rows only, and one file for a pair, <function>-pair-<host>-
 <date>.txt; --name gives the part before <host> (exp-onediv, for a pair in place of
-<function>-pair). It never overwrites a file without --force.
+<function>-pair). It never overwrites a file without --force. A second file of one name, host
+and date, of a run whose code differs from that of the file already there (code_compared), is
+<name>-<host>-<date>-<n>.txt, n one past the largest there (2 for the first): write picks it.
+A run whose code is that of the file there or of one of its -<n> files is a re-run, to be
+joined with --run: write refuses it, and with --force overwrites that file, never one of other
+code. check takes a name of either form.
 What it writes:
 
 - the workflow's header lines, "Host" to "Command", with the load at the end of the run moved up
@@ -84,7 +89,9 @@ file that cannot be read or written).
 """
 
 import argparse
+import contextlib
 import decimal
+import io
 import glob
 import json
 import os
@@ -108,6 +115,9 @@ LOAD = re.compile(r"(\d+\.\d+ \d+\.\d+ \d+\.\d+) at (start|end)")
 CORES = re.compile(r" ?\(\d+ cores\)")
 PAIR_TITLE = re.compile(r"^# Pair: \S.*, base against head, \d{4}-\d{2}-\d{2} ")
 NAME_END = re.compile(r"-[^-]+-\d{4}-\d{2}-\d{2}\.txt$")
+# The sequence number of a second, third, ... file of one name, host and date.
+SEQUENCE = r"-(?:[2-9]|[1-9]\d+)"
+COMMIT_LINE = re.compile(r"^# Commit: +([0-9a-f]{7,40})\b")
 RUN_LINE = "# Run %d of %d of this file: its title, header, table and raw output follow."
 RUN_LINE_RE = re.compile(r"^# Run \d+ of \d+ of this file: ")
 TABLE_HEAD = re.compile(r"^# Row\s+\S+\s+min\s+avg\s+max\s+\(ns/op\)$")
@@ -1042,9 +1052,11 @@ def check_run(path, actual, directory, first):
     # A run from before the workflow wrote a Host line has no name to compare.
     suffix = NAME_END.search(made[0][0])
     suffix = suffix.group(0) if suffix else None
-    if first and suffix and not os.path.basename(path).endswith(suffix):
-        diffs.append("the file's name does not end in %s, the first run's host and date"
-                     % suffix)
+    if first and suffix and not re.search(
+            re.escape(suffix[:-len(".txt")]) + "(?:%s)?\\.txt$" % SEQUENCE,
+            os.path.basename(path)):
+        diffs.append("the file's name does not end in %s, the first run's host and date, or"
+                     " in %s-<n>.txt" % (suffix, suffix[:-len(".txt")]))
     have = {}
     for key, value in fields(header_block(top)):
         have.setdefault(key, []).append(value)
@@ -1436,6 +1448,74 @@ def selftest_code(repo):
             del NOTES[:]
             assert three == two, [l for l in three if l not in two]
             assert check(written(three), [d, middle, again]) == []
+        # A new file whose name a file of other code holds goes to the first free -<n>; one
+        # whose code is that of a file there keeps the name, for act to refuse.
+        with tempfile.TemporaryDirectory() as out:
+            artifact(again, c1, "r1")
+            name = os.path.join(out, "exp-xeon8573c-2026-11-20.txt")
+            numbered = os.path.join(out, "exp-xeon8573c-2026-11-20-%d.txt")
+            at_c1 = files_of(again)["exp-xeon8573c-2026-11-20.txt"]
+            assert placed(name, at_c1) == name  # nothing there
+            with open(name, "w", encoding="ascii") as f:
+                f.write("\n".join(at_c1) + "\n")
+            artifact(again, c2, "r2")
+            assert placed(name, files_of(again)["exp-xeon8573c-2026-11-20.txt"]) == name
+            artifact(again, c3, "r3")
+            at_c3 = files_of(again)["exp-xeon8573c-2026-11-20.txt"]
+            del NOTES[:]
+            assert placed(name, at_c3) == numbered % 2, placed(name, at_c3)
+            assert len(NOTES) == 1 and "Lanes.java" in NOTES[0], NOTES
+            # Log1pBenchmark's code is the same at c1 and c3: its name is kept.
+            assert placed(name.replace("exp", "log1p"),
+                          files_of(again)["log1p-xeon8573c-2026-11-20.txt"]) == \
+                name.replace("exp", "log1p")
+            with open(numbered % 2, "w", encoding="ascii") as f:
+                f.write("\n".join(at_c3) + "\n")
+            assert placed(name, at_c3) == numbered % 2  # a re-run of -2's code
+            artifact(again, c4, "r4")
+            assert placed(name, files_of(again)["exp-xeon8573c-2026-11-20.txt"]) == \
+                numbered % 3
+            # act refuses the name a file of the same code holds, and writes the -<n> one.
+            args = argparse.Namespace(command="write", name=None, out_dir=out, force=False)
+            artifact(again, c3, "r3")
+            del NOTES[:]
+            try:
+                act(args, [again])
+                raise AssertionError("a re-run of -2's code written as a file of its own")
+            except Problem as e:
+                assert "there already" in str(e) and "-2.txt" in str(e), e
+            artifact(again, c4, "r4")
+            del NOTES[:]
+            with contextlib.redirect_stdout(io.StringIO()), \
+                    contextlib.redirect_stderr(io.StringIO()):
+                assert act(args, [again]) == 0 and os.path.exists(numbered % 3)
+            # --force overwrites the file of the same code, -2, never the plain file of other
+            # code.
+            artifact(again, c3, "r3")
+            with open(name, encoding="ascii") as f:
+                plain = f.read()
+            with contextlib.redirect_stdout(io.StringIO()), \
+                    contextlib.redirect_stderr(io.StringIO()):
+                assert act(argparse.Namespace(command="write", name=None, out_dir=out,
+                                              force=True), [again]) == 0
+            with open(name, encoding="ascii") as f:
+                assert f.read() == plain
+            # With -2 gone, a file of new code takes the n after the largest there, -4.
+            os.remove(numbered % 2)
+            c9 = commit({main + "Lanes.java": files[main + "Lanes.java"].replace("1.0", "9.0")},
+                        "more code")
+            artifact(again, c9, "r9")
+            assert placed(name, files_of(again)["exp-xeon8573c-2026-11-20.txt"]) == \
+                numbered % 4
+            # A file whose commit git cannot read is the place, for act to refuse, and is named
+            # in a note; it refuses no other file.
+            with open(numbered % 3, "w", encoding="ascii") as f:
+                f.write("# Commit:      %s (main)\n" % ("e" * 40))
+            del NOTES[:]
+            assert placed(name, files_of(again)["exp-xeon8573c-2026-11-20.txt"]) == \
+                numbered % 3
+            assert any("could not be compared" in x for x in NOTES), NOTES
+            del NOTES[:]
         # At different commits the JDK and the command must be the same too.
         for old, new in (("# Load:", "# JDK:         25.0.6\n# Load:"),
                          ("exec:exec", "exec:exec -Dother")):
@@ -1519,8 +1599,14 @@ def selftest_files():
                          " own"], found
         found = check(written(d, exp, name="exp-epyc7763-2026-11-20.txt"), d)
         assert found == ["the file's name does not end in -xeon8573c-2026-11-20.txt, the first"
-                         " run's host and date"], found
+                         " run's host and date, or in -xeon8573c-2026-11-20-<n>.txt"], found
         assert check(written(d, exp, name="exp-finish-xeon8573c-2026-11-20.txt"), d) == []
+        # A second file of the name, host and date, -<n> from 2, checks; -1 and -02 do not.
+        for n in ("2", "3", "12"):
+            assert check(written(d, exp, name="exp-xeon8573c-2026-11-20-%s.txt" % n), d) == []
+        for n in ("1", "02", "x"):
+            found = check(written(d, exp, name="exp-xeon8573c-2026-11-20-%s.txt" % n), d)
+            assert len(found) == 1 and "does not end in" in found[0], (n, found)
         # A hand-added header line of any form does not end the header.
         odd = [x for l in exp for x in ([l, "# CPU MHz:     3000"]
                                         if l.startswith("# Commit:") else [l])]
@@ -1869,6 +1955,7 @@ def act(args, directories):
         raise Problem("--name is a file's name, not a path: %s" % args.name)
     files = {os.path.join(args.out_dir, name): lines
              for name, lines in joined_files(directories, args.name).items()}
+    files = {placed(path, lines): lines for path, lines in files.items()}
     there = [path for path in files if os.path.exists(path)]
     if there and not args.force:
         raise Problem("%s: there already, and nothing was written; pass --force to overwrite"
@@ -1883,6 +1970,43 @@ def act(args, directories):
         print("wrote %s: %d lines, %d of them markers to replace by hand"
               % (path, len(lines), sum(MARKER in l for l in lines)))
     return 0
+
+
+def first_commit(lines):
+    return next((m.group(1) for m in map(COMMIT_LINE.match, lines) if m), None)
+
+
+def placed(path, lines):
+    """Where a new file goes: path, or path with -<n> before .txt. The file of that name and its
+    numbered files there, n from 2, are compared in order with the new file's first run
+    (code_compared, on its classes): the first that times the same code is the place, which act
+    refuses without --force and overwrites with it (the new run is that file's re-run, to be
+    joined with --run); so is the first that cannot be compared, having no Commit line or a
+    commit git cannot read. If each times other code, the place is the next n after the largest
+    there, so that a later file of the date has a larger n."""
+    stem = path[:-len(".txt")]
+    new, classes = first_commit(lines), classes_of(lines)
+    numbered = re.compile(re.escape(os.path.basename(stem)) + "-(%s)\\.txt$" % SEQUENCE[1:])
+    directory = os.path.dirname(path) or "."
+    ns = sorted(int(m.group(1)) for m in map(numbered.match, os.listdir(directory)) if m) \
+        if os.path.isdir(directory) else []
+    there = ([path] if os.path.exists(path) else []) + ["%s-%d.txt" % (stem, n) for n in ns]
+    if not there or not new or not classes:
+        return path
+    for at in there:
+        with open(at, encoding="ascii", errors="replace") as f:
+            old = first_commit(f.read().split("\n"))
+        if not old:
+            return at
+        try:
+            code_compared(old, new, classes)
+            return at
+        except CodeDiffers as e:
+            NOTES.append("%s times other code than this run: %s" % (os.path.basename(at), e))
+        except Problem as e:
+            NOTES.append("%s could not be compared with this run: %s" % (os.path.basename(at), e))
+            return at
+    return "%s-%d.txt" % (stem, max(ns + [1]) + 1)
 
 
 if __name__ == "__main__":

@@ -20,16 +20,16 @@ files:
 
 | Function | xeon8573c (AVX-512): common / mixed | epyc7763 (AVX2): common / mixed |
 |---|---|---|
-| `exp` | older code | older code |
+| `exp` | older code | newer code |
 | `expm1` | 3.82x / 3.39x | 1.85x / 1.65x |
-| `log` | 4.12x / 2.38x | older code |
-| `log10` | 4.64x / 2.82x | older code |
+| `log` | 4.12x / 2.38x | 2.44x / 1.97x |
+| `log10` | 4.64x / 2.82x | 2.30x / 1.86x |
 | `log1p` | 3.61x / 3.28x | 1.88x / 1.64x |
 | `sinh` | 3.57x / 2.71x | 2.12x / 1.69x |
 | `cosh` | 3.34x / 1.88x | 2.15x / 1.70x |
-| `asin` | 2.31x / 2.10x | 2.09x / 1.52x |
-| `atan` | 3.54x / 2.30x | 1.77x / 1.52x |
-| `acos` | 2.21x / 1.90x | 1.99x / 1.36x (one run, near 1.3x) |
+| `asin` | 2.31x / 2.10x | 2.07x / 1.52x |
+| `atan` | 3.54x / 2.30x | 1.77x / 1.51x |
+| `acos` | 2.21x / 1.90x | 1.99x / 1.36x |
 | `atan2` | 2.72x / 2.08x | 1.72x / 1.55x |
 
 For vfdlibm 0.2.0 (tag v0.2.0). Each figure is `StrictMath` called once per lane (the
