@@ -272,7 +272,7 @@ def fig_who(full):
     photon = column(DATA / "photon-2026-11-24.csv", "photon")
     mvec = column(DATA / "libmvec-glibc-2.43-avx2.csv", "libmvec")
     correct = column(DATA / "correctly-rounded.csv", "correct")
-    cols = [("Spark", "4.3.0, local", spark), ("Photon", "my warehouse", photon),
+    cols = [("Spark", "4.3.0", spark), ("Photon", "", photon),
             ("glibc", "scalar", None)]
     if full:
         cols += [("glibc", "libmvec", mvec), ("correct", "rounding", correct)]
