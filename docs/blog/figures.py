@@ -272,7 +272,7 @@ def fig_who(full):
     photon = column(DATA / "photon-2026-11-24.csv", "photon")
     mvec = column(DATA / "libmvec-glibc-2.43-avx2.csv", "libmvec")
     correct = column(DATA / "correctly-rounded.csv", "correct")
-    cols = [("Spark", "4.3.0", spark), ("Photon", "", photon),
+    cols = [("Spark", "4.3.0", spark), ("Databricks", "Photon", photon),
             ("glibc", "scalar", None)]
     if full:
         cols += [("glibc", "libmvec", mvec), ("correct", "rounding", correct)]
@@ -302,7 +302,7 @@ def fig_who(full):
     c0 = M + IW - len(cols) * cw
     for i, (a, b, _) in enumerate(cols):
         cx = c0 + i * cw + cw / 2
-        f.text(cx, y + 14, a, size=15, weight=700, anchor="middle")
+        f.text(cx, y + 14, a, size=14 if full else 15, weight=700, anchor="middle")
         f.text(cx, y + 32, b, size=13, fill=GREY, anchor="middle")
     y += 44
     names = {"exp": "exp(x)", "ln": "ln(x)", "expm1": "expm1(x)", "pow": "pow(2, x)"}
