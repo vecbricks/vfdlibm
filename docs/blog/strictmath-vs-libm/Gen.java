@@ -2,8 +2,8 @@ import java.util.Random;
 
 /**
  * Prints 200,000 random inputs x in [-700, 700) (seed 7), one per line, each with StrictMath's
- * exp(x), log(|x|), expm1(x / 100) and pow(2.0, x / 700), as Double.toString writes them (the
- * shortest decimal that reads back as the same double). compare.py reads this output.
+ * exp(x), log(|x|), expm1(x / 100) and pow(2.0, x / 700), as Double.toString writes them (a
+ * decimal that reads back as the same double). compare.py reads this output.
  */
 public class Gen {
   public static void main(String[] a) {

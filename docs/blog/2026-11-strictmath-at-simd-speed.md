@@ -10,7 +10,8 @@ published: false
 
 <!-- A draft for vfdlibm 0.3.0. Every link to github.com/vecbricks/vfdlibm/blob/v0.3.0/ and
      tree/v0.3.0/ resolves only once the tag v0.3.0 exists, and the link to docs/blog/NanTier.java
-     only if this branch is merged before the tag is made. -->
+     only if this branch is merged before the tag is made, as do the links to
+     docs/blog/photon-check.sql and docs/blog/strictmath-vs-libm/. -->
 <!-- N in the title must be a figure of the README's generated speedup table at v0.3.0: the
      largest "common" figure among the rows exp, log and pow in the xeon8573c (AVX-512) column,
      as the table prints it. Until that table exists there is no N; do not put in another figure. -->
@@ -54,37 +55,40 @@ the same doubles, and a test that compares them passes there too.
 
 ## What a Photon warehouse returns
 
-I wanted to see what this looks like outside the JVM, so on 24 November 2026 I ran two queries on
-my own Databricks SQL warehouse with Photon.
+I wanted to see what this looks like outside the JVM, so on 24 November 2026 I ran queries on my
+own Databricks SQL warehouse with Photon.
 
 The first was `SELECT EXP(1), LOG(E(), 10), pow(2, 0.5), EXPM1(1.0E-5)`. It returned
 2.7182818284590455, 2.302585092994046, 1.4142135623730951 and 0.000010000050000166668. The first is
-StrictMath's `exp(1)`. On JDK 25, `Math.exp(1)` is 2.718281828459045, and so is `exp(1)` in
-glibc 2.43, the C library on my laptop. But a query of literals shows little: Spark's optimizer
-folds constant expressions on the driver, in the JVM, so Photon never computes them.
+StrictMath's `exp(1)`. On JDK 25, `Math.exp(1)` is 2.718281828459045, and so is `exp(1)` in glibc
+2.43, the C library on my laptop. But a query of literals shows little: Spark's optimizer folds
+constant expressions on the driver, in the JVM, so this query does not exercise Photon. I have not
+yet compared a literal with the same value read from a column.
 
-<!-- {{LITERAL_VS_COLUMN}}: owner to run SELECT exp(1.0D), (SELECT exp(x) FROM tmp_math WHERE x = 1.0D) and add the result if they differ -->
+<!-- {% raw %}{{LITERAL_VS_COLUMN}}{% endraw %}: owner to run SELECT exp(1.0D), (SELECT exp(x) FROM tmp_math WHERE x = 1.0D) and add the result if they differ -->
 
-The second query reads a column. Its `EXPLAIN` shows
-`PhotonProject [... EXP(x), ln(x), pow(2.0, x), EXPM1(x)]` over `PhotonScan parquet`, and says "The query is fully supported by Photon." Its
-32 inputs, eight each for `exp`, `ln`, `expm1` and `pow(2.0, x)`, are ones where JDK 25's
-`StrictMath` and glibc 2.43's libm give different doubles. On my workspace, on 24 November 2026,
-Photon's results matched the C library's on all 32, and `StrictMath`'s on none. The query is
-[`photon-check.sql`](https://github.com/vecbricks/vfdlibm/blob/v0.3.0/docs/blog/photon-check.sql), with both expected
-results in the table, so you can run it on your own engine (the end of this post has it too).
+Then I read the inputs from a table column. For such a query, `EXPLAIN` showed
+`PhotonProject [... EXP(x), ln(x), pow(2.0, x), EXPM1(x)]` over `PhotonScan parquet`, and said
+"The query is fully supported by Photon." The test,
+[`photon-check.sql`](https://github.com/vecbricks/vfdlibm/blob/v0.3.0/docs/blog/photon-check.sql),
+holds 32 inputs, eight each for `exp`, `ln`, `expm1` and `pow(2.0, x)`, where JDK 25's `StrictMath`
+and glibc 2.43's libm give different doubles, with both results beside each input. On my
+workspace, on 24 November 2026, Photon's results matched the C library's (the `libm` column,
+computed with glibc 2.43) on all 32, and `StrictMath`'s on none. You can run the same file on your
+own engine; the end of this post has it too.
 
-How often do the two libraries differ? On 200,000 random inputs, `x` drawn uniformly
-between -700 and 700 from seed 7, `StrictMath` and glibc 2.43 differ on 19,720 for `exp(x)`, 19,627 for `pow(2.0, x/700)`,
-4,047 for `ln(abs(x))` and 139 for `expm1(x/100)`. The generator and the comparison are in
+How often do the two libraries differ? On 200,000 random inputs, `x` drawn uniformly between -700
+and 700 from seed 7, `StrictMath` and glibc 2.43 differ on 19,720 for `exp(x)`, 19,627 for
+`pow(2.0, x/700)`, 4,047 for `ln(abs(x))` and 139 for `expm1(x/100)`. The generator and the
+comparison are in
 [`strictmath-vs-libm/`](https://github.com/vecbricks/vfdlibm/tree/v0.3.0/docs/blog/strictmath-vs-libm).
 
-Other accelerators are open about the same choice. The RAPIDS Accelerator for Apache Spark's
-[compatibility guide](https://nvidia.github.io/cudf-spark/docs/compatibility.html) says: "For other
-functions like sin, cos, etc. the output may be different, but within the rounding error inherent
-in floating-point calculations." And Velox's Presto `exp`,
+Other engines do not promise `StrictMath`'s bits either. The compatibility guide of NVIDIA's
+[cuDF plugin for Apache Spark](https://nvidia.github.io/cudf-spark/docs/compatibility.html) says:
+"For other functions like sin, cos, etc. the output may be different, but within the rounding
+error inherent in floating-point calculations." And in Velox's code, its Presto `exp`,
 [`ExpFunction`](https://github.com/facebookincubator/velox/blob/b0706264be6ce974388fc263197c2a9e013416d2/velox/functions/prestosql/Arithmetic.h#L336-L340),
-calls `std::exp`. vfdlibm is for an engine that wants the speed of vectors and Spark's own
-bits.
+calls `std::exp`. vfdlibm is for an engine that wants the speed of vectors and Spark's own bits.
 
 ## vfdlibm
 
@@ -358,8 +362,11 @@ each body spends its cycles ([#156](https://github.com/vecbricks/vfdlibm/issues/
 ## Check your own engine
 
 Which doubles does your SQL engine return: `StrictMath`'s, like Spark's JVM code, or another
-library's? The query below works on any Spark-compatible SQL engine. Each row holds an input with
-both libraries' results, and the `matches` column says which one the engine returned. Four of the
+library's? The query below works on any Spark-compatible SQL engine that can create the table; it
+is the form I ran on Databricks. On Apache Spark without Delta or another catalog of v2 tables,
+`CREATE OR REPLACE TABLE` is refused: use `DROP TABLE IF EXISTS tmp_photon_math` and then
+`CREATE TABLE tmp_photon_math (...) USING parquet`. Each row holds an input with both libraries'
+results, and the `matches` column says which one the engine returned. Four of the
 32 rows are shown; [`photon-check.sql`](https://github.com/vecbricks/vfdlibm/blob/v0.3.0/docs/blog/photon-check.sql) has them all.
 
 ```sql
