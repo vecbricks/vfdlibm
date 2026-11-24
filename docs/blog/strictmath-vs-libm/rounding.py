@@ -2,12 +2,15 @@
 
 For each of the 32 rows (f, x, strictmath, libm) it computes f(x) in decimal arithmetic at 80
 significant digits and rounds that to a double (float() of a Decimal rounds correctly, to
-nearest). On these 32 inputs (no expm1 or pow argument near 0, where exp(x) - 1 would cancel)
-an error of a few units in the 80th digit cannot move a double's rounding unless the exact value
-lies within about 1e-60 of a midpoint between doubles, which the script reports as "too close to
-call"; it is not a general method for any input. The functions: exp(x), ln(x), expm1(x) as exp(x) - 1, and pow(2.0, x) as
-exp(ln(2) * x). It also writes rows.txt in the current directory, one "f x libm" line a row,
-for libmvec.c.
+nearest). The functions: exp(x), ln(x), expm1(x) as exp(x) - 1, and pow(2.0, x) as
+exp(ln(2) * x). On these 32 inputs (no expm1 or pow argument near 0, where exp(x) - 1 would
+cancel) an error of a few units in the 80th digit cannot move a double's rounding unless the
+exact value lies within about 1e-60 of a midpoint between doubles, which the script reports as
+"too close to call"; it is not a general method for any input.
+
+It writes two files in the current directory: rows.txt, one "f x libm" line a row, for
+libmvec.c, and correctly-rounded.csv (f,x,correct), which ../figures.py reads when it is
+committed beside this script.
 """
 
 import decimal
@@ -45,7 +48,8 @@ def too_close(v):
 
 
 counts = {"libm": 0, "strictmath": 0, "neither": 0, "too close": 0}
-with open("rows.txt", "w") as out:  # in the current directory
+with open("rows.txt", "w") as out, open("correctly-rounded.csv", "w") as csv:
+    csv.write("f,x,correct\n")
     for f, xs, ss, ls in rows:
         x, s, l = float(xs), float(ss), float(ls)
         out.write(f"{f} {x!r} {l!r}\n")
@@ -55,6 +59,7 @@ with open("rows.txt", "w") as out:  # in the current directory
             print(f"{f}({x!r}): too close to call")
             counts["too close"] += 1
             continue
+        csv.write(f"{f},{x!r},{cr!r}\n")
         who = "libm" if cr == l else "strictmath" if cr == s else "neither"
         counts[who] += 1
         if who != "libm":

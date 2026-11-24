@@ -52,4 +52,24 @@ libmvec (AVX2) equals scalar glibc on 15, differs on 17; scalar glibc differs fr
 
 The three where `StrictMath`'s result is the correctly rounded one are all `expm1`, at
 3.178803427426695, 1.0542424180475716 and 1.0400925680121542. libmvec differs on 5 `exp`, 4 `ln`,
-3 `expm1` and 5 `pow(2.0, x)` inputs.
+3 `expm1` and 5 `pow(2.0, x)` inputs. They also write `correctly-rounded.csv` and `libmvec.csv`.
+
+## The data behind the post's figures
+
+`../figures.py` draws the post's figures into `../img/` from the files in `data/`:
+
+- `exp1-bits.txt`: `java ExpOne.java` on JDK 25.0.5.1, the bits of `StrictMath.exp(1)`,
+  `Math.exp(1)` and `Math.E`.
+- `compare-glibc-2.43.txt`: `compare.py`'s output above.
+- `correctly-rounded.csv` and `libmvec-glibc-2.43-avx2.csv`: the files `rounding.py` and
+  `libmvec` write, from the run above.
+- `spark-4.2.0-local-2026-11-24.csv`: `photon-check.sql` run by Apache Spark 4.2.0's `spark-sql`
+  in local mode on JDK 21, with the table created `USING parquet` (the first statement replaced by
+  `DROP TABLE IF EXISTS tmp_photon_math` and `CREATE TABLE ... USING parquet`); its output, tab
+  separated, as comma-separated columns.
+- `photon-2026-11-24.csv`: Photon's result for each input, from a Databricks SQL warehouse with
+  Photon on 24 November 2026; on every row it equals the `libm` column of `photon-check.sql`.
+
+```sh
+python3 ../figures.py
+```
