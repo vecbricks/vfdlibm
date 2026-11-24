@@ -268,11 +268,11 @@ def fig_who(full):
     two inputs a function (the first, and the first where the correctly rounded result is
     StrictMath's if there is one, else the second) and three sources."""
     rows = rows_of_sql()
-    spark = column(DATA / "spark-4.2.0-local-2026-11-24.csv", "spark")
+    spark = column(DATA / "spark-4.3.0-local-2026-11-24.csv", "spark")
     photon = column(DATA / "photon-2026-11-24.csv", "photon")
     mvec = column(DATA / "libmvec-glibc-2.43-avx2.csv", "libmvec")
     correct = column(DATA / "correctly-rounded.csv", "correct")
-    cols = [("Spark", "4.2.0, local", spark), ("Photon", "my warehouse", photon),
+    cols = [("Spark", "4.3.0, local", spark), ("Photon", "my warehouse", photon),
             ("glibc", "scalar", None)]
     if full:
         cols += [("glibc", "libmvec", mvec), ("correct", "rounding", correct)]
@@ -336,7 +336,7 @@ def fig_who(full):
                          "AVX2 libmvec. Not excluded: another library or glibc version with the same "
                          "doubles here, a hand-vectorized port of glibc's algorithms, libmvec at "
                          "another width, another CPU (the warehouse's is unknown).")
-    y = f.caption(y, "Photon: a Databricks SQL warehouse, 24 November 2026. Spark and glibc: my "
+    y = f.caption(y, "Photon: Databricks Free Edition, SQL warehouse, 24 November 2026. Spark and glibc: my "
                      "laptop, glibc 2.43." + ("" if full else " All 32 inputs give the same picture."))
     f.desc = (f"For {len(rows)} inputs, which result each source returned: G for glibc 2.43's "
               "result, S for StrictMath's. Totals G / S: " + "; ".join(

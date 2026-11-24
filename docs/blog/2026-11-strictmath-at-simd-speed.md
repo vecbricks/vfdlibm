@@ -82,8 +82,8 @@ input gives the same 64 bits on every JVM and every CPU.
 
 ## Photon returns other doubles
 
-On my Databricks SQL warehouse, Photon, Databricks' native query engine, returned results that
-matched the C library's, not Spark's.
+On a SQL warehouse of mine on [Databricks Free Edition](https://www.databricks.com/learn/free-edition), Photon, Databricks' native query
+engine, returned results that matched the C library's, not Spark's.
 
 [![Eight of the 32 inputs: Apache Spark returns StrictMath's result on each, Photon and glibc return glibc's.](img/who-returns-what.svg)](img/who-returns-what.svg)
 
@@ -100,6 +100,8 @@ two libraries disagree? On my random inputs, about one `exp` in ten.
 
 Which doubles does your SQL engine return? Each row below holds an input and both libraries'
 results, and `matches` says which one your engine returned. This is the form I ran on Databricks;
+[Free Edition](https://www.databricks.com/learn/free-edition), which Databricks says "is provided at no cost to all users", is enough to
+run it there;
 on Apache Spark without Delta, replace the first line with `DROP TABLE IF EXISTS tmp_photon_math`
 and `CREATE TABLE tmp_photon_math (...) USING parquet`. Four of the 32 rows are shown;
 [`photon-check.sql`](https://github.com/vecbricks/vfdlibm/blob/v0.3.0/docs/blog/photon-check.sql)
@@ -180,7 +182,7 @@ public class NanTier {
 
 One run each on my laptop, JDK 25.0.5.1 on x86-64 (your counts will differ):
 
-```
+```console
 $ java -Xint NanTier.java
 atan2(NaN#1, NaN#2): first=2000000 second=0 other=0
 $ java NanTier.java
@@ -280,7 +282,7 @@ public final class Main {
 }
 ```
 
-```sh
+```bash
 mvn -q compile org.apache.maven.plugins:maven-dependency-plugin:3.7.0:build-classpath \
   -Dmdep.outputFile=cp.txt
 java --add-modules jdk.incubator.vector -cp "target/classes:$(cat cp.txt)" example.Main
@@ -316,7 +318,7 @@ java --add-modules jdk.incubator.vector -cp "target/classes:$(cat cp.txt)" examp
 
 [![StrictMath.exp(1) and Math.E as 64 bits: they differ in the last two bits, one ulp apart.](img/exp1-bits.svg)](img/exp1-bits.svg)
 
-**The Photon run**, on my workspace on 24 November 2026
+**The Photon run**: [Databricks Free Edition](https://www.databricks.com/learn/free-edition), SQL warehouse with Photon, 24 November 2026
 - A query of literals, `SELECT EXP(1), LOG(E(), 10), pow(2, 0.5), EXPM1(1.0E-5)`, returned
   2.7182818284590455, 2.302585092994046, 1.4142135623730951 and 0.000010000050000166668: the first
   is `StrictMath`'s `exp(1)`. Spark's optimizer folds constant expressions on the driver, in the JVM,
@@ -328,8 +330,9 @@ java --add-modules jdk.incubator.vector -cp "target/classes:$(cat cp.txt)" examp
 - The test is [`photon-check.sql`](https://github.com/vecbricks/vfdlibm/blob/v0.3.0/docs/blog/photon-check.sql);
   Photon's output, as pasted from the SQL editor, is `strictmath-vs-libm/data/photon-2026-11-24.csv`, and on every row
   it equals the file's `libm` column.
-- Apache Spark 4.2.0's `spark-sql` in local mode on JDK 21, on my laptop, ran the same file with a
-  parquet table; every row matched `StrictMath` (`strictmath-vs-libm/data/spark-4.2.0-local-2026-11-24.csv`).
+- Apache Spark 4.3.0's `spark-sql` (the official `spark-4.3.0-bin-hadoop3.tgz`, checked against
+  Apache's SHA-512) in local mode on JDK 21, on my laptop, ran the same file with a parquet table;
+  every row matched `StrictMath` (`strictmath-vs-libm/data/spark-4.3.0-local-2026-11-24.csv`).
 
 **Narrowing it down: all 32 inputs**
 

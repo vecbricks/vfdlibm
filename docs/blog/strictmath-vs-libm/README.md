@@ -63,14 +63,15 @@ The three where `StrictMath`'s result is the correctly rounded one are all `expm
 - `compare-glibc-2.43.txt`: `compare.py`'s output above.
 - `correctly-rounded.csv` and `libmvec-glibc-2.43-avx2.csv`: the files `rounding.py` and
   `libmvec` write, from the run above.
-- `spark-4.2.0-local-2026-11-24.csv`: `photon-check.sql` run by Apache Spark 4.2.0's `spark-sql`
-  in local mode on JDK 21, with the table created `USING parquet` (the first statement replaced by
+- `spark-4.3.0-local-2026-11-24.csv`: `photon-check.sql` run by Apache Spark 4.3.0's `spark-sql`
+  (the official `spark-4.3.0-bin-hadoop3.tgz`, checked against Apache's SHA-512) in local mode on
+  JDK 21, with the table created `USING parquet` (the first statement replaced by
   `DROP TABLE IF EXISTS tmp_photon_math` and `CREATE TABLE ... USING parquet`); its output, tab
   separated, as comma-separated columns.
 - `nantier-jdk-25.0.5.1.txt`: `../NanTier.java`'s output, one run under `-Xint` and one under the
   default JIT tiers, on JDK 25.0.5.1, x86-64.
-- `photon-2026-11-24.csv`: Photon's result for each input, from a Databricks SQL warehouse with
-  Photon on 24 November 2026: the owner's output of `photon-check.sql`'s query, pasted verbatim
+- `photon-2026-11-24.csv`: Photon's result for each input, from Databricks Free Edition, SQL
+  warehouse with Photon, 24 November 2026: the owner's output of `photon-check.sql`'s query, pasted verbatim
   from the Databricks SQL editor, header and row order kept. On every row the `photon` value
   equals the `libm` column of `photon-check.sql`.
 
