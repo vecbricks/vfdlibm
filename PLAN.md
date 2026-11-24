@@ -222,9 +222,10 @@ five are a later, optional set; the large-argument reduction of the trigonometri
   `cosh`, `AsinBenchmark` one for `asin`, `AtanBenchmark` one for `atan`, `AcosBenchmark` one for
   `acos`, `Atan2Benchmark` two for `atan2` (the blended and the guarded arm, over two arrays) and
   `HypotBenchmark` one for `hypot` (over two arrays; `hypot-epyc7763-2026-11-23.txt` reads it,
-  one run whose reading wants a re-run), and `PowBenchmark` one for `pow` (the same;
-  `pow-epyc7763-2026-11-23.txt` reads it, one run, its `rareOracle` row the allocation
-  baseline).
+  a run and its re-run: no direction against the scalar loop at the preferred species, and
+  `finishMax` 1.6x slower than `finishPreferred` on common data in both), and `PowBenchmark` one
+  for `pow` (the same; `pow-epyc7763-2026-11-23.txt` reads it, one run, its `rareOracle` row the
+  allocation baseline).
   Each of the thirteen has rows at `SPECIES_MAX` (`*Max`), which the allocation check covers: the
   finish of `exp`, `expm1`, `log`, `log10` and `log1p` boxed there on mixed data until its first
   eight lanes were written out (`bench/results/max-finish-laptop-2026-11-20.txt`, then
