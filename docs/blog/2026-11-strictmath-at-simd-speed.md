@@ -20,7 +20,7 @@ published: false
 
 <div class="summary" markdown="1" style="border: 1px solid #d6d6d6; border-radius: 12px; padding: 4px 16px; margin-bottom: 1.5em;">
 
-**In short.** vfdlibm computes `exp`, `log`, `pow` and ten more functions on whole vectors of
+**In short.** [vfdlibm](https://github.com/vecbricks/vfdlibm) computes `exp`, `log`, `pow` and ten more functions on whole vectors of
 doubles, and every result has the same bits as `java.lang.StrictMath`, which Spark calls for
 `exp`, `ln`, `power` and their relatives. That matters because the bits differ elsewhere: on 32
 test inputs on my Databricks Free Edition warehouse, Photon's results matched glibc's, not
@@ -30,7 +30,7 @@ Spark's.
 
 ## Faster, with the same bits
 
-{% raw %}On the Intel Xeon Platinum 8573C (AVX-512), vfdlibm computes `exp`, `log` and `pow` up to
+{% raw %}On the Intel Xeon Platinum 8573C (AVX-512), [vfdlibm](https://github.com/vecbricks/vfdlibm) computes `exp`, `log` and `pow` up to
 {{N}}× faster than `StrictMath`, and every result has the same bits.{% endraw %}
 
 <!-- The figure img/speedup.svg is a placeholder: at release, make figures.py draw the bars from
@@ -226,6 +226,9 @@ incubator module. On x86, code on 128-bit vectors calls the Vector API's Java fa
 {% raw %}{{VARKA: owner writes one or two sentences on Varka}}{% endraw %}
 
 ## How I checked
+
+The code, data and scripts below are in [vfdlibm's repository](https://github.com/vecbricks/vfdlibm), unless a link
+points elsewhere.
 
 **The speed numbers**
 - Kernel timings from the README's [speedup table](https://github.com/vecbricks/vfdlibm/blob/v0.3.0/README.md),
