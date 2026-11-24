@@ -1,0 +1,474 @@
+# hypot before and after #174 (arguments ordered by magnitude), on the EPYC 7763, 24 November 2026
+#
+# What this is. A pair (bench/pair.sh) dispatched with bench/dispatch-bench.sh --host epyc7763
+# --attempts 12 --base bench-base-0d1854c main HypotBenchmark, run 45423052742 (dispatched 15:13
+# UTC, ended 16:00, failure: the pair's own verdict, below). The base is 0d1854c (#172, main
+# before #174), through a branch made for this pair, since the workflow takes a branch or a tag.
+# The head is c7d65d4, main when the pair was dispatched. The one change under HypotBenchmark
+# between them is #174's: the arguments are swapped where |y| > |x| by their sign-cleared bits
+# compared as longs, where line 60 of e_hypot.c compares their high words (PROOFS.md, L21).
+#
+# What it covers. HypotBenchmark only, on one EPYC 7763 draw (AVX2, MaxVectorSize=32, so all
+# three vector rows run at 256 bits). No AVX-512 host was paired.
+#
+# How it ended. bench/pair.sh's verdict: of 8 rows, 3 slower and 1 faster by 10% or more by both
+# the median and the best of its 5 rounds a side, so the step failed and the run with it.
+#
+# Reading, by the pair's medians and bests (a row counts only when both agree):
+# - The three vector rows on mixed data are slower, by 30.7% to 31.0% by median: about 7350 ns/op
+#   at the base and 10630 at the head. On common data finish256 and finishPreferred are within
+#   5%, which is no direction.
+# - finishMax on common data is faster by 66.2% by median, which is not a gain of #174: at the
+#   base that row ran at 9228.5 ns/op on average against 5746.7 to 5767.4 for the other two rows,
+#   the same 256-bit body, as in hypot-epyc7763-2026-11-23.txt; at the head it is at their level.
+# - The scalar loop is within noise both ways.
+# - Every lane gives the same order under both comparisons on this data: the two differ only
+#   where the high words are equal, and in each such pair of HypotBenchmark's (its subnormal
+#   pairs, high word 0) |x| is the larger, so neither comparison swaps. So base and head compute
+#   the same values on every lane. Why the head
+#   is slower on mixed data is not read here: a diagnostic run of the same body in other loops
+#   is to be recorded in a file of its own.
+#
+# The base, 0d1854c: minimum, average and maximum of its 50 measured iterations.
+# Row                              inputs          min          avg          max   (ns/op)
+# HypotBenchmark.finish256         common       5643.0       5767.4       5854.6
+# HypotBenchmark.finish256         mixed        7283.5       7373.6       7462.4
+# HypotBenchmark.finishMax         common       9191.8       9228.5       9294.4
+# HypotBenchmark.finishMax         mixed        7278.6       7350.7       7450.8
+# HypotBenchmark.finishPreferred   common       5601.2       5746.7       5857.7
+# HypotBenchmark.finishPreferred   mixed        7286.5       7376.3       7507.7
+# HypotBenchmark.scalarStrictMath  common       7035.3       7083.6       7189.7
+# HypotBenchmark.scalarStrictMath  mixed        7406.6       8469.1      11573.0
+#
+# The head, c7d65d4: minimum, average and maximum of its 50 measured iterations.
+# Row                              inputs          min          avg          max   (ns/op)
+# HypotBenchmark.finish256         common       5423.5       5563.9       5761.4
+# HypotBenchmark.finish256         mixed       10570.2      10661.2      10930.5
+# HypotBenchmark.finishMax         common       5413.2       5573.9       5744.3
+# HypotBenchmark.finishMax         mixed       10571.7      10635.4      10770.3
+# HypotBenchmark.finishPreferred   common       5413.7       5567.6       5733.7
+# HypotBenchmark.finishPreferred   mixed       10589.4      10624.7      10698.8
+# HypotBenchmark.scalarStrictMath  common       7042.7       7090.2       7186.7
+# HypotBenchmark.scalarStrictMath  mixed        7946.7       8155.1       9325.8
+#
+# bench/pair.sh's results file follows.
+#
+# Pair: HypotBenchmark, base against head, 2026-11-24 16:00 UTC
+#
+# Host:        epyc7763
+# Base:        0d1854ca5083d951766bfd4fa72c65f8fac9ceda ([VFDLIBM] Measure VectorOperators.EXP against StrictMath and vfd)
+# Head:        c7d65d4342cfe0b98fdb065f4ef429b805969ebf ([VFDLIBM] Compare vfdlibm's exp, log and pow with java.lang.Math)
+# Run:         https://github.com/vecbricks/vfdlibm/actions/runs/45423052742
+# JDK:         OpenJDK 64-Bit Server VM Zulu25.38+201-CA (build 25.0.5.1+2-LTS, mixed mode, sharing)
+# CPU:         AMD EPYC 7763 64-Core Processor
+# AVX-512:     avx512f=no avx512dq=no
+# CPU flags:   avx avx2
+# Vector:      MaxVectorSize=32 UseAVX=2
+# Datapath:    46.2 / 92.2 / 92.5 lane-ops/ns at 128 / 256 / 512 bits; 256:128 = 2.00 (control), 512:256 = 1.00
+#              (bench/datapath.sh, at the machine's own JVM flags)
+# Kernel:      7.0.0-1020-azure
+# Load:        1.97 0.55 0.19 at start, 1.15 1.24 1.18 at end (4 cores)
+# JMH:         -f 2 -wi 3 -w 2s -i 5 -r 2s -prof gc
+#              -jvmArgsAppend "-XX:CompileCommand=inline,io.github.vecbricks.vfdlibm.*::*"
+# Pair:        5 of at most 5 rounds, base first in odd rounds (3 base first, 2 head first);
+#              threshold 10%, early stop within 3% after three rounds
+# Command:     bench/pair.sh --base '0d1854ca5083d951766bfd4fa72c65f8fac9ceda' --rounds 5 --threshold 10 --within 3 --jmh '-f 2 -wi 3 -w 2s -i 5 -r 2s -prof gc' --host 'epyc7763' 'HypotBenchmark'
+#
+# Comparison (bench/pair.py): + is faster, - slower; median of the rounds' scores and
+# best measured iteration of any round, head against base.
+#
+ median    best      base med      head med  unit    head B/op  row
+ -31.0%  -31.2%        7334.3       10624.0  ns/op       0.037  HypotBenchmark.finishMax inputs=mixed [avgt]  <-- slower
+ -30.8%  -31.2%        7359.9       10632.6  ns/op       0.037  HypotBenchmark.finishPreferred inputs=mixed [avgt]  <-- slower
+ -30.7%  -31.1%        7379.6       10650.0  ns/op       0.037  HypotBenchmark.finish256 inputs=mixed [avgt]  <-- slower
+  -0.1%   -0.1%        7083.9        7089.7  ns/op       0.025  HypotBenchmark.scalarStrictMath inputs=common [avgt]
+  +0.4%   -6.8%        8036.3        8004.4  ns/op       0.028  HypotBenchmark.scalarStrictMath inputs=mixed [avgt]
+  +3.4%   +3.5%        5731.9        5541.0  ns/op       0.019  HypotBenchmark.finishPreferred inputs=common [avgt]
+  +4.5%   +4.0%        5798.4        5548.8  ns/op       0.019  HypotBenchmark.finish256 inputs=common [avgt]
+ +66.2%  +69.8%        9231.9        5554.5  ns/op       0.019  HypotBenchmark.finishMax inputs=common [avgt]  <-- faster
+
+8 rows, 3 slower and 1 faster by 10% or more by both the median and the best, of 5 base and 5 head rounds; the widest change either way is 66.2% by median and 69.8% by best
+
+# Load at the start of each side:
+#   round 1 base: load 2.32 0.73 0.26 at start
+#   round 1 head: load 1.46 1.08 0.53 at start
+#   round 2 head: load 1.70 1.32 0.77 at start
+#   round 2 base: load 1.38 1.26 0.89 at start
+#   round 3 base: load 1.11 1.23 0.99 at start
+#   round 3 head: load 1.14 1.19 1.02 at start
+#   round 4 head: load 1.18 1.19 1.05 at start
+#   round 4 base: load 1.15 1.24 1.11 at start
+#   round 5 base: load 1.15 1.23 1.13 at start
+#   round 5 head: load 1.23 1.24 1.16 at start
+#
+# Each round's JMH summary table follows; the out directory has the JSON and full logs.
+
+# round 1, base
+Benchmark                                           (inputs)  Mode  Cnt     Score     Error   Units
+HypotBenchmark.finish256                              common  avgt   10  5706.885 +/-  44.951   ns/op
+HypotBenchmark.finish256:gc.alloc.rate                common  avgt   10     0.003 +/-   0.001  MB/sec
+HypotBenchmark.finish256:gc.alloc.rate.norm           common  avgt   10     0.020 +/-   0.001    B/op
+HypotBenchmark.finish256:gc.count                     common  avgt   10       ~ 0            counts
+HypotBenchmark.finish256                               mixed  avgt   10  7415.806 +/-  63.541   ns/op
+HypotBenchmark.finish256:gc.alloc.rate                 mixed  avgt   10     0.003 +/-   0.001  MB/sec
+HypotBenchmark.finish256:gc.alloc.rate.norm            mixed  avgt   10     0.026 +/-   0.001    B/op
+HypotBenchmark.finish256:gc.count                      mixed  avgt   10       ~ 0            counts
+HypotBenchmark.finishMax                              common  avgt   10  9251.667 +/-  22.759   ns/op
+HypotBenchmark.finishMax:gc.alloc.rate                common  avgt   10     0.003 +/-   0.001  MB/sec
+HypotBenchmark.finishMax:gc.alloc.rate.norm           common  avgt   10     0.032 +/-   0.001    B/op
+HypotBenchmark.finishMax:gc.count                     common  avgt   10       ~ 0            counts
+HypotBenchmark.finishMax                               mixed  avgt   10  7334.345 +/-  59.671   ns/op
+HypotBenchmark.finishMax:gc.alloc.rate                 mixed  avgt   10     0.003 +/-   0.001  MB/sec
+HypotBenchmark.finishMax:gc.alloc.rate.norm            mixed  avgt   10     0.026 +/-   0.001    B/op
+HypotBenchmark.finishMax:gc.count                      mixed  avgt   10       ~ 0            counts
+HypotBenchmark.finishPreferred                        common  avgt   10  5657.994 +/-  77.813   ns/op
+HypotBenchmark.finishPreferred:gc.alloc.rate          common  avgt   10     0.003 +/-   0.001  MB/sec
+HypotBenchmark.finishPreferred:gc.alloc.rate.norm     common  avgt   10     0.020 +/-   0.001    B/op
+HypotBenchmark.finishPreferred:gc.count               common  avgt   10       ~ 0            counts
+HypotBenchmark.finishPreferred                         mixed  avgt   10  7411.933 +/-  68.897   ns/op
+HypotBenchmark.finishPreferred:gc.alloc.rate           mixed  avgt   10     0.003 +/-   0.001  MB/sec
+HypotBenchmark.finishPreferred:gc.alloc.rate.norm      mixed  avgt   10     0.026 +/-   0.001    B/op
+HypotBenchmark.finishPreferred:gc.count                mixed  avgt   10       ~ 0            counts
+HypotBenchmark.scalarStrictMath                       common  avgt   10  7085.019 +/-  69.186   ns/op
+HypotBenchmark.scalarStrictMath:gc.alloc.rate         common  avgt   10     0.003 +/-   0.001  MB/sec
+HypotBenchmark.scalarStrictMath:gc.alloc.rate.norm    common  avgt   10     0.025 +/-   0.001    B/op
+HypotBenchmark.scalarStrictMath:gc.count              common  avgt   10       ~ 0            counts
+HypotBenchmark.scalarStrictMath                        mixed  avgt   10  7796.050 +/- 603.930   ns/op
+HypotBenchmark.scalarStrictMath:gc.alloc.rate          mixed  avgt   10     0.003 +/-   0.001  MB/sec
+HypotBenchmark.scalarStrictMath:gc.alloc.rate.norm     mixed  avgt   10     0.027 +/-   0.002    B/op
+HypotBenchmark.scalarStrictMath:gc.count               mixed  avgt   10       ~ 0            counts
+
+Benchmark result is saved to /home/runner/work/vfdlibm/vfdlibm/pair/base-1.json
+
+# round 1, head
+Benchmark                                           (inputs)  Mode  Cnt      Score     Error   Units
+HypotBenchmark.finish256                              common  avgt   10   5646.964 +/-  63.928   ns/op
+HypotBenchmark.finish256:gc.alloc.rate                common  avgt   10      0.003 +/-   0.001  MB/sec
+HypotBenchmark.finish256:gc.alloc.rate.norm           common  avgt   10      0.020 +/-   0.001    B/op
+HypotBenchmark.finish256:gc.count                     common  avgt   10        ~ 0            counts
+HypotBenchmark.finish256                               mixed  avgt   10  10640.258 +/-  68.953   ns/op
+HypotBenchmark.finish256:gc.alloc.rate                 mixed  avgt   10      0.003 +/-   0.001  MB/sec
+HypotBenchmark.finish256:gc.alloc.rate.norm            mixed  avgt   10      0.037 +/-   0.001    B/op
+HypotBenchmark.finish256:gc.count                      mixed  avgt   10        ~ 0            counts
+HypotBenchmark.finishMax                              common  avgt   10   5501.845 +/- 104.917   ns/op
+HypotBenchmark.finishMax:gc.alloc.rate                common  avgt   10      0.003 +/-   0.001  MB/sec
+HypotBenchmark.finishMax:gc.alloc.rate.norm           common  avgt   10      0.019 +/-   0.001    B/op
+HypotBenchmark.finishMax:gc.count                     common  avgt   10        ~ 0            counts
+HypotBenchmark.finishMax                               mixed  avgt   10  10646.702 +/-  43.500   ns/op
+HypotBenchmark.finishMax:gc.alloc.rate                 mixed  avgt   10      0.003 +/-   0.001  MB/sec
+HypotBenchmark.finishMax:gc.alloc.rate.norm            mixed  avgt   10      0.037 +/-   0.001    B/op
+HypotBenchmark.finishMax:gc.count                      mixed  avgt   10        ~ 0            counts
+HypotBenchmark.finishPreferred                        common  avgt   10   5488.787 +/- 107.771   ns/op
+HypotBenchmark.finishPreferred:gc.alloc.rate          common  avgt   10      0.003 +/-   0.001  MB/sec
+HypotBenchmark.finishPreferred:gc.alloc.rate.norm     common  avgt   10      0.019 +/-   0.001    B/op
+HypotBenchmark.finishPreferred:gc.count               common  avgt   10        ~ 0            counts
+HypotBenchmark.finishPreferred                         mixed  avgt   10  10647.522 +/-  32.919   ns/op
+HypotBenchmark.finishPreferred:gc.alloc.rate           mixed  avgt   10      0.003 +/-   0.001  MB/sec
+HypotBenchmark.finishPreferred:gc.alloc.rate.norm      mixed  avgt   10      0.037 +/-   0.001    B/op
+HypotBenchmark.finishPreferred:gc.count                mixed  avgt   10        ~ 0            counts
+HypotBenchmark.scalarStrictMath                       common  avgt   10   7074.810 +/-  55.403   ns/op
+HypotBenchmark.scalarStrictMath:gc.alloc.rate         common  avgt   10      0.003 +/-   0.001  MB/sec
+HypotBenchmark.scalarStrictMath:gc.alloc.rate.norm    common  avgt   10      0.025 +/-   0.001    B/op
+HypotBenchmark.scalarStrictMath:gc.count              common  avgt   10        ~ 0            counts
+HypotBenchmark.scalarStrictMath                        mixed  avgt   10   8164.019 +/- 276.356   ns/op
+HypotBenchmark.scalarStrictMath:gc.alloc.rate          mixed  avgt   10      0.003 +/-   0.001  MB/sec
+HypotBenchmark.scalarStrictMath:gc.alloc.rate.norm     mixed  avgt   10      0.029 +/-   0.001    B/op
+HypotBenchmark.scalarStrictMath:gc.count               mixed  avgt   10        ~ 0            counts
+
+Benchmark result is saved to /home/runner/work/vfdlibm/vfdlibm/pair/head-1.json
+
+# round 2, base
+Benchmark                                           (inputs)  Mode  Cnt     Score      Error   Units
+HypotBenchmark.finish256                              common  avgt   10  5801.102 +/-   25.774   ns/op
+HypotBenchmark.finish256:gc.alloc.rate                common  avgt   10     0.003 +/-    0.001  MB/sec
+HypotBenchmark.finish256:gc.alloc.rate.norm           common  avgt   10     0.020 +/-    0.001    B/op
+HypotBenchmark.finish256:gc.count                     common  avgt   10       ~ 0             counts
+HypotBenchmark.finish256                               mixed  avgt   10  7391.096 +/-   27.958   ns/op
+HypotBenchmark.finish256:gc.alloc.rate                 mixed  avgt   10     0.003 +/-    0.001  MB/sec
+HypotBenchmark.finish256:gc.alloc.rate.norm            mixed  avgt   10     0.026 +/-    0.001    B/op
+HypotBenchmark.finish256:gc.count                      mixed  avgt   10       ~ 0             counts
+HypotBenchmark.finishMax                              common  avgt   10  9209.845 +/-   25.548   ns/op
+HypotBenchmark.finishMax:gc.alloc.rate                common  avgt   10     0.003 +/-    0.001  MB/sec
+HypotBenchmark.finishMax:gc.alloc.rate.norm           common  avgt   10     0.032 +/-    0.001    B/op
+HypotBenchmark.finishMax:gc.count                     common  avgt   10       ~ 0             counts
+HypotBenchmark.finishMax                               mixed  avgt   10  7321.590 +/-    9.078   ns/op
+HypotBenchmark.finishMax:gc.alloc.rate                 mixed  avgt   10     0.003 +/-    0.001  MB/sec
+HypotBenchmark.finishMax:gc.alloc.rate.norm            mixed  avgt   10     0.026 +/-    0.001    B/op
+HypotBenchmark.finishMax:gc.count                      mixed  avgt   10       ~ 0             counts
+HypotBenchmark.finishPreferred                        common  avgt   10  5731.864 +/-  136.758   ns/op
+HypotBenchmark.finishPreferred:gc.alloc.rate          common  avgt   10     0.003 +/-    0.001  MB/sec
+HypotBenchmark.finishPreferred:gc.alloc.rate.norm     common  avgt   10     0.020 +/-    0.001    B/op
+HypotBenchmark.finishPreferred:gc.count               common  avgt   10       ~ 0             counts
+HypotBenchmark.finishPreferred                         mixed  avgt   10  7390.292 +/-   43.840   ns/op
+HypotBenchmark.finishPreferred:gc.alloc.rate           mixed  avgt   10     0.003 +/-    0.001  MB/sec
+HypotBenchmark.finishPreferred:gc.alloc.rate.norm      mixed  avgt   10     0.026 +/-    0.001    B/op
+HypotBenchmark.finishPreferred:gc.count                mixed  avgt   10       ~ 0             counts
+HypotBenchmark.scalarStrictMath                       common  avgt   10  7127.362 +/-   84.345   ns/op
+HypotBenchmark.scalarStrictMath:gc.alloc.rate         common  avgt   10     0.003 +/-    0.001  MB/sec
+HypotBenchmark.scalarStrictMath:gc.alloc.rate.norm    common  avgt   10     0.025 +/-    0.001    B/op
+HypotBenchmark.scalarStrictMath:gc.count              common  avgt   10       ~ 0             counts
+HypotBenchmark.scalarStrictMath                        mixed  avgt   10  9769.640 +/- 2847.239   ns/op
+HypotBenchmark.scalarStrictMath:gc.alloc.rate          mixed  avgt   10     0.003 +/-    0.001  MB/sec
+HypotBenchmark.scalarStrictMath:gc.alloc.rate.norm     mixed  avgt   10     0.034 +/-    0.010    B/op
+HypotBenchmark.scalarStrictMath:gc.count               mixed  avgt   10       ~ 0             counts
+
+Benchmark result is saved to /home/runner/work/vfdlibm/vfdlibm/pair/base-2.json
+
+# round 2, head
+Benchmark                                           (inputs)  Mode  Cnt      Score     Error   Units
+HypotBenchmark.finish256                              common  avgt   10   5650.834 +/-  43.676   ns/op
+HypotBenchmark.finish256:gc.alloc.rate                common  avgt   10      0.003 +/-   0.001  MB/sec
+HypotBenchmark.finish256:gc.alloc.rate.norm           common  avgt   10      0.020 +/-   0.001    B/op
+HypotBenchmark.finish256:gc.count                     common  avgt   10        ~ 0            counts
+HypotBenchmark.finish256                               mixed  avgt   10  10650.024 +/- 157.936   ns/op
+HypotBenchmark.finish256:gc.alloc.rate                 mixed  avgt   10      0.003 +/-   0.001  MB/sec
+HypotBenchmark.finish256:gc.alloc.rate.norm            mixed  avgt   10      0.037 +/-   0.001    B/op
+HypotBenchmark.finish256:gc.count                      mixed  avgt   10        ~ 0            counts
+HypotBenchmark.finishMax                              common  avgt   10   5617.784 +/-  85.703   ns/op
+HypotBenchmark.finishMax:gc.alloc.rate                common  avgt   10      0.003 +/-   0.001  MB/sec
+HypotBenchmark.finishMax:gc.alloc.rate.norm           common  avgt   10      0.020 +/-   0.001    B/op
+HypotBenchmark.finishMax:gc.count                     common  avgt   10        ~ 0            counts
+HypotBenchmark.finishMax                               mixed  avgt   10  10685.022 +/-  74.510   ns/op
+HypotBenchmark.finishMax:gc.alloc.rate                 mixed  avgt   10      0.003 +/-   0.001  MB/sec
+HypotBenchmark.finishMax:gc.alloc.rate.norm            mixed  avgt   10      0.037 +/-   0.001    B/op
+HypotBenchmark.finishMax:gc.count                      mixed  avgt   10        ~ 0            counts
+HypotBenchmark.finishPreferred                        common  avgt   10   5540.969 +/- 178.801   ns/op
+HypotBenchmark.finishPreferred:gc.alloc.rate          common  avgt   10      0.003 +/-   0.001  MB/sec
+HypotBenchmark.finishPreferred:gc.alloc.rate.norm     common  avgt   10      0.019 +/-   0.001    B/op
+HypotBenchmark.finishPreferred:gc.count               common  avgt   10        ~ 0            counts
+HypotBenchmark.finishPreferred                         mixed  avgt   10  10634.412 +/-  32.350   ns/op
+HypotBenchmark.finishPreferred:gc.alloc.rate           mixed  avgt   10      0.003 +/-   0.001  MB/sec
+HypotBenchmark.finishPreferred:gc.alloc.rate.norm      mixed  avgt   10      0.037 +/-   0.001    B/op
+HypotBenchmark.finishPreferred:gc.count                mixed  avgt   10        ~ 0            counts
+HypotBenchmark.scalarStrictMath                       common  avgt   10   7077.292 +/-  24.777   ns/op
+HypotBenchmark.scalarStrictMath:gc.alloc.rate         common  avgt   10      0.003 +/-   0.001  MB/sec
+HypotBenchmark.scalarStrictMath:gc.alloc.rate.norm    common  avgt   10      0.025 +/-   0.001    B/op
+HypotBenchmark.scalarStrictMath:gc.count              common  avgt   10        ~ 0            counts
+HypotBenchmark.scalarStrictMath                        mixed  avgt   10   7983.086 +/-  42.877   ns/op
+HypotBenchmark.scalarStrictMath:gc.alloc.rate          mixed  avgt   10      0.003 +/-   0.001  MB/sec
+HypotBenchmark.scalarStrictMath:gc.alloc.rate.norm     mixed  avgt   10      0.028 +/-   0.001    B/op
+HypotBenchmark.scalarStrictMath:gc.count               mixed  avgt   10        ~ 0            counts
+
+Benchmark result is saved to /home/runner/work/vfdlibm/vfdlibm/pair/head-2.json
+
+# round 3, base
+Benchmark                                           (inputs)  Mode  Cnt     Score    Error   Units
+HypotBenchmark.finish256                              common  avgt   10  5803.086 +/- 21.857   ns/op
+HypotBenchmark.finish256:gc.alloc.rate                common  avgt   10     0.003 +/-  0.001  MB/sec
+HypotBenchmark.finish256:gc.alloc.rate.norm           common  avgt   10     0.020 +/-  0.001    B/op
+HypotBenchmark.finish256:gc.count                     common  avgt   10       ~ 0           counts
+HypotBenchmark.finish256                               mixed  avgt   10  7340.348 +/- 74.371   ns/op
+HypotBenchmark.finish256:gc.alloc.rate                 mixed  avgt   10     0.003 +/-  0.001  MB/sec
+HypotBenchmark.finish256:gc.alloc.rate.norm            mixed  avgt   10     0.026 +/-  0.001    B/op
+HypotBenchmark.finish256:gc.count                      mixed  avgt   10       ~ 0           counts
+HypotBenchmark.finishMax                              common  avgt   10  9235.957 +/- 31.914   ns/op
+HypotBenchmark.finishMax:gc.alloc.rate                common  avgt   10     0.003 +/-  0.001  MB/sec
+HypotBenchmark.finishMax:gc.alloc.rate.norm           common  avgt   10     0.032 +/-  0.001    B/op
+HypotBenchmark.finishMax:gc.count                     common  avgt   10       ~ 0           counts
+HypotBenchmark.finishMax                               mixed  avgt   10  7365.162 +/- 18.224   ns/op
+HypotBenchmark.finishMax:gc.alloc.rate                 mixed  avgt   10     0.003 +/-  0.001  MB/sec
+HypotBenchmark.finishMax:gc.alloc.rate.norm            mixed  avgt   10     0.026 +/-  0.001    B/op
+HypotBenchmark.finishMax:gc.count                      mixed  avgt   10       ~ 0           counts
+HypotBenchmark.finishPreferred                        common  avgt   10  5811.680 +/- 18.168   ns/op
+HypotBenchmark.finishPreferred:gc.alloc.rate          common  avgt   10     0.003 +/-  0.001  MB/sec
+HypotBenchmark.finishPreferred:gc.alloc.rate.norm     common  avgt   10     0.020 +/-  0.001    B/op
+HypotBenchmark.finishPreferred:gc.count               common  avgt   10       ~ 0           counts
+HypotBenchmark.finishPreferred                         mixed  avgt   10  7359.686 +/- 47.652   ns/op
+HypotBenchmark.finishPreferred:gc.alloc.rate           mixed  avgt   10     0.003 +/-  0.001  MB/sec
+HypotBenchmark.finishPreferred:gc.alloc.rate.norm      mixed  avgt   10     0.026 +/-  0.001    B/op
+HypotBenchmark.finishPreferred:gc.count                mixed  avgt   10       ~ 0           counts
+HypotBenchmark.scalarStrictMath                       common  avgt   10  7060.369 +/- 21.673   ns/op
+HypotBenchmark.scalarStrictMath:gc.alloc.rate         common  avgt   10     0.003 +/-  0.001  MB/sec
+HypotBenchmark.scalarStrictMath:gc.alloc.rate.norm    common  avgt   10     0.025 +/-  0.001    B/op
+HypotBenchmark.scalarStrictMath:gc.count              common  avgt   10       ~ 0           counts
+HypotBenchmark.scalarStrictMath                        mixed  avgt   10  7969.488 +/- 26.871   ns/op
+HypotBenchmark.scalarStrictMath:gc.alloc.rate          mixed  avgt   10     0.003 +/-  0.001  MB/sec
+HypotBenchmark.scalarStrictMath:gc.alloc.rate.norm     mixed  avgt   10     0.028 +/-  0.001    B/op
+HypotBenchmark.scalarStrictMath:gc.count               mixed  avgt   10       ~ 0           counts
+
+Benchmark result is saved to /home/runner/work/vfdlibm/vfdlibm/pair/base-3.json
+
+# round 3, head
+Benchmark                                           (inputs)  Mode  Cnt      Score     Error   Units
+HypotBenchmark.finish256                              common  avgt   10   5535.897 +/- 157.031   ns/op
+HypotBenchmark.finish256:gc.alloc.rate                common  avgt   10      0.003 +/-   0.001  MB/sec
+HypotBenchmark.finish256:gc.alloc.rate.norm           common  avgt   10      0.019 +/-   0.001    B/op
+HypotBenchmark.finish256:gc.count                     common  avgt   10        ~ 0            counts
+HypotBenchmark.finish256                               mixed  avgt   10  10684.741 +/-  34.173   ns/op
+HypotBenchmark.finish256:gc.alloc.rate                 mixed  avgt   10      0.003 +/-   0.001  MB/sec
+HypotBenchmark.finish256:gc.alloc.rate.norm            mixed  avgt   10      0.037 +/-   0.001    B/op
+HypotBenchmark.finish256:gc.count                      mixed  avgt   10        ~ 0            counts
+HypotBenchmark.finishMax                              common  avgt   10   5649.305 +/- 141.583   ns/op
+HypotBenchmark.finishMax:gc.alloc.rate                common  avgt   10      0.003 +/-   0.001  MB/sec
+HypotBenchmark.finishMax:gc.alloc.rate.norm           common  avgt   10      0.020 +/-   0.001    B/op
+HypotBenchmark.finishMax:gc.count                     common  avgt   10        ~ 0            counts
+HypotBenchmark.finishMax                               mixed  avgt   10  10607.539 +/-  58.217   ns/op
+HypotBenchmark.finishMax:gc.alloc.rate                 mixed  avgt   10      0.003 +/-   0.001  MB/sec
+HypotBenchmark.finishMax:gc.alloc.rate.norm            mixed  avgt   10      0.037 +/-   0.001    B/op
+HypotBenchmark.finishMax:gc.count                      mixed  avgt   10        ~ 0            counts
+HypotBenchmark.finishPreferred                        common  avgt   10   5687.572 +/-  70.758   ns/op
+HypotBenchmark.finishPreferred:gc.alloc.rate          common  avgt   10      0.003 +/-   0.001  MB/sec
+HypotBenchmark.finishPreferred:gc.alloc.rate.norm     common  avgt   10      0.020 +/-   0.001    B/op
+HypotBenchmark.finishPreferred:gc.count               common  avgt   10        ~ 0            counts
+HypotBenchmark.finishPreferred                         mixed  avgt   10  10632.589 +/-  51.677   ns/op
+HypotBenchmark.finishPreferred:gc.alloc.rate           mixed  avgt   10      0.003 +/-   0.001  MB/sec
+HypotBenchmark.finishPreferred:gc.alloc.rate.norm      mixed  avgt   10      0.037 +/-   0.001    B/op
+HypotBenchmark.finishPreferred:gc.count                mixed  avgt   10        ~ 0            counts
+HypotBenchmark.scalarStrictMath                       common  avgt   10   7089.656 +/-  45.732   ns/op
+HypotBenchmark.scalarStrictMath:gc.alloc.rate         common  avgt   10      0.003 +/-   0.001  MB/sec
+HypotBenchmark.scalarStrictMath:gc.alloc.rate.norm    common  avgt   10      0.025 +/-   0.001    B/op
+HypotBenchmark.scalarStrictMath:gc.count              common  avgt   10        ~ 0            counts
+HypotBenchmark.scalarStrictMath                        mixed  avgt   10   8004.367 +/-  86.419   ns/op
+HypotBenchmark.scalarStrictMath:gc.alloc.rate          mixed  avgt   10      0.003 +/-   0.001  MB/sec
+HypotBenchmark.scalarStrictMath:gc.alloc.rate.norm     mixed  avgt   10      0.028 +/-   0.001    B/op
+HypotBenchmark.scalarStrictMath:gc.count               mixed  avgt   10        ~ 0            counts
+
+Benchmark result is saved to /home/runner/work/vfdlibm/vfdlibm/pair/head-3.json
+
+# round 4, base
+Benchmark                                           (inputs)  Mode  Cnt     Score     Error   Units
+HypotBenchmark.finish256                              common  avgt   10  5798.384 +/-  18.012   ns/op
+HypotBenchmark.finish256:gc.alloc.rate                common  avgt   10     0.003 +/-   0.001  MB/sec
+HypotBenchmark.finish256:gc.alloc.rate.norm           common  avgt   10     0.020 +/-   0.001    B/op
+HypotBenchmark.finish256:gc.count                     common  avgt   10       ~ 0            counts
+HypotBenchmark.finish256                               mixed  avgt   10  7379.620 +/-  16.745   ns/op
+HypotBenchmark.finish256:gc.alloc.rate                 mixed  avgt   10     0.003 +/-   0.001  MB/sec
+HypotBenchmark.finish256:gc.alloc.rate.norm            mixed  avgt   10     0.026 +/-   0.001    B/op
+HypotBenchmark.finish256:gc.count                      mixed  avgt   10       ~ 0            counts
+HypotBenchmark.finishMax                              common  avgt   10  9213.208 +/-  26.328   ns/op
+HypotBenchmark.finishMax:gc.alloc.rate                common  avgt   10     0.003 +/-   0.001  MB/sec
+HypotBenchmark.finishMax:gc.alloc.rate.norm           common  avgt   10     0.032 +/-   0.001    B/op
+HypotBenchmark.finishMax:gc.count                     common  avgt   10       ~ 0            counts
+HypotBenchmark.finishMax                               mixed  avgt   10  7398.314 +/-  33.309   ns/op
+HypotBenchmark.finishMax:gc.alloc.rate                 mixed  avgt   10     0.003 +/-   0.001  MB/sec
+HypotBenchmark.finishMax:gc.alloc.rate.norm            mixed  avgt   10     0.026 +/-   0.001    B/op
+HypotBenchmark.finishMax:gc.count                      mixed  avgt   10       ~ 0            counts
+HypotBenchmark.finishPreferred                        common  avgt   10  5722.435 +/- 109.803   ns/op
+HypotBenchmark.finishPreferred:gc.alloc.rate          common  avgt   10     0.003 +/-   0.001  MB/sec
+HypotBenchmark.finishPreferred:gc.alloc.rate.norm     common  avgt   10     0.020 +/-   0.001    B/op
+HypotBenchmark.finishPreferred:gc.count               common  avgt   10       ~ 0            counts
+HypotBenchmark.finishPreferred                         mixed  avgt   10  7359.876 +/- 102.983   ns/op
+HypotBenchmark.finishPreferred:gc.alloc.rate           mixed  avgt   10     0.003 +/-   0.001  MB/sec
+HypotBenchmark.finishPreferred:gc.alloc.rate.norm      mixed  avgt   10     0.026 +/-   0.001    B/op
+HypotBenchmark.finishPreferred:gc.count                mixed  avgt   10       ~ 0            counts
+HypotBenchmark.scalarStrictMath                       common  avgt   10  7061.456 +/-  19.927   ns/op
+HypotBenchmark.scalarStrictMath:gc.alloc.rate         common  avgt   10     0.003 +/-   0.001  MB/sec
+HypotBenchmark.scalarStrictMath:gc.alloc.rate.norm    common  avgt   10     0.025 +/-   0.001    B/op
+HypotBenchmark.scalarStrictMath:gc.count              common  avgt   10       ~ 0            counts
+HypotBenchmark.scalarStrictMath                        mixed  avgt   10  8036.337 +/- 103.235   ns/op
+HypotBenchmark.scalarStrictMath:gc.alloc.rate          mixed  avgt   10     0.003 +/-   0.001  MB/sec
+HypotBenchmark.scalarStrictMath:gc.alloc.rate.norm     mixed  avgt   10     0.028 +/-   0.001    B/op
+HypotBenchmark.scalarStrictMath:gc.count               mixed  avgt   10       ~ 0            counts
+
+Benchmark result is saved to /home/runner/work/vfdlibm/vfdlibm/pair/base-4.json
+
+# round 4, head
+Benchmark                                           (inputs)  Mode  Cnt      Score      Error   Units
+HypotBenchmark.finish256                              common  avgt   10   5548.780 +/-  148.502   ns/op
+HypotBenchmark.finish256:gc.alloc.rate                common  avgt   10      0.003 +/-    0.001  MB/sec
+HypotBenchmark.finish256:gc.alloc.rate.norm           common  avgt   10      0.019 +/-    0.001    B/op
+HypotBenchmark.finish256:gc.count                     common  avgt   10        ~ 0             counts
+HypotBenchmark.finish256                               mixed  avgt   10  10720.018 +/-  118.663   ns/op
+HypotBenchmark.finish256:gc.alloc.rate                 mixed  avgt   10      0.003 +/-    0.001  MB/sec
+HypotBenchmark.finish256:gc.alloc.rate.norm            mixed  avgt   10      0.037 +/-    0.001    B/op
+HypotBenchmark.finish256:gc.count                      mixed  avgt   10        ~ 0             counts
+HypotBenchmark.finishMax                              common  avgt   10   5545.983 +/-  194.187   ns/op
+HypotBenchmark.finishMax:gc.alloc.rate                common  avgt   10      0.003 +/-    0.001  MB/sec
+HypotBenchmark.finishMax:gc.alloc.rate.norm           common  avgt   10      0.019 +/-    0.001    B/op
+HypotBenchmark.finishMax:gc.count                     common  avgt   10        ~ 0             counts
+HypotBenchmark.finishMax                               mixed  avgt   10  10613.595 +/-   45.414   ns/op
+HypotBenchmark.finishMax:gc.alloc.rate                 mixed  avgt   10      0.003 +/-    0.001  MB/sec
+HypotBenchmark.finishMax:gc.alloc.rate.norm            mixed  avgt   10      0.037 +/-    0.001    B/op
+HypotBenchmark.finishMax:gc.count                      mixed  avgt   10        ~ 0             counts
+HypotBenchmark.finishPreferred                        common  avgt   10   5514.461 +/-  124.739   ns/op
+HypotBenchmark.finishPreferred:gc.alloc.rate          common  avgt   10      0.003 +/-    0.001  MB/sec
+HypotBenchmark.finishPreferred:gc.alloc.rate.norm     common  avgt   10      0.019 +/-    0.001    B/op
+HypotBenchmark.finishPreferred:gc.count               common  avgt   10        ~ 0             counts
+HypotBenchmark.finishPreferred                         mixed  avgt   10  10606.405 +/-   19.512   ns/op
+HypotBenchmark.finishPreferred:gc.alloc.rate           mixed  avgt   10      0.003 +/-    0.001  MB/sec
+HypotBenchmark.finishPreferred:gc.alloc.rate.norm      mixed  avgt   10      0.037 +/-    0.001    B/op
+HypotBenchmark.finishPreferred:gc.count                mixed  avgt   10        ~ 0             counts
+HypotBenchmark.scalarStrictMath                       common  avgt   10   7117.294 +/-   90.149   ns/op
+HypotBenchmark.scalarStrictMath:gc.alloc.rate         common  avgt   10      0.003 +/-    0.001  MB/sec
+HypotBenchmark.scalarStrictMath:gc.alloc.rate.norm    common  avgt   10      0.025 +/-    0.001    B/op
+HypotBenchmark.scalarStrictMath:gc.count              common  avgt   10        ~ 0             counts
+HypotBenchmark.scalarStrictMath                        mixed  avgt   10   8641.808 +/- 1051.724   ns/op
+HypotBenchmark.scalarStrictMath:gc.alloc.rate          mixed  avgt   10      0.003 +/-    0.001  MB/sec
+HypotBenchmark.scalarStrictMath:gc.alloc.rate.norm     mixed  avgt   10      0.030 +/-    0.004    B/op
+HypotBenchmark.scalarStrictMath:gc.count               mixed  avgt   10        ~ 0             counts
+
+Benchmark result is saved to /home/runner/work/vfdlibm/vfdlibm/pair/head-4.json
+
+# round 5, base
+Benchmark                                           (inputs)  Mode  Cnt     Score     Error   Units
+HypotBenchmark.finish256                              common  avgt   10  5727.630 +/- 125.468   ns/op
+HypotBenchmark.finish256:gc.alloc.rate                common  avgt   10     0.003 +/-   0.001  MB/sec
+HypotBenchmark.finish256:gc.alloc.rate.norm           common  avgt   10     0.020 +/-   0.001    B/op
+HypotBenchmark.finish256:gc.count                     common  avgt   10       ~ 0            counts
+HypotBenchmark.finish256                               mixed  avgt   10  7341.304 +/-  49.555   ns/op
+HypotBenchmark.finish256:gc.alloc.rate                 mixed  avgt   10     0.003 +/-   0.001  MB/sec
+HypotBenchmark.finish256:gc.alloc.rate.norm            mixed  avgt   10     0.026 +/-   0.001    B/op
+HypotBenchmark.finish256:gc.count                      mixed  avgt   10       ~ 0            counts
+HypotBenchmark.finishMax                              common  avgt   10  9231.874 +/-  46.465   ns/op
+HypotBenchmark.finishMax:gc.alloc.rate                common  avgt   10     0.003 +/-   0.001  MB/sec
+HypotBenchmark.finishMax:gc.alloc.rate.norm           common  avgt   10     0.032 +/-   0.001    B/op
+HypotBenchmark.finishMax:gc.count                     common  avgt   10       ~ 0            counts
+HypotBenchmark.finishMax                               mixed  avgt   10  7333.918 +/-  34.324   ns/op
+HypotBenchmark.finishMax:gc.alloc.rate                 mixed  avgt   10     0.003 +/-   0.001  MB/sec
+HypotBenchmark.finishMax:gc.alloc.rate.norm            mixed  avgt   10     0.026 +/-   0.001    B/op
+HypotBenchmark.finishMax:gc.count                      mixed  avgt   10       ~ 0            counts
+HypotBenchmark.finishPreferred                        common  avgt   10  5809.758 +/-  30.655   ns/op
+HypotBenchmark.finishPreferred:gc.alloc.rate          common  avgt   10     0.003 +/-   0.001  MB/sec
+HypotBenchmark.finishPreferred:gc.alloc.rate.norm     common  avgt   10     0.020 +/-   0.001    B/op
+HypotBenchmark.finishPreferred:gc.count               common  avgt   10       ~ 0            counts
+HypotBenchmark.finishPreferred                         mixed  avgt   10  7359.913 +/-  43.382   ns/op
+HypotBenchmark.finishPreferred:gc.alloc.rate           mixed  avgt   10     0.003 +/-   0.001  MB/sec
+HypotBenchmark.finishPreferred:gc.alloc.rate.norm      mixed  avgt   10     0.026 +/-   0.001    B/op
+HypotBenchmark.finishPreferred:gc.count                mixed  avgt   10       ~ 0            counts
+HypotBenchmark.scalarStrictMath                       common  avgt   10  7083.938 +/-  62.730   ns/op
+HypotBenchmark.scalarStrictMath:gc.alloc.rate         common  avgt   10     0.003 +/-   0.001  MB/sec
+HypotBenchmark.scalarStrictMath:gc.alloc.rate.norm    common  avgt   10     0.025 +/-   0.001    B/op
+HypotBenchmark.scalarStrictMath:gc.count              common  avgt   10       ~ 0            counts
+HypotBenchmark.scalarStrictMath                        mixed  avgt   10  8774.036 +/- 872.455   ns/op
+HypotBenchmark.scalarStrictMath:gc.alloc.rate          mixed  avgt   10     0.003 +/-   0.001  MB/sec
+HypotBenchmark.scalarStrictMath:gc.alloc.rate.norm     mixed  avgt   10     0.031 +/-   0.003    B/op
+HypotBenchmark.scalarStrictMath:gc.count               mixed  avgt   10       ~ 0            counts
+
+Benchmark result is saved to /home/runner/work/vfdlibm/vfdlibm/pair/base-5.json
+
+# round 5, head
+Benchmark                                           (inputs)  Mode  Cnt      Score     Error   Units
+HypotBenchmark.finish256                              common  avgt   10   5437.245 +/-  23.377   ns/op
+HypotBenchmark.finish256:gc.alloc.rate                common  avgt   10      0.003 +/-   0.001  MB/sec
+HypotBenchmark.finish256:gc.alloc.rate.norm           common  avgt   10      0.019 +/-   0.001    B/op
+HypotBenchmark.finish256:gc.count                     common  avgt   10        ~ 0            counts
+HypotBenchmark.finish256                               mixed  avgt   10  10611.125 +/-  29.541   ns/op
+HypotBenchmark.finish256:gc.alloc.rate                 mixed  avgt   10      0.003 +/-   0.001  MB/sec
+HypotBenchmark.finish256:gc.alloc.rate.norm            mixed  avgt   10      0.037 +/-   0.001    B/op
+HypotBenchmark.finish256:gc.count                      mixed  avgt   10        ~ 0            counts
+HypotBenchmark.finishMax                              common  avgt   10   5554.535 +/- 174.500   ns/op
+HypotBenchmark.finishMax:gc.alloc.rate                common  avgt   10      0.003 +/-   0.001  MB/sec
+HypotBenchmark.finishMax:gc.alloc.rate.norm           common  avgt   10      0.019 +/-   0.001    B/op
+HypotBenchmark.finishMax:gc.count                     common  avgt   10        ~ 0            counts
+HypotBenchmark.finishMax                               mixed  avgt   10  10623.978 +/-  85.156   ns/op
+HypotBenchmark.finishMax:gc.alloc.rate                 mixed  avgt   10      0.003 +/-   0.001  MB/sec
+HypotBenchmark.finishMax:gc.alloc.rate.norm            mixed  avgt   10      0.037 +/-   0.001    B/op
+HypotBenchmark.finishMax:gc.count                      mixed  avgt   10        ~ 0            counts
+HypotBenchmark.finishPreferred                        common  avgt   10   5606.046 +/-  67.060   ns/op
+HypotBenchmark.finishPreferred:gc.alloc.rate          common  avgt   10      0.003 +/-   0.001  MB/sec
+HypotBenchmark.finishPreferred:gc.alloc.rate.norm     common  avgt   10      0.020 +/-   0.001    B/op
+HypotBenchmark.finishPreferred:gc.count               common  avgt   10        ~ 0            counts
+HypotBenchmark.finishPreferred                         mixed  avgt   10  10602.564 +/-  14.231   ns/op
+HypotBenchmark.finishPreferred:gc.alloc.rate           mixed  avgt   10      0.003 +/-   0.001  MB/sec
+HypotBenchmark.finishPreferred:gc.alloc.rate.norm      mixed  avgt   10      0.037 +/-   0.001    B/op
+HypotBenchmark.finishPreferred:gc.count                mixed  avgt   10        ~ 0            counts
+HypotBenchmark.scalarStrictMath                       common  avgt   10   7092.169 +/-  46.062   ns/op
+HypotBenchmark.scalarStrictMath:gc.alloc.rate         common  avgt   10      0.003 +/-   0.001  MB/sec
+HypotBenchmark.scalarStrictMath:gc.alloc.rate.norm    common  avgt   10      0.025 +/-   0.001    B/op
+HypotBenchmark.scalarStrictMath:gc.count              common  avgt   10        ~ 0            counts
+HypotBenchmark.scalarStrictMath                        mixed  avgt   10   7982.099 +/-  34.263   ns/op
+HypotBenchmark.scalarStrictMath:gc.alloc.rate          mixed  avgt   10      0.003 +/-   0.001  MB/sec
+HypotBenchmark.scalarStrictMath:gc.alloc.rate.norm     mixed  avgt   10      0.028 +/-   0.001    B/op
+HypotBenchmark.scalarStrictMath:gc.count               mixed  avgt   10        ~ 0            counts
+
+Benchmark result is saved to /home/runner/work/vfdlibm/vfdlibm/pair/head-5.json
