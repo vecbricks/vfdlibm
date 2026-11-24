@@ -15,8 +15,9 @@ published: false
      largest "common" figure among the rows exp, log and pow in the xeon8573c (AVX-512) column,
      as the table prints it. Until that table exists there is no N; do not put in another figure. -->
 
-When you write `exp(x)`, `ln(x)` or `power(x, y)` in Spark SQL, the result does not come from
-`java.lang.Math`. It comes from `java.lang.StrictMath`, and Spark asks for it on purpose.
+Ask Java for e and you get `Math.E`, 2.718281828459045. Ask Spark SQL for `exp(1)` and you get
+2.7182818284590455, the next double up. Spark does not compute `exp`, `ln` or `power` with
+`java.lang.Math`. It computes them with `java.lang.StrictMath`, and it asks for it on purpose.
 
 That choice gives Spark a guarantee: the same bits on every executor, every JVM and every CPU.
 It also means the call runs on one double at a time. I wrote a library that keeps the guarantee
@@ -50,6 +51,40 @@ either neighbour of the exact value, and the JIT may give it from code written f
 respect to fdlibm version 5.3." fdlibm is Sun's Freely Distributable Math Library, written in
 C. The same input gives the same 64 bits everywhere, so a query run on another cluster returns
 the same doubles, and a test that compares them passes there too.
+
+## What a Photon warehouse returns
+
+I wanted to see what this looks like outside the JVM, so on 24 November 2026 I ran two queries on
+my own Databricks SQL warehouse with Photon.
+
+The first was `SELECT EXP(1), LOG(E(), 10), pow(2, 0.5), EXPM1(1.0E-5)`. It returned
+2.7182818284590455, 2.302585092994046, 1.4142135623730951 and 0.000010000050000166668. The first is
+StrictMath's `exp(1)`. On JDK 25, `Math.exp(1)` is 2.718281828459045, and so is `exp(1)` in
+glibc 2.43, the C library on my laptop. But a query of literals shows little: Spark's optimizer
+folds constant expressions on the driver, in the JVM, so Photon never computes them.
+
+<!-- {{LITERAL_VS_COLUMN}}: owner to run SELECT exp(1.0D), (SELECT exp(x) FROM tmp_math WHERE x = 1.0D) and add the result if they differ -->
+
+The second query reads a column. Its `EXPLAIN` shows
+`PhotonProject [... EXP(x), ln(x), pow(2.0, x), EXPM1(x)]` over `PhotonScan parquet`, and says "The query is fully supported by Photon." Its
+32 inputs, eight each for `exp`, `ln`, `expm1` and `pow(2.0, x)`, are ones where JDK 25's
+`StrictMath` and glibc 2.43's libm give different doubles. On my workspace, on 24 November 2026,
+Photon's results matched the C library's on all 32, and `StrictMath`'s on none. The query is
+[`photon-check.sql`](https://github.com/vecbricks/vfdlibm/blob/v0.3.0/docs/blog/photon-check.sql), with both expected
+results in the table, so you can run it on your own engine (the end of this post has it too).
+
+How often do the two libraries differ? On 200,000 random inputs, `x` drawn uniformly
+between -700 and 700 from seed 7, `StrictMath` and glibc 2.43 differ on 19,720 for `exp(x)`, 19,627 for `pow(2.0, x/700)`,
+4,047 for `ln(abs(x))` and 139 for `expm1(x/100)`. The generator and the comparison are in
+[`strictmath-vs-libm/`](https://github.com/vecbricks/vfdlibm/tree/v0.3.0/docs/blog/strictmath-vs-libm).
+
+Other accelerators are open about the same choice. The RAPIDS Accelerator for Apache Spark's
+[compatibility guide](https://nvidia.github.io/cudf-spark/docs/compatibility.html) says: "For other
+functions like sin, cos, etc. the output may be different, but within the rounding error inherent
+in floating-point calculations." And Velox's Presto `exp`,
+[`ExpFunction`](https://github.com/facebookincubator/velox/blob/b0706264be6ce974388fc263197c2a9e013416d2/velox/functions/prestosql/Arithmetic.h#L336-L340),
+calls `std::exp`. vfdlibm is for an engine that wants the speed of vectors and Spark's own
+bits.
 
 ## vfdlibm
 
@@ -317,3 +352,34 @@ the optional five ([#162](https://github.com/vecbricks/vfdlibm/issues/162)) and 
 each body spends its cycles ([#156](https://github.com/vecbricks/vfdlibm/issues/156)).
 
 {% raw %}{{VARKA: owner writes one or two sentences on Varka}}{% endraw %}
+
+<div class="box" markdown="1" style="border: 1px solid #d6d6d6; border-radius: 12px; padding: 0 16px; margin-top: 2em;">
+
+## Check your own engine
+
+Which doubles does your SQL engine return: `StrictMath`'s, like Spark's JVM code, or another
+library's? The query below works on any Spark-compatible SQL engine. Each row holds an input with
+both libraries' results, and the `matches` column says which one the engine returned. Four of the
+32 rows are shown; [`photon-check.sql`](https://github.com/vecbricks/vfdlibm/blob/v0.3.0/docs/blog/photon-check.sql) has them all.
+
+```sql
+CREATE OR REPLACE TABLE tmp_photon_math (f STRING, x DOUBLE, strictmath DOUBLE, libm DOUBLE);
+INSERT INTO tmp_photon_math VALUES
+  ('exp', 398.66376279136523D, 1.372373473676344e+173D, 1.3723734736763437e+173D),
+  ('ln', 212.36641575624026D, 5.3583131589573565D, 5.358313158957356D),
+  ('expm1', 1.7622825689472796D, 4.825719836785396D, 4.825719836785395D),
+  ('pow', 0.4983392062672662D, 1.4125864924923173D, 1.412586492492317D);
+
+SELECT f, x, photon,
+       CASE WHEN photon = strictmath THEN 'StrictMath (Spark)'
+            WHEN photon = libm THEN 'glibc libm'
+            ELSE 'neither' END AS matches
+FROM (
+  SELECT f, x, strictmath, libm,
+         CASE f WHEN 'exp' THEN exp(x) WHEN 'ln' THEN ln(x)
+                WHEN 'expm1' THEN expm1(x) WHEN 'pow' THEN pow(2.0D, x) END AS photon
+  FROM tmp_photon_math)
+ORDER BY f, x;
+```
+
+</div>
