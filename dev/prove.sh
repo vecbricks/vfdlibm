@@ -106,7 +106,13 @@ require_solver() {
   echo "$path"
 }
 
-# A wheel only, never a build from source, and only the wheel whose hash is pinned.
+# A solver already under target/solvers/ is trusted as it stands, unchecked. In CI that directory
+# is cached (ci.yml's and nightly.yml's proofs jobs): a cache is saved only by a job that
+# succeeded, so after an install below that checked the hash of what it downloaded, and its key
+# hashes this file, pins included, so another pin never restores it.
+
+# A wheel only, never a build from source, and only the wheel whose hash is pinned. --retries 5 is
+# pip's default, stated so the download is retried whatever the default becomes.
 install_z3() {
   local dir="$solvers/z3-$Z3_VERSION"
   [ -x "$dir/bin/z3" ] && return 0
@@ -120,8 +126,8 @@ install_z3() {
   for h in "${Z3_WHEEL_SHA256[@]}"; do hashes+=" --hash=sha256:$h"; done
   python3 -m venv "$dir" \
     && echo "z3-solver==$Z3_VERSION.0$hashes" > "$dir/requirements.txt" \
-    && "$dir/bin/pip" install --quiet --disable-pip-version-check --only-binary=:all: \
-      --require-hashes -r "$dir/requirements.txt"
+    && "$dir/bin/pip" install --quiet --disable-pip-version-check --retries 5 \
+      --only-binary=:all: --require-hashes -r "$dir/requirements.txt"
 }
 
 install_cvc5() {
@@ -133,7 +139,9 @@ install_cvc5() {
     return 1
   fi
   tmp="$(mktemp -d)"
-  curl -sSfL -o "$tmp/$CVC5_ZIP" \
+  # Retried on any error, a 403 or 5xx from GitHub's release download included, which -f makes an
+  # error and --retry-all-errors (curl 7.71 or later) retries: one 403 failed a nightly run.
+  curl -sSfL --retry 5 --retry-all-errors --retry-delay 5 -o "$tmp/$CVC5_ZIP" \
       "https://github.com/cvc5/cvc5/releases/download/cvc5-$CVC5_VERSION/$CVC5_ZIP" \
     && echo "$CVC5_SHA256  $tmp/$CVC5_ZIP" | sha256sum -c --quiet \
     && unzip -q "$tmp/$CVC5_ZIP" -d "$tmp" \
