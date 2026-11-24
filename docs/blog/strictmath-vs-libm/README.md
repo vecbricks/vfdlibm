@@ -56,6 +56,10 @@ The three where `StrictMath`'s result is the correctly rounded one are all `expm
 
 ## The data behind the post's figures
 
+The aggregate card reads `aggregate-photon-2026-11-24.csv` and `aggregate-spark-4.3.0-jdk21.tsv`,
+and checks them against the glibc prediction; those files are described under "The aggregate
+query" below.
+
 `../figures.py` draws the post's figures into `../img/` from the files in `data/`:
 
 - `exp1-bits.txt`: `java ExpOne.java` on JDK 25.0.5.1, the bits of `StrictMath.exp(1)`,
@@ -122,12 +126,16 @@ its comment header says how to read them. The files in `data/`:
 `aggregate-cbrt-cr.py` prints the sum of the correctly rounded cube roots of the `cbrt` inputs,
 75000024.722734006601528900, in about five seconds.
 
+From this directory (the block makes its own scratch directory), with Spark 4.3.0's `bin` on the
+`PATH`; run the two `spark-sql` lines once with `JAVA_HOME` at JDK 21 (the `-jdk21` files) and once
+at JDK 25 (the `-jdk25` files):
+
 ```bash
 d=$(pwd); cd "$(mktemp -d)"
 gcc -O1 -ffp-contract=off -fno-builtin -o aggregate-glibc-values "$d/aggregate-glibc-values.c" -lm
 ./aggregate-glibc-values > glibc-values.csv
-spark-sql --master 'local[2]' -S -f "$d/../aggregate-check.sql"
-spark-sql --master 'local[2]' -S -f "$d/aggregate-predict-glibc.sql"
-python3 "$d/aggregate-cbrt-cr.py"
+JAVA_HOME=/path/to/jdk-21 spark-sql --master 'local[2]' -S -f "$d/../aggregate-check.sql"
+JAVA_HOME=/path/to/jdk-21 spark-sql --master 'local[2]' -S -f "$d/aggregate-predict-glibc.sql"
+python3 "$d/aggregate-cbrt-cr.py"   # prints 75000024.722734006601528900
 ```
 

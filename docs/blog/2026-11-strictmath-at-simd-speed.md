@@ -383,11 +383,12 @@ java --add-modules jdk.incubator.vector -cp "target/classes:$(cat cp.txt)" examp
   `_ZGVdN4vv_pow`; they differ from scalar glibc on 17 of the 32 (5 `exp`, 4 `ln`, 3 `expm1`, 5
   `pow`). For `pow(2, 0.4983392062672662)`, libmvec gives 1.4125864924923173 and scalar glibc
   1.412586492492317. Photon matched the scalar values on all 32.
-- So Photon's results on my Free Edition warehouse are consistent with a call to glibc's scalar functions for
-  each element, and inconsistent with `StrictMath`, with a correctly rounded library, and with glibc
+- So on these 32 inputs of `exp`, `ln`, `expm1` and `pow`, Photon's results on my Free Edition
+  warehouse are consistent with a call to glibc's scalar functions for each element, and inconsistent with `StrictMath`, with a correctly rounded library, and with glibc
   2.43's AVX2 libmvec. They do not exclude another library, or another glibc version, that returns
   the same doubles on these inputs, a hand-vectorized port of glibc's algorithms, libmvec at another
-  width, or another CPU: I do not know the warehouse's CPU.
+  width, or another CPU: I do not know the warehouse's CPU. The aggregate query below shows one
+  function, `cbrt`, where Photon's results match neither glibc 2.43 nor Spark.
 - The rates: [`Gen.java` and `compare.py`](https://github.com/vecbricks/vfdlibm/tree/v0.3.0/docs/blog/strictmath-vs-libm),
   200,000 inputs drawn uniformly between -700 and 700 from seed 7, with `ln` of the absolute value,
   `expm1` of x/100 and `pow(2.0, x/700)`; Python's `math` module calls the C library.
@@ -404,13 +405,15 @@ java --add-modules jdk.incubator.vector -cp "target/classes:$(cat cp.txt)" examp
 - [`aggregate-check.sql`](https://github.com/vecbricks/vfdlibm/blob/v0.3.0/docs/blog/aggregate-check.sql) builds 1,000,000 inputs per function from
   `range()`'s `id`, so no engine can fold a call to a constant, and reduces each function's results
   to order-independent aggregates: the exact sum of every result cast to `DECIMAL(38,18)` and a
-  `bit_xor` of `xxhash64` over the results' bits. `cast_lossy` is 0 on every row, so each cast is
-  exact and a one-ulp change moves the sum.
+  `bit_xor` of `xxhash64` over the results' bits. `cast_lossy` is 0 on every row, so each result's
+  cast reads back as the same double, and a one-ulp change moves `sum_y`. `sum_x` is a control sum
+  of the arguments, rounded to the decimal's scale, not an exact one.
 - The controls agree: `xor_x` and `sum_x`, the inputs' fingerprint and sum, are the same on Photon
   and on Spark for every function, and so is the whole `sqrt` row. So the inputs, the casts and the
-  hashes agree, and the differences are the math library's.
+  hashes agree, and the differences are in the functions' results.
 - Photon: Databricks Free Edition, SQL warehouse with Photon, 24 November 2026, its output as
-  pasted from the SQL editor (`data/aggregate-photon-2026-11-24.csv`). Spark: Apache Spark 4.3.0,
+  pasted from the SQL editor (`data/aggregate-photon-2026-11-24.csv`). I did not record this run's
+  query profile or `EXPLAIN`. Spark: Apache Spark 4.3.0,
   local mode, on JDK 21 and on JDK 25 (`data/aggregate-spark-4.3.0-jdk21.tsv`, `-jdk25.tsv`). The
   glibc prediction: [`aggregate-glibc-values.c`](https://github.com/vecbricks/vfdlibm/blob/v0.3.0/docs/blog/strictmath-vs-libm/aggregate-glibc-values.c)
   computes every result with glibc 2.43 on my laptop, and
@@ -438,8 +441,8 @@ java --add-modules jdk.incubator.vector -cp "target/classes:$(cat cp.txt)" examp
   computed by [`aggregate-cbrt-cr.py`](https://github.com/vecbricks/vfdlibm/blob/v0.3.0/docs/blog/strictmath-vs-libm/aggregate-cbrt-cr.py): consistent with
   correct rounding on these inputs.
 - `sin`, `tanh` and `cbrt` go to `java.lang.Math` in Spark, so Spark's own rows for them depend on
-  the JDK: `tanh` and `cbrt` give different results on JDK 21 and JDK 25. The table compares with
-  JDK 21.
+  the JDK (and, for `Math`, possibly the CPU): on my laptop `tanh` and `cbrt` give different results
+  on JDK 21 and JDK 25. The table compares with JDK 21.
 
 **The NaN exception and the contract**
 - In `atan2`, `hypot` and `pow`, a lane of two NaNs with different bits returns one of the two

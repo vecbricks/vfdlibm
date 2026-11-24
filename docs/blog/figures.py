@@ -579,9 +579,22 @@ def fig_aggregate():
     photon, spark = aggregate_rows()
     for f_, r in photon.items():  # the controls: inputs, casts and hashes agree on every row
         assert all(r[c] == spark[f_][c] for c in ("n", "cast_lossy", "xor_x", "sum_x")), f_
+        assert r["cast_lossy"] == "0", f_
     differ = sorted(f_ for f_ in photon if photon[f_]["sum_y"] != spark[f_]["sum_y"])
     same = sorted(f_ for f_ in photon if f_ not in differ)
     assert same == ["sqrt"], same
+    assert photon["sqrt"] == spark["sqrt"], "the post says the whole sqrt row agrees"
+    # what How I checked's table says: Photon equals the glibc 2.43 prediction on every function
+    # but cbrt (the prediction file has four more columns after the nine)
+    cols = "f n sum_y xor_y min_y max_y cast_lossy xor_x sum_x".split()
+    pred = {}
+    for line in (DATA / "aggregate-glibc-2.43-predicted-jdk21.tsv").read_text().splitlines():
+        if line.strip():
+            v = line.split("\t")
+            pred[v[0]] = dict(zip(cols, v[:9]))
+            assert v[9] == "0", "x_mismatch"
+    match = sorted(f_ for f_ in photon if photon[f_] == pred[f_])
+    assert match == sorted(set(photon) - {"cbrt"}), match
     a, b = spark["exp"]["sum_y"], photon["exp"]["sum_y"]
     k = next(i for i in range(len(a)) if a[i] != b[i])
     f = Fig("aggregate", "A million rows, two totals",

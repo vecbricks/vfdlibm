@@ -12,7 +12,7 @@
 -- the sum); xor_y, the XOR of xxhash64 over the results' bits, a fingerprint of the whole column;
 -- min_y and max_y as strings, so no UI rounds them; cast_lossy, the rows whose cast to decimal
 -- does not read back as the same double (must be 0); and xor_x and sum_x, the same fingerprint
--- and sum of the arguments.
+-- for the arguments and a control sum of them (rounded to the decimal's scale, not exact).
 --
 -- CONTROLS, compare these first: xor_x and sum_x must equal Spark's on every row, and the sqrt
 -- row must equal Spark's in every column. If they do not, the engines differ in how they make
@@ -23,7 +23,8 @@
 -- projection to the JVM; if the profile shows no Photon, rerun without the sin, tanh and cbrt rows.
 -- Spark's own answer for sin, tanh and cbrt (java.lang.Math) depends on the JDK: on Spark 4.3.0
 -- local, tanh and cbrt give different sum_y and xor_y on JDK 21 and JDK 25 (sin does not);
--- compare those rows with a Spark run on the same JDK as the cluster's.
+-- compare those rows with a Spark run on the same JDK as the cluster's (and, for Math, possibly
+-- the same CPU).
 WITH t AS (
   SELECT id, CAST(id AS DOUBLE) / 1000000D AS u FROM range(1000000)
 ), v AS (
