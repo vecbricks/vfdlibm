@@ -60,9 +60,11 @@ import jdk.incubator.vector.VectorSpecies;
  * {@code guarded} only in a vector with a live special lane, which is the one {@code VFdlibm}
  * calls, at every species. atan2 has no finish arm, so rule 1 of issue #30 (a tie goes to the
  * finish arm) does not pick between the two (the issue's corrected comment,
- * https://github.com/vecbricks/vfdlibm/issues/30#issuecomment-7085437272). Each host has timed both
- * arms in a run and a re-run ({@code bench/results/atan2-xeon8573c-2026-11-22.txt} and {@code
- * atan2-epyc7763-2026-11-22.txt}), and neither file gives them a direction, so guarded stays the
+ * https://github.com/vecbricks/vfdlibm/issues/30#issuecomment-7085437272). The Xeon has timed both
+ * arms in a run and a re-run and the EPYC in a run and two re-runs ({@code
+ * bench/results/atan2-xeon8573c-2026-11-22.txt} and {@code atan2-epyc7763-2026-11-22.txt}), and
+ * neither file gives them a direction (the EPYC's third run reads blended over guarded at 1.27 at
+ * the preferred species on common data), so guarded stays the
  * default at every species by the owner's decision of 22 November.
  */
 final class Atan2 {

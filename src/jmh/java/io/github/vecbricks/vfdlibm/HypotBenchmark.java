@@ -29,7 +29,9 @@ import org.openjdk.jmh.annotations.Warmup;
  * StrictMath.hypot} loop and {@link Hypot#hypot}, the one arm ({@code VFdlibm.hypot} runs it, with
  * every lane of an infinity or a NaN finished per lane), at 256 bits, at the host's preferred
  * species and at {@code SPECIES_MAX}. 128 bits is left out: on x86 C2 lowers no mask at two
- * 64-bit lanes, so every 128-bit arm boxes (SKILLS.md). No results file times it yet.
+ * 64-bit lanes, so every 128-bit arm boxes (SKILLS.md). bench/results/hypot-epyc7763-2026-11-23.txt
+ * times it, one run on the EPYC 7763, whose reading wants a re-run (its finishMax and
+ * finishPreferred rows disagree on common data).
  *
  * <p>{@code inputs} picks the data: {@code common} draws {@code x} and {@code y} from {@code
  * [-10, 10)}, Varka's baseline range, where every lane takes the medium path unscaled (both of

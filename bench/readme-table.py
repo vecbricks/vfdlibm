@@ -41,9 +41,9 @@ The table has a row per function and a column per host: xeon8573c (AVX-512) and 
 always, and xeon6973p, epyc9v45 and neoversen2 once a results file of theirs exists. A cell
 holds two ratios, for the inputs common and mixed: the minimum of the file's scalarStrictMath row
 over the minimum of the default arm at the preferred species (its <arm>Preferred row), both of
-one run, in ns/op as the file's min/avg/max table gives them. Where a file holds a run and its
-re-run, the ratio is taken within each run and the lower one is shown. From a file of one run,
-a ratio from 1.30 to under 1.40 is marked "(one run, near 1.3x)", and one under 1.30 shows no
+one run, in ns/op as the file's min/avg/max table gives them. Where a file holds several runs
+(a run and its re-runs), the ratio is taken within each run and the lowest is shown. From a
+file of one run, a ratio from 1.30 to under 1.40 is marked "(one run, near 1.3x)", and one under 1.30 shows no
 figure but "re-run needed", since AGENTS.md asks a claim under about 1.3x to be re-run.
 
 The file of a function and host is bench/results/<function>-<host>-<date>.txt, or
@@ -412,7 +412,7 @@ def table_and_state(root, tag):
         "For vfdlibm %s (tag %s). Each figure is `StrictMath` called once per lane (the"
         " `scalarStrictMath` row) over the function's default arm at the host's preferred"
         " species (its `<arm>Preferred` row), by minimum ns/op within one run; where a file"
-        " holds a run and its re-run, the lower of the two runs' ratios is shown; from one run, a"
+        " holds several runs, the lowest of their ratios is shown; from one run, a"
         " ratio under 1.4x is marked, and one under 1.3x says \"re-run needed\". `common`: no lane takes a"
         " rare path; `mixed`: rare lanes run. The preferred species is %s. \"older code\" and"
         " \"newer code\": the files of that function and host time code older or newer than"

@@ -34,14 +34,13 @@ files:
 
 For vfdlibm 0.2.0 (tag v0.2.0). Each figure is `StrictMath` called once per lane (the
 `scalarStrictMath` row) over the function's default arm at the host's preferred species (its
-`<arm>Preferred` row), by minimum ns/op within one run; where a file holds a run and its re-run, the
-lower of the two runs' ratios is shown; from one run, a ratio under 1.4x is marked, and one under
-1.3x says "re-run needed". `common`: no lane takes a rare path; `mixed`: rare lanes run. The
-preferred species is 512 bits on xeon8573c, 256 bits on epyc7763. "older code" and "newer code": the
-files of that function and host time code older or newer than the release's; "not measured": there
-is no file. The figures come from the newest file per function and host under
-[`bench/results/`](bench/results/) that times the release's code; `bench/readme-table.py --write`
-makes this table, and CI checks it.
+`<arm>Preferred` row), by minimum ns/op within one run; where a file holds several runs, the lowest
+of their ratios is shown; from one run, a ratio under 1.4x is marked, and one under 1.3x says
+"re-run needed". `common`: no lane takes a rare path; `mixed`: rare lanes run. The preferred species
+is 512 bits on xeon8573c, 256 bits on epyc7763. "older code" and "newer code": the files of that
+function and host time code older or newer than the release's; "not measured": there is no file. The
+figures come from the newest file per function and host under [`bench/results/`](bench/results/)
+that times the release's code; `bench/readme-table.py --write` makes this table, and CI checks it.
 
 <!-- end of speedup-table -->
 

@@ -127,7 +127,8 @@ port teaches.
   or `laptop` with a suffix for its flags (`laptop-avx2`); `<function>` may name the comparison
   too (`exp-finish`, `exp-onediv`); a second file of one name, host and date, whose run times other
   code than the first's, is `<function>-<host>-<date>-<n>.txt` from n = 2, which `bench/record.py
-  write` picks. The files written before the newer hosts keep their names. An
+  write` picks (a run of the code of a file there is that file's re-run, joined to it with
+  `--run`; `--force` never overwrites a file of other code or one it cannot compare). The files written before the newer hosts keep their names. An
   allocation reading from GitHub's Arm runner, whose key is `neoversen2`, is
   `alloc-neoversen2-<date>.txt`; the one written before the key is `alloc-arm-2026-11-20.txt`. It
   is no timing, and says so.

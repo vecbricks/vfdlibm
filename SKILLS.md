@@ -1613,11 +1613,12 @@ mnemonic); the other operations count the same at both widths.
   `bench/alloc-check.py` passes on the `Atan2Benchmark` rows (`blended` and `guarded`, at 256 bits,
   the preferred species and `SPECIES_MAX`, common and mixed data) at this laptop's flags and as an
   AVX2 host, and CI runs it. Those local readings are not committed, so no figure of them is
-  quoted. Each host has timed both arms in a run and a re-run
+  quoted. The Xeon has timed both arms in a run and a re-run and the EPYC in a run and two re-runs
   (`bench/results/atan2-xeon8573c-2026-11-22.txt` and `atan2-epyc7763-2026-11-22.txt`), and neither
-  file gives them a direction. atan2 has no finish arm (both arms compute the special lanes in the
-  vector; blended runs their blends in every vector, guarded behind a test), so rule 1 of issue #30
-  does not pick between them ([the issue's corrected
+  file gives them a direction (the EPYC's third run reads blended over guarded at 1.27 at the
+  preferred species on common data). atan2 has no finish arm (both arms compute the special lanes
+  in the vector; blended runs their blends in every vector, guarded behind a test), so rule 1 of
+  issue #30 does not pick between them ([the issue's corrected
   comment](https://github.com/vecbricks/vfdlibm/issues/30#issuecomment-7085437272)). So guarded
   stays the default at every species by the owner's decision of 22 November.
 - **A lane the core must not see.** A NaN, an infinity or a huge `t` in a lane the special blends
