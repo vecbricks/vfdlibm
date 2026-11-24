@@ -75,8 +75,8 @@ import jdk.incubator.vector.VectorSpecies;
  * provisionally. By minimums at 256 bits, the preferred species and, on the Xeon, 512 bits, the
  * blended arm over the finish arm is 1.24 to 1.28 on common data and 1.06 to 1.13 on mixed data
  * on the AMD EPYC 7763 ({@code bench/results/log10-epyc7763-2026-11-20.txt}, two runs), and,
- * with {@code SPECIES_MAX} too, 1.15 to 1.26 on common data and 0.89 to 1.01 on mixed data on the
- * Xeon Platinum 8573C ({@code bench/results/log10-xeon8573c-2026-11-22.txt}, a run and a re-run).
+ * with {@code SPECIES_MAX} too, 1.13 to 1.26 on common data and 0.89 to 1.01 on mixed data on the
+ * Xeon Platinum 8573C ({@code bench/results/log10-xeon8573c-2026-11-22.txt}, three runs).
  * Every one of those ratios is within 1.3x, so no direction is read. The Xeon file times this
  * class as it is now; the EPYC file times it before the finish's first eight lanes were written
  * out with constant indices (issue #37), which the pair on the EPYC 7763 reads as

@@ -50,7 +50,9 @@ import org.openjdk.jmh.annotations.Warmup;
  * indices and a loop takes any past eight; the row reads under 0.1 B/op in the laptop reading of
  * bench/results/max-finish-alloc-free-laptop-2026-11-21.txt (allocation only, no timing). No
  * file reads the finish it replaced. bench/results/sinh-xeon8573c-2026-11-21.txt and
- * sinh-epyc7763-2026-11-21.txt read these rows, one run on each host.
+ * sinh-epyc7763-2026-11-21.txt read these rows of earlier code, one run on each host, and
+ * sinh-xeon8573c-2026-11-24.txt and sinh-epyc7763-2026-11-23.txt read them as the code is now, one
+ * run on each.
  */
 @State(Scope.Thread)
 @BenchmarkMode(Mode.AverageTime)

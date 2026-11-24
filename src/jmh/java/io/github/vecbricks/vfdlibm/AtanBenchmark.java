@@ -49,7 +49,7 @@ import org.openjdk.jmh.annotations.Warmup;
  * lane index that boxes there, until it wrote out its first eight lanes with constant indices
  * (bench/results/max-finish-alloc-free-laptop-2026-11-21.txt).
  * bench/results/atan-xeon8573c-2026-11-22.txt and atan-epyc7763-2026-11-22.txt read these rows,
- * one run on the Xeon and a run and its re-run on the EPYC.
+ * a run and its re-run on each host.
  */
 @State(Scope.Thread)
 @BenchmarkMode(Mode.AverageTime)

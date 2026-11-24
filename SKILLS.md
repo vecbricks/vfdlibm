@@ -713,9 +713,13 @@ mnemonic); the other operations count the same at both widths.
   they give no cause for the Xeon's larger slowing, and
   `bench/results/exp-kinds-xeon8573c-2026-11-21.txt` times each kind of rare input apart. Both files
   time `exp` as of a5683c3 and a1db6df, and `Exp.java` has changed since by a fault constant, a
-  local and the finish's first eight lanes written out with constant indices (issue #37), so no run
-  has timed today's body as a whole: the pair above times rows of it after that change, on one
-  host. `VFdlibm.exp` keeps the finish arm, which those files read lower than the blend by more than
+  local and the finish's first eight lanes written out with constant indices (issue #37). Today's
+  `Exp.java` is timed in one run each by `exp-epyc7763-2026-11-23.txt` and
+  `exp-epyc7763-2026-11-24.txt` (before and after #174 changed `Hypot.java`, which is under
+  `ExpBenchmark` by `bench/record.py`'s rule) and `exp-xeon8573c-2026-11-24.txt` (before #174): the
+  blend over the finish reads 1.98 to 2.12 on common data and 1.37 to 1.44 on mixed data on the
+  EPYC, and 1.25 to 1.34 and 1.73 to 1.81 on the Xeon, at every vector row of 256 bits or more.
+  `VFdlibm.exp` keeps the finish arm, which those files read lower than the blend by more than
   1.3x on mixed data at 256 bits and the preferred species on both hosts and at 512 bits on the
   8573C (the `*Max` rows of the files committed so far time the finish that boxed before issue #37
   and are left out), and to which issue #30's rules send a tie;
@@ -790,11 +794,11 @@ mnemonic); the other operations count the same at both widths.
   equal width. Both files time the `log` of a5683c3 and a1db6df, before the finish's first eight
   lanes written out with constant indices (issue #37); `LogBenchmark` gained its `finishMax` row
   after the EPYC run, which is why that file has none. The Xeon's file of today's `log`
-  (`bench/results/log-xeon8573c-2026-11-22.txt`, a run and a re-run) reads no direction between
-  the arms: blended over finish at 256 bits is 1.29 and 1.30 on common data and 0.97 on mixed
-  data; at 512 bits, which its preferred species is, 1.28 to 1.36 on common data, the preferred row
-  of the re-run inside 1.3x, and on mixed data the finish 1.13 to 1.17 times the blend, inside the
-  line the 21 November file sat on. `VFdlibm.log` keeps the finish arm by the rules issue #30 set
+  (`bench/results/log-xeon8573c-2026-11-22.txt`, three runs) reads no direction between the arms:
+  blended over finish at 256 bits is 1.19 to 1.30 on common data and 0.93 to 0.97 on mixed data; at
+  512 bits, which its preferred species is, 1.28 to 1.37 on common data, the preferred row of the
+  second run inside 1.3x, and on mixed data the finish 1.11 to 1.17 times the blend, inside the line
+  the 21 November file sat on. `VFdlibm.log` keeps the finish arm by the rules issue #30 set
   (a tie within 1.3x goes to the finish arm), provisionally until a host run revises it: an EPYC
   run of today's code, a first of the other AVX-512 hosts or a pair. Measure the finish only once
   it allocates nothing.
@@ -944,9 +948,9 @@ mnemonic); the other operations count the same at both widths.
   of a5683c3 and a1db6df, before the finish's first eight lanes written out with constant indices
   (issue #37); the pair of that change (the exp entry above) reads log10's mixed finish rows 2.6%
   to 4.0% slower by median and 3.7% to 4.1% by best on the EPYC 7763, the cause not known.
-  The Xeon's file of today's `Log10` (`bench/results/log10-xeon8573c-2026-11-22.txt`, a run and a
-  re-run, with `*Max` rows of today's finish) reads blended over finish 1.15 to 1.26 on common data
-  and 0.89 to 1.01 on mixed data, all inside 1.3x in both runs: no direction. `VFdlibm.log10` calls
+  The Xeon's file of today's `Log10` (`bench/results/log10-xeon8573c-2026-11-22.txt`, three runs,
+  with `*Max` rows of today's finish) reads blended over finish 1.13 to 1.26 on common data and 0.89
+  to 1.01 on mixed data, all inside 1.3x in every run: no direction. `VFdlibm.log10` calls
   the finish arm by the rules issue #30 set (a tie within 1.3x goes to the finish arm),
   provisionally until a host run revises it: an EPYC run of today's code, a first of the other
   AVX-512 hosts or a pair.
@@ -1476,8 +1480,10 @@ mnemonic); the other operations count the same at both widths.
   data (`bench/results/cosh-epyc7763-2026-11-21.txt`); on `CoshKindsBench` the finish arm reads
   lower outside 1.3x with no small lane (1.46 to 1.70 on both hosts), lower inside 1.3x at 3.5% of
   small lanes, and the slice arm lower inside 1.3x at 17% (`cosh-kinds-epyc7763-2026-11-21.txt`,
-  `cosh-kinds-xeon8573c-2026-11-21.txt`). The Xeon 8573C has one `CoshBenchmark` run
-  (`cosh-xeon8573c-2026-11-21.txt`); a second run decides.
+  `cosh-kinds-xeon8573c-2026-11-21.txt`). Of the code as it is now, each host has one
+  `CoshBenchmark` run (`cosh-xeon8573c-2026-11-24.txt`, `cosh-epyc7763-2026-11-23.txt`): both read
+  the finish arm lower on every row, slice over finish 1.29 to 1.38 on the Xeon and 1.28 to 1.36 on
+  the EPYC, no direction from one run; a second run on each host decides.
 - **Which exp faults reach cosh.** `exp.dropCorrection` and `exp.constantOffByOneUlp`, which
   change `expCore`'s lanes of `|x| >= 0.5 ln2`. `exp.thresholdMoved` moves the subnormal
   scale-back, which `expCore` leaves out, and `exp.dropKForcing` the lanes of the word of 0.5
@@ -1507,7 +1513,7 @@ mnemonic); the other operations count the same at both widths.
   that are a constant or `x+x`, so a guarded arm that blends them is possible; none is built,
   because the tie-break rule of #30 sends a tie to the finish arm and no timing says otherwise.
   The host files of 22 November (`bench/results/atan-xeon8573c-2026-11-22.txt` and
-  `atan-epyc7763-2026-11-22.txt`, one run on the Xeon, a run and a re-run on the EPYC) time
+  `atan-epyc7763-2026-11-22.txt`, a run and a re-run on each host) time
   the one arm against the scalar loop, and read every vector row at 0.02 B/op or less, but for
   the EPYC's 512-bit rows, which run in Java there.
 - **Sizes of its faults, each of 2^22 uniform draws from its own interval.** `atan.dropLo`:
@@ -1558,7 +1564,7 @@ mnemonic); the other operations count the same at both widths.
   has no `SPECIES_MAX` arm), at this laptop's flags and as an AVX2 host (`-XX:UseAVX=2
   -XX:MaxVectorSize=32`); CI runs it. Those local readings are not committed, so no figure of
   them is quoted. The host files of 22 November (`bench/results/asin-xeon8573c-2026-11-22.txt`
-  and `asin-epyc7763-2026-11-22.txt`, one run on the Xeon, a run and a re-run on the EPYC) read
+  and `asin-epyc7763-2026-11-22.txt`, a run and a re-run on each host) read
   every vector row at 0.02 B/op or less, but for the EPYC's 512-bit rows, which run in Java
   there, and time the arm against the scalar loop. None of it says anything of 128 bits or of
   the masked form's lowering.
@@ -1606,8 +1612,8 @@ mnemonic); the other operations count the same at both widths.
   0.0143 and 0.999999999999999.
 - **Allocation.** CI runs `bench/alloc-check.py` on `AcosBenchmark`'s rows (`finish256`,
   `finishPreferred`, `finishMax`, common and mixed data). The host files of 22 November
-  (`bench/results/acos-xeon8573c-2026-11-22.txt` and `acos-epyc7763-2026-11-22.txt`, one run
-  on the Xeon, a run and a re-run on the EPYC) read every vector row at 0.02 B/op or less, but
+  (`bench/results/acos-xeon8573c-2026-11-22.txt` and `acos-epyc7763-2026-11-22.txt`, a run and
+  a re-run on each host) read every vector row at 0.02 B/op or less, but
   for the EPYC's 512-bit rows, which run in Java there, and time the arm against the scalar
   loop.
 
@@ -1629,7 +1635,7 @@ mnemonic); the other operations count the same at both widths.
   `bench/alloc-check.py` passes on the `Atan2Benchmark` rows (`blended` and `guarded`, at 256 bits,
   the preferred species and `SPECIES_MAX`, common and mixed data) at this laptop's flags and as an
   AVX2 host, and CI runs it. Those local readings are not committed, so no figure of them is
-  quoted. The Xeon has timed both arms in a run and a re-run and the EPYC in a run and two re-runs
+  quoted. The Xeon has timed both arms in three runs and the EPYC in a run and two re-runs
   (`bench/results/atan2-xeon8573c-2026-11-22.txt` and `atan2-epyc7763-2026-11-22.txt`), and neither
   file gives them a direction (the EPYC's third run reads blended over guarded at 1.27 at the
   preferred species on common data). atan2 has no finish arm (both arms compute the special lanes

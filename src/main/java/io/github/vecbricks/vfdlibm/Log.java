@@ -66,10 +66,10 @@ import jdk.incubator.vector.VectorSpecies;
  * the blend on ordinary data and level with it, about 1.05x, when one input in 16 is rare, and
  * with AVX-512 at 512 bits on that mixed data the blend wins, by 1.36x in both runs. The host
  * files read, by minimums, the blended arm over the finish arm. On the Xeon Platinum 8573C
- * ({@code bench/results/log-xeon8573c-2026-11-22.txt}, a run and a re-run, the code as it is now)
- * no width gives a direction: at 256 bits 1.29 and 1.30 on ordinary data and 0.97 on mixed data;
- * at 512 bits, its preferred species, 1.28 to 1.36 on ordinary data, the preferred row of the
- * re-run inside 1.3x, and on mixed data the finish 1.13 to 1.17 times the blend. On the AMD EPYC
+ * ({@code bench/results/log-xeon8573c-2026-11-22.txt}, three runs, the code as it is now) no
+ * width gives a direction: at 256 bits 1.19 to 1.30 on ordinary data and 0.93 to 0.97 on mixed
+ * data; at 512 bits, its preferred species, 1.28 to 1.37 on ordinary data, the preferred row of the
+ * second run inside 1.3x, and on mixed data the finish 1.11 to 1.17 times the blend. On the AMD EPYC
  * 7763 ({@code bench/results/log-epyc7763-2026-11-20.txt}, two runs) at 256 bits, its native
  * width and its preferred species, the ratio is 1.22 to 1.24 on ordinary data and 1.02 to 1.03 on
  * mixed data, within 1.3x, and the finish read 0.017 B/op or less in JMH's table; that file times

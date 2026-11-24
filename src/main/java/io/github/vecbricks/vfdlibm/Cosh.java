@@ -89,8 +89,11 @@ import jdk.incubator.vector.VectorSpecies;
  * mixed data ({@code bench/results/cosh-epyc7763-2026-11-21.txt}); on {@code CoshKindsBench} the
  * finish arm reads lower outside 1.3x with no small lane (1.46 to 1.70 on both hosts), lower inside
  * 1.3x at 3.5% of small lanes, and the slice arm lower inside 1.3x at 17% ({@code
- * cosh-kinds-epyc7763-2026-11-21.txt}, {@code cosh-kinds-xeon8573c-2026-11-21.txt}). The Xeon 8573C
- * has one {@code CoshBenchmark} run ({@code cosh-xeon8573c-2026-11-21.txt}); a second run decides.
+ * cosh-kinds-epyc7763-2026-11-21.txt}, {@code cosh-kinds-xeon8573c-2026-11-21.txt}). Of the code
+ * as it is now, each host has one {@code CoshBenchmark} run ({@code cosh-xeon8573c-2026-11-24.txt},
+ * {@code cosh-epyc7763-2026-11-23.txt}): both read the finish arm lower on every row, slice over
+ * finish 1.29 to 1.38 on the Xeon and 1.28 to 1.36 on the EPYC, no direction from one run; a
+ * second run on each host decides.
  * The default is chosen in {@code cosh(x,
  * live)}; other places say "the default arm".
  */

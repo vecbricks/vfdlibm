@@ -81,14 +81,16 @@ import jdk.incubator.vector.VectorMask;
  *       exp-log10-pair-rerun-epyc7763-2026-11-21.txt}); the cause is not known, and no AVX-512
  *       host and no other port was paired. {@code SPECIES_MAX} at 128 bits, and with more than
  *       eight lanes, was not read. On both hosts the {@code *Max} rows of today's {@code sinh}
- *       and {@code cosh} ({@code bench/results/sinh-xeon8573c-2026-11-21.txt} and {@code
- *       sinh-epyc7763-2026-11-21.txt}, and the same for {@code cosh}), of {@code asin}, {@code
+ *       and {@code cosh} ({@code bench/results/sinh-xeon8573c-2026-11-24.txt} and {@code
+ *       sinh-epyc7763-2026-11-23.txt}, and the same for {@code cosh}), of {@code asin}, {@code
  *       atan} and {@code acos}, whose finishes were written in that shape from the start, and of
  *       {@code atan2}, which finishes no lane per lane ({@code asin-xeon8573c-2026-11-22.txt}
  *       and {@code asin-epyc7763-2026-11-22.txt}, and the same for {@code atan}, {@code acos}
  *       and {@code atan2}), read under 0.05 bytes per op, and so do those of today's {@code
  *       expm1}, {@code log}, {@code log10} and {@code log1p} on the Xeon 8573C ({@code
- *       expm1-xeon8573c-2026-11-22.txt}, a run and a re-run, and the same for the other three)
+ *       log-xeon8573c-2026-11-22.txt} and {@code log10-xeon8573c-2026-11-22.txt}, three runs
+ *       each, and {@code expm1-xeon8573c-2026-11-24.txt} and {@code
+ *       log1p-xeon8573c-2026-11-24.txt}, one run each)
  *       and of {@code expm1} and {@code log1p} on the EPYC 7763 ({@code
  *       expm1-epyc7763-2026-11-23.txt} and {@code log1p-epyc7763-2026-11-23.txt}, a run and a
  *       re-run each).
