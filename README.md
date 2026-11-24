@@ -43,9 +43,9 @@ that times the release's code; `bench/readme-table.py --write` makes this table,
 
 <!-- end of speedup-table -->
 
-`hypot`'s figures on mixed data on the EPYC 7763 are a known issue of 0.3.0: on data where some
-lanes hold a NaN or an infinity it runs slower than `StrictMath` there, with the same results
-(`CHANGELOG.md`, "Known issues").
+`hypot` on AVX2 is a known issue of 0.3.0: on the EPYC 7763 it is not shown to be faster than
+`StrictMath`, and on data where some lanes hold a NaN or an infinity it is slower, with the same
+results (`CHANGELOG.md`, "Known issues").
 
 ## Use
 

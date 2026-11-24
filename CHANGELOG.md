@@ -42,13 +42,15 @@ two NaNs with different bits in a function of two arguments (`AGENTS.md`, "Relea
 
 ### Known issues
 
-- `hypot` can be slower than `StrictMath.hypot` on an AVX2 host, on data where some lanes hold a
-  NaN or an infinity. On the AMD EPYC 7763, `HypotBenchmark`'s vector rows on such data run at
-  about 0.75x `StrictMath`, about 31% slower than the same benchmark before `hypot` was made to
-  order its arguments by magnitude, as `StrictMath` does
-  (`bench/results/hypot-order-pair-epyc7763-2026-11-24.txt`). The results are not affected, only
-  the speed. The Intel Xeon 8573C (AVX-512) shows no such slowdown
-  (`bench/results/hypot-xeon8573c-2026-11-24-2.txt`).
+- `hypot` is not shown to be faster than `StrictMath.hypot` on an AVX2 host, and on data where some
+  lanes hold a NaN or an infinity it is slower. On the AMD EPYC 7763, `HypotBenchmark` reads
+  `StrictMath` over `hypot` at 1.25x to 1.30x on common data and 0.70x to 0.75x on such data, about
+  31% slower there than the same benchmark before `hypot` was made to order its arguments by
+  magnitude, as `StrictMath` does (`bench/results/hypot-epyc7763-2026-11-24.txt`,
+  `bench/results/hypot-order-pair-epyc7763-2026-11-24.txt`). On the Intel Xeon 8573C (AVX-512) it is
+  about 2.2x faster than `StrictMath` on common data, with no direction on such data
+  (`bench/results/hypot-xeon8573c-2026-11-24-2.txt`). The results are not affected, only the speed;
+  a fix of the speed would be a patch.
 
 ## [0.2.0] - 2026-11-22
 
