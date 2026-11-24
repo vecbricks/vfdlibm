@@ -30,20 +30,24 @@ with both results, for checking which one a SQL engine returns.
 Two more tests on the 32 inputs of `../photon-check.sql`. `rounding.py` computes each function in
 Python's `decimal` at 80 digits, rounds to a double, and says which column is the correctly
 rounded one; it also writes `rows.txt` in the current directory. `libmvec.c` reads `rows.txt` and
-compares glibc's AVX2 vector functions (libmvec) with the scalar results.
+compares glibc's AVX2 vector functions (libmvec) with the machine's scalar glibc, and the scalar
+results with the `libm` column.
+
+Run them from a scratch directory, so that `rows.txt` and the binary stay out of the
+repository:
 
 ```sh
-python3 rounding.py
-cc -O1 -mavx2 -o libmvec libmvec.c -lmvec -lm
+d=$(pwd); cd "$(mktemp -d)"
+python3 "$d/rounding.py"
+cc -O1 -mavx2 -o libmvec "$d/libmvec.c" -lmvec -lm
 ./libmvec
 ```
 
-On glibc 2.43, x86-64 with AVX2, Python 3.14.4, they printed (the lines of each mismatch left out
-but for the counts):
+On glibc 2.43, x86-64 with AVX2, Python 3.14.4, their last lines read:
 
 ```
-32 rows; the correctly rounded result is libm's on 29, StrictMath's on 3, neither on 0
-libmvec (AVX2) equals scalar glibc on 15, differs on 17
+32 rows; the correctly rounded result is libm's on 29, StrictMath's on 3, neither on 0, too close to call on 0
+libmvec (AVX2) equals scalar glibc on 15, differs on 17; scalar glibc differs from the libm column on 0
 ```
 
 The three where `StrictMath`'s result is the correctly rounded one are all `expm1`, at

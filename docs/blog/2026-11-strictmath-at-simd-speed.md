@@ -83,14 +83,14 @@ and 700 from seed 7, `StrictMath` and glibc 2.43 differ on 19,720 for `exp(x)`, 
 comparison are in
 [`strictmath-vs-libm/`](https://github.com/vecbricks/vfdlibm/tree/v0.3.0/docs/blog/strictmath-vs-libm).
 
-Matching glibc on 32 inputs could mean only that Photon is accurate, so I ran two more tests on
+Matching glibc on 32 inputs could mean merely that Photon is accurate, so I ran two more tests on
 the same 32 inputs, on my laptop.
 
 First, which answer is correctly rounded, the double nearest the exact value? Computed with
 Python's `decimal` at 80 digits ([`rounding.py`](https://github.com/vecbricks/vfdlibm/blob/v0.3.0/docs/blog/strictmath-vs-libm/rounding.py)), glibc's
 value is the correctly rounded one on 29 of the 32 and `StrictMath`'s on 3, all three `expm1`:
 at 3.178803427426695, 1.0542424180475716 and 1.0400925680121542. Photon matched glibc on all 32,
-these 3 included. So it reproduces glibc's own results, not merely accurate ones.
+these 3 included, which accuracy alone would not explain.
 
 Second, glibc also has a vector library, libmvec. Its AVX2 functions (`_ZGVdN4v_exp`,
 `_ZGVdN4v_log`, `_ZGVdN4v_expm1` and `_ZGVdN4vv_pow`, in [`libmvec.c`](https://github.com/vecbricks/vfdlibm/blob/v0.3.0/docs/blog/strictmath-vs-libm/libmvec.c)) differ from
@@ -100,7 +100,8 @@ scalar glibc on 17 of the 32: 5 for `exp`, 4 for `ln`, 3 for `expm1` and 5 for `
 
 So Photon's results on my workspace are consistent with a call to glibc's scalar functions for
 each element, and inconsistent with Spark's `StrictMath`, with a correctly rounded library, and
-with glibc's AVX2 libmvec. They do not exclude a hand-vectorized port of glibc's algorithms,
+with glibc 2.43's AVX2 libmvec. They do not exclude another library, or another glibc version,
+that returns the same doubles on these inputs, a hand-vectorized port of glibc's algorithms,
 libmvec at another width, or another CPU: I do not know the warehouse's CPU.
 
 Other engines do not promise `StrictMath`'s bits either. The compatibility guide of NVIDIA's

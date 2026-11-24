@@ -2,9 +2,10 @@
 
 For each of the 32 rows (f, x, strictmath, libm) it computes f(x) in decimal arithmetic at 80
 significant digits and rounds that to a double (float() of a Decimal rounds correctly, to
-nearest). An error of a few units in the 80th digit cannot move a double's rounding unless the
-exact value lies within about 1e-60 of a midpoint between doubles, which the script reports as
-"too close to call". The functions: exp(x), ln(x), expm1(x) as exp(x) - 1, and pow(2.0, x) as
+nearest). On these 32 inputs (no expm1 or pow argument near 0, where exp(x) - 1 would cancel)
+an error of a few units in the 80th digit cannot move a double's rounding unless the exact value
+lies within about 1e-60 of a midpoint between doubles, which the script reports as "too close to
+call"; it is not a general method for any input. The functions: exp(x), ln(x), expm1(x) as exp(x) - 1, and pow(2.0, x) as
 exp(ln(2) * x). It also writes rows.txt in the current directory, one "f x libm" line a row,
 for libmvec.c.
 """
@@ -43,7 +44,7 @@ def too_close(v):
     return abs(v - mid) <= abs(v) * D("1e-60")
 
 
-counts = {"libm": 0, "strictmath": 0, "neither": 0}
+counts = {"libm": 0, "strictmath": 0, "neither": 0, "too close": 0}
 with open("rows.txt", "w") as out:  # in the current directory
     for f, xs, ss, ls in rows:
         x, s, l = float(xs), float(ss), float(ls)
@@ -52,6 +53,7 @@ with open("rows.txt", "w") as out:  # in the current directory
         cr = float(v)
         if too_close(v):
             print(f"{f}({x!r}): too close to call")
+            counts["too close"] += 1
             continue
         who = "libm" if cr == l else "strictmath" if cr == s else "neither"
         counts[who] += 1
@@ -59,5 +61,6 @@ with open("rows.txt", "w") as out:  # in the current directory
             print(f"{f}({x!r}): correctly rounded {cr!r} is {who}'s; libm {l!r}, strictmath {s!r}")
 
 print(f"{len(rows)} rows; the correctly rounded result is libm's on {counts['libm']}, "
-      f"StrictMath's on {counts['strictmath']}, neither on {counts['neither']}")
-sys.exit(0 if len(rows) == 32 else 1)
+      f"StrictMath's on {counts['strictmath']}, neither on {counts['neither']}, "
+      f"too close to call on {counts['too close']}")
+sys.exit(0 if len(rows) == 32 and sum(counts.values()) == 32 else 1)
