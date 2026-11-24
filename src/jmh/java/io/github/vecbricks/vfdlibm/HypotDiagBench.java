@@ -14,6 +14,7 @@ import jdk.incubator.vector.DoubleVector;
 import jdk.incubator.vector.VectorSpecies;
 import org.openjdk.jmh.annotations.Benchmark;
 import org.openjdk.jmh.annotations.BenchmarkMode;
+import org.openjdk.jmh.annotations.CompilerControl;
 import org.openjdk.jmh.annotations.Fork;
 import org.openjdk.jmh.annotations.Measurement;
 import org.openjdk.jmh.annotations.Mode;
@@ -57,7 +58,8 @@ public class HypotDiagBench {
 
   @Setup
   public void setUp() {
-    if (!inputs.equals("common") && !inputs.equals("mixed")) {
+    int only = inputs.matches("k([0-9]|1[01])") ? Integer.parseInt(inputs.substring(1)) : -1;
+    if (!inputs.equals("common") && !inputs.equals("mixed") && only < 0) {
       throw new IllegalArgumentException("inputs is common or mixed, not '" + inputs + "'");
     }
     SplittableRandom random = new SplittableRandom(1L);
@@ -67,8 +69,9 @@ public class HypotDiagBench {
     for (int i = 0; i < N; i++) {
       xs[i] = random.nextDouble(-10.0, 10.0);
       ys[i] = random.nextDouble(-10.0, 10.0);
-      if (inputs.equals("mixed") && random.nextInt(16) == 0) {
-        double[] rare = RARE[random.nextInt(RARE.length)];
+      if (!inputs.equals("common") && random.nextInt(16) == 0) {
+        int pick = random.nextInt(RARE.length);
+        double[] rare = RARE[only < 0 ? pick : only];
         xs[i] = rare[0];
         ys[i] = rare[1];
       }
@@ -136,19 +139,65 @@ public class HypotDiagBench {
     return out;
   }
 
-  /** main's code with loops aligned to 64 bytes: does code layout move it? */
+
+
+  /** main's loop as a method of its own, never inlined, so the rows below call one compiled loop. */
+  @CompilerControl(CompilerControl.Mode.DONT_INLINE)
+  double[] loopMain() {
+    for (int i = 0; i < N; i += S256.length()) {
+      Hypot.hypot(DoubleVector.fromArray(S256, xs, i), DoubleVector.fromArray(S256, ys, i), null)
+          .intoArray(out, i);
+    }
+    return out;
+  }
+
+  @CompilerControl(CompilerControl.Mode.DONT_INLINE)
+  double[] pad1() {
+    return loopMain();
+  }
+
+  @CompilerControl(CompilerControl.Mode.DONT_INLINE)
+  double[] pad2() {
+    return pad1();
+  }
+
+  @CompilerControl(CompilerControl.Mode.DONT_INLINE)
+  double[] pad3() {
+    return pad2();
+  }
+
+  /** main's loop under JMH's sample mode: same body, another harness loop around it. */
   @Benchmark
-  @Fork(value = 1, jvmArgsPrepend = {"--add-modules", "jdk.incubator.vector",
-      "-XX:OptoLoopAlignment=64"})
-  public double[] mainLoopAlign64() {
+  @BenchmarkMode(Mode.SampleTime)
+  public double[] mainSample() {
     return main();
   }
 
-  /** The old code with loops aligned to 64 bytes. */
+  /** The old code under JMH's sample mode. */
   @Benchmark
-  @Fork(value = 1, jvmArgsPrepend = {"--add-modules", "jdk.incubator.vector",
-      "-XX:OptoLoopAlignment=64"})
-  public double[] oldLoopAlign64() {
+  @BenchmarkMode(Mode.SampleTime)
+  public double[] oldSample() {
     return old();
+  }
+
+  /** The same compiled loop from four stack depths: does the stack offset move it? */
+  @Benchmark
+  public double[] depth0() {
+    return loopMain();
+  }
+
+  @Benchmark
+  public double[] depth1() {
+    return pad1();
+  }
+
+  @Benchmark
+  public double[] depth2() {
+    return pad2();
+  }
+
+  @Benchmark
+  public double[] depth3() {
+    return pad3();
   }
 }
