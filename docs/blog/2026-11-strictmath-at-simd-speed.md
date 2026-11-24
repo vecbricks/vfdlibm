@@ -226,8 +226,9 @@ if(hb > ha) {a=y;b=x;j=ha; ha=hb;hb=j;} else {a=x;b=y;}
 
 These two inputs share their top 32 bits, so the C keeps them in the order given, and its answer
 depends on that order. `StrictMath.hypot` gives one answer in both orders, on JDK 17, 21 and 25,
-and so does `Math.hypot`, which Spark calls. vfdlibm had followed the C exactly. In 0.3.0 it
-orders `hypot`'s arguments by magnitude, as `StrictMath` does ({% raw %}[{{PR}}]({{PR}}){% endraw %}).
+and so does `Math.hypot`, which Spark calls. vfdlibm's port had followed the C exactly. In 0.3.0
+it orders `hypot`'s arguments by magnitude, so its result no longer depends on their order, as
+`StrictMath`'s does not ({% raw %}[{{PR}}]({{PR}}){% endraw %}).
 
 ## What it does not do yet
 
@@ -427,24 +428,24 @@ java --add-modules jdk.incubator.vector -cp "target/classes:$(cat cp.txt)" examp
   `StrictMath.hypot` and `Math.hypot` in both orders on JDK 17.0.21.1, 21.0.13.1 and 25.0.5.1.
   Both outputs are in `strictmath-vs-libm/data/hypot-order.txt`.
 - [`HypotPairs.java`](https://github.com/vecbricks/vfdlibm/blob/v0.3.0/docs/blog/strictmath-vs-libm/HypotPairs.java) and [`HypotPairsEdges.java`](https://github.com/vecbricks/vfdlibm/blob/v0.3.0/docs/blog/strictmath-vs-libm/HypotPairsEdges.java)
-  draw 1,300,000 pairs whose arguments share their top 32 bits, and
+  draw 1,300,000 pairs whose magnitudes share their high 32 bits, and
   [`hypot-order-check.c`](https://github.com/vecbricks/vfdlibm/blob/v0.3.0/docs/blog/strictmath-vs-libm/hypot-order-check.c) compares `StrictMath` with the C called with the
   larger magnitude first: they differ only on two pairs, both of two NaNs (the contract's
   exception). On these random pairs the C's own answer depended on the order only for pairs of two
   NaNs, so they test the rule less than the fuzzer's input does
   (`strictmath-vs-libm/data/hypot-pairs.txt`).
 - [JDK-7130085](https://bugs.openjdk.org/browse/JDK-7130085), "Port fdlibm hypot to Java" (JDK 9,
-  2015), replaced the JDK's native C `hypot` with a Java port, and since JDK 9
-  `StrictMath.hypot` gives the same result in either order. The JDK's own tests,
-  [`HypotTests.java`](https://github.com/openjdk/jdk/blob/master/test/jdk/java/lang/StrictMath/HypotTests.java),
-  require `hypot(a, b) == hypot(b, a)`.
+  2015), replaced the JDK's native C `hypot` with a Java port. The JDK's own tests,
+  [`HypotTests.java`](https://github.com/openjdk/jdk/blob/jdk-25-ga/test/jdk/java/lang/StrictMath/HypotTests.java)
+  at JDK 25, require `hypot(a, b) == hypot(b, a)`. I ran only JDK 17, 21 and 25.
 
 **How the bits are kept**
 - Ported from Sun's fdlibm 5.3 C sources only, never from OpenJDK's `FdLibm.java` (GPLv2 with the
   Classpath exception); `StrictMath` is only the oracle the tests call.
 - Where the code computes differently from the C, a numbered lemma in
   [`PROOFS.md`](https://github.com/vecbricks/vfdlibm/blob/v0.3.0/PROOFS.md) argues the result is the
-  same double for every input; parts of those for `exp`, `log` and `expm1` are machine-checked in
+  same double for every input; the one place the code leaves the C, to match `StrictMath`, is
+  `hypot`'s argument order (the third surprise). Parts of those for `exp`, `log` and `expm1` are machine-checked in
   [`proofs/`](https://github.com/vecbricks/vfdlibm/tree/v0.3.0/proofs), by an SMT solver on every
   pull request and under Z3 and cvc5 every night.
 - Tests compare every lane with `StrictMath` at every width the host has, on hard cases from

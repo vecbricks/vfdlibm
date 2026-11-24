@@ -88,7 +88,8 @@ python3 ../figures.py
 
 `hypot-order.c` and `hypot-order-check.c` link Sun's `e_hypot.c` from
 `../../../reference/fdlibm-5.3/`; `HypotOrder.java`, `HypotPairs.java` and `HypotPairsEdges.java`
-run on any JDK. From a scratch directory:
+run on any JDK. From this directory (the block makes its own scratch directory for the
+binaries):
 
 ```bash
 d=$(pwd); R=$d/../../../reference/fdlibm-5.3

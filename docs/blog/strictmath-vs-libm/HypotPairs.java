@@ -1,9 +1,10 @@
 import java.util.SplittableRandom;
 
 /**
- * Prints N pairs (seed 11) whose two arguments share a high word, with StrictMath.hypot's result:
- * "x y strictmath" as raw bits in hex, for hypot-order-check.c. A third of the high words are
- * random (NaNs and infinities included), a third lie near 1.0, a third are random finite.
+ * Prints N pairs (seed 11) whose two magnitudes share their high 32 bits (the signs are drawn
+ * apart), with StrictMath.hypot's result: "x y strictmath" as raw bits in hex, for
+ * hypot-order-check.c. A third of the high words are random (NaNs included), a third lie near 1.0,
+ * a third are random finite.
  *
  *   java HypotPairs.java 1000000
  */

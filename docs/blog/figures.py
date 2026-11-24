@@ -12,6 +12,8 @@ files:
 - photon-check.sql and strictmath-vs-libm/data/*.csv: who returns what on the 32 inputs;
 - strictmath-vs-libm/data/compare-glibc-2.43.txt (compare.py's output): how often they differ;
 - strictmath-vs-libm/data/nantier-jdk-25.0.5.1.txt: NanTier.java's output, one run per mode;
+- strictmath-vs-libm/data/hypot-order.txt (hypot-order.c's and HypotOrder.java's output): the
+  hypot argument-order card;
 - ../../bench/results/exp-xeon8573c-2026-11-21.txt: the allocation of exp's finish rows;
 - ../../reference/fdlibm-5.3/e_hypot.c: the lines of the hypot figure, by line number.
 
@@ -515,22 +517,26 @@ def fig_hypot_order():
     txt = (DATA / "hypot-order.txt").read_text()
     c = re.search(r"hypot\(x, y\) = ([0-9a-f]{16}), hypot\(y, x\) = ([0-9a-f]{16})", txt)
     cxy, cyx = c.group(1), c.group(2)
+    xy = re.search(r"x = 0x([0-9a-f]{16}), y = 0x([0-9a-f]{16})", txt)
+    xb, yb = xy.group(1), xy.group(2)
+    assert xb[:8] == yb[:8], "the card says the two share their high 32 bits"
     jdks = re.findall(r"^JDK (\S+): StrictMath\.hypot\(x, y\) = ([0-9a-f]{16}), StrictMath\.hypot\(y, x\) = "
                       r"([0-9a-f]{16}), Math\.hypot\(x, y\) = ([0-9a-f]{16}), Math\.hypot\(y, x\) = ([0-9a-f]{16})",
                       txt, re.M)
     assert jdks and all(len(set(j[1:])) == 1 for j in jdks), jdks
     sm = jdks[0][1]
     assert all(j[1] == sm for j in jdks)
+    assert cxy != cyx and sm in (cxy, cyx), "the card says the C's answer depends on the order"
     versions = ", ".join(j[0].split(".")[0] for j in jdks)
     f = Fig("hypot-order", "One input, two answers from the C",
             "hypot(x, y) and hypot(y, x) on the input the nightly fuzzer found.",
-            f"x = 0x5f201b45bbc5eac3 and y = 0x5f201b45fffffffe share their high 32 bits. fdlibm 5.3's "
+            f"x = 0x{xb} and y = 0x{yb} share their high 32 bits. fdlibm 5.3's "
             f"C returns {cxy} for hypot(x, y) and {cyx} for hypot(y, x). StrictMath.hypot and "
             f"Math.hypot return {sm} in both orders on JDK {versions}.")
     y = f.header()
     f.rect(M, y, IW, 64, GREY_F, GREY_S, rx=10)
-    f.text(M + 16, y + 26, "x = 0x5f201b45 bbc5eac3", size=16, mono=True)
-    f.text(M + 16, y + 50, "y = 0x5f201b45 fffffffe", size=16, mono=True)
+    f.text(M + 16, y + 26, f"x = 0x{xb[:8]} {xb[8:]}", size=16, mono=True)
+    f.text(M + 16, y + 50, f"y = 0x{yb[:8]} {yb[8:]}", size=16, mono=True)
     f.text(M + IW - 16, y + 38, "same high 32 bits", size=15, fill=GREY, anchor="end")
     y += 88
 
