@@ -1,0 +1,2157 @@
+# MathCompareBench on an AMD EPYC 7763 GitHub runner, 24 November 2026: exp, log and pow three
+# ways, StrictMath, java.lang.Math and vfdlibm, one run at c7d65d4
+#
+# Produced by .github/workflows/benchmark.yml, dispatched by bench/dispatch-bench.sh --host
+# epyc7763 on main at c7d65d4, for MathCompareBench: run 45478462685, 24 November 2026, from 20:13
+# UTC (ended 20:24). Why: the blog post on vfdlibm 0.3.0 asks why a caller would not use
+# java.lang.Math, which is faster than StrictMath and gives other bits on some inputs; this class
+# (#179) times the three in one run. It is one run on one draw of the host, with no re-run. This
+# file holds MathCompareBench's blocks and rows of the run. bench/record.py write made it from the
+# run's artifact (as mathcomparebench-epyc7763-2026-11-24.txt, renamed), and bench/record.py check
+# bench/results/math-compare-epyc7763-2026-11-24.txt --run 45478462685 passes. The lines from
+# "Host" to "Command" are the workflow's header; the min/avg/max table is taken from JMH's "Result"
+# blocks in the raw output.
+#
+# The code: no file of MathCompareBench existed; this is its first. Per function, <fn>StrictMath
+# is the scalar StrictMath loop, <fn>Math the same loop over java.lang.Math, and <fn>Preferred
+# vfdlibm's default arm at the preferred species, the body the finishPreferred row of the
+# function's *Benchmark calls. Each function's arrays are its *Benchmark's, common with no lane
+# on vfdlibm's rare path and mixed with one input in 16 (one pair, for pow) that takes it
+# (MathCompareBench's Javadoc). The Math rows give other bits than StrictMath's on some lanes, by
+# design; MathCompareBenchTest holds the other rows to StrictMath's raw bits. The JMH options
+# include -foe true, so a row that failed would have failed the run; every row of MathCompareBench
+# has a Result block, which bench/record.py requires.
+#
+# Host:        epyc7763 (expected CPU 'AMD EPYC 7763 64-Core Processor')
+# Commit:      c7d65d4342cfe0b98fdb065f4ef429b805969ebf (main)
+# Run:         https://github.com/vecbricks/vfdlibm/actions/runs/45478462685
+# JDK:         OpenJDK 64-Bit Server VM Zulu25.38+201-CA (build 25.0.5.1+2-LTS, mixed mode, sharing)
+# CPU:         AMD EPYC 7763 64-Core Processor
+# AVX-512:     avx512f=no avx512dq=no
+# CPU flags:   avx avx2
+# Vector:      MaxVectorSize=32 UseAVX=2
+# Datapath:    46.3 / 92.4 / 92.5 lane-ops/ns at 128 / 256 / 512 bits; 256:128 = 2.00 (control),
+#              512:256 = 1.00
+#              (bench/datapath.sh, at the machine's own JVM flags)
+# Kernel:      7.0.0-1020-azure
+# Load:        1.49 0.42 0.14 at start, 1.21 1.10 0.68 at end (4 cores)
+# JMH:         -f 2 -wi 3 -w 2s -i 5 -r 2s -prof gc -foe true -jvmArgsAppend
+#              "-XX:CompileCommand=inline,io.github.vecbricks.vfdlibm.*::*"
+# Command:     mvn -B -Pjmh test-compile exec:exec -Djmh.args="<the above>"
+#
+# Reading it (AVX2: the AMD EPYC 7763, UseAVX=2, MaxVectorSize=32, so the preferred species is 256
+# bits; each figure from the table of this file, a minimum rounded from JMH's three decimals; a
+# ratio under 1.30 has no direction, one from 1.30 to under 1.40, on this one run, none until a
+# re-run, and one of 1.40 or more is outside 1.3x):
+# - Rows first: the table holds all 18 rows (nine methods by two inputs values), and JMH's summary
+#   table holds the same 18, each with its gc.alloc.rate.norm.
+# - Allocation, read by name before any time: every row reads 0.071 B/op or less but three. The
+#   powStrictMath rows read 98,304 and 94,272 B/op, StrictMath.pow's own allocation, and
+#   powPreferred on mixed data 1,824, which is StrictMath.pow's on the lanes vfdlibm finishes with
+#   it: PowBenchmark.rareOracle reads 1,824.009 on mixed data in pow-epyc7763-2026-11-23.txt, and
+#   MathCompareBench has no baseline of its own. No vfdlibm body boxed: powPreferred reads 0.071 on
+#   common data. bench/alloc-check.py --include was not run for this file; CI's allocation check
+#   covers the bodies the Preferred rows call.
+# - Minimums, ns per 1024 inputs (common / mixed): expStrictMath 11,268 / 11,751, expMath 4,941 /
+#   5,869, expPreferred 2,618 / 4,603; logStrictMath 9,394 / 9,712, logMath 7,105 / 7,165,
+#   logPreferred 3,865 / 4,981; powStrictMath 97,934 / 96,929, powMath 15,481 / 15,859,
+#   powPreferred 20,141 / 22,692.
+# - exp: StrictMath over vfdlibm 4.30 / 2.55 (common / mixed), Math over vfdlibm 1.89 / 1.28,
+#   StrictMath over Math 2.28 / 2.00. vfdlibm is lower than Math on common data, outside 1.3x; on
+#   mixed data no direction.
+# - log: StrictMath over vfdlibm 2.43 / 1.95, Math over vfdlibm 1.84 / 1.44, StrictMath over Math
+#   1.32 / 1.36. vfdlibm is lower than Math on both, outside 1.3x; StrictMath and Math have no
+#   direction until a re-run.
+# - pow: StrictMath over vfdlibm 4.86 / 4.27, StrictMath over Math 6.33 / 6.11, and vfdlibm over
+#   Math 1.30 / 1.43: Math is lower than vfdlibm, outside 1.3x on mixed data and with no direction
+#   until a re-run on common data. vfdlibm and Math are both outside 1.3x of StrictMath.
+# - No row's own maximum is more than 3% above its minimum (the widest powMath common, 15,481 to
+#   15,913, 2.8%). One run on one draw of the host.
+#
+# Row                             inputs          min          avg          max   (ns/op)
+# MathCompareBench.expMath        common       4941.0       4956.7       4981.5
+# MathCompareBench.expMath        mixed        5869.0       5887.1       5915.0
+# MathCompareBench.expPreferred   common       2618.4       2638.5       2659.3
+# MathCompareBench.expPreferred   mixed        4602.6       4616.0       4637.2
+# MathCompareBench.expStrictMath  common      11268.4      11320.9      11392.2
+# MathCompareBench.expStrictMath  mixed       11750.9      11798.3      11914.3
+# MathCompareBench.logMath        common       7105.3       7131.4       7191.8
+# MathCompareBench.logMath        mixed        7164.9       7174.7       7201.6
+# MathCompareBench.logPreferred   common       3865.0       3891.2       3916.0
+# MathCompareBench.logPreferred   mixed        4981.1       5000.8       5031.8
+# MathCompareBench.logStrictMath  common       9394.3       9439.9       9492.7
+# MathCompareBench.logStrictMath  mixed        9711.8       9749.1       9808.7
+# MathCompareBench.powMath        common      15481.3      15553.9      15913.2
+# MathCompareBench.powMath        mixed       15859.3      15907.0      16023.9
+# MathCompareBench.powPreferred   common      20141.0      20222.8      20337.5
+# MathCompareBench.powPreferred   mixed       22692.0      22745.9      22899.9
+# MathCompareBench.powStrictMath  common      97934.1      98149.7      98278.2
+# MathCompareBench.powStrictMath  mixed       96928.8      97116.0      98015.8
+#
+# Raw output of the run follows: the workflow's artifact from its first JMH line, with Maven's
+# lines dropped and JMH's plus-minus and approximately signs and powers of ten in ASCII.
+#
+# JMH version: 1.37
+# VM version: JDK 25.0.5.1, OpenJDK 64-Bit Server VM, 25.0.5.1+2-LTS
+# VM invoker: /opt/hostedtoolcache/Java_Zulu_jdk/25.0.5-1.2/x64/bin/java
+# VM options: --add-modules=jdk.incubator.vector -XX:CompileCommand=inline,io.github.vecbricks.vfdlibm.*::*
+# Blackhole mode: compiler (auto-detected, use -Djmh.blackhole.autoDetect=false to disable)
+# Warmup: 3 iterations, 2 s each
+# Measurement: 5 iterations, 2 s each
+# Timeout: 10 min per iteration
+# Threads: 1 thread, will synchronize iterations
+# Benchmark mode: Average time, time/op
+# Benchmark: io.github.vecbricks.vfdlibm.MathCompareBench.expMath
+# Parameters: (inputs = common)
+
+# Run progress: 0.00% complete, ETA 00:09:36
+# Fork: 1 of 2
+CompileCommand: inline io/github/vecbricks/vfdlibm/*.* bool inline = true
+WARNING: Using incubator modules: jdk.incubator.vector
+WARNING: A terminally deprecated method in sun.misc.Unsafe has been called
+WARNING: sun.misc.Unsafe::objectFieldOffset has been called by org.openjdk.jmh.util.Utils (file:/home/runner/.m2/repository/org/openjdk/jmh/jmh-core/1.37/jmh-core-1.37.jar)
+WARNING: Please consider reporting this to the maintainers of class org.openjdk.jmh.util.Utils
+WARNING: sun.misc.Unsafe::objectFieldOffset will be removed in a future release
+# Warmup Iteration   1: 4966.743 ns/op
+# Warmup Iteration   2: 4976.890 ns/op
+# Warmup Iteration   3: 4976.330 ns/op
+Iteration   1: 4962.320 ns/op
+                 gc.alloc.rate:      0.003 MB/sec
+                 gc.alloc.rate.norm: 0.017 B/op
+                 gc.count:           ~ 0 counts
+
+Iteration   2: 4958.304 ns/op
+                 gc.alloc.rate:      0.003 MB/sec
+                 gc.alloc.rate.norm: 0.017 B/op
+                 gc.count:           ~ 0 counts
+
+Iteration   3: 4947.253 ns/op
+                 gc.alloc.rate:      0.003 MB/sec
+                 gc.alloc.rate.norm: 0.017 B/op
+                 gc.count:           ~ 0 counts
+
+Iteration   4: 4966.697 ns/op
+                 gc.alloc.rate:      0.003 MB/sec
+                 gc.alloc.rate.norm: 0.017 B/op
+                 gc.count:           ~ 0 counts
+
+Iteration   5: 4941.041 ns/op
+                 gc.alloc.rate:      0.003 MB/sec
+                 gc.alloc.rate.norm: 0.017 B/op
+                 gc.count:           ~ 0 counts
+
+
+# Run progress: 2.78% complete, ETA 00:09:32
+# Fork: 2 of 2
+CompileCommand: inline io/github/vecbricks/vfdlibm/*.* bool inline = true
+WARNING: Using incubator modules: jdk.incubator.vector
+WARNING: A terminally deprecated method in sun.misc.Unsafe has been called
+WARNING: sun.misc.Unsafe::objectFieldOffset has been called by org.openjdk.jmh.util.Utils (file:/home/runner/.m2/repository/org/openjdk/jmh/jmh-core/1.37/jmh-core-1.37.jar)
+WARNING: Please consider reporting this to the maintainers of class org.openjdk.jmh.util.Utils
+WARNING: sun.misc.Unsafe::objectFieldOffset will be removed in a future release
+# Warmup Iteration   1: 4983.059 ns/op
+# Warmup Iteration   2: 4937.869 ns/op
+# Warmup Iteration   3: 4956.064 ns/op
+Iteration   1: 4946.384 ns/op
+                 gc.alloc.rate:      0.003 MB/sec
+                 gc.alloc.rate.norm: 0.017 B/op
+                 gc.count:           ~ 0 counts
+
+Iteration   2: 4972.031 ns/op
+                 gc.alloc.rate:      0.003 MB/sec
+                 gc.alloc.rate.norm: 0.017 B/op
+                 gc.count:           ~ 0 counts
+
+Iteration   3: 4949.601 ns/op
+                 gc.alloc.rate:      0.003 MB/sec
+                 gc.alloc.rate.norm: 0.017 B/op
+                 gc.count:           ~ 0 counts
+
+Iteration   4: 4941.779 ns/op
+                 gc.alloc.rate:      0.003 MB/sec
+                 gc.alloc.rate.norm: 0.017 B/op
+                 gc.count:           ~ 0 counts
+
+Iteration   5: 4981.474 ns/op
+                 gc.alloc.rate:      0.003 MB/sec
+                 gc.alloc.rate.norm: 0.017 B/op
+                 gc.count:           ~ 0 counts
+
+
+
+Result "io.github.vecbricks.vfdlibm.MathCompareBench.expMath":
+  4956.688 +/-(99.9%) 20.759 ns/op [Average]
+  (min, avg, max) = (4941.041, 4956.688, 4981.474), stdev = 13.731
+  CI (99.9%): [4935.929, 4977.447] (assumes normal distribution)
+
+Secondary result "io.github.vecbricks.vfdlibm.MathCompareBench.expMath:gc.alloc.rate":
+  0.003 +/-(99.9%) 0.001 MB/sec [Average]
+  (min, avg, max) = (0.003, 0.003, 0.003), stdev = 0.001
+  CI (99.9%): [0.003, 0.003] (assumes normal distribution)
+
+Secondary result "io.github.vecbricks.vfdlibm.MathCompareBench.expMath:gc.alloc.rate.norm":
+  0.017 +/-(99.9%) 0.001 B/op [Average]
+  (min, avg, max) = (0.017, 0.017, 0.017), stdev = 0.001
+  CI (99.9%): [0.017, 0.017] (assumes normal distribution)
+
+Secondary result "io.github.vecbricks.vfdlibm.MathCompareBench.expMath:gc.count":
+  ~ 0 counts
+
+
+# JMH version: 1.37
+# VM version: JDK 25.0.5.1, OpenJDK 64-Bit Server VM, 25.0.5.1+2-LTS
+# VM invoker: /opt/hostedtoolcache/Java_Zulu_jdk/25.0.5-1.2/x64/bin/java
+# VM options: --add-modules=jdk.incubator.vector -XX:CompileCommand=inline,io.github.vecbricks.vfdlibm.*::*
+# Blackhole mode: compiler (auto-detected, use -Djmh.blackhole.autoDetect=false to disable)
+# Warmup: 3 iterations, 2 s each
+# Measurement: 5 iterations, 2 s each
+# Timeout: 10 min per iteration
+# Threads: 1 thread, will synchronize iterations
+# Benchmark mode: Average time, time/op
+# Benchmark: io.github.vecbricks.vfdlibm.MathCompareBench.expMath
+# Parameters: (inputs = mixed)
+
+# Run progress: 5.56% complete, ETA 00:09:15
+# Fork: 1 of 2
+CompileCommand: inline io/github/vecbricks/vfdlibm/*.* bool inline = true
+WARNING: Using incubator modules: jdk.incubator.vector
+WARNING: A terminally deprecated method in sun.misc.Unsafe has been called
+WARNING: sun.misc.Unsafe::objectFieldOffset has been called by org.openjdk.jmh.util.Utils (file:/home/runner/.m2/repository/org/openjdk/jmh/jmh-core/1.37/jmh-core-1.37.jar)
+WARNING: Please consider reporting this to the maintainers of class org.openjdk.jmh.util.Utils
+WARNING: sun.misc.Unsafe::objectFieldOffset will be removed in a future release
+# Warmup Iteration   1: 5891.787 ns/op
+# Warmup Iteration   2: 5855.746 ns/op
+# Warmup Iteration   3: 5864.356 ns/op
+Iteration   1: 5874.276 ns/op
+                 gc.alloc.rate:      0.003 MB/sec
+                 gc.alloc.rate.norm: 0.021 B/op
+                 gc.count:           ~ 0 counts
+
+Iteration   2: 5869.006 ns/op
+                 gc.alloc.rate:      0.003 MB/sec
+                 gc.alloc.rate.norm: 0.021 B/op
+                 gc.count:           ~ 0 counts
+
+Iteration   3: 5878.936 ns/op
+                 gc.alloc.rate:      0.003 MB/sec
+                 gc.alloc.rate.norm: 0.021 B/op
+                 gc.count:           ~ 0 counts
+
+Iteration   4: 5888.328 ns/op
+                 gc.alloc.rate:      0.003 MB/sec
+                 gc.alloc.rate.norm: 0.021 B/op
+                 gc.count:           ~ 0 counts
+
+Iteration   5: 5902.845 ns/op
+                 gc.alloc.rate:      0.003 MB/sec
+                 gc.alloc.rate.norm: 0.021 B/op
+                 gc.count:           ~ 0 counts
+
+
+# Run progress: 8.33% complete, ETA 00:08:59
+# Fork: 2 of 2
+CompileCommand: inline io/github/vecbricks/vfdlibm/*.* bool inline = true
+WARNING: Using incubator modules: jdk.incubator.vector
+WARNING: A terminally deprecated method in sun.misc.Unsafe has been called
+WARNING: sun.misc.Unsafe::objectFieldOffset has been called by org.openjdk.jmh.util.Utils (file:/home/runner/.m2/repository/org/openjdk/jmh/jmh-core/1.37/jmh-core-1.37.jar)
+WARNING: Please consider reporting this to the maintainers of class org.openjdk.jmh.util.Utils
+WARNING: sun.misc.Unsafe::objectFieldOffset will be removed in a future release
+# Warmup Iteration   1: 5891.162 ns/op
+# Warmup Iteration   2: 5854.971 ns/op
+# Warmup Iteration   3: 5899.485 ns/op
+Iteration   1: 5888.842 ns/op
+                 gc.alloc.rate:      0.003 MB/sec
+                 gc.alloc.rate.norm: 0.021 B/op
+                 gc.count:           ~ 0 counts
+
+Iteration   2: 5914.951 ns/op
+                 gc.alloc.rate:      0.003 MB/sec
+                 gc.alloc.rate.norm: 0.021 B/op
+                 gc.count:           ~ 0 counts
+
+Iteration   3: 5891.013 ns/op
+                 gc.alloc.rate:      0.003 MB/sec
+                 gc.alloc.rate.norm: 0.021 B/op
+                 gc.count:           ~ 0 counts
+
+Iteration   4: 5890.164 ns/op
+                 gc.alloc.rate:      0.003 MB/sec
+                 gc.alloc.rate.norm: 0.021 B/op
+                 gc.count:           ~ 0 counts
+
+Iteration   5: 5872.848 ns/op
+                 gc.alloc.rate:      0.003 MB/sec
+                 gc.alloc.rate.norm: 0.021 B/op
+                 gc.count:           ~ 0 counts
+
+
+
+Result "io.github.vecbricks.vfdlibm.MathCompareBench.expMath":
+  5887.121 +/-(99.9%) 21.466 ns/op [Average]
+  (min, avg, max) = (5869.006, 5887.121, 5914.951), stdev = 14.199
+  CI (99.9%): [5865.655, 5908.587] (assumes normal distribution)
+
+Secondary result "io.github.vecbricks.vfdlibm.MathCompareBench.expMath:gc.alloc.rate":
+  0.003 +/-(99.9%) 0.001 MB/sec [Average]
+  (min, avg, max) = (0.003, 0.003, 0.003), stdev = 0.001
+  CI (99.9%): [0.003, 0.003] (assumes normal distribution)
+
+Secondary result "io.github.vecbricks.vfdlibm.MathCompareBench.expMath:gc.alloc.rate.norm":
+  0.021 +/-(99.9%) 0.001 B/op [Average]
+  (min, avg, max) = (0.021, 0.021, 0.021), stdev = 0.001
+  CI (99.9%): [0.021, 0.021] (assumes normal distribution)
+
+Secondary result "io.github.vecbricks.vfdlibm.MathCompareBench.expMath:gc.count":
+  ~ 0 counts
+
+
+# JMH version: 1.37
+# VM version: JDK 25.0.5.1, OpenJDK 64-Bit Server VM, 25.0.5.1+2-LTS
+# VM invoker: /opt/hostedtoolcache/Java_Zulu_jdk/25.0.5-1.2/x64/bin/java
+# VM options: --add-modules=jdk.incubator.vector -XX:CompileCommand=inline,io.github.vecbricks.vfdlibm.*::*
+# Blackhole mode: compiler (auto-detected, use -Djmh.blackhole.autoDetect=false to disable)
+# Warmup: 3 iterations, 2 s each
+# Measurement: 5 iterations, 2 s each
+# Timeout: 10 min per iteration
+# Threads: 1 thread, will synchronize iterations
+# Benchmark mode: Average time, time/op
+# Benchmark: io.github.vecbricks.vfdlibm.MathCompareBench.expPreferred
+# Parameters: (inputs = common)
+
+# Run progress: 11.11% complete, ETA 00:08:42
+# Fork: 1 of 2
+CompileCommand: inline io/github/vecbricks/vfdlibm/*.* bool inline = true
+WARNING: Using incubator modules: jdk.incubator.vector
+WARNING: A terminally deprecated method in sun.misc.Unsafe has been called
+WARNING: sun.misc.Unsafe::objectFieldOffset has been called by org.openjdk.jmh.util.Utils (file:/home/runner/.m2/repository/org/openjdk/jmh/jmh-core/1.37/jmh-core-1.37.jar)
+WARNING: Please consider reporting this to the maintainers of class org.openjdk.jmh.util.Utils
+WARNING: sun.misc.Unsafe::objectFieldOffset will be removed in a future release
+# Warmup Iteration   1: 3998.856 ns/op
+# Warmup Iteration   2: 2985.330 ns/op
+# Warmup Iteration   3: 2650.472 ns/op
+Iteration   1: 2656.286 ns/op
+                 gc.alloc.rate:      0.003 MB/sec
+                 gc.alloc.rate.norm: 0.009 B/op
+                 gc.count:           ~ 0 counts
+
+Iteration   2: 2649.390 ns/op
+                 gc.alloc.rate:      0.003 MB/sec
+                 gc.alloc.rate.norm: 0.009 B/op
+                 gc.count:           ~ 0 counts
+
+Iteration   3: 2658.582 ns/op
+                 gc.alloc.rate:      0.003 MB/sec
+                 gc.alloc.rate.norm: 0.009 B/op
+                 gc.count:           ~ 0 counts
+
+Iteration   4: 2649.053 ns/op
+                 gc.alloc.rate:      0.003 MB/sec
+                 gc.alloc.rate.norm: 0.009 B/op
+                 gc.count:           ~ 0 counts
+
+Iteration   5: 2659.259 ns/op
+                 gc.alloc.rate:      0.003 MB/sec
+                 gc.alloc.rate.norm: 0.009 B/op
+                 gc.count:           ~ 0 counts
+
+
+# Run progress: 13.89% complete, ETA 00:08:26
+# Fork: 2 of 2
+CompileCommand: inline io/github/vecbricks/vfdlibm/*.* bool inline = true
+WARNING: Using incubator modules: jdk.incubator.vector
+WARNING: A terminally deprecated method in sun.misc.Unsafe has been called
+WARNING: sun.misc.Unsafe::objectFieldOffset has been called by org.openjdk.jmh.util.Utils (file:/home/runner/.m2/repository/org/openjdk/jmh/jmh-core/1.37/jmh-core-1.37.jar)
+WARNING: Please consider reporting this to the maintainers of class org.openjdk.jmh.util.Utils
+WARNING: sun.misc.Unsafe::objectFieldOffset will be removed in a future release
+# Warmup Iteration   1: 3850.018 ns/op
+# Warmup Iteration   2: 2956.940 ns/op
+# Warmup Iteration   3: 2617.617 ns/op
+Iteration   1: 2628.797 ns/op
+                 gc.alloc.rate:      0.003 MB/sec
+                 gc.alloc.rate.norm: 0.009 B/op
+                 gc.count:           ~ 0 counts
+
+Iteration   2: 2618.385 ns/op
+                 gc.alloc.rate:      0.003 MB/sec
+                 gc.alloc.rate.norm: 0.009 B/op
+                 gc.count:           ~ 0 counts
+
+Iteration   3: 2621.861 ns/op
+                 gc.alloc.rate:      0.003 MB/sec
+                 gc.alloc.rate.norm: 0.009 B/op
+                 gc.count:           ~ 0 counts
+
+Iteration   4: 2622.972 ns/op
+                 gc.alloc.rate:      0.003 MB/sec
+                 gc.alloc.rate.norm: 0.009 B/op
+                 gc.count:           ~ 0 counts
+
+Iteration   5: 2620.370 ns/op
+                 gc.alloc.rate:      0.003 MB/sec
+                 gc.alloc.rate.norm: 0.009 B/op
+                 gc.count:           ~ 0 counts
+
+
+
+Result "io.github.vecbricks.vfdlibm.MathCompareBench.expPreferred":
+  2638.495 +/-(99.9%) 26.312 ns/op [Average]
+  (min, avg, max) = (2618.385, 2638.495, 2659.259), stdev = 17.404
+  CI (99.9%): [2612.184, 2664.807] (assumes normal distribution)
+
+Secondary result "io.github.vecbricks.vfdlibm.MathCompareBench.expPreferred:gc.alloc.rate":
+  0.003 +/-(99.9%) 0.001 MB/sec [Average]
+  (min, avg, max) = (0.003, 0.003, 0.003), stdev = 0.001
+  CI (99.9%): [0.003, 0.003] (assumes normal distribution)
+
+Secondary result "io.github.vecbricks.vfdlibm.MathCompareBench.expPreferred:gc.alloc.rate.norm":
+  0.009 +/-(99.9%) 0.001 B/op [Average]
+  (min, avg, max) = (0.009, 0.009, 0.009), stdev = 0.001
+  CI (99.9%): [0.009, 0.009] (assumes normal distribution)
+
+Secondary result "io.github.vecbricks.vfdlibm.MathCompareBench.expPreferred:gc.count":
+  ~ 0 counts
+
+
+# JMH version: 1.37
+# VM version: JDK 25.0.5.1, OpenJDK 64-Bit Server VM, 25.0.5.1+2-LTS
+# VM invoker: /opt/hostedtoolcache/Java_Zulu_jdk/25.0.5-1.2/x64/bin/java
+# VM options: --add-modules=jdk.incubator.vector -XX:CompileCommand=inline,io.github.vecbricks.vfdlibm.*::*
+# Blackhole mode: compiler (auto-detected, use -Djmh.blackhole.autoDetect=false to disable)
+# Warmup: 3 iterations, 2 s each
+# Measurement: 5 iterations, 2 s each
+# Timeout: 10 min per iteration
+# Threads: 1 thread, will synchronize iterations
+# Benchmark mode: Average time, time/op
+# Benchmark: io.github.vecbricks.vfdlibm.MathCompareBench.expPreferred
+# Parameters: (inputs = mixed)
+
+# Run progress: 16.67% complete, ETA 00:08:09
+# Fork: 1 of 2
+CompileCommand: inline io/github/vecbricks/vfdlibm/*.* bool inline = true
+WARNING: Using incubator modules: jdk.incubator.vector
+WARNING: A terminally deprecated method in sun.misc.Unsafe has been called
+WARNING: sun.misc.Unsafe::objectFieldOffset has been called by org.openjdk.jmh.util.Utils (file:/home/runner/.m2/repository/org/openjdk/jmh/jmh-core/1.37/jmh-core-1.37.jar)
+WARNING: Please consider reporting this to the maintainers of class org.openjdk.jmh.util.Utils
+WARNING: sun.misc.Unsafe::objectFieldOffset will be removed in a future release
+# Warmup Iteration   1: 6128.408 ns/op
+# Warmup Iteration   2: 4373.577 ns/op
+# Warmup Iteration   3: 4619.086 ns/op
+Iteration   1: 4637.200 ns/op
+                 gc.alloc.rate:      0.003 MB/sec
+                 gc.alloc.rate.norm: 0.016 B/op
+                 gc.count:           ~ 0 counts
+
+Iteration   2: 4608.843 ns/op
+                 gc.alloc.rate:      0.003 MB/sec
+                 gc.alloc.rate.norm: 0.016 B/op
+                 gc.count:           ~ 0 counts
+
+Iteration   3: 4612.324 ns/op
+                 gc.alloc.rate:      0.003 MB/sec
+                 gc.alloc.rate.norm: 0.016 B/op
+                 gc.count:           ~ 0 counts
+
+Iteration   4: 4621.408 ns/op
+                 gc.alloc.rate:      0.003 MB/sec
+                 gc.alloc.rate.norm: 0.016 B/op
+                 gc.count:           ~ 0 counts
+
+Iteration   5: 4629.611 ns/op
+                 gc.alloc.rate:      0.003 MB/sec
+                 gc.alloc.rate.norm: 0.016 B/op
+                 gc.count:           ~ 0 counts
+
+
+# Run progress: 19.44% complete, ETA 00:07:53
+# Fork: 2 of 2
+CompileCommand: inline io/github/vecbricks/vfdlibm/*.* bool inline = true
+WARNING: Using incubator modules: jdk.incubator.vector
+WARNING: A terminally deprecated method in sun.misc.Unsafe has been called
+WARNING: sun.misc.Unsafe::objectFieldOffset has been called by org.openjdk.jmh.util.Utils (file:/home/runner/.m2/repository/org/openjdk/jmh/jmh-core/1.37/jmh-core-1.37.jar)
+WARNING: Please consider reporting this to the maintainers of class org.openjdk.jmh.util.Utils
+WARNING: sun.misc.Unsafe::objectFieldOffset will be removed in a future release
+# Warmup Iteration   1: 6193.027 ns/op
+# Warmup Iteration   2: 4349.034 ns/op
+# Warmup Iteration   3: 4605.634 ns/op
+Iteration   1: 4608.526 ns/op
+                 gc.alloc.rate:      0.003 MB/sec
+                 gc.alloc.rate.norm: 0.016 B/op
+                 gc.count:           ~ 0 counts
+
+Iteration   2: 4602.561 ns/op
+                 gc.alloc.rate:      0.003 MB/sec
+                 gc.alloc.rate.norm: 0.016 B/op
+                 gc.count:           ~ 0 counts
+
+Iteration   3: 4611.019 ns/op
+                 gc.alloc.rate:      0.003 MB/sec
+                 gc.alloc.rate.norm: 0.016 B/op
+                 gc.count:           ~ 0 counts
+
+Iteration   4: 4610.664 ns/op
+                 gc.alloc.rate:      0.003 MB/sec
+                 gc.alloc.rate.norm: 0.016 B/op
+                 gc.count:           ~ 0 counts
+
+Iteration   5: 4617.531 ns/op
+                 gc.alloc.rate:      0.003 MB/sec
+                 gc.alloc.rate.norm: 0.016 B/op
+                 gc.count:           ~ 0 counts
+
+
+
+Result "io.github.vecbricks.vfdlibm.MathCompareBench.expPreferred":
+  4615.969 +/-(99.9%) 16.101 ns/op [Average]
+  (min, avg, max) = (4602.561, 4615.969, 4637.200), stdev = 10.650
+  CI (99.9%): [4599.868, 4632.070] (assumes normal distribution)
+
+Secondary result "io.github.vecbricks.vfdlibm.MathCompareBench.expPreferred:gc.alloc.rate":
+  0.003 +/-(99.9%) 0.001 MB/sec [Average]
+  (min, avg, max) = (0.003, 0.003, 0.003), stdev = 0.001
+  CI (99.9%): [0.003, 0.003] (assumes normal distribution)
+
+Secondary result "io.github.vecbricks.vfdlibm.MathCompareBench.expPreferred:gc.alloc.rate.norm":
+  0.016 +/-(99.9%) 0.001 B/op [Average]
+  (min, avg, max) = (0.016, 0.016, 0.016), stdev = 0.001
+  CI (99.9%): [0.016, 0.016] (assumes normal distribution)
+
+Secondary result "io.github.vecbricks.vfdlibm.MathCompareBench.expPreferred:gc.count":
+  ~ 0 counts
+
+
+# JMH version: 1.37
+# VM version: JDK 25.0.5.1, OpenJDK 64-Bit Server VM, 25.0.5.1+2-LTS
+# VM invoker: /opt/hostedtoolcache/Java_Zulu_jdk/25.0.5-1.2/x64/bin/java
+# VM options: --add-modules=jdk.incubator.vector -XX:CompileCommand=inline,io.github.vecbricks.vfdlibm.*::*
+# Blackhole mode: compiler (auto-detected, use -Djmh.blackhole.autoDetect=false to disable)
+# Warmup: 3 iterations, 2 s each
+# Measurement: 5 iterations, 2 s each
+# Timeout: 10 min per iteration
+# Threads: 1 thread, will synchronize iterations
+# Benchmark mode: Average time, time/op
+# Benchmark: io.github.vecbricks.vfdlibm.MathCompareBench.expStrictMath
+# Parameters: (inputs = common)
+
+# Run progress: 22.22% complete, ETA 00:07:37
+# Fork: 1 of 2
+CompileCommand: inline io/github/vecbricks/vfdlibm/*.* bool inline = true
+WARNING: Using incubator modules: jdk.incubator.vector
+WARNING: A terminally deprecated method in sun.misc.Unsafe has been called
+WARNING: sun.misc.Unsafe::objectFieldOffset has been called by org.openjdk.jmh.util.Utils (file:/home/runner/.m2/repository/org/openjdk/jmh/jmh-core/1.37/jmh-core-1.37.jar)
+WARNING: Please consider reporting this to the maintainers of class org.openjdk.jmh.util.Utils
+WARNING: sun.misc.Unsafe::objectFieldOffset will be removed in a future release
+# Warmup Iteration   1: 11273.116 ns/op
+# Warmup Iteration   2: 11263.395 ns/op
+# Warmup Iteration   3: 11358.391 ns/op
+Iteration   1: 11313.284 ns/op
+                 gc.alloc.rate:      0.003 MB/sec
+                 gc.alloc.rate.norm: 0.040 B/op
+                 gc.count:           ~ 0 counts
+
+Iteration   2: 11268.370 ns/op
+                 gc.alloc.rate:      0.003 MB/sec
+                 gc.alloc.rate.norm: 0.039 B/op
+                 gc.count:           ~ 0 counts
+
+Iteration   3: 11321.367 ns/op
+                 gc.alloc.rate:      0.003 MB/sec
+                 gc.alloc.rate.norm: 0.040 B/op
+                 gc.count:           ~ 0 counts
+
+Iteration   4: 11314.698 ns/op
+                 gc.alloc.rate:      0.003 MB/sec
+                 gc.alloc.rate.norm: 0.039 B/op
+                 gc.count:           ~ 0 counts
+
+Iteration   5: 11332.471 ns/op
+                 gc.alloc.rate:      0.003 MB/sec
+                 gc.alloc.rate.norm: 0.040 B/op
+                 gc.count:           ~ 0 counts
+
+
+# Run progress: 25.00% complete, ETA 00:07:20
+# Fork: 2 of 2
+CompileCommand: inline io/github/vecbricks/vfdlibm/*.* bool inline = true
+WARNING: Using incubator modules: jdk.incubator.vector
+WARNING: A terminally deprecated method in sun.misc.Unsafe has been called
+WARNING: sun.misc.Unsafe::objectFieldOffset has been called by org.openjdk.jmh.util.Utils (file:/home/runner/.m2/repository/org/openjdk/jmh/jmh-core/1.37/jmh-core-1.37.jar)
+WARNING: Please consider reporting this to the maintainers of class org.openjdk.jmh.util.Utils
+WARNING: sun.misc.Unsafe::objectFieldOffset will be removed in a future release
+# Warmup Iteration   1: 11404.403 ns/op
+# Warmup Iteration   2: 11333.538 ns/op
+# Warmup Iteration   3: 11335.492 ns/op
+Iteration   1: 11313.392 ns/op
+                 gc.alloc.rate:      0.003 MB/sec
+                 gc.alloc.rate.norm: 0.040 B/op
+                 gc.count:           ~ 0 counts
+
+Iteration   2: 11342.307 ns/op
+                 gc.alloc.rate:      0.003 MB/sec
+                 gc.alloc.rate.norm: 0.040 B/op
+                 gc.count:           ~ 0 counts
+
+Iteration   3: 11277.187 ns/op
+                 gc.alloc.rate:      0.003 MB/sec
+                 gc.alloc.rate.norm: 0.039 B/op
+                 gc.count:           ~ 0 counts
+
+Iteration   4: 11333.386 ns/op
+                 gc.alloc.rate:      0.003 MB/sec
+                 gc.alloc.rate.norm: 0.040 B/op
+                 gc.count:           ~ 0 counts
+
+Iteration   5: 11392.225 ns/op
+                 gc.alloc.rate:      0.003 MB/sec
+                 gc.alloc.rate.norm: 0.040 B/op
+                 gc.count:           ~ 0 counts
+
+
+
+Result "io.github.vecbricks.vfdlibm.MathCompareBench.expStrictMath":
+  11320.869 +/-(99.9%) 52.028 ns/op [Average]
+  (min, avg, max) = (11268.370, 11320.869, 11392.225), stdev = 34.414
+  CI (99.9%): [11268.840, 11372.897] (assumes normal distribution)
+
+Secondary result "io.github.vecbricks.vfdlibm.MathCompareBench.expStrictMath:gc.alloc.rate":
+  0.003 +/-(99.9%) 0.001 MB/sec [Average]
+  (min, avg, max) = (0.003, 0.003, 0.003), stdev = 0.001
+  CI (99.9%): [0.003, 0.003] (assumes normal distribution)
+
+Secondary result "io.github.vecbricks.vfdlibm.MathCompareBench.expStrictMath:gc.alloc.rate.norm":
+  0.040 +/-(99.9%) 0.001 B/op [Average]
+  (min, avg, max) = (0.039, 0.040, 0.040), stdev = 0.001
+  CI (99.9%): [0.039, 0.040] (assumes normal distribution)
+
+Secondary result "io.github.vecbricks.vfdlibm.MathCompareBench.expStrictMath:gc.count":
+  ~ 0 counts
+
+
+# JMH version: 1.37
+# VM version: JDK 25.0.5.1, OpenJDK 64-Bit Server VM, 25.0.5.1+2-LTS
+# VM invoker: /opt/hostedtoolcache/Java_Zulu_jdk/25.0.5-1.2/x64/bin/java
+# VM options: --add-modules=jdk.incubator.vector -XX:CompileCommand=inline,io.github.vecbricks.vfdlibm.*::*
+# Blackhole mode: compiler (auto-detected, use -Djmh.blackhole.autoDetect=false to disable)
+# Warmup: 3 iterations, 2 s each
+# Measurement: 5 iterations, 2 s each
+# Timeout: 10 min per iteration
+# Threads: 1 thread, will synchronize iterations
+# Benchmark mode: Average time, time/op
+# Benchmark: io.github.vecbricks.vfdlibm.MathCompareBench.expStrictMath
+# Parameters: (inputs = mixed)
+
+# Run progress: 27.78% complete, ETA 00:07:04
+# Fork: 1 of 2
+CompileCommand: inline io/github/vecbricks/vfdlibm/*.* bool inline = true
+WARNING: Using incubator modules: jdk.incubator.vector
+WARNING: A terminally deprecated method in sun.misc.Unsafe has been called
+WARNING: sun.misc.Unsafe::objectFieldOffset has been called by org.openjdk.jmh.util.Utils (file:/home/runner/.m2/repository/org/openjdk/jmh/jmh-core/1.37/jmh-core-1.37.jar)
+WARNING: Please consider reporting this to the maintainers of class org.openjdk.jmh.util.Utils
+WARNING: sun.misc.Unsafe::objectFieldOffset will be removed in a future release
+# Warmup Iteration   1: 11647.961 ns/op
+# Warmup Iteration   2: 11713.889 ns/op
+# Warmup Iteration   3: 11787.915 ns/op
+Iteration   1: 11914.333 ns/op
+                 gc.alloc.rate:      0.003 MB/sec
+                 gc.alloc.rate.norm: 0.042 B/op
+                 gc.count:           ~ 0 counts
+
+Iteration   2: 11782.231 ns/op
+                 gc.alloc.rate:      0.003 MB/sec
+                 gc.alloc.rate.norm: 0.041 B/op
+                 gc.count:           ~ 0 counts
+
+Iteration   3: 11818.045 ns/op
+                 gc.alloc.rate:      0.003 MB/sec
+                 gc.alloc.rate.norm: 0.041 B/op
+                 gc.count:           ~ 0 counts
+
+Iteration   4: 11788.019 ns/op
+                 gc.alloc.rate:      0.003 MB/sec
+                 gc.alloc.rate.norm: 0.041 B/op
+                 gc.count:           ~ 0 counts
+
+Iteration   5: 11798.164 ns/op
+                 gc.alloc.rate:      0.003 MB/sec
+                 gc.alloc.rate.norm: 0.041 B/op
+                 gc.count:           ~ 0 counts
+
+
+# Run progress: 30.56% complete, ETA 00:06:48
+# Fork: 2 of 2
+CompileCommand: inline io/github/vecbricks/vfdlibm/*.* bool inline = true
+WARNING: Using incubator modules: jdk.incubator.vector
+WARNING: A terminally deprecated method in sun.misc.Unsafe has been called
+WARNING: sun.misc.Unsafe::objectFieldOffset has been called by org.openjdk.jmh.util.Utils (file:/home/runner/.m2/repository/org/openjdk/jmh/jmh-core/1.37/jmh-core-1.37.jar)
+WARNING: Please consider reporting this to the maintainers of class org.openjdk.jmh.util.Utils
+WARNING: sun.misc.Unsafe::objectFieldOffset will be removed in a future release
+# Warmup Iteration   1: 11600.849 ns/op
+# Warmup Iteration   2: 11604.608 ns/op
+# Warmup Iteration   3: 11748.927 ns/op
+Iteration   1: 11750.920 ns/op
+                 gc.alloc.rate:      0.003 MB/sec
+                 gc.alloc.rate.norm: 0.041 B/op
+                 gc.count:           ~ 0 counts
+
+Iteration   2: 11790.819 ns/op
+                 gc.alloc.rate:      0.003 MB/sec
+                 gc.alloc.rate.norm: 0.041 B/op
+                 gc.count:           ~ 0 counts
+
+Iteration   3: 11758.303 ns/op
+                 gc.alloc.rate:      0.003 MB/sec
+                 gc.alloc.rate.norm: 0.041 B/op
+                 gc.count:           ~ 0 counts
+
+Iteration   4: 11803.893 ns/op
+                 gc.alloc.rate:      0.003 MB/sec
+                 gc.alloc.rate.norm: 0.041 B/op
+                 gc.count:           ~ 0 counts
+
+Iteration   5: 11778.311 ns/op
+                 gc.alloc.rate:      0.003 MB/sec
+                 gc.alloc.rate.norm: 0.041 B/op
+                 gc.count:           ~ 0 counts
+
+
+
+Result "io.github.vecbricks.vfdlibm.MathCompareBench.expStrictMath":
+  11798.304 +/-(99.9%) 68.636 ns/op [Average]
+  (min, avg, max) = (11750.920, 11798.304, 11914.333), stdev = 45.398
+  CI (99.9%): [11729.668, 11866.939] (assumes normal distribution)
+
+Secondary result "io.github.vecbricks.vfdlibm.MathCompareBench.expStrictMath:gc.alloc.rate":
+  0.003 +/-(99.9%) 0.001 MB/sec [Average]
+  (min, avg, max) = (0.003, 0.003, 0.003), stdev = 0.001
+  CI (99.9%): [0.003, 0.003] (assumes normal distribution)
+
+Secondary result "io.github.vecbricks.vfdlibm.MathCompareBench.expStrictMath:gc.alloc.rate.norm":
+  0.041 +/-(99.9%) 0.001 B/op [Average]
+  (min, avg, max) = (0.041, 0.041, 0.042), stdev = 0.001
+  CI (99.9%): [0.041, 0.042] (assumes normal distribution)
+
+Secondary result "io.github.vecbricks.vfdlibm.MathCompareBench.expStrictMath:gc.count":
+  ~ 0 counts
+
+
+# JMH version: 1.37
+# VM version: JDK 25.0.5.1, OpenJDK 64-Bit Server VM, 25.0.5.1+2-LTS
+# VM invoker: /opt/hostedtoolcache/Java_Zulu_jdk/25.0.5-1.2/x64/bin/java
+# VM options: --add-modules=jdk.incubator.vector -XX:CompileCommand=inline,io.github.vecbricks.vfdlibm.*::*
+# Blackhole mode: compiler (auto-detected, use -Djmh.blackhole.autoDetect=false to disable)
+# Warmup: 3 iterations, 2 s each
+# Measurement: 5 iterations, 2 s each
+# Timeout: 10 min per iteration
+# Threads: 1 thread, will synchronize iterations
+# Benchmark mode: Average time, time/op
+# Benchmark: io.github.vecbricks.vfdlibm.MathCompareBench.logMath
+# Parameters: (inputs = common)
+
+# Run progress: 33.33% complete, ETA 00:06:31
+# Fork: 1 of 2
+CompileCommand: inline io/github/vecbricks/vfdlibm/*.* bool inline = true
+WARNING: Using incubator modules: jdk.incubator.vector
+WARNING: A terminally deprecated method in sun.misc.Unsafe has been called
+WARNING: sun.misc.Unsafe::objectFieldOffset has been called by org.openjdk.jmh.util.Utils (file:/home/runner/.m2/repository/org/openjdk/jmh/jmh-core/1.37/jmh-core-1.37.jar)
+WARNING: Please consider reporting this to the maintainers of class org.openjdk.jmh.util.Utils
+WARNING: sun.misc.Unsafe::objectFieldOffset will be removed in a future release
+# Warmup Iteration   1: 7225.299 ns/op
+# Warmup Iteration   2: 7202.659 ns/op
+# Warmup Iteration   3: 7267.551 ns/op
+Iteration   1: 7110.271 ns/op
+                 gc.alloc.rate:      0.003 MB/sec
+                 gc.alloc.rate.norm: 0.025 B/op
+                 gc.count:           ~ 0 counts
+
+Iteration   2: 7111.071 ns/op
+                 gc.alloc.rate:      0.003 MB/sec
+                 gc.alloc.rate.norm: 0.025 B/op
+                 gc.count:           ~ 0 counts
+
+Iteration   3: 7105.287 ns/op
+                 gc.alloc.rate:      0.003 MB/sec
+                 gc.alloc.rate.norm: 0.025 B/op
+                 gc.count:           ~ 0 counts
+
+Iteration   4: 7158.730 ns/op
+                 gc.alloc.rate:      0.003 MB/sec
+                 gc.alloc.rate.norm: 0.025 B/op
+                 gc.count:           ~ 0 counts
+
+Iteration   5: 7129.796 ns/op
+                 gc.alloc.rate:      0.003 MB/sec
+                 gc.alloc.rate.norm: 0.025 B/op
+                 gc.count:           ~ 0 counts
+
+
+# Run progress: 36.11% complete, ETA 00:06:15
+# Fork: 2 of 2
+CompileCommand: inline io/github/vecbricks/vfdlibm/*.* bool inline = true
+WARNING: Using incubator modules: jdk.incubator.vector
+WARNING: A terminally deprecated method in sun.misc.Unsafe has been called
+WARNING: sun.misc.Unsafe::objectFieldOffset has been called by org.openjdk.jmh.util.Utils (file:/home/runner/.m2/repository/org/openjdk/jmh/jmh-core/1.37/jmh-core-1.37.jar)
+WARNING: Please consider reporting this to the maintainers of class org.openjdk.jmh.util.Utils
+WARNING: sun.misc.Unsafe::objectFieldOffset will be removed in a future release
+# Warmup Iteration   1: 7228.622 ns/op
+# Warmup Iteration   2: 7194.072 ns/op
+# Warmup Iteration   3: 7133.037 ns/op
+Iteration   1: 7105.765 ns/op
+                 gc.alloc.rate:      0.003 MB/sec
+                 gc.alloc.rate.norm: 0.025 B/op
+                 gc.count:           ~ 0 counts
+
+Iteration   2: 7111.749 ns/op
+                 gc.alloc.rate:      0.003 MB/sec
+                 gc.alloc.rate.norm: 0.025 B/op
+                 gc.count:           ~ 0 counts
+
+Iteration   3: 7177.560 ns/op
+                 gc.alloc.rate:      0.003 MB/sec
+                 gc.alloc.rate.norm: 0.025 B/op
+                 gc.count:           ~ 0 counts
+
+Iteration   4: 7111.882 ns/op
+                 gc.alloc.rate:      0.003 MB/sec
+                 gc.alloc.rate.norm: 0.025 B/op
+                 gc.count:           ~ 0 counts
+
+Iteration   5: 7191.792 ns/op
+                 gc.alloc.rate:      0.003 MB/sec
+                 gc.alloc.rate.norm: 0.025 B/op
+                 gc.count:           ~ 0 counts
+
+
+
+Result "io.github.vecbricks.vfdlibm.MathCompareBench.logMath":
+  7131.390 +/-(99.9%) 49.102 ns/op [Average]
+  (min, avg, max) = (7105.287, 7131.390, 7191.792), stdev = 32.478
+  CI (99.9%): [7082.289, 7180.492] (assumes normal distribution)
+
+Secondary result "io.github.vecbricks.vfdlibm.MathCompareBench.logMath:gc.alloc.rate":
+  0.003 +/-(99.9%) 0.001 MB/sec [Average]
+  (min, avg, max) = (0.003, 0.003, 0.003), stdev = 0.001
+  CI (99.9%): [0.003, 0.003] (assumes normal distribution)
+
+Secondary result "io.github.vecbricks.vfdlibm.MathCompareBench.logMath:gc.alloc.rate.norm":
+  0.025 +/-(99.9%) 0.001 B/op [Average]
+  (min, avg, max) = (0.025, 0.025, 0.025), stdev = 0.001
+  CI (99.9%): [0.025, 0.025] (assumes normal distribution)
+
+Secondary result "io.github.vecbricks.vfdlibm.MathCompareBench.logMath:gc.count":
+  ~ 0 counts
+
+
+# JMH version: 1.37
+# VM version: JDK 25.0.5.1, OpenJDK 64-Bit Server VM, 25.0.5.1+2-LTS
+# VM invoker: /opt/hostedtoolcache/Java_Zulu_jdk/25.0.5-1.2/x64/bin/java
+# VM options: --add-modules=jdk.incubator.vector -XX:CompileCommand=inline,io.github.vecbricks.vfdlibm.*::*
+# Blackhole mode: compiler (auto-detected, use -Djmh.blackhole.autoDetect=false to disable)
+# Warmup: 3 iterations, 2 s each
+# Measurement: 5 iterations, 2 s each
+# Timeout: 10 min per iteration
+# Threads: 1 thread, will synchronize iterations
+# Benchmark mode: Average time, time/op
+# Benchmark: io.github.vecbricks.vfdlibm.MathCompareBench.logMath
+# Parameters: (inputs = mixed)
+
+# Run progress: 38.89% complete, ETA 00:05:59
+# Fork: 1 of 2
+CompileCommand: inline io/github/vecbricks/vfdlibm/*.* bool inline = true
+WARNING: Using incubator modules: jdk.incubator.vector
+WARNING: A terminally deprecated method in sun.misc.Unsafe has been called
+WARNING: sun.misc.Unsafe::objectFieldOffset has been called by org.openjdk.jmh.util.Utils (file:/home/runner/.m2/repository/org/openjdk/jmh/jmh-core/1.37/jmh-core-1.37.jar)
+WARNING: Please consider reporting this to the maintainers of class org.openjdk.jmh.util.Utils
+WARNING: sun.misc.Unsafe::objectFieldOffset will be removed in a future release
+# Warmup Iteration   1: 7284.093 ns/op
+# Warmup Iteration   2: 7236.824 ns/op
+# Warmup Iteration   3: 7184.000 ns/op
+Iteration   1: 7185.242 ns/op
+                 gc.alloc.rate:      0.003 MB/sec
+                 gc.alloc.rate.norm: 0.025 B/op
+                 gc.count:           ~ 0 counts
+
+Iteration   2: 7201.550 ns/op
+                 gc.alloc.rate:      0.003 MB/sec
+                 gc.alloc.rate.norm: 0.025 B/op
+                 gc.count:           ~ 0 counts
+
+Iteration   3: 7164.893 ns/op
+                 gc.alloc.rate:      0.003 MB/sec
+                 gc.alloc.rate.norm: 0.025 B/op
+                 gc.count:           ~ 0 counts
+
+Iteration   4: 7166.917 ns/op
+                 gc.alloc.rate:      0.003 MB/sec
+                 gc.alloc.rate.norm: 0.025 B/op
+                 gc.count:           ~ 0 counts
+
+Iteration   5: 7171.325 ns/op
+                 gc.alloc.rate:      0.003 MB/sec
+                 gc.alloc.rate.norm: 0.025 B/op
+                 gc.count:           ~ 0 counts
+
+
+# Run progress: 41.67% complete, ETA 00:05:42
+# Fork: 2 of 2
+CompileCommand: inline io/github/vecbricks/vfdlibm/*.* bool inline = true
+WARNING: Using incubator modules: jdk.incubator.vector
+WARNING: A terminally deprecated method in sun.misc.Unsafe has been called
+WARNING: sun.misc.Unsafe::objectFieldOffset has been called by org.openjdk.jmh.util.Utils (file:/home/runner/.m2/repository/org/openjdk/jmh/jmh-core/1.37/jmh-core-1.37.jar)
+WARNING: Please consider reporting this to the maintainers of class org.openjdk.jmh.util.Utils
+WARNING: sun.misc.Unsafe::objectFieldOffset will be removed in a future release
+# Warmup Iteration   1: 7301.367 ns/op
+# Warmup Iteration   2: 7239.664 ns/op
+# Warmup Iteration   3: 7193.839 ns/op
+Iteration   1: 7165.813 ns/op
+                 gc.alloc.rate:      0.003 MB/sec
+                 gc.alloc.rate.norm: 0.025 B/op
+                 gc.count:           ~ 0 counts
+
+Iteration   2: 7166.871 ns/op
+                 gc.alloc.rate:      0.003 MB/sec
+                 gc.alloc.rate.norm: 0.025 B/op
+                 gc.count:           ~ 0 counts
+
+Iteration   3: 7169.964 ns/op
+                 gc.alloc.rate:      0.003 MB/sec
+                 gc.alloc.rate.norm: 0.025 B/op
+                 gc.count:           ~ 0 counts
+
+Iteration   4: 7185.384 ns/op
+                 gc.alloc.rate:      0.003 MB/sec
+                 gc.alloc.rate.norm: 0.025 B/op
+                 gc.count:           ~ 0 counts
+
+Iteration   5: 7169.096 ns/op
+                 gc.alloc.rate:      0.003 MB/sec
+                 gc.alloc.rate.norm: 0.025 B/op
+                 gc.count:           ~ 0 counts
+
+
+
+Result "io.github.vecbricks.vfdlibm.MathCompareBench.logMath":
+  7174.706 +/-(99.9%) 18.229 ns/op [Average]
+  (min, avg, max) = (7164.893, 7174.706, 7201.550), stdev = 12.057
+  CI (99.9%): [7156.477, 7192.935] (assumes normal distribution)
+
+Secondary result "io.github.vecbricks.vfdlibm.MathCompareBench.logMath:gc.alloc.rate":
+  0.003 +/-(99.9%) 0.001 MB/sec [Average]
+  (min, avg, max) = (0.003, 0.003, 0.003), stdev = 0.001
+  CI (99.9%): [0.003, 0.003] (assumes normal distribution)
+
+Secondary result "io.github.vecbricks.vfdlibm.MathCompareBench.logMath:gc.alloc.rate.norm":
+  0.025 +/-(99.9%) 0.001 B/op [Average]
+  (min, avg, max) = (0.025, 0.025, 0.025), stdev = 0.001
+  CI (99.9%): [0.025, 0.025] (assumes normal distribution)
+
+Secondary result "io.github.vecbricks.vfdlibm.MathCompareBench.logMath:gc.count":
+  ~ 0 counts
+
+
+# JMH version: 1.37
+# VM version: JDK 25.0.5.1, OpenJDK 64-Bit Server VM, 25.0.5.1+2-LTS
+# VM invoker: /opt/hostedtoolcache/Java_Zulu_jdk/25.0.5-1.2/x64/bin/java
+# VM options: --add-modules=jdk.incubator.vector -XX:CompileCommand=inline,io.github.vecbricks.vfdlibm.*::*
+# Blackhole mode: compiler (auto-detected, use -Djmh.blackhole.autoDetect=false to disable)
+# Warmup: 3 iterations, 2 s each
+# Measurement: 5 iterations, 2 s each
+# Timeout: 10 min per iteration
+# Threads: 1 thread, will synchronize iterations
+# Benchmark mode: Average time, time/op
+# Benchmark: io.github.vecbricks.vfdlibm.MathCompareBench.logPreferred
+# Parameters: (inputs = common)
+
+# Run progress: 44.44% complete, ETA 00:05:26
+# Fork: 1 of 2
+CompileCommand: inline io/github/vecbricks/vfdlibm/*.* bool inline = true
+WARNING: Using incubator modules: jdk.incubator.vector
+WARNING: A terminally deprecated method in sun.misc.Unsafe has been called
+WARNING: sun.misc.Unsafe::objectFieldOffset has been called by org.openjdk.jmh.util.Utils (file:/home/runner/.m2/repository/org/openjdk/jmh/jmh-core/1.37/jmh-core-1.37.jar)
+WARNING: Please consider reporting this to the maintainers of class org.openjdk.jmh.util.Utils
+WARNING: sun.misc.Unsafe::objectFieldOffset will be removed in a future release
+# Warmup Iteration   1: 5375.646 ns/op
+# Warmup Iteration   2: 3874.293 ns/op
+# Warmup Iteration   3: 3871.802 ns/op
+Iteration   1: 3865.006 ns/op
+                 gc.alloc.rate:      0.003 MB/sec
+                 gc.alloc.rate.norm: 0.014 B/op
+                 gc.count:           ~ 0 counts
+
+Iteration   2: 3897.639 ns/op
+                 gc.alloc.rate:      0.003 MB/sec
+                 gc.alloc.rate.norm: 0.014 B/op
+                 gc.count:           ~ 0 counts
+
+Iteration   3: 3894.844 ns/op
+                 gc.alloc.rate:      0.003 MB/sec
+                 gc.alloc.rate.norm: 0.014 B/op
+                 gc.count:           ~ 0 counts
+
+Iteration   4: 3875.699 ns/op
+                 gc.alloc.rate:      0.003 MB/sec
+                 gc.alloc.rate.norm: 0.014 B/op
+                 gc.count:           ~ 0 counts
+
+Iteration   5: 3871.495 ns/op
+                 gc.alloc.rate:      0.003 MB/sec
+                 gc.alloc.rate.norm: 0.014 B/op
+                 gc.count:           ~ 0 counts
+
+
+# Run progress: 47.22% complete, ETA 00:05:10
+# Fork: 2 of 2
+CompileCommand: inline io/github/vecbricks/vfdlibm/*.* bool inline = true
+WARNING: Using incubator modules: jdk.incubator.vector
+WARNING: A terminally deprecated method in sun.misc.Unsafe has been called
+WARNING: sun.misc.Unsafe::objectFieldOffset has been called by org.openjdk.jmh.util.Utils (file:/home/runner/.m2/repository/org/openjdk/jmh/jmh-core/1.37/jmh-core-1.37.jar)
+WARNING: Please consider reporting this to the maintainers of class org.openjdk.jmh.util.Utils
+WARNING: sun.misc.Unsafe::objectFieldOffset will be removed in a future release
+# Warmup Iteration   1: 5017.020 ns/op
+# Warmup Iteration   2: 3889.196 ns/op
+# Warmup Iteration   3: 3889.371 ns/op
+Iteration   1: 3916.047 ns/op
+                 gc.alloc.rate:      0.003 MB/sec
+                 gc.alloc.rate.norm: 0.014 B/op
+                 gc.count:           ~ 0 counts
+
+Iteration   2: 3909.409 ns/op
+                 gc.alloc.rate:      0.003 MB/sec
+                 gc.alloc.rate.norm: 0.014 B/op
+                 gc.count:           ~ 0 counts
+
+Iteration   3: 3888.759 ns/op
+                 gc.alloc.rate:      0.003 MB/sec
+                 gc.alloc.rate.norm: 0.014 B/op
+                 gc.count:           ~ 0 counts
+
+Iteration   4: 3895.597 ns/op
+                 gc.alloc.rate:      0.003 MB/sec
+                 gc.alloc.rate.norm: 0.014 B/op
+                 gc.count:           ~ 0 counts
+
+Iteration   5: 3897.819 ns/op
+                 gc.alloc.rate:      0.003 MB/sec
+                 gc.alloc.rate.norm: 0.014 B/op
+                 gc.count:           ~ 0 counts
+
+
+
+Result "io.github.vecbricks.vfdlibm.MathCompareBench.logPreferred":
+  3891.232 +/-(99.9%) 24.624 ns/op [Average]
+  (min, avg, max) = (3865.006, 3891.232, 3916.047), stdev = 16.287
+  CI (99.9%): [3866.608, 3915.855] (assumes normal distribution)
+
+Secondary result "io.github.vecbricks.vfdlibm.MathCompareBench.logPreferred:gc.alloc.rate":
+  0.003 +/-(99.9%) 0.001 MB/sec [Average]
+  (min, avg, max) = (0.003, 0.003, 0.003), stdev = 0.001
+  CI (99.9%): [0.003, 0.003] (assumes normal distribution)
+
+Secondary result "io.github.vecbricks.vfdlibm.MathCompareBench.logPreferred:gc.alloc.rate.norm":
+  0.014 +/-(99.9%) 0.001 B/op [Average]
+  (min, avg, max) = (0.014, 0.014, 0.014), stdev = 0.001
+  CI (99.9%): [0.014, 0.014] (assumes normal distribution)
+
+Secondary result "io.github.vecbricks.vfdlibm.MathCompareBench.logPreferred:gc.count":
+  ~ 0 counts
+
+
+# JMH version: 1.37
+# VM version: JDK 25.0.5.1, OpenJDK 64-Bit Server VM, 25.0.5.1+2-LTS
+# VM invoker: /opt/hostedtoolcache/Java_Zulu_jdk/25.0.5-1.2/x64/bin/java
+# VM options: --add-modules=jdk.incubator.vector -XX:CompileCommand=inline,io.github.vecbricks.vfdlibm.*::*
+# Blackhole mode: compiler (auto-detected, use -Djmh.blackhole.autoDetect=false to disable)
+# Warmup: 3 iterations, 2 s each
+# Measurement: 5 iterations, 2 s each
+# Timeout: 10 min per iteration
+# Threads: 1 thread, will synchronize iterations
+# Benchmark mode: Average time, time/op
+# Benchmark: io.github.vecbricks.vfdlibm.MathCompareBench.logPreferred
+# Parameters: (inputs = mixed)
+
+# Run progress: 50.00% complete, ETA 00:04:53
+# Fork: 1 of 2
+CompileCommand: inline io/github/vecbricks/vfdlibm/*.* bool inline = true
+WARNING: Using incubator modules: jdk.incubator.vector
+WARNING: A terminally deprecated method in sun.misc.Unsafe has been called
+WARNING: sun.misc.Unsafe::objectFieldOffset has been called by org.openjdk.jmh.util.Utils (file:/home/runner/.m2/repository/org/openjdk/jmh/jmh-core/1.37/jmh-core-1.37.jar)
+WARNING: Please consider reporting this to the maintainers of class org.openjdk.jmh.util.Utils
+WARNING: sun.misc.Unsafe::objectFieldOffset will be removed in a future release
+# Warmup Iteration   1: 6443.034 ns/op
+# Warmup Iteration   2: 4713.178 ns/op
+# Warmup Iteration   3: 4994.848 ns/op
+Iteration   1: 5004.119 ns/op
+                 gc.alloc.rate:      0.003 MB/sec
+                 gc.alloc.rate.norm: 0.018 B/op
+                 gc.count:           ~ 0 counts
+
+Iteration   2: 4996.693 ns/op
+                 gc.alloc.rate:      0.003 MB/sec
+                 gc.alloc.rate.norm: 0.017 B/op
+                 gc.count:           ~ 0 counts
+
+Iteration   3: 4997.840 ns/op
+                 gc.alloc.rate:      0.003 MB/sec
+                 gc.alloc.rate.norm: 0.017 B/op
+                 gc.count:           ~ 0 counts
+
+Iteration   4: 4983.097 ns/op
+                 gc.alloc.rate:      0.003 MB/sec
+                 gc.alloc.rate.norm: 0.017 B/op
+                 gc.count:           ~ 0 counts
+
+Iteration   5: 4981.055 ns/op
+                 gc.alloc.rate:      0.003 MB/sec
+                 gc.alloc.rate.norm: 0.017 B/op
+                 gc.count:           ~ 0 counts
+
+
+# Run progress: 52.78% complete, ETA 00:04:37
+# Fork: 2 of 2
+CompileCommand: inline io/github/vecbricks/vfdlibm/*.* bool inline = true
+WARNING: Using incubator modules: jdk.incubator.vector
+WARNING: A terminally deprecated method in sun.misc.Unsafe has been called
+WARNING: sun.misc.Unsafe::objectFieldOffset has been called by org.openjdk.jmh.util.Utils (file:/home/runner/.m2/repository/org/openjdk/jmh/jmh-core/1.37/jmh-core-1.37.jar)
+WARNING: Please consider reporting this to the maintainers of class org.openjdk.jmh.util.Utils
+WARNING: sun.misc.Unsafe::objectFieldOffset will be removed in a future release
+# Warmup Iteration   1: 6509.644 ns/op
+# Warmup Iteration   2: 4748.655 ns/op
+# Warmup Iteration   3: 5022.503 ns/op
+Iteration   1: 5008.927 ns/op
+                 gc.alloc.rate:      0.003 MB/sec
+                 gc.alloc.rate.norm: 0.018 B/op
+                 gc.count:           ~ 0 counts
+
+Iteration   2: 4999.256 ns/op
+                 gc.alloc.rate:      0.003 MB/sec
+                 gc.alloc.rate.norm: 0.017 B/op
+                 gc.count:           ~ 0 counts
+
+Iteration   3: 5031.792 ns/op
+                 gc.alloc.rate:      0.003 MB/sec
+                 gc.alloc.rate.norm: 0.018 B/op
+                 gc.count:           ~ 0 counts
+
+Iteration   4: 5005.043 ns/op
+                 gc.alloc.rate:      0.003 MB/sec
+                 gc.alloc.rate.norm: 0.017 B/op
+                 gc.count:           ~ 0 counts
+
+Iteration   5: 5000.261 ns/op
+                 gc.alloc.rate:      0.003 MB/sec
+                 gc.alloc.rate.norm: 0.017 B/op
+                 gc.count:           ~ 0 counts
+
+
+
+Result "io.github.vecbricks.vfdlibm.MathCompareBench.logPreferred":
+  5000.808 +/-(99.9%) 21.305 ns/op [Average]
+  (min, avg, max) = (4981.055, 5000.808, 5031.792), stdev = 14.092
+  CI (99.9%): [4979.504, 5022.113] (assumes normal distribution)
+
+Secondary result "io.github.vecbricks.vfdlibm.MathCompareBench.logPreferred:gc.alloc.rate":
+  0.003 +/-(99.9%) 0.001 MB/sec [Average]
+  (min, avg, max) = (0.003, 0.003, 0.003), stdev = 0.001
+  CI (99.9%): [0.003, 0.003] (assumes normal distribution)
+
+Secondary result "io.github.vecbricks.vfdlibm.MathCompareBench.logPreferred:gc.alloc.rate.norm":
+  0.017 +/-(99.9%) 0.001 B/op [Average]
+  (min, avg, max) = (0.017, 0.017, 0.018), stdev = 0.001
+  CI (99.9%): [0.017, 0.018] (assumes normal distribution)
+
+Secondary result "io.github.vecbricks.vfdlibm.MathCompareBench.logPreferred:gc.count":
+  ~ 0 counts
+
+
+# JMH version: 1.37
+# VM version: JDK 25.0.5.1, OpenJDK 64-Bit Server VM, 25.0.5.1+2-LTS
+# VM invoker: /opt/hostedtoolcache/Java_Zulu_jdk/25.0.5-1.2/x64/bin/java
+# VM options: --add-modules=jdk.incubator.vector -XX:CompileCommand=inline,io.github.vecbricks.vfdlibm.*::*
+# Blackhole mode: compiler (auto-detected, use -Djmh.blackhole.autoDetect=false to disable)
+# Warmup: 3 iterations, 2 s each
+# Measurement: 5 iterations, 2 s each
+# Timeout: 10 min per iteration
+# Threads: 1 thread, will synchronize iterations
+# Benchmark mode: Average time, time/op
+# Benchmark: io.github.vecbricks.vfdlibm.MathCompareBench.logStrictMath
+# Parameters: (inputs = common)
+
+# Run progress: 55.56% complete, ETA 00:04:21
+# Fork: 1 of 2
+CompileCommand: inline io/github/vecbricks/vfdlibm/*.* bool inline = true
+WARNING: Using incubator modules: jdk.incubator.vector
+WARNING: A terminally deprecated method in sun.misc.Unsafe has been called
+WARNING: sun.misc.Unsafe::objectFieldOffset has been called by org.openjdk.jmh.util.Utils (file:/home/runner/.m2/repository/org/openjdk/jmh/jmh-core/1.37/jmh-core-1.37.jar)
+WARNING: Please consider reporting this to the maintainers of class org.openjdk.jmh.util.Utils
+WARNING: sun.misc.Unsafe::objectFieldOffset will be removed in a future release
+# Warmup Iteration   1: 9426.945 ns/op
+# Warmup Iteration   2: 9372.077 ns/op
+# Warmup Iteration   3: 9395.588 ns/op
+Iteration   1: 9407.118 ns/op
+                 gc.alloc.rate:      0.003 MB/sec
+                 gc.alloc.rate.norm: 0.033 B/op
+                 gc.count:           ~ 0 counts
+
+Iteration   2: 9401.169 ns/op
+                 gc.alloc.rate:      0.003 MB/sec
+                 gc.alloc.rate.norm: 0.033 B/op
+                 gc.count:           ~ 0 counts
+
+Iteration   3: 9492.662 ns/op
+                 gc.alloc.rate:      0.003 MB/sec
+                 gc.alloc.rate.norm: 0.033 B/op
+                 gc.count:           ~ 0 counts
+
+Iteration   4: 9429.578 ns/op
+                 gc.alloc.rate:      0.003 MB/sec
+                 gc.alloc.rate.norm: 0.033 B/op
+                 gc.count:           ~ 0 counts
+
+Iteration   5: 9394.317 ns/op
+                 gc.alloc.rate:      0.003 MB/sec
+                 gc.alloc.rate.norm: 0.033 B/op
+                 gc.count:           ~ 0 counts
+
+
+# Run progress: 58.33% complete, ETA 00:04:04
+# Fork: 2 of 2
+CompileCommand: inline io/github/vecbricks/vfdlibm/*.* bool inline = true
+WARNING: Using incubator modules: jdk.incubator.vector
+WARNING: A terminally deprecated method in sun.misc.Unsafe has been called
+WARNING: sun.misc.Unsafe::objectFieldOffset has been called by org.openjdk.jmh.util.Utils (file:/home/runner/.m2/repository/org/openjdk/jmh/jmh-core/1.37/jmh-core-1.37.jar)
+WARNING: Please consider reporting this to the maintainers of class org.openjdk.jmh.util.Utils
+WARNING: sun.misc.Unsafe::objectFieldOffset will be removed in a future release
+# Warmup Iteration   1: 9424.074 ns/op
+# Warmup Iteration   2: 9432.318 ns/op
+# Warmup Iteration   3: 9528.520 ns/op
+Iteration   1: 9461.604 ns/op
+                 gc.alloc.rate:      0.003 MB/sec
+                 gc.alloc.rate.norm: 0.033 B/op
+                 gc.count:           ~ 0 counts
+
+Iteration   2: 9462.614 ns/op
+                 gc.alloc.rate:      0.003 MB/sec
+                 gc.alloc.rate.norm: 0.033 B/op
+                 gc.count:           ~ 0 counts
+
+Iteration   3: 9479.986 ns/op
+                 gc.alloc.rate:      0.003 MB/sec
+                 gc.alloc.rate.norm: 0.033 B/op
+                 gc.count:           ~ 0 counts
+
+Iteration   4: 9455.739 ns/op
+                 gc.alloc.rate:      0.003 MB/sec
+                 gc.alloc.rate.norm: 0.033 B/op
+                 gc.count:           ~ 0 counts
+
+Iteration   5: 9414.239 ns/op
+                 gc.alloc.rate:      0.003 MB/sec
+                 gc.alloc.rate.norm: 0.033 B/op
+                 gc.count:           ~ 0 counts
+
+
+
+Result "io.github.vecbricks.vfdlibm.MathCompareBench.logStrictMath":
+  9439.903 +/-(99.9%) 52.966 ns/op [Average]
+  (min, avg, max) = (9394.317, 9439.903, 9492.662), stdev = 35.034
+  CI (99.9%): [9386.937, 9492.868] (assumes normal distribution)
+
+Secondary result "io.github.vecbricks.vfdlibm.MathCompareBench.logStrictMath:gc.alloc.rate":
+  0.003 +/-(99.9%) 0.001 MB/sec [Average]
+  (min, avg, max) = (0.003, 0.003, 0.003), stdev = 0.001
+  CI (99.9%): [0.003, 0.003] (assumes normal distribution)
+
+Secondary result "io.github.vecbricks.vfdlibm.MathCompareBench.logStrictMath:gc.alloc.rate.norm":
+  0.033 +/-(99.9%) 0.001 B/op [Average]
+  (min, avg, max) = (0.033, 0.033, 0.033), stdev = 0.001
+  CI (99.9%): [0.033, 0.033] (assumes normal distribution)
+
+Secondary result "io.github.vecbricks.vfdlibm.MathCompareBench.logStrictMath:gc.count":
+  ~ 0 counts
+
+
+# JMH version: 1.37
+# VM version: JDK 25.0.5.1, OpenJDK 64-Bit Server VM, 25.0.5.1+2-LTS
+# VM invoker: /opt/hostedtoolcache/Java_Zulu_jdk/25.0.5-1.2/x64/bin/java
+# VM options: --add-modules=jdk.incubator.vector -XX:CompileCommand=inline,io.github.vecbricks.vfdlibm.*::*
+# Blackhole mode: compiler (auto-detected, use -Djmh.blackhole.autoDetect=false to disable)
+# Warmup: 3 iterations, 2 s each
+# Measurement: 5 iterations, 2 s each
+# Timeout: 10 min per iteration
+# Threads: 1 thread, will synchronize iterations
+# Benchmark mode: Average time, time/op
+# Benchmark: io.github.vecbricks.vfdlibm.MathCompareBench.logStrictMath
+# Parameters: (inputs = mixed)
+
+# Run progress: 61.11% complete, ETA 00:03:48
+# Fork: 1 of 2
+CompileCommand: inline io/github/vecbricks/vfdlibm/*.* bool inline = true
+WARNING: Using incubator modules: jdk.incubator.vector
+WARNING: A terminally deprecated method in sun.misc.Unsafe has been called
+WARNING: sun.misc.Unsafe::objectFieldOffset has been called by org.openjdk.jmh.util.Utils (file:/home/runner/.m2/repository/org/openjdk/jmh/jmh-core/1.37/jmh-core-1.37.jar)
+WARNING: Please consider reporting this to the maintainers of class org.openjdk.jmh.util.Utils
+WARNING: sun.misc.Unsafe::objectFieldOffset will be removed in a future release
+# Warmup Iteration   1: 9689.624 ns/op
+# Warmup Iteration   2: 9744.916 ns/op
+# Warmup Iteration   3: 9766.770 ns/op
+Iteration   1: 9795.826 ns/op
+                 gc.alloc.rate:      0.003 MB/sec
+                 gc.alloc.rate.norm: 0.034 B/op
+                 gc.count:           ~ 0 counts
+
+Iteration   2: 9726.558 ns/op
+                 gc.alloc.rate:      0.003 MB/sec
+                 gc.alloc.rate.norm: 0.034 B/op
+                 gc.count:           ~ 0 counts
+
+Iteration   3: 9731.167 ns/op
+                 gc.alloc.rate:      0.003 MB/sec
+                 gc.alloc.rate.norm: 0.034 B/op
+                 gc.count:           ~ 0 counts
+
+Iteration   4: 9730.066 ns/op
+                 gc.alloc.rate:      0.003 MB/sec
+                 gc.alloc.rate.norm: 0.034 B/op
+                 gc.count:           ~ 0 counts
+
+Iteration   5: 9808.661 ns/op
+                 gc.alloc.rate:      0.003 MB/sec
+                 gc.alloc.rate.norm: 0.034 B/op
+                 gc.count:           ~ 0 counts
+
+
+# Run progress: 63.89% complete, ETA 00:03:32
+# Fork: 2 of 2
+CompileCommand: inline io/github/vecbricks/vfdlibm/*.* bool inline = true
+WARNING: Using incubator modules: jdk.incubator.vector
+WARNING: A terminally deprecated method in sun.misc.Unsafe has been called
+WARNING: sun.misc.Unsafe::objectFieldOffset has been called by org.openjdk.jmh.util.Utils (file:/home/runner/.m2/repository/org/openjdk/jmh/jmh-core/1.37/jmh-core-1.37.jar)
+WARNING: Please consider reporting this to the maintainers of class org.openjdk.jmh.util.Utils
+WARNING: sun.misc.Unsafe::objectFieldOffset will be removed in a future release
+# Warmup Iteration   1: 9760.797 ns/op
+# Warmup Iteration   2: 9710.392 ns/op
+# Warmup Iteration   3: 9692.079 ns/op
+Iteration   1: 9712.978 ns/op
+                 gc.alloc.rate:      0.003 MB/sec
+                 gc.alloc.rate.norm: 0.034 B/op
+                 gc.count:           ~ 0 counts
+
+Iteration   2: 9764.678 ns/op
+                 gc.alloc.rate:      0.003 MB/sec
+                 gc.alloc.rate.norm: 0.034 B/op
+                 gc.count:           ~ 0 counts
+
+Iteration   3: 9736.227 ns/op
+                 gc.alloc.rate:      0.003 MB/sec
+                 gc.alloc.rate.norm: 0.034 B/op
+                 gc.count:           ~ 0 counts
+
+Iteration   4: 9773.132 ns/op
+                 gc.alloc.rate:      0.003 MB/sec
+                 gc.alloc.rate.norm: 0.034 B/op
+                 gc.count:           ~ 0 counts
+
+Iteration   5: 9711.821 ns/op
+                 gc.alloc.rate:      0.003 MB/sec
+                 gc.alloc.rate.norm: 0.034 B/op
+                 gc.count:           ~ 0 counts
+
+
+
+Result "io.github.vecbricks.vfdlibm.MathCompareBench.logStrictMath":
+  9749.111 +/-(99.9%) 51.893 ns/op [Average]
+  (min, avg, max) = (9711.821, 9749.111, 9808.661), stdev = 34.324
+  CI (99.9%): [9697.218, 9801.005] (assumes normal distribution)
+
+Secondary result "io.github.vecbricks.vfdlibm.MathCompareBench.logStrictMath:gc.alloc.rate":
+  0.003 +/-(99.9%) 0.001 MB/sec [Average]
+  (min, avg, max) = (0.003, 0.003, 0.003), stdev = 0.001
+  CI (99.9%): [0.003, 0.003] (assumes normal distribution)
+
+Secondary result "io.github.vecbricks.vfdlibm.MathCompareBench.logStrictMath:gc.alloc.rate.norm":
+  0.034 +/-(99.9%) 0.001 B/op [Average]
+  (min, avg, max) = (0.034, 0.034, 0.034), stdev = 0.001
+  CI (99.9%): [0.034, 0.034] (assumes normal distribution)
+
+Secondary result "io.github.vecbricks.vfdlibm.MathCompareBench.logStrictMath:gc.count":
+  ~ 0 counts
+
+
+# JMH version: 1.37
+# VM version: JDK 25.0.5.1, OpenJDK 64-Bit Server VM, 25.0.5.1+2-LTS
+# VM invoker: /opt/hostedtoolcache/Java_Zulu_jdk/25.0.5-1.2/x64/bin/java
+# VM options: --add-modules=jdk.incubator.vector -XX:CompileCommand=inline,io.github.vecbricks.vfdlibm.*::*
+# Blackhole mode: compiler (auto-detected, use -Djmh.blackhole.autoDetect=false to disable)
+# Warmup: 3 iterations, 2 s each
+# Measurement: 5 iterations, 2 s each
+# Timeout: 10 min per iteration
+# Threads: 1 thread, will synchronize iterations
+# Benchmark mode: Average time, time/op
+# Benchmark: io.github.vecbricks.vfdlibm.MathCompareBench.powMath
+# Parameters: (inputs = common)
+
+# Run progress: 66.67% complete, ETA 00:03:15
+# Fork: 1 of 2
+CompileCommand: inline io/github/vecbricks/vfdlibm/*.* bool inline = true
+WARNING: Using incubator modules: jdk.incubator.vector
+WARNING: A terminally deprecated method in sun.misc.Unsafe has been called
+WARNING: sun.misc.Unsafe::objectFieldOffset has been called by org.openjdk.jmh.util.Utils (file:/home/runner/.m2/repository/org/openjdk/jmh/jmh-core/1.37/jmh-core-1.37.jar)
+WARNING: Please consider reporting this to the maintainers of class org.openjdk.jmh.util.Utils
+WARNING: sun.misc.Unsafe::objectFieldOffset will be removed in a future release
+# Warmup Iteration   1: 15432.505 ns/op
+# Warmup Iteration   2: 15248.789 ns/op
+# Warmup Iteration   3: 15517.519 ns/op
+Iteration   1: 15481.331 ns/op
+                 gc.alloc.rate:      0.003 MB/sec
+                 gc.alloc.rate.norm: 0.054 B/op
+                 gc.count:           ~ 0 counts
+
+Iteration   2: 15495.361 ns/op
+                 gc.alloc.rate:      0.003 MB/sec
+                 gc.alloc.rate.norm: 0.054 B/op
+                 gc.count:           ~ 0 counts
+
+Iteration   3: 15913.237 ns/op
+                 gc.alloc.rate:      0.003 MB/sec
+                 gc.alloc.rate.norm: 0.056 B/op
+                 gc.count:           ~ 0 counts
+
+Iteration   4: 15487.150 ns/op
+                 gc.alloc.rate:      0.003 MB/sec
+                 gc.alloc.rate.norm: 0.054 B/op
+                 gc.count:           ~ 0 counts
+
+Iteration   5: 15497.733 ns/op
+                 gc.alloc.rate:      0.003 MB/sec
+                 gc.alloc.rate.norm: 0.054 B/op
+                 gc.count:           ~ 0 counts
+
+
+# Run progress: 69.44% complete, ETA 00:02:59
+# Fork: 2 of 2
+CompileCommand: inline io/github/vecbricks/vfdlibm/*.* bool inline = true
+WARNING: Using incubator modules: jdk.incubator.vector
+WARNING: A terminally deprecated method in sun.misc.Unsafe has been called
+WARNING: sun.misc.Unsafe::objectFieldOffset has been called by org.openjdk.jmh.util.Utils (file:/home/runner/.m2/repository/org/openjdk/jmh/jmh-core/1.37/jmh-core-1.37.jar)
+WARNING: Please consider reporting this to the maintainers of class org.openjdk.jmh.util.Utils
+WARNING: sun.misc.Unsafe::objectFieldOffset will be removed in a future release
+# Warmup Iteration   1: 15394.852 ns/op
+# Warmup Iteration   2: 15306.061 ns/op
+# Warmup Iteration   3: 15577.976 ns/op
+Iteration   1: 15541.764 ns/op
+                 gc.alloc.rate:      0.003 MB/sec
+                 gc.alloc.rate.norm: 0.054 B/op
+                 gc.count:           ~ 0 counts
+
+Iteration   2: 15546.119 ns/op
+                 gc.alloc.rate:      0.003 MB/sec
+                 gc.alloc.rate.norm: 0.054 B/op
+                 gc.count:           ~ 0 counts
+
+Iteration   3: 15526.088 ns/op
+                 gc.alloc.rate:      0.003 MB/sec
+                 gc.alloc.rate.norm: 0.054 B/op
+                 gc.count:           ~ 0 counts
+
+Iteration   4: 15522.713 ns/op
+                 gc.alloc.rate:      0.003 MB/sec
+                 gc.alloc.rate.norm: 0.054 B/op
+                 gc.count:           ~ 0 counts
+
+Iteration   5: 15527.325 ns/op
+                 gc.alloc.rate:      0.003 MB/sec
+                 gc.alloc.rate.norm: 0.054 B/op
+                 gc.count:           ~ 0 counts
+
+
+
+Result "io.github.vecbricks.vfdlibm.MathCompareBench.powMath":
+  15553.882 +/-(99.9%) 193.931 ns/op [Average]
+  (min, avg, max) = (15481.331, 15553.882, 15913.237), stdev = 128.273
+  CI (99.9%): [15359.951, 15747.813] (assumes normal distribution)
+
+Secondary result "io.github.vecbricks.vfdlibm.MathCompareBench.powMath:gc.alloc.rate":
+  0.003 +/-(99.9%) 0.001 MB/sec [Average]
+  (min, avg, max) = (0.003, 0.003, 0.003), stdev = 0.001
+  CI (99.9%): [0.003, 0.003] (assumes normal distribution)
+
+Secondary result "io.github.vecbricks.vfdlibm.MathCompareBench.powMath:gc.alloc.rate.norm":
+  0.054 +/-(99.9%) 0.001 B/op [Average]
+  (min, avg, max) = (0.054, 0.054, 0.056), stdev = 0.001
+  CI (99.9%): [0.054, 0.055] (assumes normal distribution)
+
+Secondary result "io.github.vecbricks.vfdlibm.MathCompareBench.powMath:gc.count":
+  ~ 0 counts
+
+
+# JMH version: 1.37
+# VM version: JDK 25.0.5.1, OpenJDK 64-Bit Server VM, 25.0.5.1+2-LTS
+# VM invoker: /opt/hostedtoolcache/Java_Zulu_jdk/25.0.5-1.2/x64/bin/java
+# VM options: --add-modules=jdk.incubator.vector -XX:CompileCommand=inline,io.github.vecbricks.vfdlibm.*::*
+# Blackhole mode: compiler (auto-detected, use -Djmh.blackhole.autoDetect=false to disable)
+# Warmup: 3 iterations, 2 s each
+# Measurement: 5 iterations, 2 s each
+# Timeout: 10 min per iteration
+# Threads: 1 thread, will synchronize iterations
+# Benchmark mode: Average time, time/op
+# Benchmark: io.github.vecbricks.vfdlibm.MathCompareBench.powMath
+# Parameters: (inputs = mixed)
+
+# Run progress: 72.22% complete, ETA 00:02:43
+# Fork: 1 of 2
+CompileCommand: inline io/github/vecbricks/vfdlibm/*.* bool inline = true
+WARNING: Using incubator modules: jdk.incubator.vector
+WARNING: A terminally deprecated method in sun.misc.Unsafe has been called
+WARNING: sun.misc.Unsafe::objectFieldOffset has been called by org.openjdk.jmh.util.Utils (file:/home/runner/.m2/repository/org/openjdk/jmh/jmh-core/1.37/jmh-core-1.37.jar)
+WARNING: Please consider reporting this to the maintainers of class org.openjdk.jmh.util.Utils
+WARNING: sun.misc.Unsafe::objectFieldOffset will be removed in a future release
+# Warmup Iteration   1: 15895.284 ns/op
+# Warmup Iteration   2: 15633.761 ns/op
+# Warmup Iteration   3: 15908.252 ns/op
+Iteration   1: 15915.549 ns/op
+                 gc.alloc.rate:      0.003 MB/sec
+                 gc.alloc.rate.norm: 0.056 B/op
+                 gc.count:           ~ 0 counts
+
+Iteration   2: 15962.240 ns/op
+                 gc.alloc.rate:      0.003 MB/sec
+                 gc.alloc.rate.norm: 0.056 B/op
+                 gc.count:           ~ 0 counts
+
+Iteration   3: 15868.044 ns/op
+                 gc.alloc.rate:      0.003 MB/sec
+                 gc.alloc.rate.norm: 0.056 B/op
+                 gc.count:           ~ 0 counts
+
+Iteration   4: 15904.215 ns/op
+                 gc.alloc.rate:      0.003 MB/sec
+                 gc.alloc.rate.norm: 0.056 B/op
+                 gc.count:           ~ 0 counts
+
+Iteration   5: 15859.328 ns/op
+                 gc.alloc.rate:      0.003 MB/sec
+                 gc.alloc.rate.norm: 0.056 B/op
+                 gc.count:           ~ 0 counts
+
+
+# Run progress: 75.00% complete, ETA 00:02:26
+# Fork: 2 of 2
+CompileCommand: inline io/github/vecbricks/vfdlibm/*.* bool inline = true
+WARNING: Using incubator modules: jdk.incubator.vector
+WARNING: A terminally deprecated method in sun.misc.Unsafe has been called
+WARNING: sun.misc.Unsafe::objectFieldOffset has been called by org.openjdk.jmh.util.Utils (file:/home/runner/.m2/repository/org/openjdk/jmh/jmh-core/1.37/jmh-core-1.37.jar)
+WARNING: Please consider reporting this to the maintainers of class org.openjdk.jmh.util.Utils
+WARNING: sun.misc.Unsafe::objectFieldOffset will be removed in a future release
+# Warmup Iteration   1: 15812.100 ns/op
+# Warmup Iteration   2: 15658.104 ns/op
+# Warmup Iteration   3: 15950.214 ns/op
+Iteration   1: 15864.021 ns/op
+                 gc.alloc.rate:      0.003 MB/sec
+                 gc.alloc.rate.norm: 0.056 B/op
+                 gc.count:           ~ 0 counts
+
+Iteration   2: 15906.625 ns/op
+                 gc.alloc.rate:      0.003 MB/sec
+                 gc.alloc.rate.norm: 0.056 B/op
+                 gc.count:           ~ 0 counts
+
+Iteration   3: 15867.978 ns/op
+                 gc.alloc.rate:      0.003 MB/sec
+                 gc.alloc.rate.norm: 0.056 B/op
+                 gc.count:           ~ 0 counts
+
+Iteration   4: 16023.901 ns/op
+                 gc.alloc.rate:      0.003 MB/sec
+                 gc.alloc.rate.norm: 0.056 B/op
+                 gc.count:           ~ 0 counts
+
+Iteration   5: 15897.697 ns/op
+                 gc.alloc.rate:      0.003 MB/sec
+                 gc.alloc.rate.norm: 0.056 B/op
+                 gc.count:           ~ 0 counts
+
+
+
+Result "io.github.vecbricks.vfdlibm.MathCompareBench.powMath":
+  15906.960 +/-(99.9%) 78.145 ns/op [Average]
+  (min, avg, max) = (15859.328, 15906.960, 16023.901), stdev = 51.688
+  CI (99.9%): [15828.815, 15985.105] (assumes normal distribution)
+
+Secondary result "io.github.vecbricks.vfdlibm.MathCompareBench.powMath:gc.alloc.rate":
+  0.003 +/-(99.9%) 0.001 MB/sec [Average]
+  (min, avg, max) = (0.003, 0.003, 0.003), stdev = 0.001
+  CI (99.9%): [0.003, 0.003] (assumes normal distribution)
+
+Secondary result "io.github.vecbricks.vfdlibm.MathCompareBench.powMath:gc.alloc.rate.norm":
+  0.056 +/-(99.9%) 0.001 B/op [Average]
+  (min, avg, max) = (0.056, 0.056, 0.056), stdev = 0.001
+  CI (99.9%): [0.055, 0.056] (assumes normal distribution)
+
+Secondary result "io.github.vecbricks.vfdlibm.MathCompareBench.powMath:gc.count":
+  ~ 0 counts
+
+
+# JMH version: 1.37
+# VM version: JDK 25.0.5.1, OpenJDK 64-Bit Server VM, 25.0.5.1+2-LTS
+# VM invoker: /opt/hostedtoolcache/Java_Zulu_jdk/25.0.5-1.2/x64/bin/java
+# VM options: --add-modules=jdk.incubator.vector -XX:CompileCommand=inline,io.github.vecbricks.vfdlibm.*::*
+# Blackhole mode: compiler (auto-detected, use -Djmh.blackhole.autoDetect=false to disable)
+# Warmup: 3 iterations, 2 s each
+# Measurement: 5 iterations, 2 s each
+# Timeout: 10 min per iteration
+# Threads: 1 thread, will synchronize iterations
+# Benchmark mode: Average time, time/op
+# Benchmark: io.github.vecbricks.vfdlibm.MathCompareBench.powPreferred
+# Parameters: (inputs = common)
+
+# Run progress: 77.78% complete, ETA 00:02:10
+# Fork: 1 of 2
+CompileCommand: inline io/github/vecbricks/vfdlibm/*.* bool inline = true
+WARNING: Using incubator modules: jdk.incubator.vector
+WARNING: A terminally deprecated method in sun.misc.Unsafe has been called
+WARNING: sun.misc.Unsafe::objectFieldOffset has been called by org.openjdk.jmh.util.Utils (file:/home/runner/.m2/repository/org/openjdk/jmh/jmh-core/1.37/jmh-core-1.37.jar)
+WARNING: Please consider reporting this to the maintainers of class org.openjdk.jmh.util.Utils
+WARNING: sun.misc.Unsafe::objectFieldOffset will be removed in a future release
+# Warmup Iteration   1: 43632.087 ns/op
+# Warmup Iteration   2: 20384.476 ns/op
+# Warmup Iteration   3: 20674.239 ns/op
+Iteration   1: 20237.748 ns/op
+                 gc.alloc.rate:      0.003 MB/sec
+                 gc.alloc.rate.norm: 0.071 B/op
+                 gc.count:           ~ 0 counts
+
+Iteration   2: 20140.969 ns/op
+                 gc.alloc.rate:      0.003 MB/sec
+                 gc.alloc.rate.norm: 0.070 B/op
+                 gc.count:           ~ 0 counts
+
+Iteration   3: 20147.718 ns/op
+                 gc.alloc.rate:      0.003 MB/sec
+                 gc.alloc.rate.norm: 0.071 B/op
+                 gc.count:           ~ 0 counts
+
+Iteration   4: 20150.656 ns/op
+                 gc.alloc.rate:      0.003 MB/sec
+                 gc.alloc.rate.norm: 0.071 B/op
+                 gc.count:           ~ 0 counts
+
+Iteration   5: 20159.145 ns/op
+                 gc.alloc.rate:      0.003 MB/sec
+                 gc.alloc.rate.norm: 0.070 B/op
+                 gc.count:           ~ 0 counts
+
+
+# Run progress: 80.56% complete, ETA 00:01:54
+# Fork: 2 of 2
+CompileCommand: inline io/github/vecbricks/vfdlibm/*.* bool inline = true
+WARNING: Using incubator modules: jdk.incubator.vector
+WARNING: A terminally deprecated method in sun.misc.Unsafe has been called
+WARNING: sun.misc.Unsafe::objectFieldOffset has been called by org.openjdk.jmh.util.Utils (file:/home/runner/.m2/repository/org/openjdk/jmh/jmh-core/1.37/jmh-core-1.37.jar)
+WARNING: Please consider reporting this to the maintainers of class org.openjdk.jmh.util.Utils
+WARNING: sun.misc.Unsafe::objectFieldOffset will be removed in a future release
+# Warmup Iteration   1: 39405.805 ns/op
+# Warmup Iteration   2: 20473.060 ns/op
+# Warmup Iteration   3: 20482.216 ns/op
+Iteration   1: 20262.564 ns/op
+                 gc.alloc.rate:      0.003 MB/sec
+                 gc.alloc.rate.norm: 0.071 B/op
+                 gc.count:           ~ 0 counts
+
+Iteration   2: 20260.258 ns/op
+                 gc.alloc.rate:      0.003 MB/sec
+                 gc.alloc.rate.norm: 0.071 B/op
+                 gc.count:           ~ 0 counts
+
+Iteration   3: 20337.471 ns/op
+                 gc.alloc.rate:      0.003 MB/sec
+                 gc.alloc.rate.norm: 0.071 B/op
+                 gc.count:           ~ 0 counts
+
+Iteration   4: 20265.487 ns/op
+                 gc.alloc.rate:      0.003 MB/sec
+                 gc.alloc.rate.norm: 0.071 B/op
+                 gc.count:           ~ 0 counts
+
+Iteration   5: 20266.313 ns/op
+                 gc.alloc.rate:      0.003 MB/sec
+                 gc.alloc.rate.norm: 0.071 B/op
+                 gc.count:           ~ 0 counts
+
+
+
+Result "io.github.vecbricks.vfdlibm.MathCompareBench.powPreferred":
+  20222.833 +/-(99.9%) 102.865 ns/op [Average]
+  (min, avg, max) = (20140.969, 20222.833, 20337.471), stdev = 68.039
+  CI (99.9%): [20119.968, 20325.697] (assumes normal distribution)
+
+Secondary result "io.github.vecbricks.vfdlibm.MathCompareBench.powPreferred:gc.alloc.rate":
+  0.003 +/-(99.9%) 0.001 MB/sec [Average]
+  (min, avg, max) = (0.003, 0.003, 0.003), stdev = 0.001
+  CI (99.9%): [0.003, 0.003] (assumes normal distribution)
+
+Secondary result "io.github.vecbricks.vfdlibm.MathCompareBench.powPreferred:gc.alloc.rate.norm":
+  0.071 +/-(99.9%) 0.001 B/op [Average]
+  (min, avg, max) = (0.070, 0.071, 0.071), stdev = 0.001
+  CI (99.9%): [0.070, 0.071] (assumes normal distribution)
+
+Secondary result "io.github.vecbricks.vfdlibm.MathCompareBench.powPreferred:gc.count":
+  ~ 0 counts
+
+
+# JMH version: 1.37
+# VM version: JDK 25.0.5.1, OpenJDK 64-Bit Server VM, 25.0.5.1+2-LTS
+# VM invoker: /opt/hostedtoolcache/Java_Zulu_jdk/25.0.5-1.2/x64/bin/java
+# VM options: --add-modules=jdk.incubator.vector -XX:CompileCommand=inline,io.github.vecbricks.vfdlibm.*::*
+# Blackhole mode: compiler (auto-detected, use -Djmh.blackhole.autoDetect=false to disable)
+# Warmup: 3 iterations, 2 s each
+# Measurement: 5 iterations, 2 s each
+# Timeout: 10 min per iteration
+# Threads: 1 thread, will synchronize iterations
+# Benchmark mode: Average time, time/op
+# Benchmark: io.github.vecbricks.vfdlibm.MathCompareBench.powPreferred
+# Parameters: (inputs = mixed)
+
+# Run progress: 83.33% complete, ETA 00:01:37
+# Fork: 1 of 2
+CompileCommand: inline io/github/vecbricks/vfdlibm/*.* bool inline = true
+WARNING: Using incubator modules: jdk.incubator.vector
+WARNING: A terminally deprecated method in sun.misc.Unsafe has been called
+WARNING: sun.misc.Unsafe::objectFieldOffset has been called by org.openjdk.jmh.util.Utils (file:/home/runner/.m2/repository/org/openjdk/jmh/jmh-core/1.37/jmh-core-1.37.jar)
+WARNING: Please consider reporting this to the maintainers of class org.openjdk.jmh.util.Utils
+WARNING: sun.misc.Unsafe::objectFieldOffset will be removed in a future release
+# Warmup Iteration   1: 49193.333 ns/op
+# Warmup Iteration   2: 22919.895 ns/op
+# Warmup Iteration   3: 22706.919 ns/op
+Iteration   1: 22812.506 ns/op
+                 gc.alloc.rate:      76.246 MB/sec
+                 gc.alloc.rate.norm: 1824.080 B/op
+                 gc.count:           1.000 counts
+                 gc.time:            2.000 ms
+
+Iteration   2: 22699.080 ns/op
+                 gc.alloc.rate:      76.628 MB/sec
+                 gc.alloc.rate.norm: 1824.080 B/op
+                 gc.count:           1.000 counts
+                 gc.time:            3.000 ms
+
+Iteration   3: 22717.752 ns/op
+                 gc.alloc.rate:      76.561 MB/sec
+                 gc.alloc.rate.norm: 1824.080 B/op
+                 gc.count:           ~ 0 counts
+
+Iteration   4: 22751.456 ns/op
+                 gc.alloc.rate:      76.451 MB/sec
+                 gc.alloc.rate.norm: 1824.080 B/op
+                 gc.count:           1.000 counts
+                 gc.time:            2.000 ms
+
+Iteration   5: 22753.156 ns/op
+                 gc.alloc.rate:      76.437 MB/sec
+                 gc.alloc.rate.norm: 1824.080 B/op
+                 gc.count:           1.000 counts
+                 gc.time:            2.000 ms
+
+
+# Run progress: 86.11% complete, ETA 00:01:21
+# Fork: 2 of 2
+CompileCommand: inline io/github/vecbricks/vfdlibm/*.* bool inline = true
+WARNING: Using incubator modules: jdk.incubator.vector
+WARNING: A terminally deprecated method in sun.misc.Unsafe has been called
+WARNING: sun.misc.Unsafe::objectFieldOffset has been called by org.openjdk.jmh.util.Utils (file:/home/runner/.m2/repository/org/openjdk/jmh/jmh-core/1.37/jmh-core-1.37.jar)
+WARNING: Please consider reporting this to the maintainers of class org.openjdk.jmh.util.Utils
+WARNING: sun.misc.Unsafe::objectFieldOffset will be removed in a future release
+# Warmup Iteration   1: 48845.111 ns/op
+# Warmup Iteration   2: 23549.358 ns/op
+# Warmup Iteration   3: 22722.584 ns/op
+Iteration   1: 22695.794 ns/op
+                 gc.alloc.rate:      76.636 MB/sec
+                 gc.alloc.rate.norm: 1824.079 B/op
+                 gc.count:           ~ 0 counts
+
+Iteration   2: 22725.982 ns/op
+                 gc.alloc.rate:      76.536 MB/sec
+                 gc.alloc.rate.norm: 1824.080 B/op
+                 gc.count:           1.000 counts
+                 gc.time:            3.000 ms
+
+Iteration   3: 22899.888 ns/op
+                 gc.alloc.rate:      75.952 MB/sec
+                 gc.alloc.rate.norm: 1824.080 B/op
+                 gc.count:           ~ 0 counts
+
+Iteration   4: 22710.920 ns/op
+                 gc.alloc.rate:      76.587 MB/sec
+                 gc.alloc.rate.norm: 1824.080 B/op
+                 gc.count:           1.000 counts
+                 gc.time:            3.000 ms
+
+Iteration   5: 22692.003 ns/op
+                 gc.alloc.rate:      76.643 MB/sec
+                 gc.alloc.rate.norm: 1824.080 B/op
+                 gc.count:           1.000 counts
+                 gc.time:            2.000 ms
+
+
+
+Result "io.github.vecbricks.vfdlibm.MathCompareBench.powPreferred":
+  22745.854 +/-(99.9%) 98.564 ns/op [Average]
+  (min, avg, max) = (22692.003, 22745.854, 22899.888), stdev = 65.194
+  CI (99.9%): [22647.290, 22844.418] (assumes normal distribution)
+
+Secondary result "io.github.vecbricks.vfdlibm.MathCompareBench.powPreferred:gc.alloc.rate":
+  76.468 +/-(99.9%) 0.330 MB/sec [Average]
+  (min, avg, max) = (75.952, 76.468, 76.643), stdev = 0.218
+  CI (99.9%): [76.138, 76.798] (assumes normal distribution)
+
+Secondary result "io.github.vecbricks.vfdlibm.MathCompareBench.powPreferred:gc.alloc.rate.norm":
+  1824.080 +/-(99.9%) 0.001 B/op [Average]
+  (min, avg, max) = (1824.079, 1824.080, 1824.080), stdev = 0.001
+  CI (99.9%): [1824.080, 1824.081] (assumes normal distribution)
+
+Secondary result "io.github.vecbricks.vfdlibm.MathCompareBench.powPreferred:gc.count":
+  7.000 +/-(99.9%) 0.001 counts [Sum]
+  (min, avg, max) = (~ 0, 0.700, 1.000), stdev = 0.483
+  CI (99.9%): [7.000, 7.000] (assumes normal distribution)
+
+Secondary result "io.github.vecbricks.vfdlibm.MathCompareBench.powPreferred:gc.time":
+  17.000 +/-(99.9%) 0.001 ms [Sum]
+  (min, avg, max) = (~ 0, 1.700, 3.000), stdev = 1.252
+  CI (99.9%): [17.000, 17.000] (assumes normal distribution)
+
+
+# JMH version: 1.37
+# VM version: JDK 25.0.5.1, OpenJDK 64-Bit Server VM, 25.0.5.1+2-LTS
+# VM invoker: /opt/hostedtoolcache/Java_Zulu_jdk/25.0.5-1.2/x64/bin/java
+# VM options: --add-modules=jdk.incubator.vector -XX:CompileCommand=inline,io.github.vecbricks.vfdlibm.*::*
+# Blackhole mode: compiler (auto-detected, use -Djmh.blackhole.autoDetect=false to disable)
+# Warmup: 3 iterations, 2 s each
+# Measurement: 5 iterations, 2 s each
+# Timeout: 10 min per iteration
+# Threads: 1 thread, will synchronize iterations
+# Benchmark mode: Average time, time/op
+# Benchmark: io.github.vecbricks.vfdlibm.MathCompareBench.powStrictMath
+# Parameters: (inputs = common)
+
+# Run progress: 88.89% complete, ETA 00:01:05
+# Fork: 1 of 2
+CompileCommand: inline io/github/vecbricks/vfdlibm/*.* bool inline = true
+WARNING: Using incubator modules: jdk.incubator.vector
+WARNING: A terminally deprecated method in sun.misc.Unsafe has been called
+WARNING: sun.misc.Unsafe::objectFieldOffset has been called by org.openjdk.jmh.util.Utils (file:/home/runner/.m2/repository/org/openjdk/jmh/jmh-core/1.37/jmh-core-1.37.jar)
+WARNING: Please consider reporting this to the maintainers of class org.openjdk.jmh.util.Utils
+WARNING: sun.misc.Unsafe::objectFieldOffset will be removed in a future release
+# Warmup Iteration   1: 104676.362 ns/op
+# Warmup Iteration   2: 98486.334 ns/op
+# Warmup Iteration   3: 98224.467 ns/op
+Iteration   1: 98139.072 ns/op
+                 gc.alloc.rate:      955.150 MB/sec
+                 gc.alloc.rate.norm: 98304.346 B/op
+                 gc.count:           10.000 counts
+                 gc.time:            7.000 ms
+
+Iteration   2: 98203.434 ns/op
+                 gc.alloc.rate:      954.545 MB/sec
+                 gc.alloc.rate.norm: 98304.346 B/op
+                 gc.count:           11.000 counts
+                 gc.time:            7.000 ms
+
+Iteration   3: 98120.321 ns/op
+                 gc.alloc.rate:      955.298 MB/sec
+                 gc.alloc.rate.norm: 98304.351 B/op
+                 gc.count:           11.000 counts
+                 gc.time:            6.000 ms
+
+Iteration   4: 97934.125 ns/op
+                 gc.alloc.rate:      957.148 MB/sec
+                 gc.alloc.rate.norm: 98304.345 B/op
+                 gc.count:           10.000 counts
+                 gc.time:            5.000 ms
+
+Iteration   5: 98043.462 ns/op
+                 gc.alloc.rate:      956.052 MB/sec
+                 gc.alloc.rate.norm: 98304.346 B/op
+                 gc.count:           11.000 counts
+                 gc.time:            8.000 ms
+
+
+# Run progress: 91.67% complete, ETA 00:00:48
+# Fork: 2 of 2
+CompileCommand: inline io/github/vecbricks/vfdlibm/*.* bool inline = true
+WARNING: Using incubator modules: jdk.incubator.vector
+WARNING: A terminally deprecated method in sun.misc.Unsafe has been called
+WARNING: sun.misc.Unsafe::objectFieldOffset has been called by org.openjdk.jmh.util.Utils (file:/home/runner/.m2/repository/org/openjdk/jmh/jmh-core/1.37/jmh-core-1.37.jar)
+WARNING: Please consider reporting this to the maintainers of class org.openjdk.jmh.util.Utils
+WARNING: sun.misc.Unsafe::objectFieldOffset will be removed in a future release
+# Warmup Iteration   1: 103579.483 ns/op
+# Warmup Iteration   2: 98434.704 ns/op
+# Warmup Iteration   3: 98269.886 ns/op
+Iteration   1: 98232.456 ns/op
+                 gc.alloc.rate:      954.253 MB/sec
+                 gc.alloc.rate.norm: 98304.347 B/op
+                 gc.count:           11.000 counts
+                 gc.time:            6.000 ms
+
+Iteration   2: 98148.031 ns/op
+                 gc.alloc.rate:      955.077 MB/sec
+                 gc.alloc.rate.norm: 98304.346 B/op
+                 gc.count:           10.000 counts
+                 gc.time:            6.000 ms
+
+Iteration   3: 98278.150 ns/op
+                 gc.alloc.rate:      953.795 MB/sec
+                 gc.alloc.rate.norm: 98304.352 B/op
+                 gc.count:           11.000 counts
+                 gc.time:            7.000 ms
+
+Iteration   4: 98182.875 ns/op
+                 gc.alloc.rate:      954.162 MB/sec
+                 gc.alloc.rate.norm: 98304.346 B/op
+                 gc.count:           10.000 counts
+                 gc.time:            5.000 ms
+
+Iteration   5: 98215.359 ns/op
+                 gc.alloc.rate:      954.417 MB/sec
+                 gc.alloc.rate.norm: 98304.346 B/op
+                 gc.count:           11.000 counts
+                 gc.time:            6.000 ms
+
+
+
+Result "io.github.vecbricks.vfdlibm.MathCompareBench.powStrictMath":
+  98149.729 +/-(99.9%) 151.509 ns/op [Average]
+  (min, avg, max) = (97934.125, 98149.729, 98278.150), stdev = 100.214
+  CI (99.9%): [97998.220, 98301.237] (assumes normal distribution)
+
+Secondary result "io.github.vecbricks.vfdlibm.MathCompareBench.powStrictMath:gc.alloc.rate":
+  954.990 +/-(99.9%) 1.520 MB/sec [Average]
+  (min, avg, max) = (953.795, 954.990, 957.148), stdev = 1.005
+  CI (99.9%): [953.470, 956.510] (assumes normal distribution)
+
+Secondary result "io.github.vecbricks.vfdlibm.MathCompareBench.powStrictMath:gc.alloc.rate.norm":
+  98304.347 +/-(99.9%) 0.003 B/op [Average]
+  (min, avg, max) = (98304.345, 98304.347, 98304.352), stdev = 0.002
+  CI (99.9%): [98304.344, 98304.351] (assumes normal distribution)
+
+Secondary result "io.github.vecbricks.vfdlibm.MathCompareBench.powStrictMath:gc.count":
+  106.000 +/-(99.9%) 0.001 counts [Sum]
+  (min, avg, max) = (10.000, 10.600, 11.000), stdev = 0.516
+  CI (99.9%): [106.000, 106.000] (assumes normal distribution)
+
+Secondary result "io.github.vecbricks.vfdlibm.MathCompareBench.powStrictMath:gc.time":
+  63.000 +/-(99.9%) 0.001 ms [Sum]
+  (min, avg, max) = (5.000, 6.300, 8.000), stdev = 0.949
+  CI (99.9%): [63.000, 63.000] (assumes normal distribution)
+
+
+# JMH version: 1.37
+# VM version: JDK 25.0.5.1, OpenJDK 64-Bit Server VM, 25.0.5.1+2-LTS
+# VM invoker: /opt/hostedtoolcache/Java_Zulu_jdk/25.0.5-1.2/x64/bin/java
+# VM options: --add-modules=jdk.incubator.vector -XX:CompileCommand=inline,io.github.vecbricks.vfdlibm.*::*
+# Blackhole mode: compiler (auto-detected, use -Djmh.blackhole.autoDetect=false to disable)
+# Warmup: 3 iterations, 2 s each
+# Measurement: 5 iterations, 2 s each
+# Timeout: 10 min per iteration
+# Threads: 1 thread, will synchronize iterations
+# Benchmark mode: Average time, time/op
+# Benchmark: io.github.vecbricks.vfdlibm.MathCompareBench.powStrictMath
+# Parameters: (inputs = mixed)
+
+# Run progress: 94.44% complete, ETA 00:00:32
+# Fork: 1 of 2
+CompileCommand: inline io/github/vecbricks/vfdlibm/*.* bool inline = true
+WARNING: Using incubator modules: jdk.incubator.vector
+WARNING: A terminally deprecated method in sun.misc.Unsafe has been called
+WARNING: sun.misc.Unsafe::objectFieldOffset has been called by org.openjdk.jmh.util.Utils (file:/home/runner/.m2/repository/org/openjdk/jmh/jmh-core/1.37/jmh-core-1.37.jar)
+WARNING: Please consider reporting this to the maintainers of class org.openjdk.jmh.util.Utils
+WARNING: sun.misc.Unsafe::objectFieldOffset will be removed in a future release
+# Warmup Iteration   1: 102234.370 ns/op
+# Warmup Iteration   2: 97928.333 ns/op
+# Warmup Iteration   3: 97012.849 ns/op
+Iteration   1: 97036.370 ns/op
+                 gc.alloc.rate:      926.403 MB/sec
+                 gc.alloc.rate.norm: 94272.342 B/op
+                 gc.count:           10.000 counts
+                 gc.time:            5.000 ms
+
+Iteration   2: 97142.714 ns/op
+                 gc.alloc.rate:      925.402 MB/sec
+                 gc.alloc.rate.norm: 94272.348 B/op
+                 gc.count:           11.000 counts
+                 gc.time:            6.000 ms
+
+Iteration   3: 96982.113 ns/op
+                 gc.alloc.rate:      926.898 MB/sec
+                 gc.alloc.rate.norm: 94272.342 B/op
+                 gc.count:           10.000 counts
+                 gc.time:            6.000 ms
+
+Iteration   4: 96943.934 ns/op
+                 gc.alloc.rate:      927.247 MB/sec
+                 gc.alloc.rate.norm: 94272.342 B/op
+                 gc.count:           10.000 counts
+                 gc.time:            6.000 ms
+
+Iteration   5: 96928.825 ns/op
+                 gc.alloc.rate:      927.427 MB/sec
+                 gc.alloc.rate.norm: 94272.342 B/op
+                 gc.count:           10.000 counts
+                 gc.time:            5.000 ms
+
+
+# Run progress: 97.22% complete, ETA 00:00:16
+# Fork: 2 of 2
+CompileCommand: inline io/github/vecbricks/vfdlibm/*.* bool inline = true
+WARNING: Using incubator modules: jdk.incubator.vector
+WARNING: A terminally deprecated method in sun.misc.Unsafe has been called
+WARNING: sun.misc.Unsafe::objectFieldOffset has been called by org.openjdk.jmh.util.Utils (file:/home/runner/.m2/repository/org/openjdk/jmh/jmh-core/1.37/jmh-core-1.37.jar)
+WARNING: Please consider reporting this to the maintainers of class org.openjdk.jmh.util.Utils
+WARNING: sun.misc.Unsafe::objectFieldOffset will be removed in a future release
+# Warmup Iteration   1: 102908.982 ns/op
+# Warmup Iteration   2: 97550.151 ns/op
+# Warmup Iteration   3: 97179.110 ns/op
+Iteration   1: 97064.333 ns/op
+                 gc.alloc.rate:      926.128 MB/sec
+                 gc.alloc.rate.norm: 94272.342 B/op
+                 gc.count:           10.000 counts
+                 gc.time:            7.000 ms
+
+Iteration   2: 97128.018 ns/op
+                 gc.alloc.rate:      925.536 MB/sec
+                 gc.alloc.rate.norm: 94272.348 B/op
+                 gc.count:           11.000 counts
+                 gc.time:            6.000 ms
+
+Iteration   3: 96970.463 ns/op
+                 gc.alloc.rate:      926.967 MB/sec
+                 gc.alloc.rate.norm: 94272.342 B/op
+                 gc.count:           10.000 counts
+                 gc.time:            6.000 ms
+
+Iteration   4: 98015.774 ns/op
+                 gc.alloc.rate:      916.978 MB/sec
+                 gc.alloc.rate.norm: 94272.346 B/op
+                 gc.count:           10.000 counts
+                 gc.time:            6.000 ms
+
+Iteration   5: 96947.336 ns/op
+                 gc.alloc.rate:      927.243 MB/sec
+                 gc.alloc.rate.norm: 94272.342 B/op
+                 gc.count:           10.000 counts
+                 gc.time:            6.000 ms
+
+
+
+Result "io.github.vecbricks.vfdlibm.MathCompareBench.powStrictMath":
+  97115.988 +/-(99.9%) 491.620 ns/op [Average]
+  (min, avg, max) = (96928.825, 97115.988, 98015.774), stdev = 325.177
+  CI (99.9%): [96624.368, 97607.609] (assumes normal distribution)
+
+Secondary result "io.github.vecbricks.vfdlibm.MathCompareBench.powStrictMath:gc.alloc.rate":
+  925.623 +/-(99.9%) 4.717 MB/sec [Average]
+  (min, avg, max) = (916.978, 925.623, 927.427), stdev = 3.120
+  CI (99.9%): [920.906, 930.339] (assumes normal distribution)
+
+Secondary result "io.github.vecbricks.vfdlibm.MathCompareBench.powStrictMath:gc.alloc.rate.norm":
+  94272.344 +/-(99.9%) 0.004 B/op [Average]
+  (min, avg, max) = (94272.342, 94272.344, 94272.348), stdev = 0.002
+  CI (99.9%): [94272.340, 94272.347] (assumes normal distribution)
+
+Secondary result "io.github.vecbricks.vfdlibm.MathCompareBench.powStrictMath:gc.count":
+  102.000 +/-(99.9%) 0.001 counts [Sum]
+  (min, avg, max) = (10.000, 10.200, 11.000), stdev = 0.422
+  CI (99.9%): [102.000, 102.000] (assumes normal distribution)
+
+Secondary result "io.github.vecbricks.vfdlibm.MathCompareBench.powStrictMath:gc.time":
+  59.000 +/-(99.9%) 0.001 ms [Sum]
+  (min, avg, max) = (5.000, 5.900, 7.000), stdev = 0.568
+  CI (99.9%): [59.000, 59.000] (assumes normal distribution)
+
+
+# Run complete. Total time: 00:09:47
+
+REMEMBER: The numbers below are just data. To gain reusable insights, you need to follow up on
+why the numbers are the way they are. Use profilers (see -prof, -lprof), design factorial
+experiments, perform baseline and negative tests that provide experimental control, make sure
+the benchmarking environment is safe on JVM/OS/HW level, ask for reviews from the domain experts.
+Do not assume the numbers tell you what you want them to tell.
+
+NOTE: Current JVM experimentally supports Compiler Blackholes, and they are in use. Please exercise
+extra caution when trusting the results, look into the generated code to check the benchmark still
+works, and factor in a small probability of new VM bugs. Additionally, while comparisons between
+different JVMs are already problematic, the performance difference caused by different Blackhole
+modes can be very significant. Please make sure you use the consistent Blackhole mode for comparisons.
+
+Benchmark                                          (inputs)  Mode  Cnt      Score     Error   Units
+MathCompareBench.expMath                             common  avgt   10   4956.688 +/-  20.759   ns/op
+MathCompareBench.expMath:gc.alloc.rate               common  avgt   10      0.003 +/-   0.001  MB/sec
+MathCompareBench.expMath:gc.alloc.rate.norm          common  avgt   10      0.017 +/-   0.001    B/op
+MathCompareBench.expMath:gc.count                    common  avgt   10        ~ 0            counts
+MathCompareBench.expMath                              mixed  avgt   10   5887.121 +/-  21.466   ns/op
+MathCompareBench.expMath:gc.alloc.rate                mixed  avgt   10      0.003 +/-   0.001  MB/sec
+MathCompareBench.expMath:gc.alloc.rate.norm           mixed  avgt   10      0.021 +/-   0.001    B/op
+MathCompareBench.expMath:gc.count                     mixed  avgt   10        ~ 0            counts
+MathCompareBench.expPreferred                        common  avgt   10   2638.495 +/-  26.312   ns/op
+MathCompareBench.expPreferred:gc.alloc.rate          common  avgt   10      0.003 +/-   0.001  MB/sec
+MathCompareBench.expPreferred:gc.alloc.rate.norm     common  avgt   10      0.009 +/-   0.001    B/op
+MathCompareBench.expPreferred:gc.count               common  avgt   10        ~ 0            counts
+MathCompareBench.expPreferred                         mixed  avgt   10   4615.969 +/-  16.101   ns/op
+MathCompareBench.expPreferred:gc.alloc.rate           mixed  avgt   10      0.003 +/-   0.001  MB/sec
+MathCompareBench.expPreferred:gc.alloc.rate.norm      mixed  avgt   10      0.016 +/-   0.001    B/op
+MathCompareBench.expPreferred:gc.count                mixed  avgt   10        ~ 0            counts
+MathCompareBench.expStrictMath                       common  avgt   10  11320.869 +/-  52.028   ns/op
+MathCompareBench.expStrictMath:gc.alloc.rate         common  avgt   10      0.003 +/-   0.001  MB/sec
+MathCompareBench.expStrictMath:gc.alloc.rate.norm    common  avgt   10      0.040 +/-   0.001    B/op
+MathCompareBench.expStrictMath:gc.count              common  avgt   10        ~ 0            counts
+MathCompareBench.expStrictMath                        mixed  avgt   10  11798.304 +/-  68.636   ns/op
+MathCompareBench.expStrictMath:gc.alloc.rate          mixed  avgt   10      0.003 +/-   0.001  MB/sec
+MathCompareBench.expStrictMath:gc.alloc.rate.norm     mixed  avgt   10      0.041 +/-   0.001    B/op
+MathCompareBench.expStrictMath:gc.count               mixed  avgt   10        ~ 0            counts
+MathCompareBench.logMath                             common  avgt   10   7131.390 +/-  49.102   ns/op
+MathCompareBench.logMath:gc.alloc.rate               common  avgt   10      0.003 +/-   0.001  MB/sec
+MathCompareBench.logMath:gc.alloc.rate.norm          common  avgt   10      0.025 +/-   0.001    B/op
+MathCompareBench.logMath:gc.count                    common  avgt   10        ~ 0            counts
+MathCompareBench.logMath                              mixed  avgt   10   7174.706 +/-  18.229   ns/op
+MathCompareBench.logMath:gc.alloc.rate                mixed  avgt   10      0.003 +/-   0.001  MB/sec
+MathCompareBench.logMath:gc.alloc.rate.norm           mixed  avgt   10      0.025 +/-   0.001    B/op
+MathCompareBench.logMath:gc.count                     mixed  avgt   10        ~ 0            counts
+MathCompareBench.logPreferred                        common  avgt   10   3891.232 +/-  24.624   ns/op
+MathCompareBench.logPreferred:gc.alloc.rate          common  avgt   10      0.003 +/-   0.001  MB/sec
+MathCompareBench.logPreferred:gc.alloc.rate.norm     common  avgt   10      0.014 +/-   0.001    B/op
+MathCompareBench.logPreferred:gc.count               common  avgt   10        ~ 0            counts
+MathCompareBench.logPreferred                         mixed  avgt   10   5000.808 +/-  21.305   ns/op
+MathCompareBench.logPreferred:gc.alloc.rate           mixed  avgt   10      0.003 +/-   0.001  MB/sec
+MathCompareBench.logPreferred:gc.alloc.rate.norm      mixed  avgt   10      0.017 +/-   0.001    B/op
+MathCompareBench.logPreferred:gc.count                mixed  avgt   10        ~ 0            counts
+MathCompareBench.logStrictMath                       common  avgt   10   9439.903 +/-  52.966   ns/op
+MathCompareBench.logStrictMath:gc.alloc.rate         common  avgt   10      0.003 +/-   0.001  MB/sec
+MathCompareBench.logStrictMath:gc.alloc.rate.norm    common  avgt   10      0.033 +/-   0.001    B/op
+MathCompareBench.logStrictMath:gc.count              common  avgt   10        ~ 0            counts
+MathCompareBench.logStrictMath                        mixed  avgt   10   9749.111 +/-  51.893   ns/op
+MathCompareBench.logStrictMath:gc.alloc.rate          mixed  avgt   10      0.003 +/-   0.001  MB/sec
+MathCompareBench.logStrictMath:gc.alloc.rate.norm     mixed  avgt   10      0.034 +/-   0.001    B/op
+MathCompareBench.logStrictMath:gc.count               mixed  avgt   10        ~ 0            counts
+MathCompareBench.powMath                             common  avgt   10  15553.882 +/- 193.931   ns/op
+MathCompareBench.powMath:gc.alloc.rate               common  avgt   10      0.003 +/-   0.001  MB/sec
+MathCompareBench.powMath:gc.alloc.rate.norm          common  avgt   10      0.054 +/-   0.001    B/op
+MathCompareBench.powMath:gc.count                    common  avgt   10        ~ 0            counts
+MathCompareBench.powMath                              mixed  avgt   10  15906.960 +/-  78.145   ns/op
+MathCompareBench.powMath:gc.alloc.rate                mixed  avgt   10      0.003 +/-   0.001  MB/sec
+MathCompareBench.powMath:gc.alloc.rate.norm           mixed  avgt   10      0.056 +/-   0.001    B/op
+MathCompareBench.powMath:gc.count                     mixed  avgt   10        ~ 0            counts
+MathCompareBench.powPreferred                        common  avgt   10  20222.833 +/- 102.865   ns/op
+MathCompareBench.powPreferred:gc.alloc.rate          common  avgt   10      0.003 +/-   0.001  MB/sec
+MathCompareBench.powPreferred:gc.alloc.rate.norm     common  avgt   10      0.071 +/-   0.001    B/op
+MathCompareBench.powPreferred:gc.count               common  avgt   10        ~ 0            counts
+MathCompareBench.powPreferred                         mixed  avgt   10  22745.854 +/-  98.564   ns/op
+MathCompareBench.powPreferred:gc.alloc.rate           mixed  avgt   10     76.468 +/-   0.330  MB/sec
+MathCompareBench.powPreferred:gc.alloc.rate.norm      mixed  avgt   10   1824.080 +/-   0.001    B/op
+MathCompareBench.powPreferred:gc.count                mixed  avgt   10      7.000            counts
+MathCompareBench.powPreferred:gc.time                 mixed  avgt   10     17.000                ms
+MathCompareBench.powStrictMath                       common  avgt   10  98149.729 +/- 151.509   ns/op
+MathCompareBench.powStrictMath:gc.alloc.rate         common  avgt   10    954.990 +/-   1.520  MB/sec
+MathCompareBench.powStrictMath:gc.alloc.rate.norm    common  avgt   10  98304.347 +/-   0.003    B/op
+MathCompareBench.powStrictMath:gc.count              common  avgt   10    106.000            counts
+MathCompareBench.powStrictMath:gc.time               common  avgt   10     63.000                ms
+MathCompareBench.powStrictMath                        mixed  avgt   10  97115.988 +/- 491.620   ns/op
+MathCompareBench.powStrictMath:gc.alloc.rate          mixed  avgt   10    925.623 +/-   4.717  MB/sec
+MathCompareBench.powStrictMath:gc.alloc.rate.norm     mixed  avgt   10  94272.344 +/-   0.004    B/op
+MathCompareBench.powStrictMath:gc.count               mixed  avgt   10    102.000            counts
+MathCompareBench.powStrictMath:gc.time                mixed  avgt   10     59.000                ms
