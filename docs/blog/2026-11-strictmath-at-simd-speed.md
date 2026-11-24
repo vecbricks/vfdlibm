@@ -29,16 +29,16 @@ test inputs on my Databricks warehouse, Photon's results matched glibc's, not Sp
 
 ## Faster, with the same bits
 
-{% raw %}On the Intel Xeon Platinum 8573C (AVX-512), vfdlibm computes these functions up to {{N}}×
-faster than `StrictMath`, and every result has the same bits.{% endraw %}
+{% raw %}On the Intel Xeon Platinum 8573C (AVX-512), vfdlibm computes `exp`, `log` and `pow` up to
+{{N}}× faster than `StrictMath`, and every result has the same bits.{% endraw %}
 
 <!-- The figure img/speedup.svg is a placeholder: at release, make figures.py draw the bars from
-     the README's v0.3.0 speedup table (and fill compare.svg's {{E}} the same way), then rerun it;
+     the README's v0.3.0 speedup table (and fill compare.svg's E placeholder the same way), then rerun it;
      do not edit the SVG files by hand. -->
 [![Speedup over StrictMath, per function and host: drawn from the README's v0.3.0 table at release.](img/speedup.svg)](img/speedup.svg)
 
 These are timings of a loop over an array, not of a query: a query gains only as much as it spends
-in these functions. Using it takes nine lines.
+in these functions. The method that uses it is nine lines.
 
 ```java
 static final VectorSpecies<Double> S = DoubleVector.SPECIES_PREFERRED;
@@ -61,8 +61,9 @@ the results in `ys`. The few doubles at the end that do not fill a vector go to 
 ## Why your Spark job should care
 
 When every engine returns the same doubles, a query gives the same answer after a migration, on a
-new cluster or on a new CPU, and a test that compares doubles does not flake. `StrictMath` is how
-Spark gets there, and it computes one double at a time.
+new cluster or on a new CPU, and a test that compares doubles does not flake (one kind of NaN
+aside, the first surprise below). `StrictMath` is how Spark gets there, and it computes one double
+at a time.
 
 ## Spark's e is not Java's e
 
@@ -75,13 +76,14 @@ Ask Java for e and you get `Math.E`, 2.718281828459045. Ask Spark SQL for `exp(1
 Spark's generated code calls `java.lang.StrictMath` for `exp`, `ln`, `log10`, `power` and their
 relatives, and `java.lang.Math` for the rest. The difference is a promise. `Math.exp` promises a
 result "within 1 ulp of the exact result", where an ulp, a unit in the last place, is the gap
-between a double and the next one. So it may return either neighbour, and the JIT may use code
-written for your CPU. `StrictMath` promises one algorithm, Sun's fdlibm 5.3, a C library. The same
+between a double and the next one. So it may return either neighbour, and the JIT, the compiler
+inside the JVM, may use code written for your CPU. `StrictMath` promises one algorithm, Sun's fdlibm 5.3, a C library. The same
 input gives the same 64 bits on every JVM and every CPU.
 
 ## Photon returns other doubles
 
-On my Databricks warehouse, Photon's results matched the C library's, not Spark's.
+On my Databricks SQL warehouse, Photon, Databricks' native query engine, returned results that
+matched the C library's, not Spark's.
 
 [![Eight of the 32 inputs: Apache Spark returns StrictMath's result on each, Photon and glibc return glibc's.](img/who-returns-what.svg)](img/who-returns-what.svg)
 
@@ -189,18 +191,19 @@ atan2(NaN#1, NaN#2): first=1983613 second=16387 other=0
 
 In the interpreter, every call returned the first NaN. With the JIT on, some returned the second.
 No code can match a target that moves. So in `atan2`, `hypot` and `pow`, a lane of two NaNs with
-different bits returns one of the two, and which one is not specified. Every other lane matches
+different bits returns one of the two, quieted (for `hypot`, with the sign cleared too), and which
+one is not specified. Every other lane matches
 `StrictMath` bit for bit.
 
 ### 2. Fast code can quietly turn into slow code
 
 When the JIT cannot keep a vector in CPU registers, it turns the vector into an object on the
-heap. That is called boxing. The results stay right, so every test still passes, but the code you
-thought was vector code no longer is. Only the allocation shows it.
+heap. That is called boxing. The results stay right, so every test still passes, but the vectors
+no longer stay in registers. Only the allocation shows it.
 
 [![On common data, one of exp's benchmark rows allocates 0.008 bytes per 1024 doubles at 256 bits, and 528,384 bytes at 128 bits on x86, where it boxes.](img/boxing.svg)](img/boxing.svg)
 
-So CI fails a benchmark that allocates. It also reads the machine code the JIT emits for every
+So the project's CI fails a benchmark that allocates. It also reads the machine code the JIT emits for every
 function and checks the register width, stray calls and fused multiply-adds. A fused multiply-add
 computes `a * b + c` with one rounding instead of two, which changes results, so none may appear.
 
@@ -209,8 +212,8 @@ computes `a * b + c` with one rounding instead of two, which changes results, so
 `sin`, `cos`, `tan`, `tanh` and `cbrt` are not ported, and whether they will be is open. `pow`
 computes its common case in the vector and sends the rest to `StrictMath.pow` one lane at a time,
 `pow(x, 2.0)` and `pow(x, 0.5)` included. It needs JDK 25, where the Vector API is still an
-incubator module. On x86, 128-bit vectors run the Vector API's Java fallback instead of vector
-instructions.
+incubator module. On x86, code on 128-bit vectors calls the Vector API's Java fallback. And at
+`SPECIES_MAX`, only vectors of up to eight lanes are known not to allocate.
 
 ## Try it
 
@@ -323,10 +326,10 @@ java --add-modules jdk.incubator.vector -cp "target/classes:$(cat cp.txt)" examp
 - For a query over a table column, `EXPLAIN` showed `PhotonProject [... EXP(x), ln(x), pow(2.0, x), EXPM1(x)]`
   over `PhotonScan parquet` and said "The query is fully supported by Photon."
 - The test is [`photon-check.sql`](https://github.com/vecbricks/vfdlibm/blob/v0.3.0/docs/blog/photon-check.sql);
-  Photon's output, as pasted from the SQL editor, is `data/photon-2026-11-24.csv`, and on every row
+  Photon's output, as pasted from the SQL editor, is `strictmath-vs-libm/data/photon-2026-11-24.csv`, and on every row
   it equals the file's `libm` column.
 - Apache Spark 4.2.0's `spark-sql` in local mode on JDK 21, on my laptop, ran the same file with a
-  parquet table; every row matched `StrictMath` (`data/spark-4.2.0-local-2026-11-24.csv`).
+  parquet table; every row matched `StrictMath` (`strictmath-vs-libm/data/spark-4.2.0-local-2026-11-24.csv`).
 
 **Narrowing it down: all 32 inputs**
 
@@ -363,7 +366,7 @@ java --add-modules jdk.incubator.vector -cp "target/classes:$(cat cp.txt)" examp
 - In `atan2`, `hypot` and `pow`, a lane of two NaNs with different bits returns one of the two
   arguments' bits with the quiet bit set (for `hypot`, also with the sign cleared): see
   [`AGENTS.md`, "Releases"](https://github.com/vecbricks/vfdlibm/blob/v0.3.0/AGENTS.md#releases).
-  The NaN counts are in `data/nantier-jdk-25.0.5.1.txt`.
+  The NaN counts are in `strictmath-vs-libm/data/nantier-jdk-25.0.5.1.txt`.
 
 **Boxing and the machine code**
 - The allocation figures are `exp`'s finish rows on common data in
@@ -395,9 +398,10 @@ java --add-modules jdk.incubator.vector -cp "target/classes:$(cat cp.txt)" examp
   Lefèvre's tables and CORE-MATH's MIT lists among others; each planted fault, a deliberate bug
   switched on in a test run, must be caught.
 - [`nightly.yml`](https://github.com/vecbricks/vfdlibm/blob/v0.3.0/.github/workflows/nightly.yml)
-  is set to sweep all 2^32 high words of every function, three low words each, on x86 at 256 bits
-  and up and on Arm at 128 bits, with a rotating 1/32 at 128 bits on x86 and one argument a night for
-  a function of two; a fuzzer adds inputs from a fresh seed.
+  is set to sweep all 2^32 high words of every function, three low words each: on x86 at 256 bits,
+  the widest species, and 512 bits when the runner has AVX-512; on Arm at 128 bits; at 128 bits on x86
+  a rotating 1/32 a night; one argument a night for a function of two. A fuzzer draws inputs from a
+  fresh seed at every width.
 
 **What comes next**
 - The five functions not ported: [#162](https://github.com/vecbricks/vfdlibm/issues/162). The
