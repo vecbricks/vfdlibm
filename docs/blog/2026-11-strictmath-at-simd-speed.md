@@ -439,7 +439,11 @@ java --add-modules jdk.incubator.vector -cp "target/classes:$(cat cp.txt)" examp
 - `cbrt`: Photon's row matches neither glibc 2.43 nor Spark on either JDK. Its sum,
   75000024.722734006601528900, equals to the last digit the sum of the correctly rounded cube roots,
   computed by [`aggregate-cbrt-cr.py`](https://github.com/vecbricks/vfdlibm/blob/v0.3.0/docs/blog/strictmath-vs-libm/aggregate-cbrt-cr.py): consistent with
-  correct rounding on these inputs.
+  correct rounding on these inputs. `std::cbrt` built on my laptop does not reproduce it either:
+  [`aggregate-std-cbrt.cpp`](https://github.com/vecbricks/vfdlibm/blob/v0.3.0/docs/blog/strictmath-vs-libm/aggregate-std-cbrt.cpp), built 11 ways with g++ 15.2.0 and clang
+  21.1.8 against glibc 2.43 (from `-O0` to `-O3 -ffast-math -march=native`, libstdc++ and libc++),
+  gives either the glibc prediction's total or 75000024.722734010199381500, never Photon's
+  (`data/aggregate-std-cbrt-2026-11-24.txt`).
 - `sin`, `tanh` and `cbrt` go to `java.lang.Math` in Spark, so Spark's own rows for them depend on
   the JDK (and, for `Math`, possibly the CPU): on my laptop `tanh` and `cbrt` give different results
   on JDK 21 and JDK 25. The table compares with JDK 21.

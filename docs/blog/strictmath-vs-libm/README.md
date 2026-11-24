@@ -123,6 +123,14 @@ its comment header says how to read them. The files in `data/`:
   `-O1 -ffp-contract=off -fno-builtin`, glibc 2.43), whose 465 MB output is not committed, and
   `aggregate-predict-glibc.sql`, run in Spark 4.3.0 on each JDK next to that output.
 
+`aggregate-std-cbrt.cpp` prints `std::cbrt` of the same `cbrt` inputs and
+`aggregate-std-cbrt-sum.py` sums them as the query does. `data/aggregate-std-cbrt-2026-11-24.txt`
+holds the totals of 11 builds (g++ 15.2.0 and clang 21.1.8, glibc 2.43, each with
+`-ffp-contract=off` added; the flags are on each line): all give the glibc prediction's total but
+the two clang `-ffast-math` builds, which give 75000024.722734010199381500, and none gives
+Photon's. For example:
+`g++ -O2 -ffp-contract=off aggregate-std-cbrt.cpp -o std-cbrt && ./std-cbrt | python3 aggregate-std-cbrt-sum.py`.
+
 `aggregate-cbrt-cr.py` prints the sum of the correctly rounded cube roots of the `cbrt` inputs,
 75000024.722734006601528900, in about five seconds.
 
