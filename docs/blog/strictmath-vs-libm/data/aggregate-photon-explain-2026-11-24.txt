@@ -1,0 +1,46 @@
+== Physical Plan ==
+AdaptiveSparkPlan isFinalPlan=false
++- == Initial Plan ==
+   PhotonResultStage
+   +- PhotonColumnarToRow
+      +- PhotonSort [f#13702 ASC NULLS FIRST]
+         +- PhotonShuffleExchangeSource false
+            +- PhotonShuffleMapStage ENSURE_REQUIREMENTS, [id=#7255]
+               +- PhotonShuffleExchangeSink rangepartitioning(f#13702 ASC NULLS FIRST, 16)
+                  +- PhotonGroupingAgg(keys=[f#13702], functions=[finalmerge_count(merge count#13860L) AS count(1)#13706L, finalmerge_sum(merge sum#13863, isEmpty#13864) AS sum(CAST(y AS DECIMAL(38,18)))#13707, finalmerge_bit_xor(merge bit_xor#13866L) AS bit_xor(xxhash64(y))#13708L, finalmerge_min(merge min#13868) AS min(y)#13709, finalmerge_max(merge max#13870) AS max(y)#13710, finalmerge_count(merge count#13872L) AS count((IF((CAST(CAST(y AS DECIMAL(38,18)) AS DOUBLE) = y), NULL, (NOT (CAST(CAST(y AS DECIMAL(38,18)) AS DOUBLE) = y)))))#13711L, finalmerge_bit_xor(merge bit_xor#13874L) AS bit_xor(xxhash64(x, x2))#13712L, finalmerge_sum(merge sum#13877, isEmpty#13878) AS sum((CAST(x AS DECIMAL(38,18)) + CAST(x2 AS DECIMAL(38,18))))#13713])
+                     +- PhotonShuffleExchangeSource false
+                        +- PhotonShuffleMapStage ENSURE_REQUIREMENTS, [id=#7249]
+                           +- PhotonShuffleExchangeSink hashpartitioning(f#13702, 16)
+                              +- PhotonGroupingAgg(keys=[f#13702], functions=[partial_count(1) AS count#13860L, partial_sum(cast(y#13642 as decimal(38,18))) AS (sum#13863, isEmpty#13864), partial_bit_xor(xxhash64(y#13642, 42)) AS bit_xor#13866L, partial_min(y#13642) AS min#13868, partial_max(y#13642) AS max#13870, partial_count(if ((cast(cast(y#13642 as decimal(38,18)) as double) = y#13642)) null else NOT (cast(cast(y#13642 as decimal(38,18)) as double) = y#13642)) AS count#13872L, partial_bit_xor(xxhash64(x#13704, x2#13705, 42)) AS bit_xor#13874L, partial_sum((cast(x#13704 as decimal(38,18)) + cast(x2#13705 as decimal(38,18)))) AS (sum#13877, isEmpty#13878)])
+                                 +- PhotonUnion Generic
+                                    :- PhotonProject [exp AS f#13702, x#13704, 0.0 AS x2#13705, EXP(x#13704) AS y#13642]
+                                    :  +- PhotonProject [(4.6 * (cast(id#13758L as double) / 1000000.0)) AS x#13704]
+                                    :     +- PhotonRange Range (0, 1000000, step=1, splits=8)
+                                    :- PhotonProject [ln AS f#13819, x#13821, 0.0 AS x2#13822, ln(x#13821) AS y#13851]
+                                    :  +- PhotonProject [(3.0 + (1000.0 * (cast(id#13763L as double) / 1000000.0))) AS x#13821]
+                                    :     +- PhotonRange Range (0, 1000000, step=1, splits=8)
+                                    :- PhotonProject [log10 AS f#13823, x#13825, 0.0 AS x2#13826, LOG10(x#13825) AS y#13852]
+                                    :  +- PhotonProject [(2.0 + (999998.0 * (cast(id#13770L as double) / 1000000.0))) AS x#13825]
+                                    :     +- PhotonRange Range (0, 1000000, step=1, splits=8)
+                                    :- PhotonProject [expm1 AS f#13827, x#13829, 0.0 AS x2#13830, EXPM1(x#13829) AS y#13853]
+                                    :  +- PhotonProject [(0.1 + (4.5 * (cast(id#13777L as double) / 1000000.0))) AS x#13829]
+                                    :     +- PhotonRange Range (0, 1000000, step=1, splits=8)
+                                    :- PhotonProject [pow AS f#13831, x#13833, x2#13834, pow(x#13833, x2#13834) AS y#13854]
+                                    :  +- PhotonProject [(1.5 + (cast(id#13784L as double) / 1000000.0)) AS x#13833, (1.0 + ((cast((id#13784L % 1000) as double) / 1000.0) * 3.0)) AS x2#13834]
+                                    :     +- PhotonRange Range (0, 1000000, step=1, splits=8)
+                                    :- PhotonProject [sin AS f#13835, x#13837, 0.0 AS x2#13838, SIN(x#13837) AS y#13855]
+                                    :  +- PhotonProject [(0.2 + (2.7 * (cast(id#13791L as double) / 1000000.0))) AS x#13837]
+                                    :     +- PhotonRange Range (0, 1000000, step=1, splits=8)
+                                    :- PhotonProject [tanh AS f#13839, x#13841, 0.0 AS x2#13842, TANH(x#13841) AS y#13856]
+                                    :  +- PhotonProject [(0.2 + (4.8 * (cast(id#13798L as double) / 1000000.0))) AS x#13841]
+                                    :     +- PhotonRange Range (0, 1000000, step=1, splits=8)
+                                    :- PhotonProject [cbrt AS f#13843, x#13845, 0.0 AS x2#13846, CBRT(x#13845) AS y#13857]
+                                    :  +- PhotonProject [(1.0 + (999999.0 * (cast(id#13805L as double) / 1000000.0))) AS x#13845]
+                                    :     +- PhotonRange Range (0, 1000000, step=1, splits=8)
+                                    +- PhotonProject [sqrt AS f#13847, x#13849, 0.0 AS x2#13850, SQRT(x#13849) AS y#13858]
+                                       +- PhotonProject [(1.0 + (9999.0 * (cast(id#13812L as double) / 1000000.0))) AS x#13849]
+                                          +- PhotonRange Range (0, 1000000, step=1, splits=8)
+
+
+== Photon Explanation ==
+The query is fully supported by Photon.

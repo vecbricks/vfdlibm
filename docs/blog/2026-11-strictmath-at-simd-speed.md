@@ -97,7 +97,7 @@ two libraries disagree? On my random inputs, about one `exp` in ten.
 
 A second query adds the results up. For each of nine functions it takes a million inputs and
 returns an exact sum and a fingerprint of the results, so a change of one ulp in any row shows.
-On Spark and on Photon the inputs, their sums and their fingerprints agree, and so does the `sqrt`
+Its plan on Databricks is Photon from end to end. On Spark and on Photon the inputs, their sums and their fingerprints agree, and so does the `sqrt`
 row, a control. Every other function's total differs. For seven of them, Photon's row equals,
 digit for digit, a prediction made from glibc 2.43 on my laptop.
 
@@ -412,8 +412,11 @@ java --add-modules jdk.incubator.vector -cp "target/classes:$(cat cp.txt)" examp
   and on Spark for every function, and so is the whole `sqrt` row. So the inputs, the casts and the
   hashes agree, and the differences are in the functions' results.
 - Photon: Databricks Free Edition, SQL warehouse with Photon, 24 November 2026, its output as
-  pasted from the SQL editor (`data/aggregate-photon-2026-11-24.csv`). I did not record this run's
-  query profile or `EXPLAIN`. Spark: Apache Spark 4.3.0,
+  pasted from the SQL editor (`data/aggregate-photon-2026-11-24.csv`). `EXPLAIN`, run separately
+  on the same query and warehouse the same day (`data/aggregate-photon-explain-2026-11-24.txt`),
+  shows only Photon operators, from `PhotonRange` through `PhotonProject`, `PhotonUnion` and
+  `PhotonGroupingAgg` to `PhotonSort`, and ends "The query is fully supported by Photon." The
+  query profile was not recorded. Spark: Apache Spark 4.3.0,
   local mode, on JDK 21 and on JDK 25 (`data/aggregate-spark-4.3.0-jdk21.tsv`, `-jdk25.tsv`). The
   glibc prediction: [`aggregate-glibc-values.c`](https://github.com/vecbricks/vfdlibm/blob/v0.3.0/docs/blog/strictmath-vs-libm/aggregate-glibc-values.c)
   computes every result with glibc 2.43 on my laptop, and

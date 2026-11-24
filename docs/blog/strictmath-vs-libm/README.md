@@ -113,6 +113,8 @@ its comment header says how to read them. The files in `data/`:
 
 - `aggregate-photon-2026-11-24.csv`: its output on Databricks Free Edition, SQL warehouse with
   Photon, 24 November 2026, as pasted from the SQL editor.
+- `aggregate-photon-explain-2026-11-24.txt`: `EXPLAIN` of the same query on the same warehouse,
+  24 November 2026, as pasted. It ends "The query is fully supported by Photon."
 - `aggregate-spark-4.3.0-jdk21.tsv` and `aggregate-spark-4.3.0-jdk25.tsv`: its output on Apache
   Spark 4.3.0 (`spark-4.3.0-bin-hadoop3.tgz`, git revision 98bc0212c94), `spark-sql -S`, local
   mode with two threads, on JDK 21.0.13.1 and 25.0.5.1, on my laptop (AMD Ryzen AI 9 HX PRO 370).
