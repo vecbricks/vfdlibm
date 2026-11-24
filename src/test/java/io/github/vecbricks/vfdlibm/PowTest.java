@@ -1530,6 +1530,17 @@ class PowTest {
     assertPow(width.species(), exactPairs());
   }
 
+  /**
+   * Pairs of one high word with both low words random ({@link Inputs#sharedWordPairs}), which
+   * found hypot's order of the arguments (PROOFS.md, L21), a quarter at pow's words.
+   */
+  @ParameterizedTest
+  @EnumSource(VectorWidth.class)
+  void sharedHighWords(VectorWidth width) {
+    assertPow(width.species(),
+        Inputs.sharedWordPairs(9060L + width.ordinal(), DRAWS, Nightly.POW_WORDS));
+  }
+
   /** The words and points the C tests, as the nightly's fuzz draws them. */
   @ParameterizedTest
   @EnumSource(VectorWidth.class)

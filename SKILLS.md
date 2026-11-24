@@ -1126,6 +1126,20 @@ mnemonic); the other operations count the same at both widths.
   `Nightly.PairFunction.ATAN2` lists); one pair in ten is then drawn at one of them, and a function
   that lists none draws as before. `FuzzWordGapsTest` shows a fault at exactly one gap found by the
   fuzz at every width and not found when the gaps are not listed.
+- **Pairs of one high word, both low words random** (issue 173). hypot's port was one ulp off
+  `StrictMath` where `x` and `y` share a high word and `|y|` is the larger (PROOFS.md, L21), and
+  that shows only when both low words are random: 18 of 9 * 10^8 such pairs, 0 of 10^8 with the
+  fuzz's patterned low words (0, 1, all ones, all ones less one, random one time in five). hypot's
+  gap of 0 drew such pairs with patterned low words, and the fuzz found it once in about 5 * 10^9
+  draws. So every function of two arguments now draws them: in the fuzz one pair in ten of those
+  not drawn at a gap (`Fuzz.drawSharedWord`: the first argument from its edges or random bits,
+  the second of its absolute high word, both low words and the second's sign random;
+  `FuzzWordGapsTest` checks the share), in the sweep one partner in twelve (`Sweep.partner`'s
+  same-exponent kind, on the third input of a high word, whose swept low word is random, takes
+  the swept value's high word; `PairHarnessTest` checks it), so a pass checks about 10^9 such
+  pairs, and in the unit tests `Inputs.sharedWordPairs` (`sharedHighWords` in `Atan2Test`,
+  `HypotTest` and `PowTest`). The same black box found no such pair for atan2 or pow in 2 * 10^6
+  each.
 - **One comparator for a function of two arguments** (`PairBits.matches(candidates, x, y, want,
   got)`, test code). Every comparison of a pair function's lane goes through it: `Oracle.assertPair`
   and the live lanes of `assertPairMasked` (a lane that is not live keeps `x`'s raw bits), and the
@@ -1683,7 +1697,21 @@ mnemonic); the other operations count the same at both widths.
   came from a NaN `y` beside a finite `x`: a NaN compares false, so nothing swaps, `ha` stays
   finite and the rare mask misses the lane. So the fault tested the finish's mask more than the
   swap, and was replaced by `dropY2`. Whether a finite lane shows it (two zero high words, where
-  the value swap picks the other form) was not measured; the port keeps the C's word compare.
+  the value swap picks the other form) was not measured. The port later took a swap by magnitude
+  (next item), but by the sign-cleared bits compared as longs, which a NaN does not escape.
+- **StrictMath is not the C at line 60** (issue 173). The nightly fuzz found
+  `hypot(0x5f201b45bbc5eac3, 0x5f201b45fffffffe)` one ulp off: line 60 swaps by the high words
+  alone, so with equal words `a` is `x` even when `|y|` is larger, and lines 101-108 then split
+  the low words the other way round. `StrictMath.hypot` gave the C with the larger argument first
+  in either order on every pair tried (the JDK's own port since JDK-7130085 is commutative), so
+  the port now swaps where `|y| > |x|` (PROOFS.md, L21; fault `hypot.highWordOrder`). Such pairs
+  are rare: 18 of 9 * 10^8 random pairs of one high word with random low words, 0 of 10^8 with the
+  fuzz's patterned low words, 0 of 8 * 10^8 subnormal ones, so the earlier "0 of 4,194,304
+  equal-word draws" above was too few to see it, and the fuzz's gap 0 found it once in about 5 *
+  10^9 draws. With the fault planted the port is wrong on one order of each pair of the file, 76
+  of its 152. `hard-cases/hypot-order.txt` holds 19 such pairs, found by a scratch C program over
+  Sun's C; the lesson is that the oracle is `StrictMath`, and a port that follows the C exactly
+  can still differ from it where the JDK's code is not the C.
 - **Hard cases, computed.** `dev/hypot-hard-cases.py` derives 8,400 pairs with exact integer
   arithmetic (near-midpoint families of both forms of the medium path, each within 2^-50 ulp of
   a midpoint, exact triples with nearly equal legs, scaled into each range), and

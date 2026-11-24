@@ -310,7 +310,10 @@ class PairHarnessTest {
     assertTrue(e.getMessage().contains("toy2"), e.getMessage());
   }
 
-  /** The partner is a function of the seed, the argument and the index alone, in four kinds. */
+  /**
+   * The partner is a function of the seed, the argument and the index alone, in four kinds, and
+   * one in twelve, of the third inputs only, shares the swept value's high word.
+   */
   @Test
   void partnersAreReproducibleAndOfFourKinds() {
     double[] specials = Fuzz.PAIR_SPECIALS;
@@ -318,6 +321,8 @@ class PairHarnessTest {
     int same = 0;
     int near = 0;
     int otherArgument = 0;
+    int sharedWord = 0;
+    int sharedByThirdInput = 0;
     int n = 200_000;
     for (long i = 0; i < n; i++) {
       double swept = Double.longBitsToDouble(Nightly.mix(i));
@@ -342,7 +347,17 @@ class PairHarnessTest {
       if (Math.abs(ep - es) <= 64) {
         near++;
       }
+      long pb = Double.doubleToRawLongBits(p) & Long.MAX_VALUE;
+      long sb = Double.doubleToRawLongBits(swept) & Long.MAX_VALUE;
+      if (pb >>> 32 == sb >>> 32 && pb != sb) {
+        sharedWord++;
+        sharedByThirdInput += i % 3 == 2 ? 1 : 0;
+      }
     }
+    // One partner in twelve shares the swept high word: a quarter of the third inputs.
+    assertEquals(1.0 / 12, sharedWord / (double) n, 0.005, "shared " + sharedWord);
+    assertTrue(sharedByThirdInput > 0.99 * sharedWord, "shared by a third input "
+        + sharedByThirdInput + " of " + sharedWord);
     // A quarter each of specials, the same exponent, within 64, and random bits (which are
     // within 64 of a random exponent about 6% of the time, as are the specials).
     assertTrue(otherArgument > 0.9 * n, "the other argument's partners differ: " + otherArgument);

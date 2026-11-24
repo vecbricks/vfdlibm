@@ -35,15 +35,27 @@ import jdk.incubator.vector.VectorSpecies;
  * is not live keeps {@code x}'s bits.
  *
  * <p>The method, from the C, by {@code ha} and {@code hb}, the high words of {@code |x|} and
- * {@code |y|}: the arguments are swapped where {@code hb > ha} (by the high words only, so with
- * equal words {@code b} may be the larger) and their signs cleared (lines 58-62); where {@code
- * ha-hb > 0x3c00000} the result is {@code a+b} (line 63); above {@code 2^500} both are scaled by
- * {@code 2^-600} through their words (lines 65-76), and where {@code b < 2^-500} by {@code 2^600}
- * through their words (lines 86-90), or, where {@code b} is subnormal or zero, a zero {@code b}
- * returns {@code a} (line 79) and any other is scaled by {@code 2^1022} through a multiplication
- * (lines 80-84); then {@code sqrt(t1*t1-(b*(-b)-t2*(a+t1)))} where {@code w = a-b > b} and
+ * {@code |y|}: the arguments are swapped where {@code |y| > |x|} and their signs cleared (lines
+ * 58-62, ordered as below); where {@code ha-hb > 0x3c00000} the result is {@code a+b} (line
+ * 63); above {@code 2^500} both are scaled by {@code 2^-600} through their words (lines 65-76),
+ * and where {@code b < 2^-500} by {@code 2^600} through their words (lines 86-90), or, where
+ * {@code b} is subnormal or zero, a zero {@code b} returns {@code a} (line 79) and any other is
+ * scaled by {@code 2^1022} through a multiplication (lines 80-84); then {@code sqrt(t1*t1-(b*(-b)-t2*(a+t1)))} where {@code w = a-b > b} and
  * {@code sqrt(t1*y1-(w*(-w)-(t1*y2+t2*b)))} otherwise, over operands split at the high word
  * (lines 94-109), times {@code 2^k} where {@code k != 0} (lines 110-114).
+ *
+ * <p>The one departure from the C is on purpose: line 60 swaps where {@code hb > ha}, by the high
+ * words alone, so with equal high words {@code a} is {@code x} even where {@code |y|} is the
+ * larger, and lines 101-108 then split the two at their low words the other way round, which can
+ * change the last bit ({@code hypot(0x5f201b45bbc5eac3, 0x5f201b45fffffffe)} is {@code
+ * 0x5f26c7304042d062} by the C as written, {@code ...d063} with the arguments the other way).
+ * {@code StrictMath.hypot} gave the C's result with the larger magnitude first, in either order,
+ * on every pair tried: it has been commutative since JDK 9, whose JDK-7130085 ported fdlibm's
+ * hypot to Java (JDK 8 and earlier ran the C, with line 60's order). So the port swaps where
+ * {@code |y| > |x|}, comparing the sign-cleared bits as longs: where the high words differ that
+ * is line 60's swap, and where they are equal it puts the larger first; every line after it is
+ * the C's ({@code PROOFS.md}, hypot: L21, which separates what is proven from what is observed).
+ * {@code ha} is the larger high word either way, so the rare lanes are line 60's.
  *
  * <p>The words stay apart from the values, as in the C. The 2^1022 scaling multiplies {@code a}
  * and {@code b} and leaves {@code ha} and {@code hb} as they were, and lines 97, 103 and 106 read
@@ -55,10 +67,10 @@ import jdk.incubator.vector.VectorSpecies;
  *
  * <p>The rare path: {@code ha >= 0x7ff00000}, an infinity or a NaN in either argument (lines
  * 66-70, and the lanes of line 63 whose {@code a} is not finite), finished per lane with {@code
- * StrictMath.hypot}, which is the C. Every finite lane is computed in the vector. One arm: the
- * finish. The C's {@code int} words are int lanes of half the double vector's size, as in atan2;
- * every call this body makes comes first ({@code Lanes.intSpecies}, {@code Lanes.hiInt}), and the
- * high-word writes are written out, since C2 stops inlining once the graph is large
+ * StrictMath.hypot}, which is the C on those lanes. Every finite lane is computed in the vector.
+ * One arm: the finish. The C's {@code int} words are int lanes of half the double vector's size,
+ * as in atan2; every call this body makes comes first ({@code Lanes.intSpecies}, {@code
+ * Lanes.hiInt}), and the high-word writes are written out, since C2 stops inlining once the graph is large
  * (NodeCountInliningCutoff) and a refused call boxes its vectors.
  */
 final class Hypot {
@@ -87,6 +99,7 @@ final class Hypot {
   static final String REFRESHED_WORDS = "hypot.refreshedWords";
   static final String DROP_T2 = "hypot.dropT2";
   static final String DROP_Y2 = "hypot.dropY2";
+  static final String HIGH_WORD_ORDER = "hypot.highWordOrder";
   // Read once into constants, so the body holds no call and an unplanted fault folds away. Each
   // was sized on draws before it was wired (SKILLS.md, "What the hypot port taught").
   /** Line 63's return of {@code a+b} dropped. */
@@ -97,6 +110,8 @@ final class Hypot {
   private static final boolean DROPPING_T2 = Faults.is(DROP_T2);
   /** Line 108's {@code t1*y2} dropped. */
   private static final boolean DROPPING_Y2 = Faults.is(DROP_Y2);
+  /** Line 60 as written: the arguments ordered by their high words alone (L21). */
+  private static final boolean ORDERING_BY_HIGH_WORDS = Faults.is(HIGH_WORD_ORDER);
 
   private Hypot() {}
 
@@ -108,23 +123,30 @@ final class Hypot {
   static DoubleVector hypot(DoubleVector x, DoubleVector y, VectorMask<Double> live) {
     VectorSpecies<Double> species = x.species();
     VectorSpecies<Integer> intSpecies = Lanes.intSpecies(species);
-    // Lines 58-59: ha = __HI(x)&0x7fffffff; hb = __HI(y)&0x7fffffff.
-    IntVector hx = Lanes.hiInt(x, intSpecies).and(0x7fffffff);
-    IntVector hy = Lanes.hiInt(y, intSpecies).and(0x7fffffff);
-
-    // Line 60: if(hb > ha) swap, by the words; a lane of equal words keeps a=x, b=y.
-    VectorMask<Integer> swapI = hy.compare(VectorOperators.GT, hx);
-    VectorMask<Double> swap = swapI.cast(species);
-    IntVector ha = hx.blend(hy, swapI);
-    IntVector hb = hy.blend(hx, swapI);
-    // Lines 61-62: __HI(a) = ha; __HI(b) = hb, which clears the sign bit and keeps the rest.
-    LongVector aBits =
-        ((LongVector) x.blend(y, swap).viewAsIntegralLanes()).and(Long.MAX_VALUE);
-    LongVector bBits =
-        ((LongVector) y.blend(x, swap).viewAsIntegralLanes()).and(Long.MAX_VALUE);
-    VectorSpecies<Long> longSpecies = aBits.species();
+    // Lines 58-62, ordered by magnitude and not by line 60's high words alone (PROOFS.md, L21):
+    // a is the larger of |x| and |y| by their sign-cleared bits, compared as longs, b the other,
+    // and a lane of equal magnitudes keeps a=x, b=y. Where the high words differ this is line
+    // 60's swap; where they are equal it puts the larger first, as StrictMath.hypot does.
+    // Clearing the sign bit is lines 61-62's __HI(a) = ha, __HI(b) = hb.
+    LongVector xBits = ((LongVector) x.viewAsIntegralLanes()).and(Long.MAX_VALUE);
+    LongVector yBits = ((LongVector) y.viewAsIntegralLanes()).and(Long.MAX_VALUE);
+    VectorSpecies<Long> longSpecies = xBits.species();
+    VectorMask<Long> swapL;
+    if (ORDERING_BY_HIGH_WORDS) {
+      // The fault: line 60 as written, if(hb > ha) by the high words alone.
+      IntVector hx = Lanes.hiInt(x, intSpecies).and(0x7fffffff);
+      IntVector hy = Lanes.hiInt(y, intSpecies).and(0x7fffffff);
+      swapL = hy.compare(VectorOperators.GT, hx).cast(longSpecies);
+    } else {
+      swapL = yBits.compare(VectorOperators.GT, xBits);
+    }
+    LongVector aBits = xBits.blend(yBits, swapL);
+    LongVector bBits = yBits.blend(xBits, swapL);
     DoubleVector a1 = (DoubleVector) aBits.viewAsFloatingLanes();
     DoubleVector b1 = (DoubleVector) bBits.viewAsFloatingLanes();
+    // ha and hb, the high words of |a| and |b|: line 60's words, swapped as a and b are.
+    IntVector ha = Lanes.hiInt(a1, intSpecies);
+    IntVector hb = Lanes.hiInt(b1, intSpecies);
 
     // Line 63: (ha-hb) > 0x3c00000, the ratio above 2^60: return a+b.
     VectorMask<Double> ratio = ha.sub(hb).compare(VectorOperators.GT, RATIO_WORD).cast(species);

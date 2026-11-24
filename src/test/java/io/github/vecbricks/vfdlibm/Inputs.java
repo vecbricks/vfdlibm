@@ -55,6 +55,29 @@ final class Inputs {
     return xs;
   }
 
+  /**
+   * {@code n} pairs of one absolute high word, for a function of two arguments: the word drawn
+   * from {@code words} (each with its neighbours one apart) one time in four and uniformly from
+   * the finite words otherwise, both signs and both low words uniformly random. The low words
+   * must both be random: e_hypot.c's line 60 orders such a pair otherwise than {@code
+   * StrictMath.hypot}, which shows at about 2 in 10^8 of these pairs and at none of 10^8 whose
+   * low words were patterned (0, 1, all ones; PROOFS.md, L21).
+   */
+  static Pairs sharedWordPairs(long seed, int n, int... words) {
+    SplittableRandom random = new SplittableRandom(seed);
+    double[] x = new double[n];
+    double[] y = new double[n];
+    for (int i = 0; i < n; i++) {
+      long word = words.length > 0 && random.nextInt(4) == 0
+          ? Math.max(0, Math.min(0x7fefffff, words[random.nextInt(words.length)]
+              + random.nextInt(-1, 2)))
+          : random.nextInt(0x7ff00000);
+      x[i] = Double.longBitsToDouble(word << 32 | (random.nextLong() & 0x80000000_ffffffffL));
+      y[i] = Double.longBitsToDouble(word << 32 | (random.nextLong() & 0x80000000_ffffffffL));
+    }
+    return new Pairs(x, y);
+  }
+
   /** {@code n} doubles drawn uniformly from {@code [lo, hi)}, reproducibly from {@code seed}. */
   static double[] uniform(long seed, int n, double lo, double hi) {
     SplittableRandom random = new SplittableRandom(seed);

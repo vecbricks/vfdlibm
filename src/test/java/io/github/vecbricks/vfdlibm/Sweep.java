@@ -44,7 +44,8 @@ import jdk.incubator.vector.VectorSpecies;
  * <p>A function of two arguments takes {@code --argument 1} (the default) or {@code 2}: the
  * high words swept are that argument's, each with its three low words, and each swept value gets
  * a partner for the other argument, drawn from the seed, the argument and the input's index
- * alone ({@link #partner}), so any pair of the pass replays from the seed. A pair
+ * alone ({@link #partner}), so any pair of the pass replays from the seed; one partner in twelve
+ * shares the swept value's high word, both low words random. A pair
  * is checked once in a pass, so a night that sweeps both arguments checks 3 * 2^33 pairs of the
  * 2^128. A bug that needs two particular high words together is left to the {@link Fuzz}, which
  * draws both arguments at their edges at once.
@@ -254,7 +255,11 @@ final class Sweep {
    * four, by the top two bits of its first mix: a value of {@code specials}, with the sign its
    * next bit gives; a double of the swept value's exponent; one within 64 binary exponents of it
    * (the offsets are not quite uniform: 4096 is not a multiple of 129); or random bits. The
-   * significand and sign of the second and third kinds are random.
+   * significand and sign of the second and third kinds are random, but that the second kind of
+   * the third input of a high word ({@code index % 3 == 2}, whose swept low word is random) is the
+   * swept value's absolute high word with a random sign and low word: one pair in twelve shares a
+   * high word, both low words random, where line 60 of e_hypot.c and StrictMath order the
+   * arguments differently (PROOFS.md, L21).
    */
   static double partner(long seed, int argument, long index, double swept, double[] specials) {
     long r = Nightly.mix(seed + 0xa5a5a5a5a5a5a5a5L * argument + index * 0x9e3779b97f4a7c15L);
@@ -265,6 +270,13 @@ final class Sweep {
     if (kind == 0) {
       double special = specials[(int) ((more >>> 1) % specials.length)];
       return (bits & 1) == 0 ? special : -special;
+    }
+    if (kind == 1 && index % 3 == 2) {
+      // The third input of a high word: the swept value's own absolute high word, with a random
+      // sign and a random low word, so that the pair shares a high word with both low words
+      // random (the swept one is lowWord's), as e_hypot.c's line 60 tells apart (issue 173).
+      long word = Double.doubleToRawLongBits(swept) & 0x7fffffff_00000000L;
+      return Double.longBitsToDouble(word | (bits & 0x80000000_ffffffffL));
     }
     if (kind == 1 || kind == 2) {
       int e = kind == 1 ? exponent

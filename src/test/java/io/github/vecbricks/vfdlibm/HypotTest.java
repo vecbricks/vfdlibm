@@ -47,9 +47,10 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
 
 /**
- * The entry gate of the hypot port (issue 34): {@code e_hypot.c} in scalar Java, line by line,
- * against {@code StrictMath.hypot} by {@link PairBits#matches} with hypot's declared candidates
- * ({@link PairBits.Candidates#MAGNITUDES}), so raw bits on every lane but one of two NaNs with
+ * The entry gate of the hypot port (issue 34): {@code e_hypot.c} in scalar Java, line by line but
+ * for line 60, which orders the arguments by magnitude as the port does (PROOFS.md, L21; issue
+ * 173), against {@code StrictMath.hypot} by {@link PairBits#matches} with hypot's declared
+ * candidates ({@link PairBits.Candidates#MAGNITUDES}), so raw bits on every lane but one of two NaNs with
  * different bits. The inputs reach every way out of the C ({@link Path}, each asserted taken): the
  * ratio word {@code 0x3c00000} (2^60), the scalings at {@code 2^500}, {@code 2^-500} and the
  * subnormal {@code b} (times 2^1022, with the words the C leaves stale), equal high words with
@@ -62,8 +63,9 @@ import org.junit.jupiter.params.provider.EnumSource;
  * <p>The vector port, {@link VFdlibm#hypot}, is checked on the same inputs against {@code
  * StrictMath.hypot} by the same comparison, at every width and at {@code SPECIES_MAX}, unmasked
  * and masked, with vectors that mix every way out of the C and the rare lanes in every subset of
- * lanes, the pairs of {@code hard-cases/hypot.txt} and {@code hard-cases/hypot-coremath.txt},
- * and the C's stale words (PROOFS.md, L16).
+ * lanes, the pairs of {@code hard-cases/hypot.txt}, {@code hard-cases/hypot-coremath.txt} and
+ * {@code hard-cases/hypot-order.txt}, the C's stale words (PROOFS.md, L16) and the pairs whose
+ * result by the C as written depends on the order of the arguments (L21).
  */
 class HypotTest {
 
@@ -73,16 +75,24 @@ class HypotTest {
   // The C in scalar Java
   // ---------------------------------------------------------------------------------------------
 
-  /** The C as written, or with one change, to show that the inputs below see a change. */
+  /**
+   * The C ordered by magnitude, which is what {@code StrictMath} gave and what the port computes,
+   * or with one change, to show that the inputs below see a change.
+   */
   enum Variant {
-    /** e_hypot.c line by line. */
+    /**
+     * e_hypot.c line by line but for line 60, which swaps where {@code |y| > |x|}, by the
+     * sign-cleared bits compared as longs, and not where {@code hb > ha} (PROOFS.md, L21).
+     */
+    BY_MAGNITUDE,
+    /** e_hypot.c line by line, line 60 by the high words alone. */
     AS_WRITTEN,
     /**
-     * Lines 80-84 with {@code ha} and {@code hb} read again from the scaled {@code a} and {@code
-     * b}.
+     * {@link #BY_MAGNITUDE} with lines 80-84's {@code ha} and {@code hb} read again from the
+     * scaled {@code a} and {@code b}.
      */
     REFRESHED_WORDS,
-    /** Line 63's early return of {@code a+b} dropped. */
+    /** {@link #BY_MAGNITUDE} with line 63's early return of {@code a+b} dropped. */
     NO_EARLY_RETURN
   }
 
@@ -104,8 +114,11 @@ class HypotTest {
     W_ABOVE_B,
     /** Lines 101-108: {@code w<=b}. */
     W_NOT_ABOVE_B,
-    /** Line 94 with equal high words and {@code b > a}: no swap, {@code w} negative. */
-    EQUAL_WORDS_B_LARGER,
+    /**
+     * Line 60 with equal high words and {@code |y| > |x|}: swapped by magnitude, where line 60 as
+     * written keeps {@code a = x} (L21).
+     */
+    EQUAL_WORDS_SWAPPED,
     /** Lines 80-84 then lines 96-99: the stale {@code ha} split at line 97. */
     SUBNORMAL_B_W_ABOVE_B,
     /** Lines 80-84 then lines 101-108: the stale {@code hb} and {@code ha} split at 103 and 106. */
@@ -132,9 +145,9 @@ class HypotTest {
     }
   }
 
-  /** e_hypot.c in scalar Java, line by line. */
+  /** e_hypot.c in scalar Java, ordered by magnitude ({@link Variant#BY_MAGNITUDE}). */
   static double cHypot(double x, double y) {
-    return cHypot(x, y, Variant.AS_WRITTEN, null);
+    return cHypot(x, y, Variant.BY_MAGNITUDE, null);
   }
 
   /**
@@ -158,7 +171,14 @@ class HypotTest {
     int hb;
     ha = hi(x) & 0x7fffffff; // 58
     hb = hi(y) & 0x7fffffff; // 59
-    if (hb > ha) { // 60
+    // 60: if(hb > ha) as written; by the sign-cleared bits otherwise (L21).
+    boolean swap = variant == Variant.AS_WRITTEN ? hb > ha
+        : (Double.doubleToRawLongBits(y) & Long.MAX_VALUE)
+            > (Double.doubleToRawLongBits(x) & Long.MAX_VALUE);
+    if (swap && hb == ha) {
+      took(paths, Path.EQUAL_WORDS_SWAPPED);
+    }
+    if (swap) { // 60
       a = y;
       b = x;
       j = ha;
@@ -220,9 +240,6 @@ class HypotTest {
       }
     }
     w = a - b; // 94
-    if (w < 0) {
-      took(paths, Path.EQUAL_WORDS_B_LARGER);
-    }
     if (w > b) { // 95
       t1 = 0; // 96
       t1 = withHi(t1, ha); // 97
@@ -523,9 +540,21 @@ class HypotTest {
             Inputs.magnitudes(seed + 13, n / 8, -1022, 1023)));
   }
 
-  /** The gate's inputs: {@code n} draws of each generator, the special pairs and the triples. */
+  /**
+   * The pairs of {@code hard-cases/hypot-order.txt}: equal high words at which the C as written
+   * depends on the order of the arguments (L21), issue 173's first, each in both orders and four
+   * sign combinations.
+   */
+  static Inputs.Pairs orderPairs() {
+    return Inputs.hardCasePairs("hypot-order");
+  }
+
+  /**
+   * The gate's inputs: {@code n} draws of each generator, the special pairs, the triples and the
+   * order pairs.
+   */
   static Inputs.Pairs everything(long seed, int n) {
-    return concat(specialPairs(), triplePairs(), fuzzPairs(seed, n),
+    return concat(specialPairs(), triplePairs(), orderPairs(), fuzzPairs(seed, n),
         scalingPairs(seed + 1, n), subnormalPairs(seed + 2, n), equalWordPairs(seed + 3, n),
         twiceBPairs(seed + 4, n), nanPairs(seed + 5, n), densePairs(seed + 6, n));
   }
@@ -595,7 +624,7 @@ class HypotTest {
       double x = p.x()[i];
       double y = p.y()[i];
       double want = StrictMath.hypot(x, y);
-      double got = cHypot(x, y, Variant.AS_WRITTEN, paths);
+      double got = cHypot(x, y, Variant.BY_MAGNITUDE, paths);
       if (!PairBits.matches(MAGNITUDES, x, y, want, got) && mismatched++ < 100) {
         mismatches.add("hypot(" + Oracle.hex(x) + ", " + Oracle.hex(y) + "): StrictMath "
             + PairBits.expected(MAGNITUDES, x, y, want) + ", transcription " + Oracle.hex(got));
@@ -663,7 +692,7 @@ class HypotTest {
       }
     }
     for (Variant variant : Variant.values()) {
-      if (args.length > 2 && args[2].equals("variants") && variant != Variant.AS_WRITTEN) {
+      if (args.length > 2 && args[2].equals("variants") && variant != Variant.BY_MAGNITUDE) {
         System.out.println("variant " + variant + ": differs on " + differing(p, variant));
       }
     }
@@ -808,12 +837,13 @@ class HypotTest {
   }
 
   /**
-   * The inputs see the transcription changed: with the words of lines 80-84 refreshed, or
-   * without line 63's return, the variant differs from {@code StrictMath} on some pair, so the
-   * gate's no-mismatch result is not that of inputs too weak to tell.
+   * The inputs see the transcription changed: with line 60 as written (by the high words alone),
+   * the words of lines 80-84 refreshed, or without line 63's return, the variant differs from
+   * {@code StrictMath} on some pair, so the gate's no-mismatch result is not that of inputs too
+   * weak to tell.
    */
   @ParameterizedTest
-  @EnumSource(value = Variant.class, names = "AS_WRITTEN", mode = EnumSource.Mode.EXCLUDE)
+  @EnumSource(value = Variant.class, names = "BY_MAGNITUDE", mode = EnumSource.Mode.EXCLUDE)
   void theInputsSeeAChangedTranscription(Variant variant) {
     assertTrue(differing(everything(SEED + 1, DRAWS >> 3), variant) > 0, variant.name());
   }
@@ -901,6 +931,16 @@ class HypotTest {
   void equalWordsAndTwiceB(VectorWidth width) {
     assertHypot(width.species(), concat(equalWordPairs(9400L + width.ordinal(), DRAWS),
         twiceBPairs(9450L + width.ordinal(), DRAWS)));
+  }
+
+  /**
+   * Pairs of one high word with both low words random ({@link Inputs#sharedWordPairs}), a quarter
+   * at e_hypot.c's words: where line 60 and the port's order differ (L21).
+   */
+  @ParameterizedTest
+  @EnumSource(VectorWidth.class)
+  void sharedHighWords(VectorWidth width) {
+    assertHypot(width.species(), Inputs.sharedWordPairs(9480L + width.ordinal(), DRAWS, WORDS));
   }
 
   @ParameterizedTest
@@ -1003,9 +1043,10 @@ class HypotTest {
 
   /**
    * L16's hinge (PROOFS.md): the C reads {@code ha} and {@code hb} stale after the 2^1022
-   * scaling, and that reading decides bits. On the subnormal-{@code b} pairs the C as written is
-   * {@code StrictMath} (the gate), the C with the words read again from the scaled values differs
-   * from it on some of them, and the port's vector lanes equal the C as written, bit for bit, at
+   * scaling, and that reading decides bits. On the subnormal-{@code b} pairs the C (ordered by
+   * magnitude, L21) is {@code StrictMath} (the gate), the C with the words read again from the
+   * scaled values differs from it on some of them, and the port's vector lanes equal the C, bit
+   * for bit, at
    * every width: so the port keeps the words stale, and a port that refreshed them would fail.
    */
   @ParameterizedTest
@@ -1034,9 +1075,9 @@ class HypotTest {
   }
 
   /**
-   * L16's witnesses (PROOFS.md): {@code x}, {@code y}, the C as written (which is {@code
-   * StrictMath.hypot}) and the C with the words of lines 80-84 read again, two of each form of
-   * the medium path.
+   * L16's witnesses (PROOFS.md): {@code x}, {@code y}, the C ordered by magnitude (which is {@code
+   * StrictMath.hypot}; their high words differ, so it is the C as written too) and the C with the
+   * words of lines 80-84 read again, two of each form of the medium path.
    */
   static final long[][] STALE_WORD_WITNESSES = {
     // w <= b (lines 101-108)
@@ -1056,7 +1097,7 @@ class HypotTest {
       String where = "hypot(" + Oracle.hex(x) + ", " + Oracle.hex(y) + ")";
       long[] paths = new long[Path.values().length];
       assertEquals(w[2], Double.doubleToRawLongBits(StrictMath.hypot(x, y)), where);
-      assertEquals(w[2], Double.doubleToRawLongBits(cHypot(x, y, Variant.AS_WRITTEN, paths)),
+      assertEquals(w[2], Double.doubleToRawLongBits(cHypot(x, y, Variant.BY_MAGNITUDE, paths)),
           where);
       assertEquals(w[3],
           Double.doubleToRawLongBits(cHypot(x, y, Variant.REFRESHED_WORDS, null)), where);
@@ -1089,6 +1130,153 @@ class HypotTest {
     assertHypotMasked(species, new Inputs.Pairs(xs, ys), 9850L + width.ordinal());
   }
 
+  // ---------------------------------------------------------------------------------------------
+  // L21: the order of the arguments
+  // ---------------------------------------------------------------------------------------------
+
+  /**
+   * Issue 173's witness (PROOFS.md, L21): {@code x} and {@code y} of one high word, {@code |y|}
+   * the larger, the C as written on {@code (x, y)}, and {@code StrictMath.hypot} in either order,
+   * which is the C as written on {@code (y, x)}.
+   */
+  static final long[] ORDER_WITNESS = {
+    0x5f201b45bbc5eac3L, 0x5f201b45fffffffeL, 0x5f26c7304042d062L, 0x5f26c7304042d063L
+  };
+
+  private static long raw(double d) {
+    return Double.doubleToRawLongBits(d);
+  }
+
+  /**
+   * L21's witness, in scalar Java: the high words are equal and {@code |y| > |x|}; the C as
+   * written gives {@code ...d062} on {@code (x, y)} and {@code ...d063} on {@code (y, x)};
+   * {@code StrictMath.hypot} and the C ordered by magnitude give {@code ...d063} in both orders.
+   */
+  @Test
+  void orderWitness() {
+    double x = bits(ORDER_WITNESS[0]);
+    double y = bits(ORDER_WITNESS[1]);
+    assertEquals(hi(x) & 0x7fffffff, hi(y) & 0x7fffffff);
+    assertTrue(Math.abs(y) > Math.abs(x));
+    assertEquals(ORDER_WITNESS[2], raw(cHypot(x, y, Variant.AS_WRITTEN, null)));
+    assertEquals(ORDER_WITNESS[3], raw(cHypot(y, x, Variant.AS_WRITTEN, null)));
+    for (double[] p : new double[][] {{x, y}, {y, x}}) {
+      assertEquals(ORDER_WITNESS[3], raw(StrictMath.hypot(p[0], p[1])));
+      assertEquals(ORDER_WITNESS[3], raw(cHypot(p[0], p[1])));
+    }
+  }
+
+  /**
+   * L21's hinge on {@code hard-cases/hypot-order.txt}, every pair: one high word, the C as
+   * written different by the order of the arguments, and {@code StrictMath.hypot} the same in
+   * both orders and equal to the C ordered by magnitude; so the file's pairs are what its header
+   * says, and a port ordered as line 60 is written fails on one order of each.
+   */
+  @Test
+  void orderPairsDependOnTheOrderInTheCAsWritten() {
+    Inputs.Pairs p = orderPairs();
+    assertEquals(152, p.x().length);
+    for (int i = 0; i < p.x().length; i++) {
+      double x = p.x()[i];
+      double y = p.y()[i];
+      String where = "hypot(" + Oracle.hex(x) + ", " + Oracle.hex(y) + ")";
+      assertEquals(hi(x) & 0x7fffffff, hi(y) & 0x7fffffff, where);
+      assertTrue(raw(cHypot(x, y, Variant.AS_WRITTEN, null))
+          != raw(cHypot(y, x, Variant.AS_WRITTEN, null)), where);
+      long want = raw(StrictMath.hypot(x, y));
+      assertEquals(want, raw(StrictMath.hypot(y, x)), where);
+      assertEquals(want, raw(cHypot(x, y)), where);
+      assertEquals(want, raw(cHypot(y, x)), where);
+    }
+  }
+
+  /**
+   * L21's step (a): where the high words of {@code |x|} and {@code |y|} differ, the swap by the
+   * sign-cleared bits is line 60's swap by the words, on sampled bits and on pairs whose words
+   * differ by one, with low words 0, 1 and all ones; and where they are equal line 60 never
+   * swaps, while the swap by the bits does where {@code |y|}'s low word is the larger.
+   */
+  @Test
+  void theMagnitudeSwapIsLine60sWhereTheHighWordsDiffer() {
+    SplittableRandom random = new SplittableRandom(0x4c3231L);
+    long[] lows = {0L, 1L, 0xffffffffL};
+    long equalSwapped = 0;
+    for (int i = 0; i < 1 << 20; i++) {
+      long xb = random.nextLong();
+      long yb = switch (i & 3) {
+        case 0 -> random.nextLong();
+        case 1 -> xb + (1L << 32);
+        case 2 -> xb - (1L << 32);
+        default -> (xb & 0xffffffff00000000L) | (random.nextLong() & 0xffffffffL);
+      };
+      if ((i & 3) == 1 || (i & 3) == 2) {
+        xb = (xb & 0xffffffff00000000L) | lows[random.nextInt(3)];
+        yb = (yb & 0xffffffff00000000L) | lows[random.nextInt(3)];
+      }
+      int hx = (int) ((xb & Long.MAX_VALUE) >>> 32);
+      int hy = (int) ((yb & Long.MAX_VALUE) >>> 32);
+      boolean byWords = hy > hx;
+      boolean byBits = (yb & Long.MAX_VALUE) > (xb & Long.MAX_VALUE);
+      if (hx != hy) {
+        assertEquals(byWords, byBits, Long.toHexString(xb) + " " + Long.toHexString(yb));
+      } else {
+        assertTrue(!byWords);
+        equalSwapped += byBits ? 1 : 0;
+      }
+    }
+    assertTrue(equalSwapped > 0, "no pair of equal words that the bits swap");
+  }
+
+  /**
+   * L21's vector tie: issue 173's witness and every pair of {@code hard-cases/hypot-order.txt}
+   * at every lane of a vector beside lanes of every way out of the C, at every width the host
+   * has, unmasked and masked. A port that ordered by the high words alone, as line 60 is
+   * written, fails here on one order of each pair ({@code hypot.highWordOrder}).
+   */
+  @ParameterizedTest
+  @EnumSource(VectorWidth.class)
+  void orderPairsInEveryLane(VectorWidth width) {
+    VectorSpecies<Double> species = width.species();
+    Inputs.Pairs p = orderPairLanes(species.length());
+    assertHypot(species, p);
+    assertHypotMasked(species, p, 9860L + width.ordinal());
+  }
+
+  /** {@link #orderPairsInEveryLane(VectorWidth)} at {@code SPECIES_MAX}. */
+  @Test
+  void orderPairsInEveryLaneAtMaxSpecies() {
+    Inputs.Pairs p = orderPairLanes(DoubleVector.SPECIES_MAX.length());
+    assertHypot(DoubleVector.SPECIES_MAX, p);
+    assertHypotMasked(DoubleVector.SPECIES_MAX, p, 9870L);
+  }
+
+  /**
+   * Each order pair, and the witness in both orders, at each of {@code n} lanes, the other lanes
+   * {@link #GENERAL_LANES}.
+   */
+  static Inputs.Pairs orderPairLanes(int n) {
+    Inputs.Pairs file = orderPairs();
+    List<double[]> witnesses = new ArrayList<>();
+    witnesses.add(new double[] {bits(ORDER_WITNESS[0]), bits(ORDER_WITNESS[1])});
+    witnesses.add(new double[] {bits(ORDER_WITNESS[1]), bits(ORDER_WITNESS[0])});
+    for (int i = 0; i < file.x().length; i++) {
+      witnesses.add(new double[] {file.x()[i], file.y()[i]});
+    }
+    double[] xs = new double[witnesses.size() * n * n];
+    double[] ys = new double[xs.length];
+    int k = 0;
+    for (double[] w : witnesses) {
+      for (int at = 0; at < n; at++) {
+        for (int lane = 0; lane < n; lane++) {
+          double[] pair = lane == at ? w : GENERAL_LANES[(at + lane) % GENERAL_LANES.length];
+          xs[k] = pair[0];
+          ys[k++] = pair[1];
+        }
+      }
+    }
+    return new Inputs.Pairs(xs, ys);
+  }
+
   @Test
   void maskedFormRejectsANullMask() {
     DoubleVector v = DoubleVector.zero(DoubleVector.SPECIES_128);
@@ -1116,8 +1304,10 @@ class HypotTest {
 
   /**
    * Each of hypot's faults, with a check that must fail while it is planted: the vector form over
-   * {@link #faultRunInputs()} at every width the host has. Each was sized on draws before it was
-   * wired; the sizes are in {@code SKILLS.md}, "What the hypot port taught".
+   * {@link #faultRunInputs()} at every width the host has, and for {@code hypot.highWordOrder}
+   * the order pairs in every lane ({@link #orderPairLanes}), since random equal-word draws show
+   * it about twice in 10^8 (L21). Each was sized on draws before it was wired; the sizes are in
+   * {@code SKILLS.md}, "What the hypot port taught".
    */
   static Map<String, Executable> faultCatchers() {
     Map<String, Executable> catchers = new LinkedHashMap<>();
@@ -1126,6 +1316,9 @@ class HypotTest {
       catchers.put(fault, () -> forEachWidth(species ->
           PlantedFaultTest.assertCaught(fault, () -> assertHypot(species, faultRunInputs()))));
     }
+    catchers.put(Hypot.HIGH_WORD_ORDER, () -> forEachWidth(species ->
+        PlantedFaultTest.assertCaught(Hypot.HIGH_WORD_ORDER,
+            () -> assertHypot(species, orderPairLanes(species.length())))));
     return catchers;
   }
 
