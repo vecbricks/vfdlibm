@@ -1,0 +1,324 @@
+# VectorOperators.EXP against StrictMath.exp and Math.exp, on Gen.java's 200,000 inputs
+
+A laptop's reading, not a benchmark host's: another CPU, JDK or set of flags may give other
+counts, and here the counts of the compiled operator differ between species. No timing: this
+file counts bits only.
+
+What was run and why: the post says "I have not measured how often VectorOperators.EXP differs
+from StrictMath". ../OperatorExp.java computes DoubleVector.lanewise(VectorOperators.EXP) over
+Gen.java's inputs (x in [-700, 700), java.util.Random seeded 7: the same 200,000 doubles,
+checked against Gen.java's first column; Gen.java and rounding.py are in the blog's pull
+request, #169) at one species per JVM, and compares each lane by Double.doubleToRawLongBits with
+StrictMath.exp and with Math.exp, one line per pass. Each run without -Xint is given 30 passes,
+so that the change from the interpreter to C2 shows; the -Xint runs are given 3.
+../operator_rounding.py then reads the last pass's differing lanes (dump-<bits>.txt, not kept:
+OperatorExp.java writes them again) and says which of the two results is correctly rounded. The
+commands below ran in docs/blog/strictmath-vs-libm, one at a time, with -Xmx512m added.
+
+Date: 2026-11-24
+Code: OperatorExp.java and operator_rounding.py as committed with this file (git blobs 6ce42d5
+  and 614f7af), on vfdlibm at 20df30f (origin/main); the program uses no vfdlibm code
+CPU: AMD Ryzen AI 9 HX PRO 370 w/ Radeon 890M
+CPU flags: avx2 avx512f avx512dq avx512vl present in /proc/cpuinfo
+Kernel: 7.0.0-44-generic
+JDK: OpenJDK Runtime Environment (build 25.0.5.1+2-1-26.04.1-Ubuntu)
+Vector flags: default UseAVX=3, MaxVectorSize=64 (preferred species 512 bits); under
+  -XX:UseAVX=2, MaxVectorSize=32 (preferred species 256 bits; SPECIES_512 is not run there)
+Python: Python 3.14.4 (operator_rounding.py)
+Load average at start: 2.85 14.37 17.01 (a shared machine; the counts do not depend on load)
+Compiled: in a separate run of each species (128, 256, 512 bits, default flags, 10 passes) under
+-XX:+UnlockDiagnosticVMOptions -XX:+PrintIntrinsics, C2 printed
+"jdk.internal.vm.vector.VectorSupport::libraryUnaryOp (35 bytes) (intrinsic) late inline
+succeeded" for the operator's call, so the warm passes run the intrinsic, not the Java fallback.
+
+## Summary: the last pass of each run
+
+| Run                     | Species       | EXP != StrictMath.exp | max ulp | EXP != Math.exp |
+|-------------------------|---------------|-----------------------|---------|-----------------|
+| default flags, warm     | 128           | 19,439                | 1       | 1,071           |
+| default flags, warm     | 256           | 19,439                | 1       | 1,071           |
+| default flags, warm     | 512           | 21,255                | 1       | 9,431           |
+| default flags, warm     | preferred=512 | 21,255                | 1       | 9,431           |
+| -Xint                   | each of above | 19,452                | 1       | 0               |
+| -XX:UseAVX=2, warm      | 128           | 19,439                | 1       | 1,071           |
+| -XX:UseAVX=2, warm      | 256           | 19,439                | 1       | 1,071           |
+| -XX:UseAVX=2, warm      | preferred=256 | 19,439                | 1       | 1,071           |
+
+Math.exp differs from StrictMath.exp on 19,452 inputs in every run and every pass. Under -Xint,
+and in passes 2 and 3 of each run without it, the operator's lanes equal Math.exp's on every
+input. Pass 1 of those runs already differs from Math.exp on 671 to 5,828 lanes; from the 4th,
+5th or 6th pass, by run, every pass's line is the same to the 30th. Every differing lane is 1
+ulp from StrictMath.exp. Where the warm operator and StrictMath.exp differ, the correctly
+rounded result is the operator's on 19,053 of the 19,439 lanes at 128 and 256 bits (StrictMath's
+on 386), and on 15,768 of the 21,255 at 512 bits (StrictMath's on 5,487); neither, and too close
+to call, on none. The dump files of the 128- and 256-bit runs, with and without -XX:UseAVX=2,
+are the same bytes, and so are those of the two 512-bit runs.
+
+## Output, as printed
+
+$ java --add-modules jdk.incubator.vector -Dbits=128 OperatorExp.java 30 dump-128.txt
+species 128 bits (2 lanes), 200000 inputs
+pass  1: EXP differs from StrictMath.exp on 19430 (max 1 ulp), from Math.exp on 958; Math.exp differs from StrictMath.exp on 19452
+pass  2: EXP differs from StrictMath.exp on 19452 (max 1 ulp), from Math.exp on 0; Math.exp differs from StrictMath.exp on 19452
+pass  3: EXP differs from StrictMath.exp on 19452 (max 1 ulp), from Math.exp on 0; Math.exp differs from StrictMath.exp on 19452
+pass  4: EXP differs from StrictMath.exp on 19439 (max 1 ulp), from Math.exp on 1071; Math.exp differs from StrictMath.exp on 19452
+pass  5: EXP differs from StrictMath.exp on 19439 (max 1 ulp), from Math.exp on 1071; Math.exp differs from StrictMath.exp on 19452
+pass  6: EXP differs from StrictMath.exp on 19439 (max 1 ulp), from Math.exp on 1071; Math.exp differs from StrictMath.exp on 19452
+pass  7: EXP differs from StrictMath.exp on 19439 (max 1 ulp), from Math.exp on 1071; Math.exp differs from StrictMath.exp on 19452
+pass  8: EXP differs from StrictMath.exp on 19439 (max 1 ulp), from Math.exp on 1071; Math.exp differs from StrictMath.exp on 19452
+pass  9: EXP differs from StrictMath.exp on 19439 (max 1 ulp), from Math.exp on 1071; Math.exp differs from StrictMath.exp on 19452
+pass 10: EXP differs from StrictMath.exp on 19439 (max 1 ulp), from Math.exp on 1071; Math.exp differs from StrictMath.exp on 19452
+pass 11: EXP differs from StrictMath.exp on 19439 (max 1 ulp), from Math.exp on 1071; Math.exp differs from StrictMath.exp on 19452
+pass 12: EXP differs from StrictMath.exp on 19439 (max 1 ulp), from Math.exp on 1071; Math.exp differs from StrictMath.exp on 19452
+pass 13: EXP differs from StrictMath.exp on 19439 (max 1 ulp), from Math.exp on 1071; Math.exp differs from StrictMath.exp on 19452
+pass 14: EXP differs from StrictMath.exp on 19439 (max 1 ulp), from Math.exp on 1071; Math.exp differs from StrictMath.exp on 19452
+pass 15: EXP differs from StrictMath.exp on 19439 (max 1 ulp), from Math.exp on 1071; Math.exp differs from StrictMath.exp on 19452
+pass 16: EXP differs from StrictMath.exp on 19439 (max 1 ulp), from Math.exp on 1071; Math.exp differs from StrictMath.exp on 19452
+pass 17: EXP differs from StrictMath.exp on 19439 (max 1 ulp), from Math.exp on 1071; Math.exp differs from StrictMath.exp on 19452
+pass 18: EXP differs from StrictMath.exp on 19439 (max 1 ulp), from Math.exp on 1071; Math.exp differs from StrictMath.exp on 19452
+pass 19: EXP differs from StrictMath.exp on 19439 (max 1 ulp), from Math.exp on 1071; Math.exp differs from StrictMath.exp on 19452
+pass 20: EXP differs from StrictMath.exp on 19439 (max 1 ulp), from Math.exp on 1071; Math.exp differs from StrictMath.exp on 19452
+pass 21: EXP differs from StrictMath.exp on 19439 (max 1 ulp), from Math.exp on 1071; Math.exp differs from StrictMath.exp on 19452
+pass 22: EXP differs from StrictMath.exp on 19439 (max 1 ulp), from Math.exp on 1071; Math.exp differs from StrictMath.exp on 19452
+pass 23: EXP differs from StrictMath.exp on 19439 (max 1 ulp), from Math.exp on 1071; Math.exp differs from StrictMath.exp on 19452
+pass 24: EXP differs from StrictMath.exp on 19439 (max 1 ulp), from Math.exp on 1071; Math.exp differs from StrictMath.exp on 19452
+pass 25: EXP differs from StrictMath.exp on 19439 (max 1 ulp), from Math.exp on 1071; Math.exp differs from StrictMath.exp on 19452
+pass 26: EXP differs from StrictMath.exp on 19439 (max 1 ulp), from Math.exp on 1071; Math.exp differs from StrictMath.exp on 19452
+pass 27: EXP differs from StrictMath.exp on 19439 (max 1 ulp), from Math.exp on 1071; Math.exp differs from StrictMath.exp on 19452
+pass 28: EXP differs from StrictMath.exp on 19439 (max 1 ulp), from Math.exp on 1071; Math.exp differs from StrictMath.exp on 19452
+pass 29: EXP differs from StrictMath.exp on 19439 (max 1 ulp), from Math.exp on 1071; Math.exp differs from StrictMath.exp on 19452
+pass 30: EXP differs from StrictMath.exp on 19439 (max 1 ulp), from Math.exp on 1071; Math.exp differs from StrictMath.exp on 19452
+
+$ java --add-modules jdk.incubator.vector -Dbits=256 OperatorExp.java 30 dump-256.txt
+species 256 bits (4 lanes), 200000 inputs
+pass  1: EXP differs from StrictMath.exp on 19437 (max 1 ulp), from Math.exp on 671; Math.exp differs from StrictMath.exp on 19452
+pass  2: EXP differs from StrictMath.exp on 19452 (max 1 ulp), from Math.exp on 0; Math.exp differs from StrictMath.exp on 19452
+pass  3: EXP differs from StrictMath.exp on 19452 (max 1 ulp), from Math.exp on 0; Math.exp differs from StrictMath.exp on 19452
+pass  4: EXP differs from StrictMath.exp on 19439 (max 1 ulp), from Math.exp on 1071; Math.exp differs from StrictMath.exp on 19452
+pass  5: EXP differs from StrictMath.exp on 19439 (max 1 ulp), from Math.exp on 1071; Math.exp differs from StrictMath.exp on 19452
+pass  6: EXP differs from StrictMath.exp on 19439 (max 1 ulp), from Math.exp on 1071; Math.exp differs from StrictMath.exp on 19452
+pass  7: EXP differs from StrictMath.exp on 19439 (max 1 ulp), from Math.exp on 1071; Math.exp differs from StrictMath.exp on 19452
+pass  8: EXP differs from StrictMath.exp on 19439 (max 1 ulp), from Math.exp on 1071; Math.exp differs from StrictMath.exp on 19452
+pass  9: EXP differs from StrictMath.exp on 19439 (max 1 ulp), from Math.exp on 1071; Math.exp differs from StrictMath.exp on 19452
+pass 10: EXP differs from StrictMath.exp on 19439 (max 1 ulp), from Math.exp on 1071; Math.exp differs from StrictMath.exp on 19452
+pass 11: EXP differs from StrictMath.exp on 19439 (max 1 ulp), from Math.exp on 1071; Math.exp differs from StrictMath.exp on 19452
+pass 12: EXP differs from StrictMath.exp on 19439 (max 1 ulp), from Math.exp on 1071; Math.exp differs from StrictMath.exp on 19452
+pass 13: EXP differs from StrictMath.exp on 19439 (max 1 ulp), from Math.exp on 1071; Math.exp differs from StrictMath.exp on 19452
+pass 14: EXP differs from StrictMath.exp on 19439 (max 1 ulp), from Math.exp on 1071; Math.exp differs from StrictMath.exp on 19452
+pass 15: EXP differs from StrictMath.exp on 19439 (max 1 ulp), from Math.exp on 1071; Math.exp differs from StrictMath.exp on 19452
+pass 16: EXP differs from StrictMath.exp on 19439 (max 1 ulp), from Math.exp on 1071; Math.exp differs from StrictMath.exp on 19452
+pass 17: EXP differs from StrictMath.exp on 19439 (max 1 ulp), from Math.exp on 1071; Math.exp differs from StrictMath.exp on 19452
+pass 18: EXP differs from StrictMath.exp on 19439 (max 1 ulp), from Math.exp on 1071; Math.exp differs from StrictMath.exp on 19452
+pass 19: EXP differs from StrictMath.exp on 19439 (max 1 ulp), from Math.exp on 1071; Math.exp differs from StrictMath.exp on 19452
+pass 20: EXP differs from StrictMath.exp on 19439 (max 1 ulp), from Math.exp on 1071; Math.exp differs from StrictMath.exp on 19452
+pass 21: EXP differs from StrictMath.exp on 19439 (max 1 ulp), from Math.exp on 1071; Math.exp differs from StrictMath.exp on 19452
+pass 22: EXP differs from StrictMath.exp on 19439 (max 1 ulp), from Math.exp on 1071; Math.exp differs from StrictMath.exp on 19452
+pass 23: EXP differs from StrictMath.exp on 19439 (max 1 ulp), from Math.exp on 1071; Math.exp differs from StrictMath.exp on 19452
+pass 24: EXP differs from StrictMath.exp on 19439 (max 1 ulp), from Math.exp on 1071; Math.exp differs from StrictMath.exp on 19452
+pass 25: EXP differs from StrictMath.exp on 19439 (max 1 ulp), from Math.exp on 1071; Math.exp differs from StrictMath.exp on 19452
+pass 26: EXP differs from StrictMath.exp on 19439 (max 1 ulp), from Math.exp on 1071; Math.exp differs from StrictMath.exp on 19452
+pass 27: EXP differs from StrictMath.exp on 19439 (max 1 ulp), from Math.exp on 1071; Math.exp differs from StrictMath.exp on 19452
+pass 28: EXP differs from StrictMath.exp on 19439 (max 1 ulp), from Math.exp on 1071; Math.exp differs from StrictMath.exp on 19452
+pass 29: EXP differs from StrictMath.exp on 19439 (max 1 ulp), from Math.exp on 1071; Math.exp differs from StrictMath.exp on 19452
+pass 30: EXP differs from StrictMath.exp on 19439 (max 1 ulp), from Math.exp on 1071; Math.exp differs from StrictMath.exp on 19452
+
+$ java --add-modules jdk.incubator.vector -Dbits=512 OperatorExp.java 30 dump-512.txt
+species 512 bits (8 lanes), 200000 inputs
+pass  1: EXP differs from StrictMath.exp on 20438 (max 1 ulp), from Math.exp on 5828; Math.exp differs from StrictMath.exp on 19452
+pass  2: EXP differs from StrictMath.exp on 19452 (max 1 ulp), from Math.exp on 0; Math.exp differs from StrictMath.exp on 19452
+pass  3: EXP differs from StrictMath.exp on 19452 (max 1 ulp), from Math.exp on 0; Math.exp differs from StrictMath.exp on 19452
+pass  4: EXP differs from StrictMath.exp on 19452 (max 1 ulp), from Math.exp on 0; Math.exp differs from StrictMath.exp on 19452
+pass  5: EXP differs from StrictMath.exp on 21255 (max 1 ulp), from Math.exp on 9431; Math.exp differs from StrictMath.exp on 19452
+pass  6: EXP differs from StrictMath.exp on 21255 (max 1 ulp), from Math.exp on 9431; Math.exp differs from StrictMath.exp on 19452
+pass  7: EXP differs from StrictMath.exp on 21255 (max 1 ulp), from Math.exp on 9431; Math.exp differs from StrictMath.exp on 19452
+pass  8: EXP differs from StrictMath.exp on 21255 (max 1 ulp), from Math.exp on 9431; Math.exp differs from StrictMath.exp on 19452
+pass  9: EXP differs from StrictMath.exp on 21255 (max 1 ulp), from Math.exp on 9431; Math.exp differs from StrictMath.exp on 19452
+pass 10: EXP differs from StrictMath.exp on 21255 (max 1 ulp), from Math.exp on 9431; Math.exp differs from StrictMath.exp on 19452
+pass 11: EXP differs from StrictMath.exp on 21255 (max 1 ulp), from Math.exp on 9431; Math.exp differs from StrictMath.exp on 19452
+pass 12: EXP differs from StrictMath.exp on 21255 (max 1 ulp), from Math.exp on 9431; Math.exp differs from StrictMath.exp on 19452
+pass 13: EXP differs from StrictMath.exp on 21255 (max 1 ulp), from Math.exp on 9431; Math.exp differs from StrictMath.exp on 19452
+pass 14: EXP differs from StrictMath.exp on 21255 (max 1 ulp), from Math.exp on 9431; Math.exp differs from StrictMath.exp on 19452
+pass 15: EXP differs from StrictMath.exp on 21255 (max 1 ulp), from Math.exp on 9431; Math.exp differs from StrictMath.exp on 19452
+pass 16: EXP differs from StrictMath.exp on 21255 (max 1 ulp), from Math.exp on 9431; Math.exp differs from StrictMath.exp on 19452
+pass 17: EXP differs from StrictMath.exp on 21255 (max 1 ulp), from Math.exp on 9431; Math.exp differs from StrictMath.exp on 19452
+pass 18: EXP differs from StrictMath.exp on 21255 (max 1 ulp), from Math.exp on 9431; Math.exp differs from StrictMath.exp on 19452
+pass 19: EXP differs from StrictMath.exp on 21255 (max 1 ulp), from Math.exp on 9431; Math.exp differs from StrictMath.exp on 19452
+pass 20: EXP differs from StrictMath.exp on 21255 (max 1 ulp), from Math.exp on 9431; Math.exp differs from StrictMath.exp on 19452
+pass 21: EXP differs from StrictMath.exp on 21255 (max 1 ulp), from Math.exp on 9431; Math.exp differs from StrictMath.exp on 19452
+pass 22: EXP differs from StrictMath.exp on 21255 (max 1 ulp), from Math.exp on 9431; Math.exp differs from StrictMath.exp on 19452
+pass 23: EXP differs from StrictMath.exp on 21255 (max 1 ulp), from Math.exp on 9431; Math.exp differs from StrictMath.exp on 19452
+pass 24: EXP differs from StrictMath.exp on 21255 (max 1 ulp), from Math.exp on 9431; Math.exp differs from StrictMath.exp on 19452
+pass 25: EXP differs from StrictMath.exp on 21255 (max 1 ulp), from Math.exp on 9431; Math.exp differs from StrictMath.exp on 19452
+pass 26: EXP differs from StrictMath.exp on 21255 (max 1 ulp), from Math.exp on 9431; Math.exp differs from StrictMath.exp on 19452
+pass 27: EXP differs from StrictMath.exp on 21255 (max 1 ulp), from Math.exp on 9431; Math.exp differs from StrictMath.exp on 19452
+pass 28: EXP differs from StrictMath.exp on 21255 (max 1 ulp), from Math.exp on 9431; Math.exp differs from StrictMath.exp on 19452
+pass 29: EXP differs from StrictMath.exp on 21255 (max 1 ulp), from Math.exp on 9431; Math.exp differs from StrictMath.exp on 19452
+pass 30: EXP differs from StrictMath.exp on 21255 (max 1 ulp), from Math.exp on 9431; Math.exp differs from StrictMath.exp on 19452
+
+$ java --add-modules jdk.incubator.vector -Dbits=0 OperatorExp.java 30 dump-0.txt
+species 512 bits (8 lanes), 200000 inputs
+pass  1: EXP differs from StrictMath.exp on 19903 (max 1 ulp), from Math.exp on 2683; Math.exp differs from StrictMath.exp on 19452
+pass  2: EXP differs from StrictMath.exp on 19452 (max 1 ulp), from Math.exp on 0; Math.exp differs from StrictMath.exp on 19452
+pass  3: EXP differs from StrictMath.exp on 19452 (max 1 ulp), from Math.exp on 0; Math.exp differs from StrictMath.exp on 19452
+pass  4: EXP differs from StrictMath.exp on 21255 (max 1 ulp), from Math.exp on 9431; Math.exp differs from StrictMath.exp on 19452
+pass  5: EXP differs from StrictMath.exp on 21255 (max 1 ulp), from Math.exp on 9431; Math.exp differs from StrictMath.exp on 19452
+pass  6: EXP differs from StrictMath.exp on 21255 (max 1 ulp), from Math.exp on 9431; Math.exp differs from StrictMath.exp on 19452
+pass  7: EXP differs from StrictMath.exp on 21255 (max 1 ulp), from Math.exp on 9431; Math.exp differs from StrictMath.exp on 19452
+pass  8: EXP differs from StrictMath.exp on 21255 (max 1 ulp), from Math.exp on 9431; Math.exp differs from StrictMath.exp on 19452
+pass  9: EXP differs from StrictMath.exp on 21255 (max 1 ulp), from Math.exp on 9431; Math.exp differs from StrictMath.exp on 19452
+pass 10: EXP differs from StrictMath.exp on 21255 (max 1 ulp), from Math.exp on 9431; Math.exp differs from StrictMath.exp on 19452
+pass 11: EXP differs from StrictMath.exp on 21255 (max 1 ulp), from Math.exp on 9431; Math.exp differs from StrictMath.exp on 19452
+pass 12: EXP differs from StrictMath.exp on 21255 (max 1 ulp), from Math.exp on 9431; Math.exp differs from StrictMath.exp on 19452
+pass 13: EXP differs from StrictMath.exp on 21255 (max 1 ulp), from Math.exp on 9431; Math.exp differs from StrictMath.exp on 19452
+pass 14: EXP differs from StrictMath.exp on 21255 (max 1 ulp), from Math.exp on 9431; Math.exp differs from StrictMath.exp on 19452
+pass 15: EXP differs from StrictMath.exp on 21255 (max 1 ulp), from Math.exp on 9431; Math.exp differs from StrictMath.exp on 19452
+pass 16: EXP differs from StrictMath.exp on 21255 (max 1 ulp), from Math.exp on 9431; Math.exp differs from StrictMath.exp on 19452
+pass 17: EXP differs from StrictMath.exp on 21255 (max 1 ulp), from Math.exp on 9431; Math.exp differs from StrictMath.exp on 19452
+pass 18: EXP differs from StrictMath.exp on 21255 (max 1 ulp), from Math.exp on 9431; Math.exp differs from StrictMath.exp on 19452
+pass 19: EXP differs from StrictMath.exp on 21255 (max 1 ulp), from Math.exp on 9431; Math.exp differs from StrictMath.exp on 19452
+pass 20: EXP differs from StrictMath.exp on 21255 (max 1 ulp), from Math.exp on 9431; Math.exp differs from StrictMath.exp on 19452
+pass 21: EXP differs from StrictMath.exp on 21255 (max 1 ulp), from Math.exp on 9431; Math.exp differs from StrictMath.exp on 19452
+pass 22: EXP differs from StrictMath.exp on 21255 (max 1 ulp), from Math.exp on 9431; Math.exp differs from StrictMath.exp on 19452
+pass 23: EXP differs from StrictMath.exp on 21255 (max 1 ulp), from Math.exp on 9431; Math.exp differs from StrictMath.exp on 19452
+pass 24: EXP differs from StrictMath.exp on 21255 (max 1 ulp), from Math.exp on 9431; Math.exp differs from StrictMath.exp on 19452
+pass 25: EXP differs from StrictMath.exp on 21255 (max 1 ulp), from Math.exp on 9431; Math.exp differs from StrictMath.exp on 19452
+pass 26: EXP differs from StrictMath.exp on 21255 (max 1 ulp), from Math.exp on 9431; Math.exp differs from StrictMath.exp on 19452
+pass 27: EXP differs from StrictMath.exp on 21255 (max 1 ulp), from Math.exp on 9431; Math.exp differs from StrictMath.exp on 19452
+pass 28: EXP differs from StrictMath.exp on 21255 (max 1 ulp), from Math.exp on 9431; Math.exp differs from StrictMath.exp on 19452
+pass 29: EXP differs from StrictMath.exp on 21255 (max 1 ulp), from Math.exp on 9431; Math.exp differs from StrictMath.exp on 19452
+pass 30: EXP differs from StrictMath.exp on 21255 (max 1 ulp), from Math.exp on 9431; Math.exp differs from StrictMath.exp on 19452
+
+$ java --add-modules jdk.incubator.vector -Xint -Dbits=128 OperatorExp.java 3
+species 128 bits (2 lanes), 200000 inputs
+pass  1: EXP differs from StrictMath.exp on 19452 (max 1 ulp), from Math.exp on 0; Math.exp differs from StrictMath.exp on 19452
+pass  2: EXP differs from StrictMath.exp on 19452 (max 1 ulp), from Math.exp on 0; Math.exp differs from StrictMath.exp on 19452
+pass  3: EXP differs from StrictMath.exp on 19452 (max 1 ulp), from Math.exp on 0; Math.exp differs from StrictMath.exp on 19452
+
+$ java --add-modules jdk.incubator.vector -Xint -Dbits=256 OperatorExp.java 3
+species 256 bits (4 lanes), 200000 inputs
+pass  1: EXP differs from StrictMath.exp on 19452 (max 1 ulp), from Math.exp on 0; Math.exp differs from StrictMath.exp on 19452
+pass  2: EXP differs from StrictMath.exp on 19452 (max 1 ulp), from Math.exp on 0; Math.exp differs from StrictMath.exp on 19452
+pass  3: EXP differs from StrictMath.exp on 19452 (max 1 ulp), from Math.exp on 0; Math.exp differs from StrictMath.exp on 19452
+
+$ java --add-modules jdk.incubator.vector -Xint -Dbits=512 OperatorExp.java 3
+species 512 bits (8 lanes), 200000 inputs
+pass  1: EXP differs from StrictMath.exp on 19452 (max 1 ulp), from Math.exp on 0; Math.exp differs from StrictMath.exp on 19452
+pass  2: EXP differs from StrictMath.exp on 19452 (max 1 ulp), from Math.exp on 0; Math.exp differs from StrictMath.exp on 19452
+pass  3: EXP differs from StrictMath.exp on 19452 (max 1 ulp), from Math.exp on 0; Math.exp differs from StrictMath.exp on 19452
+
+$ java --add-modules jdk.incubator.vector -Xint -Dbits=0 OperatorExp.java 3
+species 512 bits (8 lanes), 200000 inputs
+pass  1: EXP differs from StrictMath.exp on 19452 (max 1 ulp), from Math.exp on 0; Math.exp differs from StrictMath.exp on 19452
+pass  2: EXP differs from StrictMath.exp on 19452 (max 1 ulp), from Math.exp on 0; Math.exp differs from StrictMath.exp on 19452
+pass  3: EXP differs from StrictMath.exp on 19452 (max 1 ulp), from Math.exp on 0; Math.exp differs from StrictMath.exp on 19452
+
+$ java --add-modules jdk.incubator.vector -XX:UseAVX=2 -Dbits=128 OperatorExp.java 30 dump-avx2-128.txt
+species 128 bits (2 lanes), 200000 inputs
+pass  1: EXP differs from StrictMath.exp on 19432 (max 1 ulp), from Math.exp on 866; Math.exp differs from StrictMath.exp on 19452
+pass  2: EXP differs from StrictMath.exp on 19452 (max 1 ulp), from Math.exp on 0; Math.exp differs from StrictMath.exp on 19452
+pass  3: EXP differs from StrictMath.exp on 19452 (max 1 ulp), from Math.exp on 0; Math.exp differs from StrictMath.exp on 19452
+pass  4: EXP differs from StrictMath.exp on 19439 (max 1 ulp), from Math.exp on 1065; Math.exp differs from StrictMath.exp on 19452
+pass  5: EXP differs from StrictMath.exp on 19439 (max 1 ulp), from Math.exp on 1071; Math.exp differs from StrictMath.exp on 19452
+pass  6: EXP differs from StrictMath.exp on 19439 (max 1 ulp), from Math.exp on 1071; Math.exp differs from StrictMath.exp on 19452
+pass  7: EXP differs from StrictMath.exp on 19439 (max 1 ulp), from Math.exp on 1071; Math.exp differs from StrictMath.exp on 19452
+pass  8: EXP differs from StrictMath.exp on 19439 (max 1 ulp), from Math.exp on 1071; Math.exp differs from StrictMath.exp on 19452
+pass  9: EXP differs from StrictMath.exp on 19439 (max 1 ulp), from Math.exp on 1071; Math.exp differs from StrictMath.exp on 19452
+pass 10: EXP differs from StrictMath.exp on 19439 (max 1 ulp), from Math.exp on 1071; Math.exp differs from StrictMath.exp on 19452
+pass 11: EXP differs from StrictMath.exp on 19439 (max 1 ulp), from Math.exp on 1071; Math.exp differs from StrictMath.exp on 19452
+pass 12: EXP differs from StrictMath.exp on 19439 (max 1 ulp), from Math.exp on 1071; Math.exp differs from StrictMath.exp on 19452
+pass 13: EXP differs from StrictMath.exp on 19439 (max 1 ulp), from Math.exp on 1071; Math.exp differs from StrictMath.exp on 19452
+pass 14: EXP differs from StrictMath.exp on 19439 (max 1 ulp), from Math.exp on 1071; Math.exp differs from StrictMath.exp on 19452
+pass 15: EXP differs from StrictMath.exp on 19439 (max 1 ulp), from Math.exp on 1071; Math.exp differs from StrictMath.exp on 19452
+pass 16: EXP differs from StrictMath.exp on 19439 (max 1 ulp), from Math.exp on 1071; Math.exp differs from StrictMath.exp on 19452
+pass 17: EXP differs from StrictMath.exp on 19439 (max 1 ulp), from Math.exp on 1071; Math.exp differs from StrictMath.exp on 19452
+pass 18: EXP differs from StrictMath.exp on 19439 (max 1 ulp), from Math.exp on 1071; Math.exp differs from StrictMath.exp on 19452
+pass 19: EXP differs from StrictMath.exp on 19439 (max 1 ulp), from Math.exp on 1071; Math.exp differs from StrictMath.exp on 19452
+pass 20: EXP differs from StrictMath.exp on 19439 (max 1 ulp), from Math.exp on 1071; Math.exp differs from StrictMath.exp on 19452
+pass 21: EXP differs from StrictMath.exp on 19439 (max 1 ulp), from Math.exp on 1071; Math.exp differs from StrictMath.exp on 19452
+pass 22: EXP differs from StrictMath.exp on 19439 (max 1 ulp), from Math.exp on 1071; Math.exp differs from StrictMath.exp on 19452
+pass 23: EXP differs from StrictMath.exp on 19439 (max 1 ulp), from Math.exp on 1071; Math.exp differs from StrictMath.exp on 19452
+pass 24: EXP differs from StrictMath.exp on 19439 (max 1 ulp), from Math.exp on 1071; Math.exp differs from StrictMath.exp on 19452
+pass 25: EXP differs from StrictMath.exp on 19439 (max 1 ulp), from Math.exp on 1071; Math.exp differs from StrictMath.exp on 19452
+pass 26: EXP differs from StrictMath.exp on 19439 (max 1 ulp), from Math.exp on 1071; Math.exp differs from StrictMath.exp on 19452
+pass 27: EXP differs from StrictMath.exp on 19439 (max 1 ulp), from Math.exp on 1071; Math.exp differs from StrictMath.exp on 19452
+pass 28: EXP differs from StrictMath.exp on 19439 (max 1 ulp), from Math.exp on 1071; Math.exp differs from StrictMath.exp on 19452
+pass 29: EXP differs from StrictMath.exp on 19439 (max 1 ulp), from Math.exp on 1071; Math.exp differs from StrictMath.exp on 19452
+pass 30: EXP differs from StrictMath.exp on 19439 (max 1 ulp), from Math.exp on 1071; Math.exp differs from StrictMath.exp on 19452
+
+$ java --add-modules jdk.incubator.vector -XX:UseAVX=2 -Dbits=256 OperatorExp.java 30 dump-avx2-256.txt
+species 256 bits (4 lanes), 200000 inputs
+pass  1: EXP differs from StrictMath.exp on 19435 (max 1 ulp), from Math.exp on 673; Math.exp differs from StrictMath.exp on 19452
+pass  2: EXP differs from StrictMath.exp on 19452 (max 1 ulp), from Math.exp on 0; Math.exp differs from StrictMath.exp on 19452
+pass  3: EXP differs from StrictMath.exp on 19452 (max 1 ulp), from Math.exp on 0; Math.exp differs from StrictMath.exp on 19452
+pass  4: EXP differs from StrictMath.exp on 19439 (max 1 ulp), from Math.exp on 1071; Math.exp differs from StrictMath.exp on 19452
+pass  5: EXP differs from StrictMath.exp on 19439 (max 1 ulp), from Math.exp on 1071; Math.exp differs from StrictMath.exp on 19452
+pass  6: EXP differs from StrictMath.exp on 19439 (max 1 ulp), from Math.exp on 1071; Math.exp differs from StrictMath.exp on 19452
+pass  7: EXP differs from StrictMath.exp on 19439 (max 1 ulp), from Math.exp on 1071; Math.exp differs from StrictMath.exp on 19452
+pass  8: EXP differs from StrictMath.exp on 19439 (max 1 ulp), from Math.exp on 1071; Math.exp differs from StrictMath.exp on 19452
+pass  9: EXP differs from StrictMath.exp on 19439 (max 1 ulp), from Math.exp on 1071; Math.exp differs from StrictMath.exp on 19452
+pass 10: EXP differs from StrictMath.exp on 19439 (max 1 ulp), from Math.exp on 1071; Math.exp differs from StrictMath.exp on 19452
+pass 11: EXP differs from StrictMath.exp on 19439 (max 1 ulp), from Math.exp on 1071; Math.exp differs from StrictMath.exp on 19452
+pass 12: EXP differs from StrictMath.exp on 19439 (max 1 ulp), from Math.exp on 1071; Math.exp differs from StrictMath.exp on 19452
+pass 13: EXP differs from StrictMath.exp on 19439 (max 1 ulp), from Math.exp on 1071; Math.exp differs from StrictMath.exp on 19452
+pass 14: EXP differs from StrictMath.exp on 19439 (max 1 ulp), from Math.exp on 1071; Math.exp differs from StrictMath.exp on 19452
+pass 15: EXP differs from StrictMath.exp on 19439 (max 1 ulp), from Math.exp on 1071; Math.exp differs from StrictMath.exp on 19452
+pass 16: EXP differs from StrictMath.exp on 19439 (max 1 ulp), from Math.exp on 1071; Math.exp differs from StrictMath.exp on 19452
+pass 17: EXP differs from StrictMath.exp on 19439 (max 1 ulp), from Math.exp on 1071; Math.exp differs from StrictMath.exp on 19452
+pass 18: EXP differs from StrictMath.exp on 19439 (max 1 ulp), from Math.exp on 1071; Math.exp differs from StrictMath.exp on 19452
+pass 19: EXP differs from StrictMath.exp on 19439 (max 1 ulp), from Math.exp on 1071; Math.exp differs from StrictMath.exp on 19452
+pass 20: EXP differs from StrictMath.exp on 19439 (max 1 ulp), from Math.exp on 1071; Math.exp differs from StrictMath.exp on 19452
+pass 21: EXP differs from StrictMath.exp on 19439 (max 1 ulp), from Math.exp on 1071; Math.exp differs from StrictMath.exp on 19452
+pass 22: EXP differs from StrictMath.exp on 19439 (max 1 ulp), from Math.exp on 1071; Math.exp differs from StrictMath.exp on 19452
+pass 23: EXP differs from StrictMath.exp on 19439 (max 1 ulp), from Math.exp on 1071; Math.exp differs from StrictMath.exp on 19452
+pass 24: EXP differs from StrictMath.exp on 19439 (max 1 ulp), from Math.exp on 1071; Math.exp differs from StrictMath.exp on 19452
+pass 25: EXP differs from StrictMath.exp on 19439 (max 1 ulp), from Math.exp on 1071; Math.exp differs from StrictMath.exp on 19452
+pass 26: EXP differs from StrictMath.exp on 19439 (max 1 ulp), from Math.exp on 1071; Math.exp differs from StrictMath.exp on 19452
+pass 27: EXP differs from StrictMath.exp on 19439 (max 1 ulp), from Math.exp on 1071; Math.exp differs from StrictMath.exp on 19452
+pass 28: EXP differs from StrictMath.exp on 19439 (max 1 ulp), from Math.exp on 1071; Math.exp differs from StrictMath.exp on 19452
+pass 29: EXP differs from StrictMath.exp on 19439 (max 1 ulp), from Math.exp on 1071; Math.exp differs from StrictMath.exp on 19452
+pass 30: EXP differs from StrictMath.exp on 19439 (max 1 ulp), from Math.exp on 1071; Math.exp differs from StrictMath.exp on 19452
+
+$ java --add-modules jdk.incubator.vector -XX:UseAVX=2 -Dbits=0 OperatorExp.java 30 dump-avx2-0.txt
+species 256 bits (4 lanes), 200000 inputs
+pass  1: EXP differs from StrictMath.exp on 19423 (max 1 ulp), from Math.exp on 855; Math.exp differs from StrictMath.exp on 19452
+pass  2: EXP differs from StrictMath.exp on 19452 (max 1 ulp), from Math.exp on 0; Math.exp differs from StrictMath.exp on 19452
+pass  3: EXP differs from StrictMath.exp on 19452 (max 1 ulp), from Math.exp on 0; Math.exp differs from StrictMath.exp on 19452
+pass  4: EXP differs from StrictMath.exp on 19452 (max 1 ulp), from Math.exp on 0; Math.exp differs from StrictMath.exp on 19452
+pass  5: EXP differs from StrictMath.exp on 19435 (max 1 ulp), from Math.exp on 935; Math.exp differs from StrictMath.exp on 19452
+pass  6: EXP differs from StrictMath.exp on 19439 (max 1 ulp), from Math.exp on 1071; Math.exp differs from StrictMath.exp on 19452
+pass  7: EXP differs from StrictMath.exp on 19439 (max 1 ulp), from Math.exp on 1071; Math.exp differs from StrictMath.exp on 19452
+pass  8: EXP differs from StrictMath.exp on 19439 (max 1 ulp), from Math.exp on 1071; Math.exp differs from StrictMath.exp on 19452
+pass  9: EXP differs from StrictMath.exp on 19439 (max 1 ulp), from Math.exp on 1071; Math.exp differs from StrictMath.exp on 19452
+pass 10: EXP differs from StrictMath.exp on 19439 (max 1 ulp), from Math.exp on 1071; Math.exp differs from StrictMath.exp on 19452
+pass 11: EXP differs from StrictMath.exp on 19439 (max 1 ulp), from Math.exp on 1071; Math.exp differs from StrictMath.exp on 19452
+pass 12: EXP differs from StrictMath.exp on 19439 (max 1 ulp), from Math.exp on 1071; Math.exp differs from StrictMath.exp on 19452
+pass 13: EXP differs from StrictMath.exp on 19439 (max 1 ulp), from Math.exp on 1071; Math.exp differs from StrictMath.exp on 19452
+pass 14: EXP differs from StrictMath.exp on 19439 (max 1 ulp), from Math.exp on 1071; Math.exp differs from StrictMath.exp on 19452
+pass 15: EXP differs from StrictMath.exp on 19439 (max 1 ulp), from Math.exp on 1071; Math.exp differs from StrictMath.exp on 19452
+pass 16: EXP differs from StrictMath.exp on 19439 (max 1 ulp), from Math.exp on 1071; Math.exp differs from StrictMath.exp on 19452
+pass 17: EXP differs from StrictMath.exp on 19439 (max 1 ulp), from Math.exp on 1071; Math.exp differs from StrictMath.exp on 19452
+pass 18: EXP differs from StrictMath.exp on 19439 (max 1 ulp), from Math.exp on 1071; Math.exp differs from StrictMath.exp on 19452
+pass 19: EXP differs from StrictMath.exp on 19439 (max 1 ulp), from Math.exp on 1071; Math.exp differs from StrictMath.exp on 19452
+pass 20: EXP differs from StrictMath.exp on 19439 (max 1 ulp), from Math.exp on 1071; Math.exp differs from StrictMath.exp on 19452
+pass 21: EXP differs from StrictMath.exp on 19439 (max 1 ulp), from Math.exp on 1071; Math.exp differs from StrictMath.exp on 19452
+pass 22: EXP differs from StrictMath.exp on 19439 (max 1 ulp), from Math.exp on 1071; Math.exp differs from StrictMath.exp on 19452
+pass 23: EXP differs from StrictMath.exp on 19439 (max 1 ulp), from Math.exp on 1071; Math.exp differs from StrictMath.exp on 19452
+pass 24: EXP differs from StrictMath.exp on 19439 (max 1 ulp), from Math.exp on 1071; Math.exp differs from StrictMath.exp on 19452
+pass 25: EXP differs from StrictMath.exp on 19439 (max 1 ulp), from Math.exp on 1071; Math.exp differs from StrictMath.exp on 19452
+pass 26: EXP differs from StrictMath.exp on 19439 (max 1 ulp), from Math.exp on 1071; Math.exp differs from StrictMath.exp on 19452
+pass 27: EXP differs from StrictMath.exp on 19439 (max 1 ulp), from Math.exp on 1071; Math.exp differs from StrictMath.exp on 19452
+pass 28: EXP differs from StrictMath.exp on 19439 (max 1 ulp), from Math.exp on 1071; Math.exp differs from StrictMath.exp on 19452
+pass 29: EXP differs from StrictMath.exp on 19439 (max 1 ulp), from Math.exp on 1071; Math.exp differs from StrictMath.exp on 19452
+pass 30: EXP differs from StrictMath.exp on 19439 (max 1 ulp), from Math.exp on 1071; Math.exp differs from StrictMath.exp on 19452
+
+$ python3 operator_rounding.py dump-128.txt dump-256.txt dump-512.txt dump-0.txt \
+    dump-avx2-128.txt dump-avx2-256.txt dump-avx2-0.txt
+dump-128.txt: 19439 lanes differ; correctly rounded is StrictMath's on 386, the operator's on 19053, neither on 0, too close to call on 0
+dump-256.txt: 19439 lanes differ; correctly rounded is StrictMath's on 386, the operator's on 19053, neither on 0, too close to call on 0
+dump-512.txt: 21255 lanes differ; correctly rounded is StrictMath's on 5487, the operator's on 15768, neither on 0, too close to call on 0
+dump-0.txt: 21255 lanes differ; correctly rounded is StrictMath's on 5487, the operator's on 15768, neither on 0, too close to call on 0
+dump-avx2-128.txt: 19439 lanes differ; correctly rounded is StrictMath's on 386, the operator's on 19053, neither on 0, too close to call on 0
+dump-avx2-256.txt: 19439 lanes differ; correctly rounded is StrictMath's on 386, the operator's on 19053, neither on 0, too close to call on 0
+dump-avx2-0.txt: 19439 lanes differ; correctly rounded is StrictMath's on 386, the operator's on 19053, neither on 0, too close to call on 0
+
+Load average at end: 2.57 13.93 16.84
