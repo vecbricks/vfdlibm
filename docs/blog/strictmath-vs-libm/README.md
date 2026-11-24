@@ -101,3 +101,33 @@ gcc $F -I "$R" -o hypot-order-check "$d/hypot-order-check.c" "$R/e_hypot.c" -lm
 java "$d/HypotPairs.java" 1000000 | ./hypot-order-check | tail -1
 java "$d/HypotPairsEdges.java" 300000 | ./hypot-order-check | tail -1
 ```
+
+## The aggregate query
+
+`../aggregate-check.sql` reduces 1,000,000 results per function to an exact sum and a fingerprint;
+its comment header says how to read them. The files in `data/`:
+
+- `aggregate-photon-2026-11-24.csv`: its output on Databricks Free Edition, SQL warehouse with
+  Photon, 24 November 2026, as pasted from the SQL editor.
+- `aggregate-spark-4.3.0-jdk21.tsv` and `aggregate-spark-4.3.0-jdk25.tsv`: its output on Apache
+  Spark 4.3.0 (`spark-4.3.0-bin-hadoop3.tgz`, git revision 98bc0212c94), `spark-sql -S`, local
+  mode with two threads, on JDK 21.0.13.1 and 25.0.5.1, on my laptop (AMD Ryzen AI 9 HX PRO 370).
+- `aggregate-glibc-2.43-predicted-jdk21.tsv` and `-jdk25.tsv`: what an engine returning glibc
+  2.43's doubles would print, with four more columns: `x_mismatch` (inputs the C program derived
+  differently, must be 0), `rows_differ` (results that differ from that Spark's), `spark_minus_glibc`
+  and `glibc_higher`. Made by `aggregate-glibc-values.c` (gcc 15.2.0,
+  `-O1 -ffp-contract=off -fno-builtin`, glibc 2.43), whose 465 MB output is not committed, and
+  `aggregate-predict-glibc.sql`, run in Spark 4.3.0 on each JDK next to that output.
+
+`aggregate-cbrt-cr.py` prints the sum of the correctly rounded cube roots of the `cbrt` inputs,
+75000024.722734006601528900, in about five seconds.
+
+```bash
+d=$(pwd); cd "$(mktemp -d)"
+gcc -O1 -ffp-contract=off -fno-builtin -o aggregate-glibc-values "$d/aggregate-glibc-values.c" -lm
+./aggregate-glibc-values > glibc-values.csv
+spark-sql --master 'local[2]' -S -f "$d/../aggregate-check.sql"
+spark-sql --master 'local[2]' -S -f "$d/aggregate-predict-glibc.sql"
+python3 "$d/aggregate-cbrt-cr.py"
+```
+

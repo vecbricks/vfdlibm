@@ -95,6 +95,14 @@ two libraries disagree? On my random inputs, about one `exp` in ten.
 
 [![Bars: StrictMath and glibc differ on 19,720 of 200,000 inputs for exp, 19,627 for pow, 4,047 for ln and 139 for expm1.](img/how-often.svg)](img/how-often.svg)
 
+A second query adds the results up. For each of nine functions it takes a million inputs and
+returns an exact sum and a fingerprint of the results, so a change of one ulp in any row shows.
+On Spark and on Photon the inputs, their sums and their fingerprints agree, and so does the `sqrt`
+row, a control. Every other function's total differs. For seven of them, Photon's row equals,
+digit for digit, a prediction made from glibc 2.43 on my laptop.
+
+[![The exact sum of exp(x) over a million rows: 21409584.593082927242132800 on Apache Spark 4.3.0 and 21409584.593082927234346100 on Databricks Photon; the sqrt control is the same on both.](img/aggregate.svg)](img/aggregate.svg)
+
 <div class="box" markdown="1" style="border: 1px solid #d6d6d6; border-radius: 12px; padding: 0 16px; margin-top: 1em;">
 
 ### Check your own engine
@@ -106,7 +114,9 @@ users", is enough to run it; to check your company's engine, use your own worksp
 Spark without Delta, replace the first line with `DROP TABLE IF EXISTS tmp_photon_math` and
 `CREATE TABLE tmp_photon_math (...) USING parquet`. Four of the 32 rows are shown;
 [`photon-check.sql`](https://github.com/vecbricks/vfdlibm/blob/v0.3.0/docs/blog/photon-check.sql)
-has them all.
+has them all. The second query to try is
+[`aggregate-check.sql`](https://github.com/vecbricks/vfdlibm/blob/v0.3.0/docs/blog/aggregate-check.sql): it creates no table, runs as is in `spark-sql`
+and in a Databricks SQL editor, and its comments say which rows to compare first.
 
 ```sql
 CREATE OR REPLACE TABLE tmp_photon_math (f STRING, x DOUBLE, strictmath DOUBLE, libm DOUBLE);
@@ -389,6 +399,47 @@ java --add-modules jdk.incubator.vector -cp "target/classes:$(cat cp.txt)" examp
 - [`figures.py`](https://github.com/vecbricks/vfdlibm/blob/v0.3.0/docs/blog/figures.py) draws the
   data figures from committed files: `strictmath-vs-libm/data/`, the benchmark file named below and
   fdlibm's `e_hypot.c`.
+
+**The aggregate query**
+- [`aggregate-check.sql`](https://github.com/vecbricks/vfdlibm/blob/v0.3.0/docs/blog/aggregate-check.sql) builds 1,000,000 inputs per function from
+  `range()`'s `id`, so no engine can fold a call to a constant, and reduces each function's results
+  to order-independent aggregates: the exact sum of every result cast to `DECIMAL(38,18)` and a
+  `bit_xor` of `xxhash64` over the results' bits. `cast_lossy` is 0 on every row, so each cast is
+  exact and a one-ulp change moves the sum.
+- The controls agree: `xor_x` and `sum_x`, the inputs' fingerprint and sum, are the same on Photon
+  and on Spark for every function, and so is the whole `sqrt` row. So the inputs, the casts and the
+  hashes agree, and the differences are the math library's.
+- Photon: Databricks Free Edition, SQL warehouse with Photon, 24 November 2026, its output as
+  pasted from the SQL editor (`data/aggregate-photon-2026-11-24.csv`). Spark: Apache Spark 4.3.0,
+  local mode, on JDK 21 and on JDK 25 (`data/aggregate-spark-4.3.0-jdk21.tsv`, `-jdk25.tsv`). The
+  glibc prediction: [`aggregate-glibc-values.c`](https://github.com/vecbricks/vfdlibm/blob/v0.3.0/docs/blog/strictmath-vs-libm/aggregate-glibc-values.c)
+  computes every result with glibc 2.43 on my laptop, and
+  [`aggregate-predict-glibc.sql`](https://github.com/vecbricks/vfdlibm/blob/v0.3.0/docs/blog/strictmath-vs-libm/aggregate-predict-glibc.sql) runs the same
+  aggregates over them in Spark (`data/aggregate-glibc-2.43-predicted-jdk21.tsv`, `-jdk25.tsv`).
+- The comparison, every column of each row; the last column counts the inputs where Spark on JDK 21
+  and glibc 2.43 return different doubles:
+
+| Function | Spark calls | Photon = Spark (JDK 21) | Photon = glibc 2.43 prediction | Rows where Spark and glibc differ |
+|---|---|---|---|---|
+| `exp` | `StrictMath` | no | yes | 97,775 |
+| `expm1` | `StrictMath` | no | yes | 1,348 |
+| `ln` | `StrictMath` | no | yes | 19,392 |
+| `log10` | `StrictMath` | no | yes | 2,906 |
+| `pow` | `StrictMath` | no | yes | 96,629 |
+| `sin` | `Math` | no | yes | 1,785 |
+| `tanh` | `Math` | no | yes | 95 |
+| `cbrt` | `Math` | no | no | 508,235 |
+| `sqrt` | `Math` | yes | yes | 0 |
+
+- For `exp`, the sum is 21409584.593082927242132800 on Spark and 21409584.593082927234346100 on
+  Photon, which is also the glibc prediction's.
+- `cbrt`: Photon's row matches neither glibc 2.43 nor Spark on either JDK. Its sum,
+  75000024.722734006601528900, equals to the last digit the sum of the correctly rounded cube roots,
+  computed by [`aggregate-cbrt-cr.py`](https://github.com/vecbricks/vfdlibm/blob/v0.3.0/docs/blog/strictmath-vs-libm/aggregate-cbrt-cr.py): consistent with
+  correct rounding on these inputs.
+- `sin`, `tanh` and `cbrt` go to `java.lang.Math` in Spark, so Spark's own rows for them depend on
+  the JDK: `tanh` and `cbrt` give different results on JDK 21 and JDK 25. The table compares with
+  JDK 21.
 
 **The NaN exception and the contract**
 - In `atan2`, `hypot` and `pow`, a lane of two NaNs with different bits returns one of the two

@@ -14,6 +14,8 @@ files:
 - strictmath-vs-libm/data/nantier-jdk-25.0.5.1.txt: NanTier.java's output, one run per mode;
 - strictmath-vs-libm/data/hypot-order.txt (hypot-order.c's and HypotOrder.java's output): the
   hypot argument-order card;
+- strictmath-vs-libm/data/aggregate-photon-2026-11-24.csv and aggregate-spark-4.3.0-jdk21.tsv
+  (aggregate-check.sql's output on each engine): the aggregate card;
 - ../../bench/results/exp-xeon8573c-2026-11-21.txt: the allocation of exp's finish rows;
 - ../../reference/fdlibm-5.3/e_hypot.c: the lines of the hypot figure, by line number.
 
@@ -560,6 +562,58 @@ def fig_hypot_order():
     f.write(y)
 
 
+def aggregate_rows():
+    """aggregate-check.sql's rows: Photon's (CSV, as pasted) and Spark 4.3.0's on JDK 21 (TSV)."""
+    cols = "f n sum_y xor_y min_y max_y cast_lossy xor_x sum_x".split()
+    with open(DATA / "aggregate-photon-2026-11-24.csv") as fh:
+        photon = {r["f"]: r for r in csv.DictReader(fh)}
+    spark = {}
+    for line in (DATA / "aggregate-spark-4.3.0-jdk21.tsv").read_text().splitlines():
+        if line.strip():
+            r = dict(zip(cols, line.split("\t")[:9]))
+            spark[r["f"]] = r
+    return photon, spark
+
+
+def fig_aggregate():
+    photon, spark = aggregate_rows()
+    for f_, r in photon.items():  # the controls: inputs, casts and hashes agree on every row
+        assert all(r[c] == spark[f_][c] for c in ("n", "cast_lossy", "xor_x", "sum_x")), f_
+    differ = sorted(f_ for f_ in photon if photon[f_]["sum_y"] != spark[f_]["sum_y"])
+    same = sorted(f_ for f_ in photon if f_ not in differ)
+    assert same == ["sqrt"], same
+    a, b = spark["exp"]["sum_y"], photon["exp"]["sum_y"]
+    k = next(i for i in range(len(a)) if a[i] != b[i])
+    f = Fig("aggregate", "A million rows, two totals",
+            "The same query on Apache Spark 4.3.0 and on Databricks Photon: the exact sum of "
+            "exp(x) over 1,000,000 inputs.",
+            f"The exact DECIMAL sum of exp(x) over 1,000,000 inputs is {a} on Apache Spark 4.3.0 "
+            f"and {b} on Databricks Photon. The sqrt control is {spark['sqrt']['sum_y']} on both. "
+            f"Of the nine functions, every one but sqrt differs.")
+    y = f.header()
+    f.text(M, y + 8, "sum of exp(x), 1,000,000 rows", size=15, fill=GREY)
+    y += 22
+    for label, val, fill, stroke, col in (("Apache Spark 4.3.0", a, BLUE_F, BLUE_S, BLUE_T),
+                                          ("Databricks Photon", b, ORANGE_F, ORANGE_S, ORANGE_T)):
+        f.rect(M, y, IW, 76, fill, stroke)
+        f.text(M + 16, y + 28, label, size=17, weight=700)
+        f.add(f'<text x="{M + 16}" y="{y + 58}" font-family="{esc(MONO)}" font-size="18" '
+              f'style="font-variant-ligatures: none"><tspan fill="{INK}">{esc(val[:k])}</tspan>'
+              f'<tspan fill="{col}" font-weight="700">{esc(val[k:])}</tspan></text>')
+        y += 86
+    y += 6
+    f.rect(M, y, IW, 76, GREY_F, "#9e9e9e", dash=True)
+    f.text(M + 16, y + 28, "Control: sum of sqrt(x), on both", size=17, weight=700)
+    f.text(M + 16, y + 58, spark["sqrt"]["sum_y"], size=18, mono=True)
+    y += 98
+    f.pill(M, y, IW, 42, ORANGE_S, "Every function but sqrt differs", size=17)
+    y += 72
+    y = f.caption(y, "The inputs, their sums and hashes agree on both engines, so the difference is "
+                     "in the math. Photon: Databricks Free Edition, SQL warehouse, 24 November 2026. "
+                     "Spark: my laptop, local mode, JDK 21. Data: strictmath-vs-libm/data/aggregate-*.")
+    f.write(y)
+
+
 def fig_speedup():
     f = Fig("speedup", "Speedup over StrictMath",
             "Per function, on the Intel Xeon Platinum 8573C (AVX-512) and the AMD EPYC 7763 (AVX2); "
@@ -586,5 +640,6 @@ if __name__ == "__main__":
     fig_hypot()
     fig_boxing()
     fig_hypot_order()
+    fig_aggregate()
     fig_speedup()
     print("who-returns-what G/S counts:", counts)
