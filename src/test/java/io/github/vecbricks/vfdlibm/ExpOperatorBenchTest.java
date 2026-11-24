@@ -17,8 +17,9 @@ import org.junit.jupiter.api.Test;
 /**
  * {@code ExpOperatorBench} is what its Javadoc says: its {@code setUp} throws on an {@code inputs}
  * value it does not know, its arrays are {@code ExpBenchmark}'s by raw bits, and its scalar and
- * vfdlibm rows return {@code StrictMath.exp}'s bits. The operator's rows are not compared: they
- * promise {@code Math}'s accuracy, not {@code StrictMath}'s bits.
+ * vfdlibm rows return {@code StrictMath.exp}'s bits. The operator's rows promise {@code Math}'s
+ * accuracy, not {@code StrictMath}'s bits, so they are held to 2 ulps of {@code StrictMath.exp}
+ * (each of the two within 1 ulp of the exact result), not to its bits.
  */
 class ExpOperatorBenchTest {
 
@@ -58,6 +59,24 @@ class ExpOperatorBenchTest {
         for (int i = 0; i < xs.length; i++) {
           assertEquals(bits(StrictMath.exp(xs[i])), bits(rows[r][i]), inputs + " row " + r
               + " at " + i);
+        }
+      }
+      // The operator's rows: every lane written, within 2 ulps of StrictMath.exp (a NaN for a
+      // NaN), which checks each loop's stride and species without asking for StrictMath's bits.
+      double[][] operator = {
+        bench.operator256().clone(), bench.operatorPreferred().clone(),
+        bench.operatorMax().clone()
+      };
+      for (int r = 0; r < operator.length; r++) {
+        for (int i = 0; i < xs.length; i++) {
+          double strict = StrictMath.exp(xs[i]);
+          double op = operator[r][i];
+          String where = inputs + " operator row " + r + " at " + i + ": " + op;
+          if (Double.isNaN(strict)) {
+            assertEquals(true, Double.isNaN(op), where);
+          } else {
+            assertEquals(true, Math.abs(bits(op) - bits(strict)) <= 2, where);
+          }
         }
       }
     }

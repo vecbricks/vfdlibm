@@ -33,10 +33,11 @@ import org.openjdk.jmh.annotations.Warmup;
  * and at {@code SPECIES_MAX}.
  *
  * <p>The operator promises {@code Math}'s accuracy, not {@code StrictMath}'s bits, so its rows
- * return other bits than the other two on some lanes, by design: no test compares them. How
- * often, on a laptop, is in {@code
- * docs/blog/strictmath-vs-libm/data/operator-exp-jdk-25.0.5.1-laptop.txt}. These rows give the
- * time that difference buys or costs, beside the time of {@code StrictMath}'s bits.
+ * return other bits than the other two on some lanes, by design: {@code ExpOperatorBenchTest}
+ * holds them to 2 ulps of {@code StrictMath.exp}, not to its bits. How often they differ, on a
+ * laptop, is in {@code docs/blog/strictmath-vs-libm/data/operator-exp-jdk-25.0.5.1-laptop.txt}.
+ * These rows give the time that difference buys or costs, beside the time of {@code
+ * StrictMath}'s bits.
  *
  * <p>{@code inputs} picks the data, and the arrays are {@code ExpBenchmark}'s, drawn the same
  * way: {@code common} draws from {@code [-20, 20]}, where no lane takes vfdlibm's rare path;

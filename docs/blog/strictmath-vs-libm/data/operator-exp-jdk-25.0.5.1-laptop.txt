@@ -6,15 +6,18 @@ file counts bits only.
 
 What was run and why: the post says "I have not measured how often VectorOperators.EXP differs
 from StrictMath". ../OperatorExp.java computes DoubleVector.lanewise(VectorOperators.EXP) over
-Gen.java's inputs (x in [-700, 700), java.util.Random seeded 7: the same 200,000 doubles, checked
-against Gen.java's first column) at one species per JVM, and compares each lane by
-Double.doubleToRawLongBits with StrictMath.exp and with Math.exp, one line per pass. The default
-runs make 30 passes, so that the change from the interpreter to C2 shows; the -Xint runs make 3.
+Gen.java's inputs (x in [-700, 700), java.util.Random seeded 7: the same 200,000 doubles,
+checked against Gen.java's first column; Gen.java and rounding.py are in the blog's pull
+request, #169) at one species per JVM, and compares each lane by Double.doubleToRawLongBits with
+StrictMath.exp and with Math.exp, one line per pass. Each run without -Xint is given 30 passes,
+so that the change from the interpreter to C2 shows; the -Xint runs are given 3.
 ../operator_rounding.py then reads the last pass's differing lanes (dump-<bits>.txt, not kept:
-OperatorExp.java writes them again) and says which of the two results is correctly rounded.
-The commands below ran in docs/blog/strictmath-vs-libm, one at a time, with -Xmx512m added.
+OperatorExp.java writes them again) and says which of the two results is correctly rounded. The
+commands below ran in docs/blog/strictmath-vs-libm, one at a time, with -Xmx512m added.
 
 Date: 2026-11-24
+Code: OperatorExp.java and operator_rounding.py as committed with this file (git blobs 6ce42d5
+  and 614f7af), on vfdlibm at 20df30f (origin/main); the program uses no vfdlibm code
 CPU: AMD Ryzen AI 9 HX PRO 370 w/ Radeon 890M
 CPU flags: avx2 avx512f avx512dq avx512vl present in /proc/cpuinfo
 Kernel: 7.0.0-44-generic
