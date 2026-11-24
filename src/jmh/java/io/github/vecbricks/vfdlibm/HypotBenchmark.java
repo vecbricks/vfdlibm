@@ -30,8 +30,9 @@ import org.openjdk.jmh.annotations.Warmup;
  * every lane of an infinity or a NaN finished per lane), at 256 bits, at the host's preferred
  * species and at {@code SPECIES_MAX}. 128 bits is left out: on x86 C2 lowers no mask at two
  * 64-bit lanes, so every 128-bit arm boxes (SKILLS.md). bench/results/hypot-epyc7763-2026-11-23.txt
- * times it, one run on the EPYC 7763, whose reading wants a re-run (its finishMax and
- * finishPreferred rows disagree on common data).
+ * times it, a run and its re-run on the EPYC 7763: inside 1.3x of the scalar loop at the preferred
+ * species, and finishMax about 1.6 times finishPreferred on common data in both runs, the same code
+ * at the same width.
  *
  * <p>{@code inputs} picks the data: {@code common} draws {@code x} and {@code y} from {@code
  * [-10, 10)}, Varka's baseline range, where every lane takes the medium path unscaled (both of
