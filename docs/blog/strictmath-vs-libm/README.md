@@ -68,6 +68,11 @@ The three where `StrictMath`'s result is the correctly rounded one are all `expm
   `spark-4.3.0-local-provenance.txt`) in local mode on JDK 21, with the table created `USING parquet` (the first statement replaced by
   `DROP TABLE IF EXISTS tmp_photon_math` and `CREATE TABLE ... USING parquet`); its output, tab
   separated, as comma-separated columns.
+- `hypot-order.txt`: `hypot-order` (fdlibm 5.3's C on the input of issue #173, both argument
+  orders; gcc 15.2.0, `-O0 -ffp-contract=off -fno-builtin -fno-strict-aliasing -D__LITTLE_ENDIAN`,
+  x86-64) and `java HypotOrder.java` on JDK 17.0.21.1, 21.0.13.1 and 25.0.5.1.
+- `hypot-pairs.txt`: `java HypotPairs.java 1000000 | ./hypot-order-check` and
+  `java HypotPairsEdges.java 300000 | ./hypot-order-check` on JDK 25.0.5.1, the same gcc and flags.
 - `nantier-jdk-25.0.5.1.txt`: `../NanTier.java`'s output, one run under `-Xint` and one under the
   default JIT tiers, on JDK 25.0.5.1, x86-64.
 - `photon-2026-11-24.csv`: Photon's result for each input, from Databricks Free Edition, SQL
@@ -77,4 +82,21 @@ The three where `StrictMath`'s result is the correctly rounded one are all `expm
 
 ```sh
 python3 ../figures.py
+```
+
+## hypot's argument order
+
+`hypot-order.c` and `hypot-order-check.c` link Sun's `e_hypot.c` from
+`../../../reference/fdlibm-5.3/`; `HypotOrder.java`, `HypotPairs.java` and `HypotPairsEdges.java`
+run on any JDK. From a scratch directory:
+
+```bash
+d=$(pwd); R=$d/../../../reference/fdlibm-5.3
+F="-O0 -ffp-contract=off -fno-builtin -fno-strict-aliasing -D__LITTLE_ENDIAN"
+cd "$(mktemp -d)"
+gcc $F -I "$R" -o hypot-order "$d/hypot-order.c" "$R/e_hypot.c" -lm && ./hypot-order
+java "$d/HypotOrder.java"
+gcc $F -I "$R" -o hypot-order-check "$d/hypot-order-check.c" "$R/e_hypot.c" -lm
+java "$d/HypotPairs.java" 1000000 | ./hypot-order-check | tail -1
+java "$d/HypotPairsEdges.java" 300000 | ./hypot-order-check | tail -1
 ```

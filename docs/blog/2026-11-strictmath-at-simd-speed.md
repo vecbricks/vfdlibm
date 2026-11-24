@@ -78,7 +78,7 @@ Spark's generated code calls `java.lang.StrictMath` for `exp`, `ln`, `log10`, `p
 relatives, and `java.lang.Math` for the rest. The difference is a promise. `Math.exp` promises a
 result "within 1 ulp of the exact result", where an ulp, a unit in the last place, is the gap
 between a double and the next one. So it may return either neighbour, and the JIT, the compiler
-inside the JVM, may use code written for your CPU. `StrictMath` promises one algorithm, Sun's fdlibm 5.3, a C library. The same
+inside the JVM, may use code written for your CPU. `StrictMath` promises one algorithm, Sun's fdlibm 5.3, a C library, and follows it almost everywhere (the third surprise below). The same
 input gives the same 64 bits on every JVM and every CPU.
 
 ## Photon returned other doubles on my warehouse
@@ -156,7 +156,7 @@ the kind of promise `Math` makes. I have not measured how often `VectorOperators
 
 [![StrictMath.exp, VectorOperators.EXP and VFdlibm.exp compared on what each promises.](img/compare.svg)](img/compare.svg)
 
-## Two surprises
+## Three surprises
 
 ### 1. StrictMath's NaN depends on the JIT
 
@@ -209,6 +209,25 @@ no longer stay in registers. Only the allocation shows it.
 So the project's CI fails a benchmark that allocates. It also reads the machine code the JIT emits for every
 function and checks the register width, stray calls and fused multiply-adds. A fused multiply-add
 computes `a * b + c` with one rounding instead of two, which changes results, so none may appear.
+
+### 3. StrictMath is not quite fdlibm
+
+`StrictMath` and fdlibm agree almost everywhere, and a vector port has to match the JDK, not the
+C. On 24 November 2026, the nightly fuzzer found one input in about five billion where vfdlibm
+was one ulp below `StrictMath.hypot`.
+
+[![hypot(x, y) and hypot(y, x) in fdlibm 5.3's C give two answers one ulp apart; StrictMath gives one answer in both orders.](img/hypot-order.svg)](img/hypot-order.svg)
+
+Sun's C picks the larger argument by comparing the top 32 bits of the two only:
+
+```c
+if(hb > ha) {a=y;b=x;j=ha; ha=hb;hb=j;} else {a=x;b=y;}
+```
+
+These two inputs share their top 32 bits, so the C keeps them in the order given, and its answer
+depends on that order. `StrictMath.hypot` gives one answer in both orders, on JDK 17, 21 and 25,
+and so does `Math.hypot`, which Spark calls. vfdlibm had followed the C exactly. In 0.3.0 it
+orders `hypot`'s arguments by magnitude, as `StrictMath` does ({% raw %}[{{PR}}]({{PR}}){% endraw %}).
 
 ## What it does not do yet
 
@@ -393,6 +412,32 @@ java --add-modules jdk.incubator.vector -cp "target/classes:$(cat cp.txt)" examp
   has four such inputs and a count, and the lines are in
   [this figure](img/hypot-stale.svg); the vector code keeps the old words, as the C does
   ([`HypotTest`](https://github.com/vecbricks/vfdlibm/blob/v0.3.0/src/test/java/io/github/vecbricks/vfdlibm/HypotTest.java)).
+
+**hypot's argument order**
+- The nightly run [45355169208](https://github.com/vecbricks/vfdlibm/actions/runs/45355169208),
+  job "fuzz (hypot, runner flags)", on 24 November 2026 on an AMD EPYC 9V74 runner (AVX2), found
+  one input in 5,454,200,832 at 256 bits, the same input at the widest species:
+  x = `0x5f201b45bbc5eac3`, y = `0x5f201b45fffffffe`. `StrictMath` gave `0x5f26c7304042d063`,
+  vfdlibm `0x5f26c7304042d062`, one ulp below ([#173](https://github.com/vecbricks/vfdlibm/issues/173)).
+- [`hypot-order.c`](https://github.com/vecbricks/vfdlibm/blob/v0.3.0/docs/blog/strictmath-vs-libm/hypot-order.c) calls Sun's C from
+  [`reference/fdlibm-5.3/e_hypot.c`](https://github.com/vecbricks/vfdlibm/blob/v0.3.0/reference/fdlibm-5.3/e_hypot.c)
+  (line 60 is the comparison quoted above), built with gcc 15.2.0 and
+  `-O0 -ffp-contract=off -fno-builtin -fno-strict-aliasing -D__LITTLE_ENDIAN`: `hypot(x, y)` is
+  `…d062` and `hypot(y, x)` is `…d063`. [`HypotOrder.java`](https://github.com/vecbricks/vfdlibm/blob/v0.3.0/docs/blog/strictmath-vs-libm/HypotOrder.java) gives `…d063` for
+  `StrictMath.hypot` and `Math.hypot` in both orders on JDK 17.0.21.1, 21.0.13.1 and 25.0.5.1.
+  Both outputs are in `strictmath-vs-libm/data/hypot-order.txt`.
+- [`HypotPairs.java`](https://github.com/vecbricks/vfdlibm/blob/v0.3.0/docs/blog/strictmath-vs-libm/HypotPairs.java) and [`HypotPairsEdges.java`](https://github.com/vecbricks/vfdlibm/blob/v0.3.0/docs/blog/strictmath-vs-libm/HypotPairsEdges.java)
+  draw 1,300,000 pairs whose arguments share their top 32 bits, and
+  [`hypot-order-check.c`](https://github.com/vecbricks/vfdlibm/blob/v0.3.0/docs/blog/strictmath-vs-libm/hypot-order-check.c) compares `StrictMath` with the C called with the
+  larger magnitude first: they differ only on two pairs, both of two NaNs (the contract's
+  exception). On these random pairs the C's own answer depended on the order only for pairs of two
+  NaNs, so they test the rule less than the fuzzer's input does
+  (`strictmath-vs-libm/data/hypot-pairs.txt`).
+- [JDK-7130085](https://bugs.openjdk.org/browse/JDK-7130085), "Port fdlibm hypot to Java" (JDK 9,
+  2015), replaced the JDK's native C `hypot` with a Java port, and since JDK 9
+  `StrictMath.hypot` gives the same result in either order. The JDK's own tests,
+  [`HypotTests.java`](https://github.com/openjdk/jdk/blob/master/test/jdk/java/lang/StrictMath/HypotTests.java),
+  require `hypot(a, b) == hypot(b, a)`.
 
 **How the bits are kept**
 - Ported from Sun's fdlibm 5.3 C sources only, never from OpenJDK's `FdLibm.java` (GPLv2 with the

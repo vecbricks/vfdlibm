@@ -511,6 +511,49 @@ def fig_boxing():
     f.write(y)
 
 
+def fig_hypot_order():
+    txt = (DATA / "hypot-order.txt").read_text()
+    c = re.search(r"hypot\(x, y\) = ([0-9a-f]{16}), hypot\(y, x\) = ([0-9a-f]{16})", txt)
+    cxy, cyx = c.group(1), c.group(2)
+    jdks = re.findall(r"^JDK (\S+): StrictMath\.hypot\(x, y\) = ([0-9a-f]{16}), StrictMath\.hypot\(y, x\) = "
+                      r"([0-9a-f]{16}), Math\.hypot\(x, y\) = ([0-9a-f]{16}), Math\.hypot\(y, x\) = ([0-9a-f]{16})",
+                      txt, re.M)
+    assert jdks and all(len(set(j[1:])) == 1 for j in jdks), jdks
+    sm = jdks[0][1]
+    assert all(j[1] == sm for j in jdks)
+    versions = ", ".join(j[0].split(".")[0] for j in jdks)
+    f = Fig("hypot-order", "One input, two answers from the C",
+            "hypot(x, y) and hypot(y, x) on the input the nightly fuzzer found.",
+            f"x = 0x5f201b45bbc5eac3 and y = 0x5f201b45fffffffe share their high 32 bits. fdlibm 5.3's "
+            f"C returns {cxy} for hypot(x, y) and {cyx} for hypot(y, x). StrictMath.hypot and "
+            f"Math.hypot return {sm} in both orders on JDK {versions}.")
+    y = f.header()
+    f.rect(M, y, IW, 64, GREY_F, GREY_S, rx=10)
+    f.text(M + 16, y + 26, "x = 0x5f201b45 bbc5eac3", size=16, mono=True)
+    f.text(M + 16, y + 50, "y = 0x5f201b45 fffffffe", size=16, mono=True)
+    f.text(M + IW - 16, y + 38, "same high 32 bits", size=15, fill=GREY, anchor="end")
+    y += 88
+
+    for label, sub, val, fill, stroke, tcol, dash in (
+            ("fdlibm 5.3 C", "hypot(x, y)", cxy, ORANGE_F, ORANGE_S, ORANGE_T, False),
+            ("fdlibm 5.3 C", "hypot(y, x)", cyx, ORANGE_F, ORANGE_S, BLUE_T, False),
+            ("StrictMath", f"both orders, JDK {versions}", sm, BLUE_F, BLUE_S, BLUE_T, False)):
+        f.rect(M, y, IW, 70, fill, stroke, dash=dash)
+        f.text(M + 16, y + 30, label, size=17, weight=700)
+        f.text(M + 16, y + 54, sub, size=15, mono=sub.startswith("hypot"), fill=GREY)
+        f.add(f'<text x="{M + IW - 16:.1f}" y="{y + 44:.1f}" font-family="{esc(MONO)}" font-size="18" '
+              f'text-anchor="end" style="font-variant-ligatures: none"><tspan fill="{INK}">0x{esc(val[:-1])}</tspan>'
+              f'<tspan fill="{tcol}" font-weight="700">{esc(val[-1])}</tspan></text>')
+        y += 80
+    y += 6
+    f.pill(M, y, IW, 42, ORANGE_S, "The C's answer depends on the order", size=17)
+    y += 72
+    y = f.caption(y, "The C picks the larger argument by its high 32 bits; here they are equal, so it "
+                     "keeps the order given. Math.hypot gives StrictMath's bits in both orders too. "
+                     "Data: strictmath-vs-libm/data/hypot-order.txt.")
+    f.write(y)
+
+
 def fig_speedup():
     f = Fig("speedup", "Speedup over StrictMath",
             "Per function, on the Intel Xeon Platinum 8573C (AVX-512) and the AMD EPYC 7763 (AVX2); "
@@ -536,5 +579,6 @@ if __name__ == "__main__":
     fig_nan()
     fig_hypot()
     fig_boxing()
+    fig_hypot_order()
     fig_speedup()
     print("who-returns-what G/S counts:", counts)
