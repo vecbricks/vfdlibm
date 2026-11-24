@@ -714,21 +714,21 @@ mnemonic); the other operations count the same at both widths.
   `bench/results/exp-kinds-xeon8573c-2026-11-21.txt` times each kind of rare input apart. Both files
   time `exp` as of a5683c3 and a1db6df, and `Exp.java` has changed since by a fault constant, a
   local and the finish's first eight lanes written out with constant indices (issue #37). Today's
-  `Exp.java` is timed in one run each by `exp-epyc7763-2026-11-23.txt` and
-  `exp-epyc7763-2026-11-24.txt` (before and after #174 changed `Hypot.java`, which is under
-  `ExpBenchmark` by `bench/record.py`'s rule) and `exp-xeon8573c-2026-11-24.txt` (before #174): the
-  blend over the finish reads 1.98 to 2.12 on common data and 1.37 to 1.44 on mixed data on the
-  EPYC, and 1.25 to 1.34 and 1.73 to 1.81 on the Xeon, at every vector row of 256 bits or more.
-  `VFdlibm.exp` keeps the finish arm, which those files read lower than the blend by more than
-  1.3x on mixed data at 256 bits and the preferred species on both hosts and at 512 bits on the
-  8573C (the `*Max` rows of the files of 21 November and before time the finish that boxed before
-  issue #37 and are left out; those of `exp-epyc7763-2026-11-23.txt`, `exp-epyc7763-2026-11-24.txt`
-  and `exp-xeon8573c-2026-11-24.txt`, which time today's finish, read the blend over it 1.37, 1.38
-  and 1.76 on mixed data), and to which issue #30's rules send a tie; provisionally, until a host
-  run revises it: a second run of today's code on each host, a first of the other AVX-512 hosts or
-  a pair. Each
-  port measures both on common and mixed
-  data, decides per branch, and records the decision in its pull request (`PLAN.md` section 5).
+  `Exp.java` is timed in two runs on each host, before and after #174 changed `Hypot.java`, which is
+  under `ExpBenchmark` by `bench/record.py`'s rule: `exp-epyc7763-2026-11-23.txt` and
+  `exp-epyc7763-2026-11-24.txt`, and `exp-xeon8573c-2026-11-24.txt` and
+  `exp-xeon8573c-2026-11-24-2.txt`: the blend over the finish reads 1.98 to 2.12 on common data and
+  1.37 to 1.44 on mixed data on the EPYC, and 1.25 to 1.42 and 1.70 to 1.81 on the Xeon, at every
+  vector row of 256 bits or more. `VFdlibm.exp` keeps the finish arm, which those files read lower
+  than the blend by more than 1.3x on mixed data at 256 bits and the preferred species on both hosts
+  and at 512 bits on the 8573C (the `*Max` rows of the files of 21 November and before time the
+  finish that boxed before issue #37 and are left out; those of `exp-epyc7763-2026-11-23.txt`,
+  `exp-epyc7763-2026-11-24.txt`, `exp-xeon8573c-2026-11-24.txt` and
+  `exp-xeon8573c-2026-11-24-2.txt`, which time today's finish, read the blend over it 1.37, 1.38,
+  1.76 and 1.77 on mixed data), and to which issue #30's rules send a tie; provisionally, until a
+  host run revises it: a first of the other AVX-512 hosts or a pair; the second run of today's code
+  on each host reads the same. Each port measures both on common and mixed data, decides per branch,
+  and records the decision in its pull request (`PLAN.md` section 5).
 - **A blended alternative costs its whole form in every lane.** exp computed the C's near form and
   its `k == 0` form for every lane and blended them. Proving that the far form and the general tail
   already give those lanes' results (`PROOFS.md`, L1 and L2) left one form. With native AVX-512 at
