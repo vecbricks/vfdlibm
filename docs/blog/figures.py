@@ -263,25 +263,43 @@ def fig_one_call():
     f.write(y)
 
 
-def fig_who():
+def fig_who(full):
+    """The grid of who returns what: all 32 inputs and five sources (full), or for the post's body
+    two inputs a function (the first, and the first where the correctly rounded result is
+    StrictMath's if there is one, else the second) and three sources."""
     rows = rows_of_sql()
     spark = column(DATA / "spark-4.2.0-local-2026-11-24.csv", "spark")
     photon = column(DATA / "photon-2026-11-24.csv", "photon")
     mvec = column(DATA / "libmvec-glibc-2.43-avx2.csv", "libmvec")
     correct = column(DATA / "correctly-rounded.csv", "correct")
-    cols = [("Spark", "4.2.0 local", spark), ("Photon", "my warehouse", photon),
-            ("glibc", "scalar", None), ("glibc", "libmvec", mvec), ("correct", "rounding", correct)]
+    cols = [("Spark", "4.2.0, local", spark), ("Photon", "my warehouse", photon),
+            ("glibc", "scalar", None)]
+    if full:
+        cols += [("glibc", "libmvec", mvec), ("correct", "rounding", correct)]
+    else:
+        picked = []
+        for fn in dict.fromkeys(r["f"] for r in rows):
+            mine = [r for r in rows if r["f"] == fn]
+            cr_s = [r for r in mine[1:] if correct.get((fn, r["x"])) == r["strictmath"]]
+            picked += [mine[0], cr_s[0] if cr_s else mine[1]]
+        rows = picked
     counts = [[0, 0, 0] for _ in cols]
-    f = Fig("who-returns-what", "Who returns what on 32 inputs",
-            "Inputs where StrictMath and glibc 2.43 give different doubles.", "")
+    if full:
+        f = Fig("who-returns-what-full", "Who returns what on 32 inputs",
+                "Inputs where StrictMath and glibc 2.43 give different doubles.", "")
+    else:
+        f = Fig("who-returns-what", "Who returns what",
+                f"{len(rows)} of the 32 inputs where StrictMath and glibc 2.43 give different doubles.", "")
     y = f.header()
     f.pill(M, y, 30, 24, ORANGE_S, "G", size=15)
-    f.text(M + 38, y + 18, "= glibc's scalar result", size=15)
-    f.pill(M + 250, y, 30, 24, BLUE_S, "S", size=15)
-    f.text(M + 288, y + 18, "= StrictMath's", size=15)
-    f.text(M + IW, y + 18, "· neither", size=15, fill=GREY, anchor="end")
+    f.text(M + 38, y + 18, "= glibc's result", size=15)
+    f.pill(M + 210, y, 30, 24, BLUE_S, "S", size=15)
+    f.text(M + 248, y + 18, "= StrictMath's", size=15)
+    if full:
+        f.text(M + IW, y + 18, "· neither", size=15, fill=GREY, anchor="end")
     y += 46
-    cw, c0 = 78, M + IW - 5 * 78
+    cw = 78 if full else 110
+    c0 = M + IW - len(cols) * cw
     for i, (a, b, _) in enumerate(cols):
         cx = c0 + i * cw + cw / 2
         f.text(cx, y + 14, a, size=15, weight=700, anchor="middle")
@@ -295,7 +313,7 @@ def fig_who():
             f.text(M + 10, y + 19, names[r["f"]], size=15, weight=700, mono=True)
             y += 31
             last = r["f"]
-        f.text(M + 10, y + 17, f"{r['x']:.5g}", size=15, mono=True, fill=GREY)
+        f.text(M + 10, y + 17, f"x = {r['x']:.5g}", size=15, mono=True, fill=GREY)
         key = (r["f"], r["x"])
         for i, (_, _, data) in enumerate(cols):
             v = r["libm"] if data is None else data.get(key)
@@ -312,15 +330,16 @@ def fig_who():
     for i, c in enumerate(counts):
         f.text(c0 + i * cw + cw / 2, y + 18, f"{c[0]} / {c[1]}", size=15, weight=700, anchor="middle")
     y += 50
-    y = f.caption(y, "Consistent with a call to glibc's scalar functions for each element; "
-                     "inconsistent with StrictMath, a correctly rounded library and glibc 2.43's AVX2 "
-                     "libmvec. Not excluded: another library or glibc version with the same doubles "
-                     "here, a hand-vectorized port of glibc's algorithms, libmvec at another width, "
-                     "another CPU (the warehouse's is unknown).")
-    y = f.caption(y, "Photon: a Databricks SQL warehouse, 24 November 2026. The rest: my laptop, "
-                     "glibc 2.43. Data in strictmath-vs-libm/data/.")
-    f.desc = ("For each of the 32 inputs, which result each source returned: G for glibc 2.43's "
-              "scalar result, S for StrictMath's. Totals G / S: " + "; ".join(
+    if full:
+        y = f.caption(y, "Consistent with a call to glibc's scalar functions for each element; "
+                         "inconsistent with StrictMath, a correctly rounded library and glibc 2.43's "
+                         "AVX2 libmvec. Not excluded: another library or glibc version with the same "
+                         "doubles here, a hand-vectorized port of glibc's algorithms, libmvec at "
+                         "another width, another CPU (the warehouse's is unknown).")
+    y = f.caption(y, "Photon: a Databricks SQL warehouse, 24 November 2026. Spark and glibc: my "
+                     "laptop, glibc 2.43." + ("" if full else " All 32 inputs give the same picture."))
+    f.desc = (f"For {len(rows)} inputs, which result each source returned: G for glibc 2.43's "
+              "result, S for StrictMath's. Totals G / S: " + "; ".join(
                   f"{a} {b}: {c[0]} / {c[1]}" for (a, b, _), c in zip(cols, counts)) + ".")
     f.write(y)
     return counts
@@ -492,43 +511,10 @@ def fig_boxing():
     f.write(y)
 
 
-def fig_checks():
-    f = Fig("checks", "How every lane is checked",
-            "Six layers, each against StrictMath or against the machine code.",
-            "Tests at every width, hard cases, planted faults, the machine code, a nightly sweep and "
-            "fuzz, and numbered lemmas where the code departs from the C.")
-    y = f.header()
-    items = (("Tests at every width", "Each lane against StrictMath by raw bits, at every width the "
-              "host has, masked and unmasked.", BLUE_F, BLUE_S, False),
-             ("Hard cases", "Inputs near a rounding boundary: Lefèvre's tables, CORE-MATH's MIT lists "
-              "for hypot and pow, exact cases computed for both.", BLUE_F, BLUE_S, False),
-             ("Planted faults", "Deliberate bugs, each switched on in a JVM of its own; the check "
-              "named for it must fail.", BLUE_F, BLUE_S, False),
-             ("The machine code", "What C2 emits: the width's registers, no fused multiply-add, from "
-              "256 bits up no stray call; and an allocation check.", ORANGE_F, ORANGE_S, False),
-             ("Every night, x86 and Arm", "All 2^32 high words, three low words each (on x86 at "
-              "128 bits, a 1/32 slice a night; one argument a night for two), and a fuzz.",
-              GREY_F, "#9e9e9e", True),
-             ("Lemmas where the code departs", "Written arguments in PROOFS.md; parts of those for "
-              "exp, log and expm1 machine-checked by Z3 and cvc5.", KHAKI_F, KHAKI_S, False))
-    for i, (head, body, fill, stroke, dash) in enumerate(items, 1):
-        lines = wrap(body, 15, IW - 70)
-        h = 52 + 20 * len(lines)
-        f.rect(M, y, IW, h, fill, stroke, dash=dash)
-        f.badge(M + 26, y + 28, str(i), stroke)
-        f.text(M + 52, y + 34, head, size=17, weight=700)
-        for j, ln in enumerate(lines):
-            f.text(M + 52, y + 58 + 20 * j, ln, size=15)
-        y += h + 10
-    y += 18
-    y = f.caption(y, "Everywhere else, the code is fdlibm's C, operation by operation, and the tests "
-                     "compare it with StrictMath.")
-    f.write(y)
-
-
 def fig_speedup():
     f = Fig("speedup", "Speedup over StrictMath",
-            "To be drawn from the README's v0.3.0 speedup table at release.",
+            "Per function, on the Intel Xeon Platinum 8573C (AVX-512) and the AMD EPYC 7763 (AVX2); "
+            "to be drawn from the README's v0.3.0 speedup table at release.",
             "A placeholder: the speedup bars are made from the README's v0.3.0 table when it exists.")
     y = f.header()
     f.rect(M, y, IW, 130, GREY_F, "#9e9e9e", dash=True)
@@ -543,12 +529,12 @@ if __name__ == "__main__":
     fig_exp1()
     fig_spark_emits()
     fig_one_call()
-    counts = fig_who()
+    counts = fig_who(full=True)
+    fig_who(full=False)
     fig_how_often()
     fig_compare()
     fig_nan()
     fig_hypot()
     fig_boxing()
-    fig_checks()
     fig_speedup()
     print("who-returns-what G/S counts:", counts)
