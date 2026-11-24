@@ -721,10 +721,12 @@ mnemonic); the other operations count the same at both widths.
   EPYC, and 1.25 to 1.34 and 1.73 to 1.81 on the Xeon, at every vector row of 256 bits or more.
   `VFdlibm.exp` keeps the finish arm, which those files read lower than the blend by more than
   1.3x on mixed data at 256 bits and the preferred species on both hosts and at 512 bits on the
-  8573C (the `*Max` rows of the files committed so far time the finish that boxed before issue #37
-  and are left out), and to which issue #30's rules send a tie;
-  provisionally, until a host run revises it: a second run of the Xeon 8573C, a first of the
-  other AVX-512 hosts or a pair. Each
+  8573C (the `*Max` rows of the files of 21 November and before time the finish that boxed before
+  issue #37 and are left out; those of `exp-epyc7763-2026-11-23.txt`, `exp-epyc7763-2026-11-24.txt`
+  and `exp-xeon8573c-2026-11-24.txt`, which time today's finish, read the blend over it 1.37, 1.38
+  and 1.76 on mixed data), and to which issue #30's rules send a tie; provisionally, until a host
+  run revises it: a second run of today's code on each host, a first of the other AVX-512 hosts or
+  a pair. Each
   port measures both on common and mixed
   data, decides per branch, and records the decision in its pull request (`PLAN.md` section 5).
 - **A blended alternative costs its whole form in every lane.** exp computed the C's near form and

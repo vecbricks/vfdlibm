@@ -48,7 +48,8 @@ import org.openjdk.jmh.annotations.Warmup;
  * allocates, which means the body boxed. The {@code *Max} row is at {@code
  * DoubleVector.SPECIES_MAX}; {@link Asin#asin}'s finish writes out its first eight lanes with
  * constant indices, as the other ports' do since #100. bench/results/asin-xeon8573c-2026-11-22.txt
- * and asin-epyc7763-2026-11-22.txt read these rows, a run and its re-run on each host. asin has one arm, so there is no comparison to make between arms.
+ * and asin-epyc7763-2026-11-22.txt read these rows, a run and its re-run on each host. asin has one
+ * arm, so there is no comparison to make between arms.
  */
 @State(Scope.Thread)
 @BenchmarkMode(Mode.AverageTime)
