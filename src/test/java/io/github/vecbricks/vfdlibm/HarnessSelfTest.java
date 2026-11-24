@@ -392,6 +392,32 @@ class HarnessSelfTest {
     assertTrue(belowTwoToMinus1060 > 4096 / 8, "only " + belowTwoToMinus1060 + " below 2^-1060");
   }
 
+  /**
+   * Each pair of {@link Inputs#sharedWordPairs} has one finite absolute high word, the words
+   * listed are drawn about a quarter of the time, and the signs and both low words vary.
+   */
+  @Test
+  void sharedWordPairsShareAFiniteHighWordAndNothingElse() {
+    int n = 1 << 14;
+    Inputs.Pairs p = Inputs.sharedWordPairs(12L, n, 0x3ff00000);
+    int listed = 0;
+    int lowsDiffer = 0;
+    int signsDiffer = 0;
+    for (int i = 0; i < n; i++) {
+      long x = Double.doubleToRawLongBits(p.x()[i]);
+      long y = Double.doubleToRawLongBits(p.y()[i]);
+      long word = (x & Long.MAX_VALUE) >>> 32;
+      assertEquals(word, (y & Long.MAX_VALUE) >>> 32);
+      assertTrue(word < 0x7ff00000L, "a finite word: " + Long.toHexString(word));
+      listed += Math.abs(word - 0x3ff00000L) <= 1 ? 1 : 0;
+      lowsDiffer += (int) x != (int) y ? 1 : 0;
+      signsDiffer += (x ^ y) < 0 ? 1 : 0;
+    }
+    assertEquals(0.25, listed / (double) n, 0.02);
+    assertTrue(lowsDiffer > n - 4, "low words differ in " + lowsDiffer);
+    assertEquals(0.5, signsDiffer / (double) n, 0.02);
+  }
+
   @Test
   void aroundIsConsecutiveDoubles() {
     long one = Double.doubleToRawLongBits(1.0);

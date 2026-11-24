@@ -27,6 +27,11 @@ vfdlibm ports fdlibm's double functions to the Java Vector API, each lane bit-id
   `dev/prove.sh` as `proofs/README.md` describes. Fused multiply-add, reassociation and division by
   a reciprocal stay out because they change results in general, so no proof covers them as a rule; a
   specific use proven equal for every input would follow the proof rule like any other.
+  Where `StrictMath` itself departs from fdlibm's C, the port follows `StrictMath`. Such a
+  departure carries a witness input, the owner's decision, and a numbered lemma that says what is
+  proven (the port equals the C on the transformed inputs) and what is only observed (that
+  `StrictMath` does the same). The lemma cites public bug records and never the JDK's source.
+  hypot's argument order is one such departure (`PROOFS.md`, L21; issue 173).
 
 ## Build and test
 

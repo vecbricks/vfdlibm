@@ -322,6 +322,18 @@ class Atan2Test {
     assertAtan2(width.species(), densePairs(8500L + 8L * width.ordinal()));
   }
 
+  /**
+   * Pairs of one high word with both low words random ({@link Inputs#sharedWordPairs}), the kind
+   * of pair on which hypot's order of the arguments showed (PROOFS.md, L21), a quarter at the
+   * words of 0, 1, 2^66 and the largest finite one.
+   */
+  @ParameterizedTest
+  @EnumSource(VectorWidth.class)
+  void sharedHighWords(VectorWidth width) {
+    assertAtan2(width.species(), Inputs.sharedWordPairs(8560L + width.ordinal(), 1 << 17,
+        0x00000000, 0x3ff00000, 0x44100000, 0x7fefffff));
+  }
+
   @ParameterizedTest
   @EnumSource(VectorWidth.class)
   void publishedPairs(VectorWidth width) {

@@ -103,6 +103,41 @@ class FuzzWordGapsTest {
     }
   }
 
+  /**
+   * One pair in ten of a function without gaps shares a high word with both low words random
+   * ({@link Fuzz#drawSharedWord}, PROOFS.md L21), and nine in a hundred of one with gaps; a pair
+   * of one high word whose low words are both outside the fuzz's patterned ones is otherwise
+   * rare, so the count is the share's.
+   */
+  @Test
+  void aTenthOfThePairsShareAHighWordWithRandomLowWords() {
+    for (int[] gaps : new int[][] {new int[0], GAPS}) {
+      Fuzz.PairEdges edges = new Fuzz.PairEdges(EDGES, EDGES, Fuzz.PAIR_SPECIALS, gaps);
+      SplittableRandom random = new SplittableRandom(0x5eedL);
+      double[] pair = new double[2];
+      int shared = 0;
+      int draws = 200_000;
+      for (int i = 0; i < draws; i++) {
+        Fuzz.drawPair(random, edges, pair);
+        long x = Double.doubleToRawLongBits(pair[0]);
+        long y = Double.doubleToRawLongBits(pair[1]);
+        if (word(pair[0]) == word(pair[1]) && patterned((int) x) + patterned((int) y) == 0) {
+          shared++;
+        }
+      }
+      // Both arguments at this one edge word (1 in 9 of 9 words) with random low words add
+      // under one percent.
+      double want = gaps.length == 0 ? 0.1 : 0.09;
+      double got = shared / (double) draws;
+      assertTrue(got > want - 0.005 && got < want + 0.01, gaps.length + " gaps: " + shared);
+    }
+  }
+
+  /** 1 for a low word the fuzz draws by pattern (0, 1, all ones, all ones less one). */
+  private static int patterned(int low) {
+    return low == 0 || low == 1 || low == -1 || low == -2 ? 1 : 0;
+  }
+
   @Test
   void theGapsAreCopiedOnTheWayInAndOut() {
     int[] gaps = {ABOVE};

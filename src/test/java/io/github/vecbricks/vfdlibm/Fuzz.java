@@ -43,7 +43,12 @@ import jdk.incubator.vector.VectorSpecies;
  * branch is on the two arguments' high words relative to each other, as {@code e_atan2.c}'s
  * {@code k = (iy - ix) >> 20}, lists the differences it tests in {@link PairEdges#wordGaps}, and
  * one pair in ten is then drawn at one of them (the other nine as above): the first argument's
- * absolute high word less the second's equals the difference, the words otherwise random.
+ * absolute high word less the second's equals the difference, the words otherwise random. Of the
+ * pairs not drawn at a gap, every function's draws one in ten sharing a high word ({@link
+ * #drawSharedWord}): the first argument drawn as above from its edges or as random bits, the
+ * second of its absolute high word with a random sign, and both low words uniformly random, where
+ * e_hypot.c's line 60 and StrictMath order the arguments differently (PROOFS.md, L21; issue 173,
+ * which the patterned low words of a gap of 0 found once in about 5 * 10^9 draws).
  *
  * <p>The sweep takes three low words per high word; these take every other one, where the C's
  * results depend on the low word: exp's {@code k}, log's and log1p's reductions.
@@ -464,6 +469,10 @@ final class Fuzz {
       drawAtGap(random, edges.wordGaps()[random.nextInt(edges.wordGaps().length)], out);
       return;
     }
+    if (random.nextInt(10) == 0) {
+      drawSharedWord(random, edges, out);
+      return;
+    }
     int kind = random.nextInt(10);
     if (kind < 3) {
       out[0] = Double.longBitsToDouble(random.nextLong());
@@ -496,6 +505,19 @@ final class Fuzz {
     int first = second + gap;
     out[0] = fromWords(random, first);
     out[1] = fromWords(random, second);
+  }
+
+  /**
+   * A pair of one absolute high word: the first argument's, drawn from its edges or as random
+   * bits (each half the time), the second's sign random, and both low words uniformly random.
+   */
+  static void drawSharedWord(SplittableRandom random, PairEdges edges, double[] out) {
+    long first = Double.doubleToRawLongBits(random.nextBoolean()
+        ? draw(random, edges.x()) : Double.longBitsToDouble(random.nextLong()));
+    long word = first & 0xffffffff_00000000L;
+    out[0] = Double.longBitsToDouble(word | (random.nextLong() & 0xffffffffL));
+    out[1] = Double.longBitsToDouble((word & 0x7fffffff_00000000L)
+        | (random.nextLong() & 0x80000000_ffffffffL));
   }
 
   /** The double of the absolute high word {@code word}, a random sign and a {@link #lowWord}. */

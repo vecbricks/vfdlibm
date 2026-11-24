@@ -1,0 +1,181 @@
+# Pairs for hypot (a function of two arguments) whose high words are equal and whose result by
+# fdlibm 5.3's e_hypot.c, as written, depends on the order of the arguments: one pair a line,
+# `x y`, each as its raw bits in hex (Double.doubleToRawLongBits), x first. Read by
+# Inputs.hardCasePairs("hypot-order"). Lines starting with # are comments. They are not hard to
+# round: they are the inputs of PROOFS.md's L21 (issue 173).
+#
+# Line 60 of e_hypot.c swaps the arguments where hb > ha, by the high words alone, so with equal
+# high words a is x whichever is larger, and lines 101-108 split the two at their low words the
+# other way round; at these pairs that changes the last bit. StrictMath.hypot gives, in either
+# order, the C's result with the larger magnitude first, and so does VFdlibm.hypot, which orders
+# by magnitude (Hypot.java). The first base pair is issue 173's, found by the nightly fuzz
+# (run 45355169208): e_hypot.c gives 0x5f26c7304042d062 for it as written and 0x5f26c7304042d063
+# with the arguments the other way, which is StrictMath's in both orders.
+#
+# The other 18 base pairs were found by a scratch C program, not committed: Sun's e_hypot.c from
+# reference/fdlibm-5.3, compiled with gcc -O0 -ffp-contract=off -fno-builtin
+# -fno-strict-aliasing -D__LITTLE_ENDIAN and linked with the C library's sqrt, called as
+# __ieee754_hypot(x, y) and __ieee754_hypot(y, x) on pairs of one high word, drawn uniformly
+# below 0x7ff00000, with two different low words, each uniformly random (xorshift128+); a pair
+# is kept where the two results differ. It found 3 of 10^8 draws and 6 and 9 of two runs of
+# 4 * 10^8 (18 of 9 * 10^8); 0 of 10^8 with the low words drawn as the fuzz draws one (0, 1,
+# all ones, all ones less one or random, each one time in five), and 0 of 8 * 10^8 with the high
+# word subnormal (below 0x00100000). They fall in the three ranges of the C's medium path: the
+# 2^-600 scaling above 2^500, the 2^600 scaling below 2^-500 and neither.
+#
+# Each base pair is written in both orders, each with the four combinations of signs: 8 lines a
+# pair, 152 in all. HypotTest checks the claim: equal high words, the C as written differing by
+# order, and StrictMath equal in both orders to the C with the larger magnitude first.
+# arity: 2
+0x5f201b45bbc5eac3 0x5f201b45fffffffe
+0xdf201b45bbc5eac3 0x5f201b45fffffffe
+0x5f201b45bbc5eac3 0xdf201b45fffffffe
+0xdf201b45bbc5eac3 0xdf201b45fffffffe
+0x5f201b45fffffffe 0x5f201b45bbc5eac3
+0xdf201b45fffffffe 0x5f201b45bbc5eac3
+0x5f201b45fffffffe 0xdf201b45bbc5eac3
+0xdf201b45fffffffe 0xdf201b45bbc5eac3
+0x249301acc6fd742a 0x249301ac29534f2d
+0xa49301acc6fd742a 0x249301ac29534f2d
+0x249301acc6fd742a 0xa49301ac29534f2d
+0xa49301acc6fd742a 0xa49301ac29534f2d
+0x249301ac29534f2d 0x249301acc6fd742a
+0xa49301ac29534f2d 0x249301acc6fd742a
+0x249301ac29534f2d 0xa49301acc6fd742a
+0xa49301ac29534f2d 0xa49301acc6fd742a
+0x45af3c2129a79ebd 0x45af3c21f7227e8b
+0xc5af3c2129a79ebd 0x45af3c21f7227e8b
+0x45af3c2129a79ebd 0xc5af3c21f7227e8b
+0xc5af3c2129a79ebd 0xc5af3c21f7227e8b
+0x45af3c21f7227e8b 0x45af3c2129a79ebd
+0xc5af3c21f7227e8b 0x45af3c2129a79ebd
+0x45af3c21f7227e8b 0xc5af3c2129a79ebd
+0xc5af3c21f7227e8b 0xc5af3c2129a79ebd
+0x4f55af446add5d68 0x4f55af44e1a8bed9
+0xcf55af446add5d68 0x4f55af44e1a8bed9
+0x4f55af446add5d68 0xcf55af44e1a8bed9
+0xcf55af446add5d68 0xcf55af44e1a8bed9
+0x4f55af44e1a8bed9 0x4f55af446add5d68
+0xcf55af44e1a8bed9 0x4f55af446add5d68
+0x4f55af44e1a8bed9 0xcf55af446add5d68
+0xcf55af44e1a8bed9 0xcf55af446add5d68
+0x6ad652b1ec2c2983 0x6ad652b1acaed420
+0xead652b1ec2c2983 0x6ad652b1acaed420
+0x6ad652b1ec2c2983 0xead652b1acaed420
+0xead652b1ec2c2983 0xead652b1acaed420
+0x6ad652b1acaed420 0x6ad652b1ec2c2983
+0xead652b1acaed420 0x6ad652b1ec2c2983
+0x6ad652b1acaed420 0xead652b1ec2c2983
+0xead652b1acaed420 0xead652b1ec2c2983
+0x645e1c8bd1191f04 0x645e1c8b3f1bcc68
+0xe45e1c8bd1191f04 0x645e1c8b3f1bcc68
+0x645e1c8bd1191f04 0xe45e1c8b3f1bcc68
+0xe45e1c8bd1191f04 0xe45e1c8b3f1bcc68
+0x645e1c8b3f1bcc68 0x645e1c8bd1191f04
+0xe45e1c8b3f1bcc68 0x645e1c8bd1191f04
+0x645e1c8b3f1bcc68 0xe45e1c8bd1191f04
+0xe45e1c8b3f1bcc68 0xe45e1c8bd1191f04
+0x7a31ae064147521b 0x7a31ae067b10b19e
+0xfa31ae064147521b 0x7a31ae067b10b19e
+0x7a31ae064147521b 0xfa31ae067b10b19e
+0xfa31ae064147521b 0xfa31ae067b10b19e
+0x7a31ae067b10b19e 0x7a31ae064147521b
+0xfa31ae067b10b19e 0x7a31ae064147521b
+0x7a31ae067b10b19e 0xfa31ae064147521b
+0xfa31ae067b10b19e 0xfa31ae064147521b
+0x422ce00033c9e37e 0x422ce000743b2ed9
+0xc22ce00033c9e37e 0x422ce000743b2ed9
+0x422ce00033c9e37e 0xc22ce000743b2ed9
+0xc22ce00033c9e37e 0xc22ce000743b2ed9
+0x422ce000743b2ed9 0x422ce00033c9e37e
+0xc22ce000743b2ed9 0x422ce00033c9e37e
+0x422ce000743b2ed9 0xc22ce00033c9e37e
+0xc22ce000743b2ed9 0xc22ce00033c9e37e
+0x0a524611716b630f 0x0a5246114bbef314
+0x8a524611716b630f 0x0a5246114bbef314
+0x0a524611716b630f 0x8a5246114bbef314
+0x8a524611716b630f 0x8a5246114bbef314
+0x0a5246114bbef314 0x0a524611716b630f
+0x8a5246114bbef314 0x0a524611716b630f
+0x0a5246114bbef314 0x8a524611716b630f
+0x8a5246114bbef314 0x8a524611716b630f
+0x1dda4f80b2825938 0x1dda4f805b98b61b
+0x9dda4f80b2825938 0x1dda4f805b98b61b
+0x1dda4f80b2825938 0x9dda4f805b98b61b
+0x9dda4f80b2825938 0x9dda4f805b98b61b
+0x1dda4f805b98b61b 0x1dda4f80b2825938
+0x9dda4f805b98b61b 0x1dda4f80b2825938
+0x1dda4f805b98b61b 0x9dda4f80b2825938
+0x9dda4f805b98b61b 0x9dda4f80b2825938
+0x13846f90bc1efa68 0x13846f90e295a3f4
+0x93846f90bc1efa68 0x13846f90e295a3f4
+0x13846f90bc1efa68 0x93846f90e295a3f4
+0x93846f90bc1efa68 0x93846f90e295a3f4
+0x13846f90e295a3f4 0x13846f90bc1efa68
+0x93846f90e295a3f4 0x13846f90bc1efa68
+0x13846f90e295a3f4 0x93846f90bc1efa68
+0x93846f90e295a3f4 0x93846f90bc1efa68
+0x06628a43572f12a2 0x06628a4375087234
+0x86628a43572f12a2 0x06628a4375087234
+0x06628a43572f12a2 0x86628a4375087234
+0x86628a43572f12a2 0x86628a4375087234
+0x06628a4375087234 0x06628a43572f12a2
+0x86628a4375087234 0x06628a43572f12a2
+0x06628a4375087234 0x86628a43572f12a2
+0x86628a4375087234 0x86628a43572f12a2
+0x604018a646b1e8b2 0x604018a6a3f51c42
+0xe04018a646b1e8b2 0x604018a6a3f51c42
+0x604018a646b1e8b2 0xe04018a6a3f51c42
+0xe04018a646b1e8b2 0xe04018a6a3f51c42
+0x604018a6a3f51c42 0x604018a646b1e8b2
+0xe04018a6a3f51c42 0x604018a646b1e8b2
+0x604018a6a3f51c42 0xe04018a646b1e8b2
+0xe04018a6a3f51c42 0xe04018a646b1e8b2
+0x1f9540137ff2f0f1 0x1f95401329bdf887
+0x9f9540137ff2f0f1 0x1f95401329bdf887
+0x1f9540137ff2f0f1 0x9f95401329bdf887
+0x9f9540137ff2f0f1 0x9f95401329bdf887
+0x1f95401329bdf887 0x1f9540137ff2f0f1
+0x9f95401329bdf887 0x1f9540137ff2f0f1
+0x1f95401329bdf887 0x9f9540137ff2f0f1
+0x9f95401329bdf887 0x9f9540137ff2f0f1
+0x049f146b078736f6 0x049f146bc4fab51e
+0x849f146b078736f6 0x049f146bc4fab51e
+0x049f146b078736f6 0x849f146bc4fab51e
+0x849f146b078736f6 0x849f146bc4fab51e
+0x049f146bc4fab51e 0x049f146b078736f6
+0x849f146bc4fab51e 0x049f146b078736f6
+0x049f146bc4fab51e 0x849f146b078736f6
+0x849f146bc4fab51e 0x849f146b078736f6
+0x58e1c4ba905d7a28 0x58e1c4baf9b921b9
+0xd8e1c4ba905d7a28 0x58e1c4baf9b921b9
+0x58e1c4ba905d7a28 0xd8e1c4baf9b921b9
+0xd8e1c4ba905d7a28 0xd8e1c4baf9b921b9
+0x58e1c4baf9b921b9 0x58e1c4ba905d7a28
+0xd8e1c4baf9b921b9 0x58e1c4ba905d7a28
+0x58e1c4baf9b921b9 0xd8e1c4ba905d7a28
+0xd8e1c4baf9b921b9 0xd8e1c4ba905d7a28
+0x36a84888a64d0c40 0x36a84888abd4011e
+0xb6a84888a64d0c40 0x36a84888abd4011e
+0x36a84888a64d0c40 0xb6a84888abd4011e
+0xb6a84888a64d0c40 0xb6a84888abd4011e
+0x36a84888abd4011e 0x36a84888a64d0c40
+0xb6a84888abd4011e 0x36a84888a64d0c40
+0x36a84888abd4011e 0xb6a84888a64d0c40
+0xb6a84888abd4011e 0xb6a84888a64d0c40
+0x5356b2ca451be407 0x5356b2cad099fe19
+0xd356b2ca451be407 0x5356b2cad099fe19
+0x5356b2ca451be407 0xd356b2cad099fe19
+0xd356b2ca451be407 0xd356b2cad099fe19
+0x5356b2cad099fe19 0x5356b2ca451be407
+0xd356b2cad099fe19 0x5356b2ca451be407
+0x5356b2cad099fe19 0xd356b2ca451be407
+0xd356b2cad099fe19 0xd356b2ca451be407
+0x49c90e5c10be8b79 0x49c90e5c9fb45233
+0xc9c90e5c10be8b79 0x49c90e5c9fb45233
+0x49c90e5c10be8b79 0xc9c90e5c9fb45233
+0xc9c90e5c10be8b79 0xc9c90e5c9fb45233
+0x49c90e5c9fb45233 0x49c90e5c10be8b79
+0xc9c90e5c9fb45233 0x49c90e5c10be8b79
+0x49c90e5c9fb45233 0xc9c90e5c10be8b79
+0xc9c90e5c9fb45233 0xc9c90e5c10be8b79

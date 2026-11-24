@@ -82,10 +82,14 @@ class NightlyTest {
   }
 
   /**
-   * Faults the fuzz cannot be asked to find: the inputs where they change a result are about one
-   * in 2^29 of a window of 2^35 doubles, and only {@code Log1pTest}'s witnesses reach them.
+   * Faults the fuzz cannot be asked to find within {@link #DRAWS}: {@code log1p.foldShortPath},
+   * whose inputs are about one in 2^29 of a window of 2^35 doubles, which only {@code
+   * Log1pTest}'s witnesses reach; and {@code hypot.highWordOrder}, which changes about 2 in 10^8
+   * of the pairs of one high word with both low words random, a tenth of the fuzz's draws, so
+   * about one draw in 5 * 10^8 (PROOFS.md, L21), which only {@code HypotTest}'s order pairs reach.
    */
-  private static final Set<String> NOT_FOR_THE_FUZZ = Set.of(Log1p.FOLD_SHORT_PATH);
+  private static final Set<String> NOT_FOR_THE_FUZZ =
+      Set.of(Log1p.FOLD_SHORT_PATH, Hypot.HIGH_WORD_ORDER);
 
   /**
    * Inputs each fuzz thread draws in {@link #fuzzCatchesThePlantedFault}. The streams are fixed
@@ -99,7 +103,11 @@ class NightlyTest {
    * those four at 24,576, 159,744, 110,592 and 4,096. Atan's three faults (atan.dropLo,
    * atan.splitMoved, atan.hiOneUlpOff), measured the same way with one thread, no draw bound
    * and a stop at the first mismatch, are found at 4,096 by both seeds. Not measured: asin's
-   * three faults and cosh's five. Over 20 seeds sinh's faults need at most 8,192 and the longest
+   * three faults and cosh's five, nor the faults of the functions of two arguments (atan2, hypot,
+   * pow), whose draws ({@code Fuzz.drawPair}) gained the pairs of one high word for issue 173
+   * while those of one argument ({@code Fuzz.draw}), measured here, did not change; CI's fault
+   * runs found each of the pair functions' faults after that change but hypot.highWordOrder,
+   * left out above. Over 20 seeds sinh's faults need at most 8,192 and the longest
    * is 614,400 (exp.dropKForcing), which a million would clear only 1.6 times, but the seed is
    * fixed. One thread finding the fault is enough, so a fault's index is the smaller of its two
    * threads': the largest is 57,344 (exp.dropKForcing), and a million inputs is 17 times that (14
