@@ -70,7 +70,9 @@ The three where `StrictMath`'s result is the correctly rounded one are all `expm
 - `nantier-jdk-25.0.5.1.txt`: `../NanTier.java`'s output, one run under `-Xint` and one under the
   default JIT tiers, on JDK 25.0.5.1, x86-64.
 - `photon-2026-11-24.csv`: Photon's result for each input, from a Databricks SQL warehouse with
-  Photon on 24 November 2026; on every row it equals the `libm` column of `photon-check.sql`.
+  Photon on 24 November 2026: the owner's output of `photon-check.sql`'s query, pasted verbatim
+  from the Databricks SQL editor, header and row order kept. On every row the `photon` value
+  equals the `libm` column of `photon-check.sql`.
 
 ```sh
 python3 ../figures.py
