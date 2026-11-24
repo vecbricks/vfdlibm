@@ -571,6 +571,14 @@ jobs:
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: "3.12"
+      # The installed solvers, cached as ci.yml's proofs job caches Z3 alone, under a key of
+      # their own ("z3-cvc5"), so that a Z3-only cache is never restored here. No restore-keys,
+      # and a cache is saved only by a job that succeeds; the reasons are in ci.yml.
+      - name: Cache the solvers
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: target/solvers
+          key: solvers-z3-cvc5-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('dev/prove.sh') }}
       - name: Install Z3 and cvc5
         run: dev/prove.sh --install both
       - name: Check the proofs under both solvers
