@@ -1864,7 +1864,9 @@ file's pairs at every lane of a vector beside lanes of the other ways out of the
 the host has and at `SPECIES_MAX`, unmasked and masked; a port that swapped by the high words alone
 fails it on one order of each pair. **Planted fault.** `hypot.highWordOrder`
 (`Hypot.HIGH_WORD_ORDER`) puts line 60's compare of the words back; `HypotTest.faultCatchers`
-requires the port to fail on those vectors with it planted, at every width.
+requires the port to fail on those vectors with it planted, at every width. The fuzz is not asked
+to find it within its fault run's draws (`NightlyTest.fuzzCatchesThePlantedFault` leaves it out):
+it changes about one draw in 5 * 10^8.
 
 **Encoding.** None: (a) is integer arithmetic on two words, checked by the test, and (b) and (c) are
 the C's evaluation and observations, so nothing here is machine-checked in `proofs/`.

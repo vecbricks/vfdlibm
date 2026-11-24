@@ -82,10 +82,14 @@ class NightlyTest {
   }
 
   /**
-   * Faults the fuzz cannot be asked to find: the inputs where they change a result are about one
-   * in 2^29 of a window of 2^35 doubles, and only {@code Log1pTest}'s witnesses reach them.
+   * Faults the fuzz cannot be asked to find within {@link #DRAWS}: {@code log1p.foldShortPath},
+   * whose inputs are about one in 2^29 of a window of 2^35 doubles, which only {@code
+   * Log1pTest}'s witnesses reach; and {@code hypot.highWordOrder}, which changes about 2 in 10^8
+   * of the pairs of one high word with both low words random, a tenth of the fuzz's draws, so
+   * about one draw in 5 * 10^8 (PROOFS.md, L21), which only {@code HypotTest}'s order pairs reach.
    */
-  private static final Set<String> NOT_FOR_THE_FUZZ = Set.of(Log1p.FOLD_SHORT_PATH);
+  private static final Set<String> NOT_FOR_THE_FUZZ =
+      Set.of(Log1p.FOLD_SHORT_PATH, Hypot.HIGH_WORD_ORDER);
 
   /**
    * Inputs each fuzz thread draws in {@link #fuzzCatchesThePlantedFault}. The streams are fixed
