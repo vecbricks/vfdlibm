@@ -19,10 +19,11 @@ published: false
 
 <div class="summary" markdown="1" style="border: 1px solid #d6d6d6; border-radius: 12px; padding: 4px 16px; margin-bottom: 1.5em;">
 
-**In short.** vfdlibm computes Spark's math functions on whole vectors of doubles, and every lane
-gets the same bits as `java.lang.StrictMath`, which Spark calls. That matters because the bits
-differ elsewhere: Spark's `exp(1)` is the double just above Java's `Math.E`. And on 32 test
-inputs on my Databricks warehouse, Photon returned the C library's results, not Spark's.
+**In short.** vfdlibm computes `exp`, `log`, `pow` and ten more functions on whole vectors of
+doubles, and every lane gets the same bits as `java.lang.StrictMath`, which Spark calls for
+`exp`, `ln`, `power` and their relatives. That matters because the bits differ elsewhere: Spark's
+`exp(1)` is the double just above Java's `Math.E`. And on 32 test inputs on my Databricks
+warehouse, Photon's results matched glibc's, not Spark's.
 
 </div>
 
@@ -59,7 +60,8 @@ On my workspace, Photon's results matched the C library's, not Spark's.
 I wanted to see what the promise looks like outside the JVM. On 24 November 2026 I ran a small
 test on my own Databricks SQL warehouse with Photon. It reads 32 inputs from a table, eight each
 for `exp`, `ln`, `expm1` and `pow(2, x)`. I picked inputs where `StrictMath` and glibc 2.43, the
-C library on my laptop, give different doubles. `EXPLAIN` said Photon ran the whole query.
+C library on my laptop, give different doubles. For a query over such a column, `EXPLAIN` said
+Photon ran all of it.
 
 [![A grid of 32 inputs: Apache Spark returns StrictMath's result on all of them, Photon and scalar glibc return glibc's, glibc's AVX2 vector library is mixed, and the correctly rounded result is glibc's on 29.](img/who-returns-what.svg)](img/who-returns-what.svg)
 
@@ -100,7 +102,8 @@ on several doubles at once. Each double is a *lane*. The vector's shape is its *
 
 vfdlibm ports fdlibm's C to that API. Version 0.3.0 has thirteen functions: `exp`, `expm1`,
 `log`, `log10`, `log1p`, `pow`, `sinh`, `cosh`, `asin`, `acos`, `atan`, `atan2` and `hypot`.
-`hypot` and `pow` are new. Every lane equals `StrictMath`'s result, compared bit for bit with
+`hypot` and `pow` are new. Six of them are the functions Spark computes with `StrictMath`; for the
+other seven Spark calls `Math`, and vfdlibm still returns `StrictMath`'s bits. Every lane equals `StrictMath`'s result, compared bit for bit with
 `Double.doubleToRawLongBits`. There is one exception, and the first surprise below explains it.
 
 [![A lane on fdlibm's common path is computed by the vector code; a rare lane by StrictMath, one at a time; either way it holds StrictMath's bits.](img/one-call.svg)](img/one-call.svg)
@@ -185,8 +188,9 @@ On my laptop, which has 512-bit vectors, it prints a warning about the incubator
 The speedup comes from benchmark files in the repository, and the README's
 [table](https://github.com/vecbricks/vfdlibm/blob/v0.3.0/README.md) is generated from them.
 
-<!-- The figure img/speedup.svg is a placeholder: at release, generate the bars from the README's
-     v0.3.0 speedup table and replace it. -->
+<!-- The figure img/speedup.svg is a placeholder: at release, make figures.py draw the bars from
+     the README's v0.3.0 speedup table (and fill compare.svg's {{E}} the same way), then rerun it;
+     do not edit the SVG files by hand. -->
 [![Speedup over StrictMath, per function and host: generated from the README's v0.3.0 table at release.](img/speedup.svg)](img/speedup.svg)
 
 {% raw %}
@@ -243,6 +247,15 @@ public class NanTier {
 }
 ```
 
+One run each on my laptop, JDK 25.0.5.1 on x86-64 (your counts will differ):
+
+```
+$ java -Xint NanTier.java
+atan2(NaN#1, NaN#2): first=2000000 second=0 other=0
+$ java NanTier.java
+atan2(NaN#1, NaN#2): first=1983613 second=16387 other=0
+```
+
 [![Under -Xint all two million calls returned the first NaN; under the default JIT tiers 16,387 returned the second.](img/nan-tier.svg)](img/nan-tier.svg)
 
 In the interpreter, every call returned the first NaN. With the JIT on, some returned the second.
@@ -260,7 +273,7 @@ fdlibm's `hypot` keeps using a value that looks out of date, and the result depe
 
 [![e_hypot.c: lines 82 to 84 scale the values by 2^1022 and keep the old high words; line 97 reads the old word.](img/hypot-stale.svg)](img/hypot-stale.svg)
 
-For a subnormal argument, `hypot` multiplies both values by 2^1022. It keeps the high words, the
+When one argument is subnormal, `hypot` may multiply both values by 2^1022. It keeps the high words, the
 top 32 bits, that it read before. A few lines later it splits the scaled values at those old
 words. It looks like a bug.
 
@@ -274,7 +287,7 @@ pins four such inputs.
 When the JIT cannot keep a vector in registers, it turns it into an object on the heap. That is
 called boxing. The results stay right, so every test still passes. Only the allocation shows it.
 
-[![exp's rows allocate 0.021 bytes or less per 1024 doubles at 256 bits, and 528,384 bytes at 128 bits on x86, where they box.](img/boxing.svg)](img/boxing.svg)
+[![On common data, exp's finish row allocates 0.008 bytes per 1024 doubles at 256 bits, and 528,384 bytes at 128 bits on x86, where it boxes.](img/boxing.svg)](img/boxing.svg)
 
 So CI fails a benchmark that allocates. It also reads the machine code the JIT emits for every
 function. It checks the register width, stray calls, and fused multiply-adds. A fused
@@ -381,10 +394,10 @@ where scalar glibc gives 1.412586492492317. Both ran on glibc 2.43, x86-64 with 
 **The rates** come from
 [`Gen.java` and `compare.py`](https://github.com/vecbricks/vfdlibm/tree/v0.3.0/docs/blog/strictmath-vs-libm):
 200,000 inputs drawn uniformly between -700 and 700 from seed 7, with `ln` of the absolute value,
-`expm1` of x/100 and `pow(2.0, x/700)`. Python's `math` module calls the C library. The data of
-every figure is in `strictmath-vs-libm/data/`, and
+`expm1` of x/100 and `pow(2.0, x/700)`. Python's `math` module calls the C library.
 [`figures.py`](https://github.com/vecbricks/vfdlibm/blob/v0.3.0/docs/blog/figures.py) draws the
-figures from it.
+data figures from committed files: the runs above in `strictmath-vs-libm/data/`, the benchmark
+file named below, and fdlibm's `e_hypot.c`.
 
 **The speed numbers** are kernel timings: `StrictMath` called once per lane against vfdlibm at the
 host's preferred species. The hosts are an Intel Xeon Platinum 8573C (AVX-512) and an AMD EPYC
@@ -401,7 +414,7 @@ subnormal argument (seed 42), 914,446 took the 2^1022 path, and on 42,876 the re
 counted by a scratch program that is not committed. Which answer is closer to the exact value is
 not measured.
 
-**Boxing and the machine code.** The allocation figures are from
+**Boxing and the machine code.** The allocation figures are the finish rows on common data in
 [`exp-xeon8573c-2026-11-21.txt`](https://github.com/vecbricks/vfdlibm/blob/v0.3.0/bench/results/exp-xeon8573c-2026-11-21.txt).
 CI runs an allocation check at 256 bits, the preferred species and `SPECIES_MAX`, and fails a row
 that reaches one byte per operation; 128 bits on x86 is known to box and is left out, and `pow` is

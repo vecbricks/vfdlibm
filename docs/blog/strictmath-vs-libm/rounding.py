@@ -9,8 +9,8 @@ exact value lies within about 1e-60 of a midpoint between doubles, which the scr
 "too close to call"; it is not a general method for any input.
 
 It writes two files in the current directory: rows.txt, one "f x libm" line a row, for
-libmvec.c, and correctly-rounded.csv (f,x,correct), which ../figures.py reads when it is
-committed beside this script.
+libmvec.c, and correctly-rounded.csv (f,x,correct; an empty correct where the row is too close
+to call), which ../figures.py reads from data/ once it is committed there.
 """
 
 import decimal
@@ -57,6 +57,7 @@ with open("rows.txt", "w") as out, open("correctly-rounded.csv", "w") as csv:
         cr = float(v)
         if too_close(v):
             print(f"{f}({x!r}): too close to call")
+            csv.write(f"{f},{x!r},\n")
             counts["too close"] += 1
             continue
         csv.write(f"{f},{x!r},{cr!r}\n")

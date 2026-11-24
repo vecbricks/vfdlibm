@@ -11,9 +11,13 @@ files:
 - strictmath-vs-libm/data/exp1-bits.txt (ExpOne.java's output): the bits of exp(1);
 - photon-check.sql and strictmath-vs-libm/data/*.csv: who returns what on the 32 inputs;
 - strictmath-vs-libm/data/compare-glibc-2.43.txt (compare.py's output): how often they differ;
+- strictmath-vs-libm/data/nantier-jdk-25.0.5.1.txt: NanTier.java's output, one run per mode;
+- ../../bench/results/exp-xeon8573c-2026-11-21.txt: the allocation of exp's finish rows;
 - ../../reference/fdlibm-5.3/e_hypot.c: the lines of the hypot figure, by line number.
 
-The other figures are diagrams whose text is written here. No figure holds a number that is not
+The other figures are diagrams whose text is written here. The speedup figure and the {{E}} of
+the comparison figure are placeholders until the README's v0.3.0 speedup table exists; at
+release, this script is to read them from that table (not the SVG files edited by hand). No figure holds a number that is not
 in a committed file or in the post's sources.
 """
 
@@ -132,7 +136,7 @@ def rows_of_sql():
 
 def column(path, field):
     with open(path) as fh:
-        return {(r["f"], float(r["x"])): float(r[field]) for r in csv.DictReader(fh)}
+        return {(r["f"], float(r["x"])): float(r[field]) for r in csv.DictReader(fh) if r[field]}
 
 
 # --- figures ----------------------------------------------------------------------------------
@@ -184,9 +188,9 @@ def fig_spark_emits():
     f = Fig("spark-emits", "What Spark's generated code calls",
             "Spark 4.3.0, mathExpressions.scala: who computes each SQL function.",
             "Spark's generated code calls java.lang.StrictMath for exp, expm1, ln, log10, log1p and "
-            "power, and for log2, log with a base and atanh through StrictMath.log and log1p. The "
-            "base class's default, java.lang.Math, serves sin, cos, tan, asin, acos, atan, atan2, "
-            "sinh, cosh, tanh, cbrt and sqrt.")
+            "power, and for log2, log with a base, asinh, acosh and atanh through StrictMath.log "
+            "and log1p. java.lang.Math serves sin, cos, tan, asin, acos, atan, sinh, cosh, tanh, "
+            "cbrt, sqrt, hypot and atan2.")
     y = f.header()
     x0 = M + 18
     top, idx = y, len(f.parts)
@@ -199,7 +203,8 @@ def fig_spark_emits():
             xs, yy = x0, yy + 42
         f.pill(xs, yy, w, 32, BLUE_S, fn, size=16)
         xs += w + 8
-    yy = f.para(x0, yy + 60, "and log2, log(base, x) and atanh, through StrictMath.log and log1p",
+    yy = f.para(x0, yy + 60, "and log2, log(base, x), asinh, acosh and atanh, through "
+                "StrictMath.log and log1p",
                 size=15, maxw=IW - 36, fill=GREY)
     h = yy + 20 - top
     f.parts.insert(idx, f'<rect x="{M}" y="{top}" width="{IW}" height="{h}" rx="12" fill="{BLUE_F}" '
@@ -207,8 +212,8 @@ def fig_spark_emits():
     y = top + h + 18
     top, idx = y, len(f.parts)
     f.text(x0, y + 36, "java.lang.Math", size=19, weight=700, mono=True)
-    f.text(x0, y + 62, "the base class's default", size=16, fill=GREY)
-    yy = f.para(x0, y + 94, "sin, cos, tan, asin, acos, atan, atan2, sinh, cosh, tanh, cbrt, sqrt",
+    f.text(x0, y + 62, "the base classes' default, and atan2's own code", size=16, fill=GREY)
+    yy = f.para(x0, y + 94, "sin, cos, tan, asin, acos, atan, sinh, cosh, tanh, cbrt, sqrt, hypot, atan2",
                 size=16, maxw=IW - 36, mono=True)
     h = yy + 24 - top
     f.parts.insert(idx, f'<rect x="{M}" y="{top}" width="{IW}" height="{h}" rx="12" '
@@ -293,8 +298,8 @@ def fig_who():
         f.text(M + 10, y + 17, f"{r['x']:.5g}", size=15, mono=True, fill=GREY)
         key = (r["f"], r["x"])
         for i, (_, _, data) in enumerate(cols):
-            v = r["libm"] if data is None else data[key]
-            k = 0 if v == r["libm"] else 1 if v == r["strictmath"] else 2
+            v = r["libm"] if data is None else data.get(key)
+            k = 2 if v is None else 0 if v == r["libm"] else 1 if v == r["strictmath"] else 2
             counts[i][k] += 1
             cx = c0 + i * cw + cw / 2
             if k == 2:
@@ -390,8 +395,10 @@ def fig_nan():
             "1,983,613 returned the first and 16,387 the second. One run each on a laptop, JDK "
             "25.0.5.1 on x86-64.")
     y = f.header()
-    for band, first, second in (("java -Xint NanTier.java", 2_000_000, 0),
-                                ("java NanTier.java", 1_983_613, 16_387)):
+    txt = (DATA / "nantier-jdk-25.0.5.1.txt").read_text()
+    runs = re.findall(r"^\$ (java .*?NanTier\.java)\n.*first=(\d+) second=(\d+)", txt, re.M)
+    assert len(runs) == 2, runs
+    for band, first, second in ((b, int(a), int(c)) for b, a, c in runs):
         f.rect(M, y, IW, 30, "#ececec", "#ececec", rx=6, sw=0)
         f.text(M + 12, y + 21, band, size=15, mono=True, weight=700)
         y += 42
@@ -415,7 +422,7 @@ def fig_nan():
 
 def fig_hypot():
     src = (HERE.parent.parent / "reference" / "fdlibm-5.3" / "e_hypot.c").read_text().splitlines()
-    show = [78, 81, 82, 83, 84, None, 85, 86, 87, 89, 90, None, 95, 96, 97, 98]
+    show = [78, None, 81, 82, 83, 84, 85, 86, 87, None, 89, 90, None, 95, 96, 97, 98]
     marks = {82: ("× 2^1022", ORANGE_F, ORANGE_T), 83: ("", ORANGE_F, ORANGE_T),
              84: ("ha, hb kept", ORANGE_F, ORANGE_T),
              89: ("written back", GREY_F, GREY), 90: ("", GREY_F, GREY),
@@ -427,6 +434,8 @@ def fig_hypot():
             "word of the unscaled a.")
     y = f.header()
     lh = 26
+    base = min(len(src[n - 1].expandtabs(8)) - len(src[n - 1].expandtabs(8).lstrip(" "))
+               for n in show if n)
     f.rect(M, y, IW, lh * len(show) + 26, "#ffffff", LINE)
     y += 32
     for n in show:
@@ -435,8 +444,8 @@ def fig_hypot():
             y += lh
             continue
         code = re.sub(r"\s*/\*.*?\*/", "", src[n - 1].expandtabs(8)).rstrip()
-        code = code[16:] if code.startswith(" " * 16) else code.lstrip()
-        code = code.replace("        ", "  ")  # a quarter of the C's tab width, to fit
+        lead = len(code) - len(code.lstrip(" ")) - base
+        code = "\u00a0" * (lead // 2) + code.lstrip(" ")  # half the C's indentation, to fit
         if n in marks:
             note, fill, col = marks[n]
             f.rect(M + 6, y - 18, IW - 12, lh - 2, fill, fill, rx=4, sw=0)
@@ -453,24 +462,33 @@ def fig_hypot():
 
 
 def fig_boxing():
+    res = (HERE.parent.parent / "bench" / "results" / "exp-xeon8573c-2026-11-21.txt").read_text()
+
+    def norm(row):
+        m = re.search(rf"^ExpBenchmark\.{row}:gc\.alloc\.rate\.norm\s+common\s+N/A\s+avgt\s+\d+\s+([\d.]+)",
+                      res, re.M)
+        return float(m.group(1))
+
+    v256, v128 = norm("finish256"), norm("finish128")
     f = Fig("boxing", "The same code, as vectors or boxed",
             "exp's rows that finish rare lanes one at a time: bytes allocated per 1024 doubles.",
-            "On the Xeon 8573C on 21 November 2026, exp's finish rows read 0.021 bytes or less per "
-            "1024 doubles at 256 bits, and 528,384 bytes on common data at 128 bits on x86, where "
+            f"On the Xeon 8573C on 21 November 2026, on common data, exp's finish row reads {v256:.3f} "
+            f"bytes per 1024 doubles at 256 bits, and {v128:,.0f} bytes at 128 bits on x86, where "
             "the masks box.")
     y = f.header()
     half = (IW - 16) / 2
     for x, head, num, sub, fill, stroke, dash, col in (
-            (M, "256 bits", "≤ 0.021 B", "vectors in registers", ORANGE_F, ORANGE_S, False, ORANGE_T),
-            (M + half + 16, "128 bits, x86", "528,384 B", "boxed: vectors as objects", BLUE_F, BLUE_S, True, BLUE_T)):
+            (M, "256 bits", f"{v256:.3f} B", "vectors in registers", ORANGE_F, ORANGE_S, False, ORANGE_T),
+            (M + half + 16, "128 bits, x86", f"{v128:,.0f} B", "boxed: vectors as objects", BLUE_F, BLUE_S, True,
+             BLUE_T)):
         f.rect(x, y, half, 150, fill, stroke, dash=dash)
         f.text(x + 16, y + 34, head, size=17, weight=700)
         f.text(x + 16, y + 86, num, size=29, weight=700, fill=col)
         f.para(x + 16, y + 122, sub, size=15, maxw=half - 28, fill=GREY)
     y += 186
-    y = f.caption(y, "Common data. The results are the same either way; only the allocation shows "
-                     "it. From bench/results/exp-xeon8573c-2026-11-21.txt, where every 256-bit row "
-                     "reads 0.021 B/op or less.")
+    y = f.caption(y, "The finish rows on common data, the Xeon 8573C's file of 21 November "
+                     "(bench/results/exp-xeon8573c-2026-11-21.txt). The results are the same either "
+                     "way; only the allocation shows it.")
     f.write(y)
 
 
@@ -488,8 +506,9 @@ def fig_checks():
               "named for it must fail.", BLUE_F, BLUE_S, False),
              ("The machine code", "What C2 emits: the width's registers, no fused multiply-add, from "
               "256 bits up no stray call; and an allocation check.", ORANGE_F, ORANGE_S, False),
-             ("Every night, x86 and Arm", "All 2^32 high words, three low words each, and a fuzz "
-              "from a fresh seed.", GREY_F, "#9e9e9e", True),
+             ("Every night, x86 and Arm", "All 2^32 high words, three low words each (on x86 at "
+              "128 bits, a 1/32 slice a night; one argument a night for two), and a fuzz.",
+              GREY_F, "#9e9e9e", True),
              ("Lemmas where the code departs", "Written arguments in PROOFS.md; parts of those for "
               "exp, log and expm1 machine-checked by Z3 and cvc5.", KHAKI_F, KHAKI_S, False))
     for i, (head, body, fill, stroke, dash) in enumerate(items, 1):
