@@ -91,13 +91,17 @@ way.
     dev/prove.sh --lint                # as CI runs them
 
 The solvers live under `target/`, so `mvn clean` removes them; `--install` puts them back in
-a few seconds and does nothing when they are there.
+a few seconds and does nothing when they are there. Installing cvc5 needs curl 7.71 or later,
+for `--retry-all-errors`. CI caches `target/solvers/` under a key that hashes `dev/prove.sh`, so
+a pin that can no longer be downloaded shows only when the script changes or in `release.yml`'s
+dry run, which caches nothing.
 
 By hand, the prelude goes after the file's `set-logic` line:
 `sed '/^(set-logic/r proofs/java.smt2' proofs/sign_symmetry.smt2 | z3 -in`. A solver's line
 numbers count the inserted prelude.
 
-CI (`.github/workflows/ci.yml`, job `proofs`) installs Z3 and runs `--self-test` and `--lint`.
+CI (`.github/workflows/ci.yml`, job `proofs`) installs Z3, from its cache when it can, and runs
+`--self-test` and `--lint`.
 
 Every proof under both solvers, `dev/prove.sh --install both && dev/prove.sh --solver both`,
 runs nightly (`.github/workflows/nightly.yml`, job `proofs`); a change to a proof or to the

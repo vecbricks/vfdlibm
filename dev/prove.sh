@@ -106,13 +106,15 @@ require_solver() {
   echo "$path"
 }
 
-# A solver already under target/solvers/ is trusted as it stands, unchecked. In CI that directory
-# is cached (ci.yml's and nightly.yml's proofs jobs): a cache is saved only by a job that
-# succeeded, so after an install below that checked the hash of what it downloaded, and its key
-# hashes this file, pins included, so another pin never restores it.
-
-# A wheel only, never a build from source, and only the wheel whose hash is pinned. --retries 5 is
-# pip's default, stated so the download is retried whatever the default becomes.
+# An install skips a solver already under target/solvers/, whose hash is not checked again (its
+# version is, by require_solver). In CI that directory is cached (ci.yml's and nightly.yml's
+# proofs jobs): a cache is saved only by a job that succeeded, so after an install below that
+# checked the hash of what it downloaded, and its key hashes this file, pins included, so another
+# pin never restores it.
+#
+# Z3: a wheel only, never a build from source, and only the wheel whose hash is pinned.
+# --retries 5 is pip's default, stated; pip retries a failed connection and a 5xx answer, not a
+# 403.
 install_z3() {
   local dir="$solvers/z3-$Z3_VERSION"
   [ -x "$dir/bin/z3" ] && return 0
