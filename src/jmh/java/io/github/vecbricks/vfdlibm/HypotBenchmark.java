@@ -28,21 +28,21 @@ import org.openjdk.jmh.annotations.Warmup;
  * hypot over two arrays of 1024 doubles ({@code x} and {@code y}): the scalar {@code
  * StrictMath.hypot} loop and {@link Hypot#hypot}, the one arm ({@code VFdlibm.hypot} runs it, with
  * every lane of an infinity or a NaN finished per lane), at 256 bits, at the host's preferred
- * species and at {@code SPECIES_MAX}. 128 bits is left out: on x86 C2 lowers no mask at two
- * 64-bit lanes, so every 128-bit arm boxes (SKILLS.md). bench/results/hypot-epyc7763-2026-11-23.txt
- * times it before #174 ordered hypot's arguments, a run and its re-run on the EPYC 7763: inside
- * 1.3x of the scalar loop at the preferred species, and finishMax about 1.6 times finishPreferred
- * on common data in both runs, the same code at the same width; hypot-xeon8573c-2026-11-24.txt
- * times that code too, one run on the Xeon 8573C. hypot-epyc7763-2026-11-24.txt times it after
- * #174, a run and its re-run on the EPYC 7763: the scalar loop lower on mixed data by 1.43 to 1.44
- * in run 1 and 1.33 to 1.34 in run 2, no direction on common data, and finishMax at the level of
- * the other rows. hypot-order-pair-epyc7763-2026-11-24.txt pairs the code before and after #174
- * there, the vector rows on mixed data at about 1.45 times the time, and
- * hypot-harness-epyc7763-2026-11-24.txt times main's loop, the body inlined into it, on mixed data
- * as a method of its own at the old level and inlined into JMH's measuring loop, as this class's
- * rows are, slower (SKILLS.md, "What the hypot port taught"). hypot-xeon8573c-2026-11-24-2.txt
- * times it after #174 on the Xeon 8573C, one run: the vector arm lower on common data by 2.13 to
- * 2.16 at 512 bits, no direction on mixed data.
+ * species and at {@code SPECIES_MAX}. 128 bits is left out: on x86 C2 lowers no mask at two 64-bit
+ * lanes, so every 128-bit arm boxes (SKILLS.md). bench/results/hypot-epyc7763-2026-11-23.txt times
+ * it before #174 ordered hypot's arguments, a run and its re-run on the EPYC 7763: inside 1.3x of
+ * the scalar loop at the preferred species, and finishMax about 1.6 times finishPreferred on common
+ * data in both runs, the same code at the same width; hypot-xeon8573c-2026-11-24.txt times that
+ * code too, one run on the Xeon 8573C. hypot-epyc7763-2026-11-24.txt times it after #174, a run and
+ * its re-run on the EPYC 7763: the scalar loop lower on mixed data by 1.43 to 1.44 in run 1 and
+ * 1.33 to 1.34 in run 2, no direction on common data, and finishMax at the level of the other rows.
+ * hypot-order-pair-epyc7763-2026-11-24.txt pairs the code before and after #174 there, the vector
+ * rows on mixed data at about 1.45 times the time, and hypot-harness-epyc7763-2026-11-24.txt times
+ * main's loop, the body inlined into it, on mixed data as a method of its own at the old level and
+ * inlined into JMH's measuring loop, as this class's rows are, slower (SKILLS.md, "What the hypot
+ * port taught"). hypot-xeon8573c-2026-11-24-2.txt times it after #174 on the Xeon 8573C, one run:
+ * the vector arm lower on common data by 2.13 to 2.16 at 512 bits, 1.38 at 256 bits with no
+ * direction until a re-run, and no direction on mixed data.
  *
  * <p>{@code inputs} picks the data: {@code common} draws {@code x} and {@code y} from {@code
  * [-10, 10)}, Varka's baseline range, where every lane takes the medium path unscaled (both of

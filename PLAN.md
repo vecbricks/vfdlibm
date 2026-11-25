@@ -239,7 +239,8 @@ five are a later, optional set; the large-argument reduction of the trigonometri
   and `hypot-harness-epyc7763-2026-11-24.txt` reads main's loop, the body inlined into it, on mixed
   data at the old level as a method of its own and slower inlined into JMH's measuring loop;
   `hypot-xeon8573c-2026-11-24-2.txt` reads it after #174 on the Xeon 8573C, one run, the vector arm
-  lower on common data by 2.13 to 2.16 at 512 bits and no direction on mixed data), and
+  lower on common data by 2.13 to 2.16 at 512 bits, 1.38 at 256 bits with no direction until a
+  re-run, and no direction on mixed data), and
   `PowBenchmark` one for `pow` (the same; `pow-epyc7763-2026-11-23.txt` and
   `pow-xeon8573c-2026-11-24.txt` read it, one run each, its `rareOracle` row the allocation
   baseline).

@@ -74,8 +74,8 @@ it, none is claimed, and whether the ports' arms should differ on Arm waits for 
 
 ### The 8573C's two readings
 
-Twenty-six of the twenty-seven files of this host read 34.5 to 35.8 lane-ops/ns at 128 bits, 68.8 to
-70.8 at 256 and 93.7 to 96.8 at 512: `exp-onediv-xeon8573c-2026-11-03.txt` (34.7 / 68.8 / 94.1,
+Twenty-nine of the thirty files of this host read 34.5 to 35.8 lane-ops/ns at 128 bits, 68.8 to
+71.6 at 256 and 93.7 to 96.8 at 512: `exp-onediv-xeon8573c-2026-11-03.txt` (34.7 / 68.8 / 94.1,
 control 1.98, 512:256 1.37), `expm1-xeon8573c-2026-11-04.txt` (34.8 / 69.2 / 94.1, 1.99, 1.36), the
 nine files of 21 November, from two runs: `exp-xeon8573c-2026-11-21.txt` and its five siblings (34.5
 / 69.1 / 93.7, 2.00, 1.36) and `sinh-`, `cosh-` and `cosh-kinds-xeon8573c-2026-11-21.txt` (34.9 /
@@ -86,7 +86,10 @@ nine files of 21 November, from two runs: `exp-xeon8573c-2026-11-21.txt` and its
 November, the second run in those four files of `expm1`, `log`, `log10` and `log1p` (35.8 / 70.8 /
 96.8, 1.98, 1.37); and run 45385032166 of 24 November (34.7 / 69.1 / 93.8, 1.99, 1.36), the seven
 files `cosh-`, `exp-`, `expm1-`, `hypot-`, `log1p-`, `pow-` and `sinh-xeon8573c-2026-11-24.txt` and
-the last run in `acos-`, `asin-`, `atan-`, `atan2-`, `log-` and `log10-xeon8573c-2026-11-22.txt`.
+the last run in `acos-`, `asin-`, `atan-`, `atan2-`, `log-` and `log10-xeon8573c-2026-11-22.txt`;
+and run 45475061665 of 24 November (35.8 / 71.6 / 96.8, 2.00, 1.35), the three files
+`exp-xeon8573c-2026-11-24-2.txt`, `hypot-xeon8573c-2026-11-24-2.txt` and
+`exp-operator-xeon8573c-2026-11-24.txt`.
 `log1p-xeon8573c-2026-11-03.txt`, of the same day as the pair, reads 41.5 / 82.7 / 113.0 (1.99,
 1.37), and its scalar `StrictMath` loop reads 7,358 ns on common data where the `log1p` file of 21
 November reads 8,846. Each file's header says which it ran on; no cause for the difference is

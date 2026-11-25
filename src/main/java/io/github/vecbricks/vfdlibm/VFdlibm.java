@@ -27,17 +27,19 @@ import jdk.incubator.vector.VectorMask;
  * computes only the lanes set in {@code live} and returns every other lane of its argument
  * untouched, raw bits and all. An inactive lane never sends the vector down a slow path.
  *
- * <p>Which species to pass. Every species of 128 bits or more gives the same bits. The files
- * under {@code bench/results/}, in the source repository and not in the jar, read what the body
- * allocates at each, in bytes per op, an op being one pass over 1024 doubles. The arm that {@code
- * exp}, {@code expm1}, {@code log}, {@code log10} and {@code log1p} call is the finish arm, the
- * one {@code atan2} calls is the guarded arm, and the one {@code cosh} calls is the slice arm;
- * {@code hypot} and {@code pow} have one arm, the finish. No file under {@code bench/results/}
- * reads {@code hypot} or {@code pow} yet: every file the list below cites predates
- * them, and of the list only the allocation check that CI runs covers them. On its mixed data
- * {@code StrictMath.pow}, which finishes {@code pow}'s rare lanes, allocates on some of them
- * itself, so that check reads {@code pow}'s rows against an oracle baseline, which they match
- * at the laptop's flags and as an AVX2 host ({@code
+ * <p>Which species to pass. Every species of 128 bits or more gives the same bits. The files under
+ * {@code bench/results/}, in the source repository and not in the jar, read what the body allocates
+ * at each, in bytes per op, an op being one pass over 1024 doubles. The arm that {@code exp},
+ * {@code expm1}, {@code log}, {@code log10} and {@code log1p} call is the finish arm, the one
+ * {@code atan2} calls is the guarded arm, and the one {@code cosh} calls is the slice arm; {@code
+ * hypot} and {@code pow} have one arm, the finish. The host files of {@code hypot} and {@code pow}
+ * ({@code hypot-epyc7763-2026-11-24.txt}, {@code hypot-xeon8573c-2026-11-24-2.txt}, {@code
+ * pow-epyc7763-2026-11-23.txt} and {@code pow-xeon8573c-2026-11-24.txt}) read their vector rows at
+ * 256 bits, the preferred species and {@code SPECIES_MAX} at 0.071 bytes per op or less, but {@code
+ * pow}'s on mixed data; the list below predates them. On its mixed data {@code StrictMath.pow},
+ * which finishes {@code pow}'s rare lanes, allocates on some of them itself, so CI's allocation
+ * check reads {@code pow}'s rows against an oracle baseline, which they match within 0.1 bytes per
+ * op in both host files, at the laptop's flags and as an AVX2 host ({@code
  * bench/results/pow-alloc-laptop-2026-11-23.txt}, an allocation reading, no timing).
  *
  * <ul>
