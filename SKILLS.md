@@ -714,21 +714,22 @@ mnemonic); the other operations count the same at both widths.
   `bench/results/exp-kinds-xeon8573c-2026-11-21.txt` times each kind of rare input apart. Both files
   time `exp` as of a5683c3 and a1db6df, and `Exp.java` has changed since by a fault constant, a
   local and the finish's first eight lanes written out with constant indices (issue #37). Today's
-  `Exp.java` is timed in two runs on each host, before and after #174 changed `Hypot.java`, which is
-  under `ExpBenchmark` by `bench/record.py`'s rule: `exp-epyc7763-2026-11-23.txt` and
+  `Exp.java` is timed on each host in two runs, one before and one after #174 changed `Hypot.java`,
+  which is under `ExpBenchmark` by `bench/record.py`'s rule: `exp-epyc7763-2026-11-23.txt` and
   `exp-epyc7763-2026-11-24.txt`, and `exp-xeon8573c-2026-11-24.txt` and
   `exp-xeon8573c-2026-11-24-2.txt`: the blend over the finish reads 1.98 to 2.12 on common data and
-  1.37 to 1.44 on mixed data on the EPYC, and 1.25 to 1.42 and 1.70 to 1.81 on the Xeon, at every
-  vector row of 256 bits or more. `VFdlibm.exp` keeps the finish arm, which those files read lower
-  than the blend by more than 1.3x on mixed data at 256 bits and the preferred species on both hosts
-  and at 512 bits on the 8573C (the `*Max` rows of the files of 21 November and before time the
-  finish that boxed before issue #37 and are left out; those of `exp-epyc7763-2026-11-23.txt`,
-  `exp-epyc7763-2026-11-24.txt`, `exp-xeon8573c-2026-11-24.txt` and
-  `exp-xeon8573c-2026-11-24-2.txt`, which time today's finish, read the blend over it 1.37, 1.38,
-  1.76 and 1.77 on mixed data), and to which issue #30's rules send a tie; provisionally, until a
-  host run revises it: a first of the other AVX-512 hosts or a pair; the second run of today's code
-  on each host reads the same. Each port measures both on common and mixed data, decides per branch,
-  and records the decision in its pull request (`PLAN.md` section 5).
+  1.37 to 1.44 on mixed data on the EPYC, and 1.25 to 1.42 and 1.70 to 1.81 on the Xeon, at 256
+  bits, the preferred species and `SPECIES_MAX` and, on the Xeon, at 512 bits (the EPYC's 512-bit
+  rows box). `VFdlibm.exp` keeps the finish arm, which those files read lower than the blend by more
+  than 1.3x on mixed data at 256 bits and the preferred species on both hosts and at 512 bits on the
+  8573C (the `*Max` rows of the files of 21 November and before time the finish that boxed before
+  issue #37 and are left out; those of `exp-epyc7763-2026-11-23.txt`, `exp-epyc7763-2026-11-24.txt`,
+  `exp-xeon8573c-2026-11-24.txt` and `exp-xeon8573c-2026-11-24-2.txt`, which time today's finish,
+  read the blend over it 1.37, 1.38, 1.76 and 1.77 on mixed data), and to which issue #30's rules
+  send a tie; provisionally, until a host run revises it: a second run of the code after #174 on
+  each host, a first of the other AVX-512 hosts or a pair. Each port measures both on common and
+  mixed data, decides per branch, and records the decision in its pull request (`PLAN.md` section
+  5).
 - **A blended alternative costs its whole form in every lane.** exp computed the C's near form and
   its `k == 0` form for every lane and blended them. Proving that the far form and the general tail
   already give those lanes' results (`PROOFS.md`, L1 and L2) left one form. With native AVX-512 at
@@ -1749,15 +1750,16 @@ mnemonic); the other operations count the same at both widths.
   `diag-hypot-variants`, a run and its re-run) times the same body as a method of its own, which C2
   does not inline into JMH's loop, at the old code's level, and inlined into the loop 1.36 to 1.39
   times slower on mixed data; with line 60's compare put back and the rest of the body as it is, the
-  inlined body is at the old level too. On common data no row moved past 1.3x. So the cost is in how
-  C2 compiles the loop around the body, not in work the change added, and it flips with small
-  changes: before #174 finishMax ran about 1.6 times finishPreferred on common data, the same body
-  at the same width. Why one compile of the loop is slow is not measured. The Xeon 8573C (AVX-512)
-  shows no slowdown (`hypot-xeon8573c-2026-11-24-2.txt`). What to take from it: a port's speed is a
-  property of the compiled loop, not of the body alone; before blaming or crediting a change, time
-  the body as its own method and in the benchmark's loop, and read a per-row move with the pair and
-  that check together. A caller's loop inlines the body as the benchmark's does, so which shape a
-  caller gets is not measured.
+  inlined body is at the old level on mixed data too. On common data no row moved past 1.3x. So the
+  cost is in how C2 compiles the loop around the body, not in work the change added, and it flips
+  with small changes: before #174 finishMax ran about 1.6 times finishPreferred on common data, the
+  same body at the same width. Why one compile of the loop is slow is not measured. On the Xeon
+  8573C (AVX-512), one run after #174 against one before, on two draws and not a pair, reads no row
+  slower (`hypot-xeon8573c-2026-11-24-2.txt`). What to take from it: a port's speed is a property of
+  the compiled loop, not of the body alone; before blaming or crediting a change, time the body as
+  its own method and in the benchmark's loop, and read a per-row move with the pair and that check
+  together. A caller's loop inlines the body as the benchmark's does, so which shape a caller gets
+  is not measured.
 
 ## What the pow port taught
 

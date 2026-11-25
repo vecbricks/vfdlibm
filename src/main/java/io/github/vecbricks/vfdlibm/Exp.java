@@ -67,17 +67,17 @@ import jdk.incubator.vector.VectorSpecies;
  * a1db6df) it is 1.23 to 1.37 on common data, a range with 1.3x inside it, and 1.70 to 1.84 on
  * mixed data, at 256 bits, 512 bits and the preferred species. This class has changed since both
  * runs by a fault constant and a local in the k conversion and by the finish's first eight lanes
- * written out with constant indices (issue #37). As it stands it is timed in two runs on each host,
- * before and after #174 changed {@code Hypot.java}, which is under {@code ExpBenchmark} by {@code
- * bench/record.py}'s rule: {@code exp-epyc7763-2026-11-23.txt} and {@code
+ * written out with constant indices (issue #37). As it stands it is timed on each host in two runs,
+ * one before and one after #174 changed {@code Hypot.java}, which is under {@code ExpBenchmark} by
+ * {@code bench/record.py}'s rule: {@code exp-epyc7763-2026-11-23.txt} and {@code
  * exp-epyc7763-2026-11-24.txt}, and {@code exp-xeon8573c-2026-11-24.txt} and {@code
  * exp-xeon8573c-2026-11-24-2.txt}: the blend over the finish reads 1.98 to 2.12 on common data and
- * 1.37 to 1.44 on mixed data on the EPYC, and 1.25 to 1.42 and 1.70 to 1.81 on the Xeon, at every
- * vector row of 256 bits or more. The change of issue #37 is not free on the EPYC 7763, by the rows
- * of the pair there. Its finish rows on mixed data ({@code finish256}, {@code finishPreferred})
- * read 7.4% to 9.3% slower by median and 8.3% to 8.9% slower by best, under the pair's 10%
- * threshold, in two runs of one AVX2 host ({@code
- * bench/results/exp-log10-pair-epyc7763-2026-11-21.txt} and {@code
+ * 1.37 to 1.44 on mixed data on the EPYC, and 1.25 to 1.42 and 1.70 to 1.81 on the Xeon, at 256
+ * bits, the preferred species and {@code SPECIES_MAX} and, on the Xeon, at 512 bits (the EPYC's
+ * 512-bit rows box). The change of issue #37 is not free on the EPYC 7763, by the rows of the pair
+ * there. Its finish rows on mixed data ({@code finish256}, {@code finishPreferred}) read 7.4% to
+ * 9.3% slower by median and 8.3% to 8.9% slower by best, under the pair's 10% threshold, in two
+ * runs of one AVX2 host ({@code bench/results/exp-log10-pair-epyc7763-2026-11-21.txt} and {@code
  * bench/results/exp-log10-pair-rerun-epyc7763-2026-11-21.txt}), and the {@code finishMax} row
  * faster on mixed data, since it no longer boxes. The cause is not known, and no AVX-512 host has
  * been paired. The first run's head is a branch tip, not a commit of main (that file's header says
@@ -88,9 +88,9 @@ import jdk.incubator.vector.VectorSpecies;
  * exp-epyc7763-2026-11-23.txt}, {@code exp-epyc7763-2026-11-24.txt}, {@code
  * exp-xeon8573c-2026-11-24.txt} and {@code exp-xeon8573c-2026-11-24-2.txt}, which time today's
  * finish, read the blend over it 1.37, 1.38, 1.76 and 1.77 on mixed data), and to which issue #30's
- * rules send a tie; the choice stays provisional until a host run revises it, a first of the other
- * AVX-512 hosts ({@code HARDWARE.md}) or a pair; the second run of today's code on each host reads
- * the same. The second arm is kept so
+ * rules send a tie; the choice stays provisional until a host run revises it, a second run of the
+ * code after #174 on each host, a first of the other AVX-512 hosts ({@code HARDWARE.md}) or a pair.
+ * The second arm is kept so
  * the choice can be re-measured, on other hosts and as the JDK changes. The folds above cut the
  * common path C2 emits from 77 instructions with two divisions to 52 with one at 512 bits on
  * AVX-512, and from 107 to 64 at 256 bits under {@code

@@ -151,12 +151,12 @@ five are a later, optional set; the large-argument reduction of the trigonometri
   straddles 1.3x, and 1.70 to 1.84 on mixed data, at 256 bits, 512 bits and the preferred species.
   The code has changed since both runs (a fault constant and a local in the k conversion, and the
   finish's first eight lanes written out with constant indices). Of today's `Exp.java`, two runs on
-  each host read finish over blend too, before and after #174 changed `Hypot.java`, which is under
-  `ExpBenchmark` by `bench/record.py`'s rule (`exp-epyc7763-2026-11-23.txt` and
+  each host, one before and one after #174 (which changed `Hypot.java`, under `ExpBenchmark` by
+  `bench/record.py`'s rule), read finish over blend too (`exp-epyc7763-2026-11-23.txt` and
   `exp-epyc7763-2026-11-24.txt`, `exp-xeon8573c-2026-11-24.txt` and
   `exp-xeon8573c-2026-11-24-2.txt`): the blend over the finish 1.98 to 2.12 on common data and 1.37
-  to 1.44 on mixed data on the EPYC, 1.25 to 1.42 and 1.70 to 1.81 on the Xeon, at every vector row
-  of 256 bits or more.
+  to 1.44 on mixed data on the EPYC, 1.25 to 1.42 and 1.70 to 1.81 on the Xeon, at 256 bits, the
+  preferred species and `SPECIES_MAX` and, on the Xeon, at 512 bits (the EPYC's 512-bit rows box).
   Which arm each function keeps follows the two rules issue #30 set on 21 November 2026: a tie
   within 1.3x on every host that has a file goes to the finish arm, except for `cosh`, whose
   per-lane set is not rare, so a host run decides its arm; and where hosts disagree, each species
