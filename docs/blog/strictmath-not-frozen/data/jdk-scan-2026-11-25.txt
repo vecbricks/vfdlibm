@@ -15,7 +15,8 @@ vfdlibm: io.github.vecbricks:vfdlibm:0.3.0 from Maven Central, sha256
 Inputs: JdkScan.java at the commit of this file: vfdlibm's hard cases (src/test/resources/.../
       hard-cases at 0f455af) plus 3,000,000 seeded random inputs per function, and for pow
       1,000,000 more aimed at fdlibm's branch for |y| > 2^31 with |x| near 1 (500,262 of them
-      inside the part JDK 27 changed). On a lane of two NaN arguments the .bin files and digests
+      with |x| within 2^-20 of 1, of which 389,513 reach the part JDK 27 changed; the others
+      have a negative x with a non-integer y, which returns NaN first: aimed.py). On a lane of two NaN arguments the .bin files and digests
       hold 0, since StrictMath's NaN there depends on the JIT tier.
 Commands, per JDK, with and (25, 26) without the libm intrinsics
       (-XX:+UnlockDiagnosticVMOptions -XX:-UseLibmIntrinsic):
@@ -31,6 +32,7 @@ then:
       python3 compare.py out-26-nolibm out-27 --file pow-Math.bin --after-file pow.bin
       python3 witness_check.py out-25/pow.bin out-27/pow.bin out-26-nolibm/pow-Math.bin out-27/pow.bin
       python3 witness_check.py out-25/pow.bin out-27/pow.bin out-25-nolibm/pow-Math.bin out-25/pow.bin
+      python3 aimed.py out-25/pow-inputs.bin
 
 ## JdkScan's output: per function, StrictMath's digest and vfdlibm lanes that differ from it
 
@@ -165,6 +167,9 @@ pow-Math.bin   4005016 inputs 1477955 differ
 The 1,477,955 inputs where StrictMath.pow and Math.pow with the intrinsics off differ all have a
 NaN result on both sides: StrictMath.pow returns 0xfff8000000000000 and Math.pow
 0x7ff8000000000000 (checked input by input after the run; no other result differs).
+
+### aimed.py
+aimed inputs with |x| within 2^-20 of 1: 500262; reaching the changed code: 389513
 
 ## Reading
 

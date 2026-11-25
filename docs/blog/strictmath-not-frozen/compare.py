@@ -30,8 +30,14 @@ def main():
     ap.add_argument("--witnesses", type=Path)
     ap.add_argument("--inputs", type=Path, help="pow-inputs.bin, for --witnesses")
     a = ap.parse_args()
+    if a.after_file and not a.file:
+        ap.error("--after-file needs --file")
     if a.all:
-        names = sorted(p.name for p in a.before.glob("*.bin") if (a.after / p.name).exists())
+        before = {p.name for p in a.before.glob("*.bin")}
+        after = {p.name for p in a.after.glob("*.bin")}
+        if before != after:
+            ap.error("files in only one directory: %s" % ", ".join(sorted(before ^ after)))
+        names = sorted(before)
     else:
         names = [a.file] if a.file else [f + ".bin" for f in FUNCTIONS]
     if a.witnesses and a.all:
@@ -42,7 +48,7 @@ def main():
         diff = [i for i in range(len(b)) if b[i] != c[i]]
         print("%-24s %9d inputs %7d differ" % (name, len(b), len(diff)) if a.all else
               "%-12s %9d inputs %6d differ" % (name, len(b), len(diff)))
-        if a.witnesses and name in ("pow.bin", "pow-Math.bin") and diff:
+        if a.witnesses and name in ("pow.bin", "pow-Math.bin"):  # rewritten, even when empty
             xy = bits(a.inputs or a.before / "pow-inputs.bin")
             with a.witnesses.open("w") as w:
                 for i in diff:

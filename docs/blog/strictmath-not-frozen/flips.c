@@ -87,6 +87,10 @@ static inline row make(uint64_t i) {
 }
 
 int main(int argc, char **argv) {
+  if (argc < 2) {
+    fprintf(stderr, "usage: %s <rows> [dump-rows dump-file]\n", argv[0]);
+    return 2;
+  }
   long long n = atoll(argv[1]);
   long long dpow = 0, fpow = 0, dexp = 0, fexp = 0, spow = 0, sexp = 0, apow = 0, aexp = 0;
   #pragma omp parallel for reduction(+:dpow,fpow,dexp,fexp,spow,sexp,apow,aexp) schedule(static)

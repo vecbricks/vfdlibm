@@ -110,7 +110,7 @@ public class StrictScan {
         long xb = (hi[r.nextInt(4)] << 32) | (r.nextLong() & 0xffffffffL);
         if (r.nextBoolean()) xb |= 1L << 63;
         double ay = Math.scalb(1.0 + r.nextDouble(), 31 + r.nextInt(33));
-        double y = r.nextInt(4) == 0 ? (double) (long) ay : ay;
+        double y = r.nextInt(4) == 0 ? (double) (long) ay : ay;  // clamps at 2^63, as in JdkScan
         in.add(new double[] {Double.longBitsToDouble(xb), r.nextBoolean() ? -y : y});
       }
     }

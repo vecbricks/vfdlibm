@@ -32,6 +32,8 @@ def main():
         e_before.append(abs((Decimal(a) - exact) / u))
         e_after.append(abs((Decimal(b) - exact) / u))
     print("normal results", len(e_before))
+    if not e_before:
+        return
     for name, e in (("before", e_before), ("after", e_after)):
         print("%-6s max error %.3f ulp, over 1 ulp on %d" % (name, max(e), sum(v > 1 for v in e)))
     print("after nearer on %d, before nearer on %d" % (sum(a < b for a, b in zip(e_after, e_before)),

@@ -48,9 +48,9 @@ returns results outside of a 1 ulp error bound", integrated into the JDK's main 
 It touches one branch of fdlibm's `pow`: `|y|` above 2<sup>31</sup> with `|x|` within about
 2<sup>-20</sup> of 1.
 
-I compared `StrictMath.pow` on JDK 25 and JDK 27 on a million inputs aimed at that branch,
-500,262 of which fall inside it (the rest sit just outside, as neighbours). The results differ
-on 1,258 of them. On each of the 1,247 with a normal result, JDK 25 was at least
+I compared `StrictMath.pow` on JDK 25 and JDK 27 on a million inputs aimed at that branch:
+500,262 have `|x|` within 2<sup>-20</sup> of 1, and 389,513 of those reach the changed code (a
+negative `x` with a non-integer `y` returns NaN first). The results differ on 1,258. On each of the 1,247 with a normal result, JDK 25 was at least
 91 ulps off, and up to 653; JDK 27 is within 0.74 ulp on all of them.
 
 [![StrictMath.pow's error in ulps on the 1,247 inputs JDK 27 changed: JDK 25 from 91 to 653 ulps, JDK 27 at most 0.74 ulp.](img/pow-errors.svg)](img/pow-errors.svg)
@@ -64,14 +64,14 @@ Those 1,258 inputs were aimed at the branch. Elsewhere the change is hard to rea
 
 - On 3,005,016 other inputs (vfdlibm's hard cases for `pow`, uniformly random bits, moderate
   magnitudes and values near 1), no result changed.
-- The 1,258 all have `|x - 1|` between about 2<sup>-23.5</sup> and 2<sup>-21.6</sup>, and `|y|`
+- The 1,258 all have `||x| - 1|` between about 2<sup>-23.5</sup> and 2<sup>-21.6</sup>, and `|y|`
   between 2<sup>31</sup> and about 2<sup>33</sup>, so their results are beyond
   10<sup>±79</sup>.
 - With `|x - 1|` below 2<sup>-24</sup> and `|y|` from 2<sup>31</sup> to 2<sup>33</sup> (results
   from about e<sup>±0.1</sup> to e<sup>±500</sup>), 17 of 4,000,000 results changed, the query
   above among them, including some with results as large as those of the 1,258. There both JDKs
   are within 1 ulp; JDK 27's result is the nearer on 5 and JDK 25's on 12, too few to call either
-  better. So the large errors came with `|x - 1|` near 2<sup>-22</sup>, not with the size of
+  better. So the large errors came with `||x| - 1|` near 2<sup>-22</sup>, not with the size of
   the result.
 - Per-second compounding, `(1 + r/n)^(n·t)` with `n` the seconds in a year, reaches the branch
   once `n·t` passes 2<sup>31</sup>, about 68 years. Over rates from 0.01% to 20% and 70 to 300
@@ -90,7 +90,7 @@ that fallback returns `StrictMath.pow`'s bits, but for the sign of a NaN result)
 To see what else moves, I ran 20 double functions of `StrictMath`, the transcendental ones and
 their relatives with `sqrt` and `IEEEremainder` as controls, and `Math`'s counterparts, on JDK 21, 25, 26 and 27, about 3 million inputs each.
 
-[![Whose bits moved with the JDK: StrictMath only pow, from JDK 25 to 27, on 1,258 inputs; Math on this x86-64 CPU cbrt and tanh from 21 to 25 and sinh from 25 to 26.](img/moved.svg)](img/moved.svg)
+[![Whose bits moved with the JDK: StrictMath only pow, from JDK 26 to 27, on 1,258 inputs; Math on this x86-64 CPU cbrt and tanh from 21 to 25 and sinh from 25 to 26.](img/moved.svg)](img/moved.svg)
 
 `StrictMath` changed once in four JDKs, in one function, with a bug record and a Javadoc
 sentence. `Math` changed three times on this CPU, with no change to its Javadoc: `cbrt` and `tanh` from JDK 21 to

@@ -8,8 +8,8 @@ import java.util.function.*;
 /**
  * For each of vfdlibm's 13 functions, reads the hard cases of vfdlibm's tests and adds 3,000,000
  * random inputs (uniform bits, moderate magnitudes, near 1), and for pow 1,000,000 more aimed at
- * fdlibm's branch for |y| > 2^31 with |x| near 1 (about half of them reach the part of it JDK 27
- * changed; see the comment there). Writes StrictMath's raw bits, in input order, to
+ * fdlibm's branch for |y| > 2^31 with |x| near 1 (389,513 of them reach the part of it JDK 27
+ * changed; see the comment there and aimed.py). Writes StrictMath's raw bits, in input order, to
  * <out>/<fn>.bin (0 on a lane of two NaN arguments), Math.pow's to <out>/pow-Math.bin, and prints per function a digest and the
  * number of vfdlibm lanes that differ from StrictMath, at 256 bits and at the preferred species (a
  * lane of two NaN arguments is checked against the contract's two candidates instead). The inputs
@@ -42,7 +42,8 @@ public class JdkScan {
       run(fn, in, out, p -> e.getValue().applyAsDouble(p[0], p[1]), fn);
       if (fn.equals("pow")) {
         try (var w = new DataOutputStream(new BufferedOutputStream(Files.newOutputStream(out.resolve("pow-Math.bin"))))) {
-          for (double[] p : in) w.writeLong(Double.doubleToRawLongBits(Math.pow(p[0], p[1])));
+          for (double[] p : in)
+            w.writeLong(Double.isNaN(p[0]) && Double.isNaN(p[1]) ? 0 : Double.doubleToRawLongBits(Math.pow(p[0], p[1])));
         }
         try (var w = new DataOutputStream(new BufferedOutputStream(Files.newOutputStream(out.resolve("pow-inputs.bin"))))) {
           for (double[] p : in) { w.writeLong(Double.doubleToRawLongBits(p[0])); w.writeLong(Double.doubleToRawLongBits(p[1])); }
@@ -78,8 +79,10 @@ public class JdkScan {
     for (int i = 0; i < N; i++) { double[] p = new double[arity]; for (int k = 0; k < arity; k++) p[k] = (r.nextBoolean() ? 1 : -1) * (1 + Math.scalb(r.nextDouble() * 2 - 1, -r.nextInt(53))); in.add(p); }
     if (fn.equals("pow")) {
       // Aimed at fdlibm's branch for |y| > 2^31 (e_pow.c line 191). Of the four high words of x,
-      // 0x3fefffff and 0x3ff00000 reach the code JDK 27 changed; 0x3feffffe and 0x3ff00001 sit
-      // just outside it and return early, by overflow or underflow, and are kept as neighbours.
+      // 0x3fefffff and 0x3ff00000 put |x| within 2^-20 of 1, where the code JDK 27 changed runs
+      // unless x < 0 and y is not an integer (NaN first, line 185); 0x3feffffe and 0x3ff00001 sit
+      // just outside and return early, by overflow or underflow, as neighbours. The integer
+      // variant of y clamps at 2^63, since (long) saturates; the published runs used it as is.
       long[] hi = {0x3fefffffL, 0x3ff00000L, 0x3feffffeL, 0x3ff00001L};
       for (int i = 0; i < N; i++) {
         long xb = (hi[r.nextInt(4)] << 32) | (r.nextLong() & 0xffffffffL);

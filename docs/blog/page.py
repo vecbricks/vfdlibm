@@ -18,14 +18,7 @@ and, for the link card (social sites show no SVG, so the card is a PNG), with ch
       --window-size=1200,630 --screenshot=card.png <dir>/card.html
     rm <dir>/card.html                    # it is not published
 
-The second post, "Even StrictMath is not frozen", is built the same way from its own directory:
-
-    python3 page.py --source strictmath-not-frozen/2026-11-even-strictmath-is-not-frozen.md \\
-      --out <vecbricks.github.io>/even-strictmath-is-not-frozen \\
-      --og-image https://vecbricks.github.io/even-strictmath-is-not-frozen/card.png \\
-      --card --card-figure pow-errors
-
-The post's prose is 2026-11-strictmath-at-simd-speed.md, its figures are img/*.svg, which
+The first post's prose is 2026-11-strictmath-at-simd-speed.md, its figures are img/*.svg, which
 figures.py writes; this script turns the two into one index.html beside a figures/ copy of the
 SVGs, the way the site's other posts are made. It is adapted from Varka's
 dev/varka_post_page.py (vecbricks/varka, Apache License 2.0, as this project), keeping its page
@@ -41,6 +34,13 @@ needs:
 It fails on a figure that is missing or not inlined, and on any `{{` left in the page, so a page
 with a hole or a placeholder is not written. Requires the markdown and pygments packages
 (`pip install markdown pygments`).
+
+The second post, "Even StrictMath is not frozen", is built the same way from its own directory:
+
+    python3 page.py --source strictmath-not-frozen/2026-11-even-strictmath-is-not-frozen.md \\
+      --out <vecbricks.github.io>/even-strictmath-is-not-frozen \\
+      --og-image https://vecbricks.github.io/even-strictmath-is-not-frozen/card.png \\
+      --card --card-figure pow-errors
 """
 
 import argparse

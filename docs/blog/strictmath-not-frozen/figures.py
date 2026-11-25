@@ -82,7 +82,7 @@ def fig_moved():
 
 
 def pow_errors():
-    """(|y ln x|, JDK 25's error, JDK 27's error) in ulps, for each normal changed result."""
+    """(|y ln |x||, JDK 25's error, JDK 27's error) in ulps, for each normal changed result."""
     getcontext().prec = 80
     rows = []
     for line in (DATA / "pow-strictmath-jdk25-vs-jdk27.txt").read_text().split("\n"):
@@ -109,7 +109,7 @@ def fig_pow_errors():
             f"On the {len(rows):,} inputs whose result JDK 27 changed (normal results, of "
             "1,000,000 aimed at |y| > 2^31 with |x| near 1): JDK 25 was off by more than an ulp on "
             "every one.",
-            f"Error in ulps against an 80-digit pow, by |y ln x|: JDK 25 from {least25:.0f} to "
+            f"Error in ulps against an 80-digit pow, by |y ln |x||: JDK 25 from {least25:.0f} to "
             f"{worst25:.0f} ulps, JDK 27 at most {worst27:.2f} ulp.")
     y0 = f.header() + 4
     px, pw, ph = M + 52, IW - 64, 300
@@ -130,7 +130,7 @@ def fig_pow_errors():
         f.text(px - 8, Y(e) + 5, label, size=13, fill=base.GREY, anchor="end")
     for z in (200, 300, 400, 500, 600, 700):
         f.text(X(z), y0 + ph + 20, str(z), size=13, fill=base.GREY, anchor="middle")
-    f.text(px + pw / 2, y0 + ph + 42, "|y ln x|, which is |ln pow(x, y)|", size=14,
+    f.text(px + pw / 2, y0 + ph + 42, "|y ln |x||, which is |ln |pow(x, y)||", size=14,
            fill=base.GREY, anchor="middle")
     for z, e25, e27 in rows:
         f.add(f'<circle cx="{X(z):.1f}" cy="{Y(e25):.1f}" r="2.2" fill="{base.ORANGE_S}" fill-opacity="0.55"/>')
