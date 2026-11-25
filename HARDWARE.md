@@ -35,7 +35,7 @@ be the whole string ("The Arm host" below).
 
 | machine | host key and CPU string | vector flags | JVM | lane-ops/ns at 128 / 256 / 512 | control | 512:256 | source |
 |---|---|---|---|---|---|---|---|
-| Intel Xeon Platinum 8573C | `xeon8573c`, `INTEL(R) XEON(R) PLATINUM 8573C` | full `avx512` set | `UseAVX=3`, `MaxVectorSize=64` | two readings: 34.5-35.9 / 68.8-71.7 / 93.7-96.8 (twenty-nine files, dated 3 to 24 November 2026, from runs up to 25 November); 41.5 / 82.7 / 113.0 (one file, 3 November) | 1.98 to 2.00 in the files; 2.00 to 2.03 in Varka's runs | 1.34 to 1.37 in the files; 1.34 to 1.36 in Varka's runs | Varka, `VARKA-62.md` 11.9, 4 runs (the control and 512:256 ranges of Varka's runs); the files named under "The 8573C's two readings" below; the string from vecbricks/varka's fork runs 41465323581, 41255932044 and 41241977271 (the owner's fork of apache/spark) |
+| Intel Xeon Platinum 8573C | `xeon8573c`, `INTEL(R) XEON(R) PLATINUM 8573C` | full `avx512` set | `UseAVX=3`, `MaxVectorSize=64` | two readings: 34.5-35.9 / 68.8-71.7 / 93.7-96.8 (thirty files, dated 3 to 25 November 2026, from runs up to 25 November); 41.5 / 82.7 / 113.0 (one file, 3 November) | 1.98 to 2.00 in the files; 2.00 to 2.03 in Varka's runs | 1.34 to 1.37 in the files; 1.34 to 1.36 in Varka's runs | Varka, `VARKA-62.md` 11.9, 4 runs (the control and 512:256 ranges of Varka's runs); the files named under "The 8573C's two readings" below; the string from vecbricks/varka's fork runs 41465323581, 41255932044 and 41241977271 (the owner's fork of apache/spark) |
 | Intel Xeon 6973P-C (Granite Rapids) | `xeon6973p`, `Intel(R) Xeon(R) 6973P-C` | full `avx512` set | `UseAVX=3`, `MaxVectorSize=64` | see source | 2.00 to 2.01 | 1.33 to 1.35 | Varka, `VARKA-62.md` 11.9, 2 runs; the string from vfdlibm run 41442062308 |
 | AMD EPYC 9V45 (Zen 5) | `epyc9v45`, `AMD EPYC 9V45 96-Core Processor` | full `avx512` set | `UseAVX=3`, `MaxVectorSize=64` | see source | 2.04 | 1.99 | Varka, `VARKA-62.md` 11.9, 1 run; the string from Varka's fork runs 41486339971, 41446843041 and 41329377429 |
 | AMD EPYC 7763 (Zen 3) | `epyc7763`, `AMD EPYC 7763 64-Core Processor` | `avx2`, no `avx512` | `UseAVX=2`, `MaxVectorSize=32` | 45.0-46.5 / 90.0-92.6 / 90.0-92.6 | 1.99 to 2.01 | 1.00 | Varka, `VARKA-62.md` 11.9, 8 runs; the lane rates, a range, from 16 Varka fork runs, 31 October to 2 November 2026 (41236071283 to 41460150392); the string from `bench/results/exp-epyc7763-2026-11-02.txt` and `log-epyc7763-2026-11-02.txt`; `exp-epyc7763-2026-11-20.txt` reads 46.2 / 92.2 / 92.5 (control 2.00, 512:256 1.00) in its first run and 46.3 / 92.4 / 92.4 in its second, inside the range |
@@ -74,7 +74,7 @@ it, none is claimed, and whether the ports' arms should differ on Arm waits for 
 
 ### The 8573C's two readings
 
-Twenty-nine of the thirty files of this host read 34.5 to 35.9 lane-ops/ns at 128 bits, 68.8 to
+Thirty of the thirty-one files of this host read 34.5 to 35.9 lane-ops/ns at 128 bits, 68.8 to
 71.7 at 256 and 93.7 to 96.8 at 512: `exp-onediv-xeon8573c-2026-11-03.txt` (34.7 / 68.8 / 94.1,
 control 1.98, 512:256 1.37), `expm1-xeon8573c-2026-11-04.txt` (34.8 / 69.2 / 94.1, 1.99, 1.36), the
 nine files of 21 November, from two runs: `exp-xeon8573c-2026-11-21.txt` and its five siblings (34.5
@@ -90,7 +90,8 @@ the last run in `acos-`, `asin-`, `atan-`, `atan2-`, `log-` and `log10-xeon8573c
 run 45475061665 of 24 November (35.8 / 71.6 / 96.8, 2.00, 1.35), the three files
 `exp-xeon8573c-2026-11-24-2.txt`, `hypot-xeon8573c-2026-11-24-2.txt` and
 `exp-operator-xeon8573c-2026-11-24.txt`; and run 45522629369 of 25 November (35.9 / 71.7 / 96.4,
-2.00, 1.34), the second run in `hypot-xeon8573c-2026-11-24-2.txt`.
+2.00, 1.34), the second run in `hypot-xeon8573c-2026-11-24-2.txt` and the one run in
+`math-compare-xeon8573c-2026-11-25.txt`.
 `log1p-xeon8573c-2026-11-03.txt`, of the same day as the pair, reads 41.5 / 82.7 / 113.0 (1.99,
 1.37), and its scalar `StrictMath` loop reads 7,358 ns on common data where the `log1p` file of 21
 November reads 8,846. Each file's header says which it ran on; no cause for the difference is
