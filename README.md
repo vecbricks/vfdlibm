@@ -15,23 +15,25 @@ two NaNs with different bits in `atan2`, `hypot` or `pow`.
 **Speedup over `StrictMath`** of the latest release, per host, from the committed results
 files:
 
-<!-- speedup-table: v0.2.0 -->
+<!-- speedup-table: v0.3.0 -->
 
 | Function | xeon8573c (AVX-512): common / mixed | epyc7763 (AVX2): common / mixed |
 |---|---|---|
-| `exp` | newer code | newer code |
-| `expm1` | 3.82x / 3.39x | 1.85x / 1.65x |
+| `exp` | 6.72x / 3.49x | 4.29x / 2.62x |
+| `expm1` | 4.03x / 3.03x | 1.90x / 1.74x |
 | `log` | 4.12x / 2.38x | 2.44x / 1.97x |
 | `log10` | 4.41x / 2.76x | 2.30x / 1.86x |
-| `log1p` | 3.61x / 3.28x | 1.88x / 1.64x |
-| `sinh` | 3.57x / 2.71x | 2.12x / 1.69x |
-| `cosh` | 3.34x / 1.88x | 2.15x / 1.70x |
+| `log1p` | 3.39x / 2.81x | 1.95x / 1.56x |
+| `sinh` | 3.53x / 2.74x | 2.12x / 1.68x |
+| `cosh` | 3.49x / 1.84x | 2.20x / 1.71x |
 | `asin` | 2.31x / 2.08x | 2.07x / 1.52x |
 | `atan` | 3.48x / 2.30x | 1.77x / 1.51x |
 | `acos` | 2.21x / 1.90x | 1.99x / 1.36x |
 | `atan2` | 2.72x / 2.08x | 1.72x / 1.55x |
+| `hypot` | 2.16x / 1.18x | 1.25x / 0.70x |
+| `pow` | 11.79x / 7.43x | 4.88x / 4.28x |
 
-For vfdlibm 0.2.0 (tag v0.2.0). Each figure is `StrictMath` called once per lane (the
+For vfdlibm 0.3.0 (tag v0.3.0). Each figure is `StrictMath` called once per lane (the
 `scalarStrictMath` row) over the function's default arm at the host's preferred species (its
 `<arm>Preferred` row), by minimum ns/op within one run; where a file holds several runs, the lowest
 of their ratios is shown; from one run, a ratio under 1.4x is marked, and one under 1.3x says
