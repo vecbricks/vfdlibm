@@ -1,12 +1,7 @@
----
-layout: post
-title: "StrictMath at SIMD speed: the same bits as Spark's exp, log and pow, up to 11.79× faster"
-date: 2026-11-24
-published: false
----
+# StrictMath at SIMD speed: the same bits as Spark's exp, log and pow, up to 11.79× faster
 
-<!-- The owner sets `date` and removes `published: false` when the post is published; until then
-     Jekyll does not publish it. -->
+<!-- Published on vecbricks.github.io as a page built by page.py (its docstring has the command);
+     this file is the prose, and img/*.svg, from figures.py, are the figures. -->
 
 <!-- The figures under img/ are written by figures.py from the data under strictmath-vs-libm/data/;
      edit the script, not the SVG files. -->
