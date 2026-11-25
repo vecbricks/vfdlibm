@@ -1721,12 +1721,11 @@ mnemonic); the other operations count the same at both widths.
   the port now swaps where `|y| > |x|` (PROOFS.md, L21; fault `hypot.highWordOrder`). Such pairs
   are rare: 18 of 9 * 10^8 random pairs of one high word with random low words, 0 of 10^8 with the
   fuzz's patterned low words, 0 of 8 * 10^8 subnormal ones, so the earlier "0 of 4,194,304
-  equal-word draws" above was too few to see it, and the fuzz's gap 0 found issue 173's pair, the
-  first, once in about 5 * 10^9 draws. With the fault planted the port is wrong on one order of each
-  pair of the file, 80 of its 160. `hard-cases/hypot-order.txt` holds 20 such pairs, two found by
-  the nightly fuzz and 18 by a scratch C program over Sun's C; the lesson is that the oracle is
-  `StrictMath`, and a port that follows the C exactly can still differ from it where the JDK's code
-  is not the C.
+  equal-word draws" above was too few to see it, and the fuzz's gap 0 found issue 173's pair once in
+  about 5 * 10^9 draws. With the fault planted the port is wrong on one order of each pair of the
+  file, 80 of its 160. `hard-cases/hypot-order.txt` holds 20 such pairs, two found by the nightly
+  fuzz and 18 by a scratch C program over Sun's C; the lesson is that the oracle is `StrictMath`,
+  and a port that follows the C exactly can still differ from it where the JDK's code is not the C.
 - **Hard cases, computed.** `dev/hypot-hard-cases.py` derives 8,400 pairs with exact integer
   arithmetic (near-midpoint families of both forms of the medium path, each within 2^-50 ulp of
   a midpoint, exact triples with nearly equal legs, scaled into each range), and

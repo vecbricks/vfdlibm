@@ -51,7 +51,7 @@ two NaNs with different bits in a function of two arguments (`AGENTS.md`, "Relea
   rows on mixed data take about 1.45 times the time they took before `hypot` was made to order its
   arguments by magnitude, as `StrictMath` does, with a compare of the whole magnitudes in place of
   the C's compare of their high words (`bench/results/hypot-order-pair-epyc7763-2026-11-24.txt`). In
-  the harness the cost needs both that new compare and the loop inlined into the benchmark's
+  diagnostic runs the cost needs both that new compare and the loop inlined into the benchmark's
   measuring loop: the same loop as a method of its own, with the body inlined into it, runs at the
   old level, and so does the inlined loop with the high-word compare
   (`bench/results/hypot-harness-epyc7763-2026-11-24.txt`); why is not known. On the Intel Xeon 8573C
