@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Counts JdkScan's aimed pow inputs that reach the part of fdlibm's pow that JDK 27 changed.
+"""Counts JdkScan's aimed pow inputs that reach the arithmetic of fdlibm's branch for |y| > 2^31.
 
 Reads JdkScan's out-<jdk>/pow-inputs.bin (x and y per input, in order; the aimed inputs are the
 last 1,000,000) and counts those with |x| within 2^-20 of 1 (high word 0x3fefffff or
@@ -27,7 +27,7 @@ def main():
         y = struct.unpack(">d", v[2 * i + 1].to_bytes(8, "big"))[0]
         if not (x < 0 and y != math.floor(y)):
             reach += 1
-    print("aimed inputs with |x| within 2^-20 of 1: %d; reaching the changed code: %d" % (window, reach))
+    print("aimed inputs with |x| within 2^-20 of 1: %d; reaching the branch's arithmetic: %d" % (window, reach))
 
 
 if __name__ == "__main__":

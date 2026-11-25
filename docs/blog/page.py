@@ -275,6 +275,9 @@ def main():
     parser.add_argument("--card-figure", default="aggregate",
                         help="the figure beside the title on the card, img/<name>.svg")
     args = parser.parse_args()
+    figure = os.path.join(os.path.dirname(os.path.abspath(args.source)), "img", args.card_figure + ".svg")
+    if args.card and not os.path.exists(figure):
+        sys.exit("no figure %s for the card" % figure)
     try:
         out, page = render(args.source, args.out, args.og_image)
     except ImportError:
@@ -282,8 +285,6 @@ def main():
     print("%s  %d bytes  %d figures" % (out, len(page), page.count('<figure class="fig">')))
     if args.card:
         title = re.search(r"<title>(.*?)</title>", page).group(1)
-        if not os.path.exists(os.path.join(args.out, "figures", args.card_figure + ".svg")):
-            sys.exit("no figure %s for the card" % args.card_figure)
         print(write_card(args.out, title, args.card_figure))
 
 

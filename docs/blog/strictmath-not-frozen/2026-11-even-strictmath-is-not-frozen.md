@@ -45,11 +45,13 @@ The reason is one sentence of `StrictMath`'s Javadoc. [JDK 25's](https://docs.or
 The change is [JDK-8326547](https://bugs.openjdk.org/browse/JDK-8326547), "StrictMath.pow
 returns results outside of a 1 ulp error bound", integrated into the JDK's main line on
 21 May 2026 ([openjdk/jdk#31210](https://github.com/openjdk/jdk/pull/31210)), and so in JDK 27.
-It touches one branch of fdlibm's `pow`: `|y|` above 2<sup>31</sup> with `|x|` within about
-2<sup>-20</sup> of 1.
+Every result it changed in my scans lies in one branch of fdlibm's `pow` (Sun's `e_pow.c`): `|y|`
+above 2<sup>31</sup> with `|x|` within about 2<sup>-20</sup> of 1. That is where the bug record's
+title and public review threads point, and what the scans below show; I did not read the JDK's
+change itself.
 
 I compared `StrictMath.pow` on JDK 25 and JDK 27 on a million inputs aimed at that branch:
-500,262 have `|x|` within 2<sup>-20</sup> of 1, and 389,513 of those reach the changed code (a
+500,262 have `|x|` within 2<sup>-20</sup> of 1, and 389,513 of those reach that branch's arithmetic (a
 negative `x` with a non-integer `y` returns NaN first). The results differ on 1,258. On each of the 1,247 with a normal result, JDK 25 was at least
 91 ulps off, and up to 653; JDK 27 is within 0.74 ulp on all of them.
 
@@ -164,7 +166,9 @@ the question #175 leaves open.
 
 Everything is in
 [docs/blog/strictmath-not-frozen](https://github.com/vecbricks/vfdlibm/tree/main/docs/blog/strictmath-not-frozen),
-with each data file's provenance at its top. The JDKs were Ubuntu 26.04's 21.0.13.1, 25.0.5.1 and
+with each data file's provenance at its top; the two lists of changed inputs,
+`pow-strictmath-jdk25-vs-jdk27.txt` and `pow-moderate-jdk25-vs-jdk27.txt`, are described in the
+files that made them. The JDKs were Ubuntu 26.04's 21.0.13.1, 25.0.5.1 and
 26.0.2, and 27.0.1.1 from jdk.java.net, on an AMD Ryzen AI 9 HX PRO 370; vfdlibm was 0.3.0 from
 Maven Central; Spark was the official 4.3.0 build, checked against Apache's SHA-512.
 

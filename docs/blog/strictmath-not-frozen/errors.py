@@ -28,14 +28,14 @@ def main():
         exact = (Decimal(y) * Decimal(abs(x)).ln()).exp()
         if x < 0 and y == int(y) and int(y) % 2:
             exact = -exact
-        u = Decimal(math.ulp(abs(float(exact))))  # the ulp at the exact value
+        u = Decimal(2) ** (math.floor(abs(exact).log10() / Decimal(2).log10()) - 52)  # exact's binade
         e_before.append(abs((Decimal(a) - exact) / u))
         e_after.append(abs((Decimal(b) - exact) / u))
     print("normal results", len(e_before))
     if not e_before:
         return
     for name, e in (("before", e_before), ("after", e_after)):
-        print("%-6s max error %.3f ulp, over 1 ulp on %d" % (name, max(e), sum(v > 1 for v in e)))
+        print("%-6s error %.3f to %.3f ulp, over 1 ulp on %d" % (name, min(e), max(e), sum(v > 1 for v in e)))
     print("after nearer on %d, before nearer on %d" % (sum(a < b for a, b in zip(e_after, e_before)),
                                                      sum(b < a for a, b in zip(e_after, e_before))))
 

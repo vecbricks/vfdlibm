@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Compares two JdkScan output directories input by input.
+"""Compares two JdkScan or StrictScan output directories input by input.
 
 Prints, per function, how many results differ, and writes each differing pow input with both
 results as "x y before after" in hex to the file given by --witnesses.
@@ -32,6 +32,8 @@ def main():
     a = ap.parse_args()
     if a.after_file and not a.file:
         ap.error("--after-file needs --file")
+    if a.witnesses and a.file and a.file not in ("pow.bin", "pow-Math.bin"):
+        ap.error("--witnesses lists pow inputs; compare pow.bin or pow-Math.bin")
     if a.all:
         before = {p.name for p in a.before.glob("*.bin")}
         after = {p.name for p in a.after.glob("*.bin")}

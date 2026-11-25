@@ -94,7 +94,7 @@ def pow_errors():
         exact = (Decimal(y) * Decimal(abs(x)).ln()).exp()
         if x < 0 and y == int(y) and int(y) % 2:
             exact = -exact
-        u = Decimal(math.ulp(abs(float(exact))))  # the ulp at the exact value
+        u = Decimal(2) ** (math.floor(abs(exact).log10() / Decimal(2).log10()) - 52)  # exact's binade
         rows.append((abs(y * math.log(abs(x))), float(abs((Decimal(a) - exact) / u)),
                      float(abs((Decimal(b) - exact) / u))))
     return rows

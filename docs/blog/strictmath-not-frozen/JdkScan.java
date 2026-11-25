@@ -8,9 +8,10 @@ import java.util.function.*;
 /**
  * For each of vfdlibm's 13 functions, reads the hard cases of vfdlibm's tests and adds 3,000,000
  * random inputs (uniform bits, moderate magnitudes, near 1), and for pow 1,000,000 more aimed at
- * fdlibm's branch for |y| > 2^31 with |x| near 1 (389,513 of them reach the part of it JDK 27
- * changed; see the comment there and aimed.py). Writes StrictMath's raw bits, in input order, to
- * <out>/<fn>.bin (0 on a lane of two NaN arguments), Math.pow's to <out>/pow-Math.bin, and prints per function a digest and the
+ * fdlibm's branch for |y| > 2^31 with |x| near 1 (389,513 of them reach its arithmetic; see the
+ * comment there and aimed.py). Writes StrictMath's raw bits, in input order, to
+ * <out>/<fn>.bin (0 on a lane of two NaN arguments), Math.pow's to <out>/pow-Math.bin, pow's inputs
+ * (x and y per input, in order) to <out>/pow-inputs.bin, and prints per function a digest and the
  * number of vfdlibm lanes that differ from StrictMath, at 256 bits and at the preferred species (a
  * lane of two NaN arguments is checked against the contract's two candidates instead). The inputs
  * are seeded, so two JDKs' outputs compare input by input (compare.py).
@@ -79,7 +80,7 @@ public class JdkScan {
     for (int i = 0; i < N; i++) { double[] p = new double[arity]; for (int k = 0; k < arity; k++) p[k] = (r.nextBoolean() ? 1 : -1) * (1 + Math.scalb(r.nextDouble() * 2 - 1, -r.nextInt(53))); in.add(p); }
     if (fn.equals("pow")) {
       // Aimed at fdlibm's branch for |y| > 2^31 (e_pow.c line 191). Of the four high words of x,
-      // 0x3fefffff and 0x3ff00000 put |x| within 2^-20 of 1, where the code JDK 27 changed runs
+      // 0x3fefffff and 0x3ff00000 put |x| within 2^-20 of 1, where that branch's arithmetic runs
       // unless x < 0 and y is not an integer (NaN first, line 185); 0x3feffffe and 0x3ff00001 sit
       // just outside and return early, by overflow or underflow, as neighbours. The integer
       // variant of y clamps at 2^63, since (long) saturates; the published runs used it as is.
