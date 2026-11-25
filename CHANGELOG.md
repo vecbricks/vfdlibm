@@ -11,6 +11,12 @@ two NaNs with different bits in a function of two arguments (`AGENTS.md`, "Relea
 
 ## [Unreleased]
 
+### Changed
+
+- `hypot` computes the lanes of an infinity or a NaN in either argument in the vector, lines
+  66-70 of fdlibm's C as blends, where it called `StrictMath.hypot` per lane; the results are
+  unchanged (#186).
+
 ## [0.3.0] - 2026-11-25
 
 ### Added

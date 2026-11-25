@@ -870,8 +870,51 @@ class HypotTest {
   // The vector port
   // ---------------------------------------------------------------------------------------------
 
+  /**
+   * L22's observed hinge in every JIT mode: lines 66-70 are blends whose NaN results are the vector
+   * sum {@code a+b}, and which NaN a sum keeps is fixed by neither IEEE 754 nor the JLS. So the
+   * vector port runs on {@link #specialPairs} and {@link #nanPairs} (NaNs of both signs, quiet and
+   * signalling, several payloads, beside NaNs, infinities and finite values) in a JVM per mode, at
+   * every width the host has, against {@code StrictMath.hypot} by raw bits but on the lane of two
+   * NaNs ({@code MAGNITUDES}). A sum that returned a canonical NaN, or kept a NaN's sign, fails on
+   * the one-NaN lanes. The children run where {@link
+   * #scalarTranscriptionIsStrictMathInEveryJitMode}'s do.
+   */
+  @ParameterizedTest
+  @EnumSource(JitMode.class)
+  void nanLanesAreStrictMathInEveryJitMode(JitMode mode) throws Exception {
+    assumeNoWidthOption();
+    assertRanInModeAndPassed(mode,
+        runInJvm(NanLanes.class, "hypot NaN lanes", mode, 1 << 9, 2));
+  }
+
+  /** The child of {@link #nanLanesAreStrictMathInEveryJitMode}: args are draws and passes. */
+  static final class NanLanes {
+    private NanLanes() {}
+
+    public static void main(String[] args) {
+      int draws = Integer.decode(args[0]);
+      int passes = Integer.parseInt(args[1]);
+      System.out.println("jvm: " + ManagementFactory.getRuntimeMXBean().getInputArguments()
+          + " | " + System.getProperty("java.vm.info"));
+      Inputs.Pairs p = concat(specialPairs(), nanPairs(9100L, draws));
+      boolean failed = false;
+      for (int pass = 1; pass <= passes; pass++) {
+        try {
+          forEachWidth(species -> assertHypot(species, p));
+          System.out.println("pass " + pass + ": " + p.x().length + " pairs at every width");
+        } catch (AssertionError e) {
+          System.out.println("pass " + pass + ": " + e.getMessage());
+          failed = true;
+        }
+      }
+      System.out.println(failed ? "result: FAILED" : "result: ok");
+      System.exit(failed ? 1 : 0);
+    }
+  }
+
   /** {@link VFdlibm#hypot} unmasked at {@code species} over the pairs {@code p}. */
-  private static void assertHypot(VectorSpecies<Double> species, Inputs.Pairs p) {
+  static void assertHypot(VectorSpecies<Double> species, Inputs.Pairs p) {
     Oracle.assertPair("VFdlibm.hypot", species, MAGNITUDES, VFdlibm::hypot, StrictMath::hypot,
         p.x(), p.y());
   }
@@ -1317,7 +1360,8 @@ class HypotTest {
   static Map<String, Executable> faultCatchers() {
     Map<String, Executable> catchers = new LinkedHashMap<>();
     for (String fault : new String[] {
-        Hypot.DROP_EARLY_RETURN, Hypot.REFRESHED_WORDS, Hypot.DROP_T2, Hypot.DROP_Y2}) {
+        Hypot.DROP_EARLY_RETURN, Hypot.REFRESHED_WORDS, Hypot.DROP_T2, Hypot.DROP_Y2,
+        Hypot.DROP_INFINITY_OVER_NAN}) {
       catchers.put(fault, () -> forEachWidth(species ->
           PlantedFaultTest.assertCaught(fault, () -> assertHypot(species, faultRunInputs()))));
     }
@@ -1338,7 +1382,7 @@ class HypotTest {
     assertHypot(width.species(), faultRunInputs());
   }
 
-  private static void forEachWidth(Consumer<VectorSpecies<Double>> check) {
+  static void forEachWidth(Consumer<VectorSpecies<Double>> check) {
     int preferred = DoubleVector.SPECIES_PREFERRED.vectorBitSize();
     for (int bits = 128; bits <= preferred; bits *= 2) {
       check.accept(VectorSpecies.of(double.class, VectorShape.forBitSize(bits)));
