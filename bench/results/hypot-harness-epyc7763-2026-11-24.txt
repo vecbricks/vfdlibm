@@ -1,15 +1,15 @@
-# HypotDiagBench on an AMD EPYC 7763 GitHub runner, 24 November 2026: hypot's body before and after
-# #174 in HypotBenchmark's loop and as a method of its own, a run and its re-run
+# HypotDiagBench on an AMD EPYC 7763 GitHub runner, 24 November 2026: hypot's loop before and after
+# #174, inlined into JMH's measuring loop and as a method of its own, a run and its re-run
 #
 # Produced by .github/workflows/benchmark.yml, dispatched by bench/dispatch-bench.sh --host epyc7763
 # --attempts 12 on the branch diag-hypot-variants at 980d723, for
 # HypotDiagBench.(old|main|mainHighWordCompare|depth0)$: run 45494174064 (24 November 2026, from
 # 21:45 UTC) and its re-run 45509851757 (from 23:25 UTC). Why:
-# hypot-order-pair-epyc7763-2026-11-24.txt reads hypot's vector rows about 31% slower on mixed data
-# after #174 on this host, while both comparisons order every lane of HypotBenchmark's data the same
-# way; these runs ask whether the body is slower in itself or in the loop C2 compiles around it. The
-# branch is a diagnostic one, never to be merged; it is kept on origin as this file's code.
-# bench/record.py write made this file from the two runs' artifacts, and bench/record.py check
+# hypot-order-pair-epyc7763-2026-11-24.txt reads hypot's vector rows on mixed data about 1.45 times
+# slower after #174 on this host, while both comparisons order every lane of HypotBenchmark's data
+# the same way; these runs ask whether the body is slower in itself or in the loop C2 compiles
+# around it. The branch is a diagnostic one, never to be merged; it is kept on origin as this file's
+# code. bench/record.py write made this file from the two runs' artifacts, and bench/record.py check
 # bench/results/hypot-harness-epyc7763-2026-11-24.txt --run 45494174064 --run 45509851757 passes.
 # The lines from "Host" to "Command" are each run's workflow header; the min/avg/max tables are
 # taken from JMH's "Result" blocks in the raw output.
@@ -18,10 +18,10 @@
 # over four bodies. old is HypotOld, a copy of Hypot.java at 0d1854c (before #174), so it orders by
 # the high words as e_hypot.c's line 60 does; main is Hypot.hypot as on main after #174;
 # mainHighWordCompare is main's Hypot run with -Dvfdlibm.fault=hypot.highWordOrder, which puts back
-# line 60's compare and keeps the rest of the body; depth0 is main's loop as a method of its own
-# that C2 does not inline into JMH's loop (CompilerControl DONT_INLINE). Every row computes the same
-# values on every lane of these arrays. The JMH options include -foe true; every row has a Result
-# block, which bench/record.py requires.
+# line 60's compare and keeps the rest of the body; depth0 is main's loop as a method of its own,
+# with the body inlined into it, that C2 does not inline into JMH's measuring loop (CompilerControl
+# DONT_INLINE). Every row computes the same values on every lane of these arrays. The JMH options
+# include -foe true; every row has a Result block, which bench/record.py requires.
 #
 # Host:        epyc7763 (expected CPU 'AMD EPYC 7763 64-Core Processor')
 # Commit:      980d72379ea04ef3010e037b952418b253c0cb53 (diag-hypot-variants)
@@ -49,16 +49,17 @@
 #   boxed.
 # - Mixed data, minimums, ns per 1024 pairs: old 7,278 / 7,320, main 10,632 / 10,596,
 #   mainHighWordCompare 7,769 / 7,747, depth0 7,662 / 7,811.
-# - main over depth0 on mixed data: 1.39 / 1.36, outside 1.3x in both runs. The same body is
-#   slower inlined into HypotBenchmark's loop than as a method of its own, by about the pair's 31%.
+# - main over depth0 on mixed data: 1.39 / 1.36, outside 1.3x in both runs. main's loop is slower
+#   inlined into JMH's measuring loop, as HypotBenchmark is, than as a method of its own called from
+#   it, with the body inlined into it either way.
 # - main over old on mixed data: 1.46 / 1.45, outside 1.3x, the pair's reading again. depth0 over
 #   old 1.05 / 1.07 and mainHighWordCompare over old 1.07 / 1.06: no direction. So after #174 the
-#   body as its own method is at the old code's level, and in HypotBenchmark's loop main's body
+#   loop as a method of its own is at the old code's level, and in HypotBenchmark's loop main's body
 #   is slow with the long compare and not with line 60's.
 # - Common data: old over main 1.07 / 1.02, depth0 over main 1.05 / 1.03, no direction;
 #   mainHighWordCompare over main 1.27 / 1.24, no direction, main lower.
-# - What this does not say: why one compile of the loop is slow. A caller's loop inlines the body
-#   the way HypotBenchmark's does, so which shape a caller gets is not measured.
+# - What this does not say: why one compile of the loop is slow. A caller's own loop method is the
+#   depth0 shape; a caller whose loop is inlined into a larger compiled method may get either.
 # - No row's own maximum is more than 7% above its minimum (the widest depth0 mixed in run 1,
 #   7,662 to 8,160, 6.5%). Two runs on two draws of the host.
 #

@@ -15,19 +15,21 @@
 # the median and the best of its 5 rounds a side, so the step failed and the run with it.
 #
 # Reading, by the pair's medians and bests (a row counts only when both agree):
-# - The three vector rows on mixed data are slower, by 30.7% to 31.0% by median: about 7350 ns/op
-#   at the base and 10630 at the head. On common data finish256 and finishPreferred are within
-#   5%, which is no direction.
+# - The three vector rows on mixed data are slower, by 30.7% to 31.0% by median in bench/pair.sh's
+#   terms (base over head, less one): about 7350 ns/op at the base and 10630 at the head, about 1.45
+#   times the time. On common data finish256 and finishPreferred are within 5%, which is no
+#   direction.
 # - finishMax on common data is faster by 66.2% by median, which is not a gain of #174: at the
 #   base that row ran at 9228.5 ns/op on average against 5746.7 to 5767.4 for the other two rows,
 #   the same 256-bit body, as in hypot-epyc7763-2026-11-23.txt; at the head it is at their level.
 # - The scalar loop is within noise both ways.
-# - Every lane gives the same order under both comparisons on this data: the two differ only
-#   where the high words are equal, and in each such pair of HypotBenchmark's (its subnormal
-#   pairs, high word 0) |x| is the larger, so neither comparison swaps. So base and head compute
-#   the same values on every lane. Why the head is slower on mixed data is read in
-#   hypot-harness-epyc7763-2026-11-24.txt: the same body as a method of its own runs at the old
-#   code's level, and inlined into HypotBenchmark's loop it is slower, a run and its re-run.
+# - Every lane gives the same order under both comparisons on this data: the two differ only where
+#   the high words are equal, and in each such pair of HypotBenchmark's (its subnormal pairs, high
+#   word 0) |x| is the larger, so neither comparison swaps. So base and head compute the same values
+#   on every lane. Why the head is slower on mixed data is read in
+#   hypot-harness-epyc7763-2026-11-24.txt: main's loop as a method of its own, with the body inlined
+#   into it, runs at the old code's level, and inlined into JMH's measuring loop, as here, it is
+#   slower, a run and its re-run.
 #
 # The base, 0d1854c: minimum, average and maximum of its 50 measured iterations.
 # Row                              inputs          min          avg          max   (ns/op)

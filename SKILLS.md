@@ -1741,25 +1741,27 @@ mnemonic); the other operations count the same at both widths.
   exactly parsed lines, 265,616 inputs with signs and orders) matched `StrictMath` at every width
   when it was evaluated, so the file is a selection, not a fix. The list is no harder for fdlibm
   than any input: it is hard for correct rounding, and `e_hypot.c` does not round correctly.
-- **A body's speed can depend on the loop it is inlined into, and #174 moved hypot's by about 31% on
-  mixed data on the EPYC 7763.** #174 replaced line 60's compare of the high words by one of the
+- **A body's speed can depend on the loop around it, and #174 moved hypot's by about 1.45x on mixed
+  data on the EPYC 7763.** #174 replaced line 60's compare of the high words by one of the
   sign-cleared bits as longs, and on HypotBenchmark's data both order every lane the same way, so
   the code before and after computes the same values. The pair
-  (`bench/results/hypot-order-pair-epyc7763-2026-11-24.txt`) still reads the vector rows about 31%
-  slower on mixed data. `hypot-harness-epyc7763-2026-11-24.txt` (a diagnostic class on the branch
-  `diag-hypot-variants`, a run and its re-run) times the same body as a method of its own, which C2
-  does not inline into JMH's loop, at the old code's level, and inlined into the loop 1.36 to 1.39
-  times slower on mixed data; with line 60's compare put back and the rest of the body as it is, the
-  inlined body is at the old level on mixed data too. On common data no row moved past 1.3x. So the
-  cost is in how C2 compiles the loop around the body, not in work the change added, and it flips
-  with small changes: before #174 finishMax ran about 1.6 times finishPreferred on common data, the
-  same body at the same width. Why one compile of the loop is slow is not measured. On the Xeon
-  8573C (AVX-512), one run after #174 against one before, on two draws and not a pair, reads no row
-  slower (`hypot-xeon8573c-2026-11-24-2.txt`). What to take from it: a port's speed is a property of
-  the compiled loop, not of the body alone; before blaming or crediting a change, time the body as
-  its own method and in the benchmark's loop, and read a per-row move with the pair and that check
-  together. A caller's loop inlines the body as the benchmark's does, so which shape a caller gets
-  is not measured.
+  (`bench/results/hypot-order-pair-epyc7763-2026-11-24.txt`) still reads the vector rows on mixed
+  data at about 7,350 ns/op before and 10,630 after, about 1.45 times the time (bench/pair.sh prints
+  it as -31%, base over head less one). `hypot-harness-epyc7763-2026-11-24.txt` (a diagnostic class
+  on the branch `diag-hypot-variants`, a run and its re-run) times main's loop two ways: as a method
+  of its own, with the body inlined into it and the loop called from JMH's measuring loop
+  (`depth0`), at the old code's level, and inlined into JMH's measuring loop, as HypotBenchmark is,
+  1.36 to 1.39 times slower on mixed data; with line 60's compare put back and the rest of the body
+  as it is, the inlined loop is at the old level on mixed data too. In the harness, no common-data
+  row moved past 1.3x. So the cost is in how C2 compiles the loop with what surrounds it, not in
+  work the change added, and it flips with small changes: before #174 finishMax ran about 1.6 times
+  finishPreferred on common data, the same body at the same width. Why one compile is slow is not
+  measured. On the Xeon 8573C (AVX-512), one run after #174 against one before, on two draws and not
+  a pair, reads no row slower (`hypot-xeon8573c-2026-11-24-2.txt`). What to take from it: a port's
+  speed is a property of the compiled loop, not of the body alone; before blaming or crediting a
+  change, time the loop as a method of its own as well as inlined into the benchmark's loop, and
+  read a per-row move with the pair and that check together. A caller's own loop method is the
+  `depth0` shape; a caller whose loop is inlined into a larger compiled method may get either.
 
 ## What the pow port taught
 

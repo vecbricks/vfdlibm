@@ -90,15 +90,13 @@ import jdk.incubator.vector.VectorSpecies;
  * finish, read the blend over it 1.37, 1.38, 1.76 and 1.77 on mixed data), and to which issue #30's
  * rules send a tie; the choice stays provisional until a host run revises it, a second run of the
  * code after #174 on each host, a first of the other AVX-512 hosts ({@code HARDWARE.md}) or a pair.
- * The second arm is kept so
- * the choice can be re-measured, on other hosts and as the JDK changes. The folds above cut the
- * common path C2 emits from 77 instructions with two divisions to 52 with one at 512 bits on
- * AVX-512, and from 107 to 64 at 256 bits under {@code
- * -XX:UseAVX=2} ({@code bench/asm/README.md}). The folded body was timed once as a pair against
- * its base on the Xeon Platinum 8573C ({@code
- * bench/results/exp-onediv-xeon8573c-2026-11-03.txt}): on common data its 256-bit, 512-bit,
- * preferred and Max rows are 1.33x to 1.48x faster by the median of five rounds, and none of
- * those rows is slower by the median or by the best iteration.
+ * The second arm is kept so the choice can be re-measured, on other hosts and as the JDK changes.
+ * The folds above cut the common path C2 emits from 77 instructions with two divisions to 52 with
+ * one at 512 bits on AVX-512, and from 107 to 64 at 256 bits under {@code -XX:UseAVX=2} ({@code
+ * bench/asm/README.md}). The folded body was timed once as a pair against its base on the Xeon
+ * Platinum 8573C ({@code bench/results/exp-onediv-xeon8573c-2026-11-03.txt}): on common data its
+ * 256-bit, 512-bit, preferred and Max rows are 1.33x to 1.48x faster by the median of five rounds,
+ * and none of those rows is slower by the median or by the best iteration.
  *
  * <p>{@link #expCore} and {@link #expRare} split the finish arm into its branch-free part and its
  * rare-lane mask, for {@code ExpBenchmark}'s experiment with two vectors per loop iteration.

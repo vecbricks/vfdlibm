@@ -233,11 +233,11 @@ five are a later, optional set; the large-argument reduction of the trigonometri
   #174 ordered its arguments, a run and its re-run: no direction against the scalar loop at the
   preferred species, and `finishMax` 1.6x slower than `finishPreferred` on common data in both;
   `hypot-epyc7763-2026-11-24.txt` reads it after #174, a run and its re-run, the scalar loop lower
-  on mixed data by 1.33 to 1.44 in both and no direction on common data, and `finishMax` at the
-  level of the other rows; `hypot-order-pair-epyc7763-2026-11-24.txt` pairs the code before and
-  after #174 there, the vector rows about 31% slower on mixed data, and
-  `hypot-harness-epyc7763-2026-11-24.txt` reads the same body at the old level as a method of its
-  own and slower inlined into the benchmark's loop;
+  on mixed data by 1.43 to 1.44 in run 1 and 1.33 to 1.34 in run 2, and no direction on common data,
+  and `finishMax` at the level of the other rows; `hypot-order-pair-epyc7763-2026-11-24.txt` pairs
+  the code before and after #174 there, the vector rows on mixed data about 1.45 times slower, and
+  `hypot-harness-epyc7763-2026-11-24.txt` reads main's loop, the body inlined into it, at the old
+  level as a method of its own and slower inlined into JMH's measuring loop;
   `hypot-xeon8573c-2026-11-24-2.txt` reads it after #174 on the Xeon 8573C, one run, the vector arm
   lower on common data by 2.13 to 2.16 at 512 bits and no direction on mixed data), and
   `PowBenchmark` one for `pow` (the same; `pow-epyc7763-2026-11-23.txt` and
