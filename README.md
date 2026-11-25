@@ -46,8 +46,8 @@ that times the release's code; `bench/readme-table.py --write` makes this table,
 <!-- end of speedup-table -->
 
 `hypot` on AVX2 is a known issue of 0.3.0: on the EPYC 7763 it is not shown to be faster than
-`StrictMath`, and on `HypotBenchmark`'s mixed data, where one pair in 16 takes another way out of
-the C, it is slower, with the same results (`CHANGELOG.md`, "Known issues").
+`StrictMath`, and on `HypotBenchmark`'s mixed data, where about one pair in 16 takes a rare path of
+fdlibm's C, it is slower, with the same results (`CHANGELOG.md`, "Known issues").
 
 ## Use
 
