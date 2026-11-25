@@ -88,6 +88,19 @@ query" below.
 python3 ../figures.py
 ```
 
+## A literal and a column
+
+`../photon-literal-check.sql` computes `exp(1.0D)` of a literal and `exp(x)` of a one-row table
+holding 1.0, in one query. The files in `data/`:
+
+- `photon-literal-vs-column-2026-11-25.txt`: its `SELECT` on Databricks Free Edition, SQL warehouse
+  with Photon, 25 November 2026, as pasted from the SQL editor: the literal is 2.7182818284590455,
+  the column 2.718281828459045, and `same` is false.
+- `photon-literal-vs-column-explain-2026-11-25.txt`: its `EXPLAIN` on the same warehouse and day,
+  as pasted, with the table's storage path removed. `PhotonProject` holds the literal already
+  folded to 2.7182818284590455 and `EXP(x)` over `PhotonScan`, and it ends "The query is fully
+  supported by Photon."
+
 ## hypot's argument order
 
 `hypot-order.c` and `hypot-order-check.c` link Sun's `e_hypot.c` from
