@@ -1,0 +1,186 @@
+# StrictMath on JDK 25, 26 and 27, and vfdlibm 0.3.0 against each
+
+What was run and why: for the post "Even StrictMath is not frozen" and issue #175, whether a JDK
+after 25 changes StrictMath's bits for any of vfdlibm's 13 functions, and whether vfdlibm 0.3.0
+still equals StrictMath there. A bit comparison, not a timing. StrictMath's and vfdlibm's
+counts here do not depend on the CPU; the Math.pow rows do (the JIT's intrinsics are chosen per
+CPU), so they are this x86-64 laptop's only.
+
+Date: 25 November 2026
+Host: laptop, AMD Ryzen AI 9 HX PRO 370 (flags: avx2 avx512f avx512dq), Linux 7.0.0-44-generic
+JDKs: 25.0.5.1+2-1-26.04.1-Ubuntu, 26.0.2+10-2-26.04.2-Ubuntu (both Ubuntu 26.04 packages),
+      27.0.1.1+4-22 (jdk.java.net)
+vfdlibm: io.github.vecbricks:vfdlibm:0.3.0 from Maven Central, sha256
+      4a675dbb2c38ade1c266941b9d8dfe7dd7245381ad8367d62059040b420617d3 (equal to Central's .sha256)
+Inputs: JdkScan.java at the commit of this file: vfdlibm's hard cases (src/test/resources/.../
+      hard-cases at 0f455af) plus 3,000,000 seeded random inputs per function, and for pow
+      1,000,000 more aimed at fdlibm's branch for |y| > 2^31 with |x| near 1 (500,262 of them
+      with |x| within 2^-20 of 1, of which 389,513 reach that branch's arithmetic; the others
+      have a negative x with a non-integer y, which returns NaN first: aimed.py). On a lane of two NaN arguments the .bin files and digests
+      hold 0, since StrictMath's NaN there depends on the JIT tier.
+Commands, per JDK, with and (25, 26) without the libm intrinsics
+      (-XX:+UnlockDiagnosticVMOptions -XX:-UseLibmIntrinsic):
+      javac --add-modules jdk.incubator.vector -cp vfdlibm-0.3.0.jar -d . JdkScan.java   (JDK 25)
+      java -Xmx3g [flags] --add-modules jdk.incubator.vector -cp .:vfdlibm-0.3.0.jar JdkScan <hard-cases> out-<jdk>
+then:
+      python3 compare.py out-25 out-26
+      python3 compare.py out-25 out-27 --witnesses data/pow-strictmath-jdk25-vs-jdk27.txt
+      python3 compare.py out-25-nolibm out-26-nolibm --file pow-Math.bin
+      python3 compare.py out-25 out-26 --file pow-Math.bin
+      python3 compare.py out-25 out-27 --file pow-Math.bin
+      python3 compare.py out-25 out-25-nolibm --file pow.bin --after-file pow-Math.bin
+      python3 compare.py out-26-nolibm out-27 --file pow-Math.bin --after-file pow.bin
+      python3 witness_check.py out-25/pow.bin out-27/pow.bin out-26-nolibm/pow-Math.bin out-27/pow.bin
+      python3 witness_check.py out-25/pow.bin out-27/pow.bin out-25-nolibm/pow-Math.bin out-25/pow.bin
+      python3 aimed.py out-25/pow-inputs.bin
+
+## JdkScan's output: per function, StrictMath's digest and vfdlibm lanes that differ from it
+
+### JDK 25
+# 25.0.5.1+2-1-26.04.1-Ubuntu
+acos   n=3001569 StrictMath=5aa9acc6aaabab5c  vf256 diff=0  vf512 diff=0
+asin   n=3001655 StrictMath=8307ab595d9c7699  vf256 diff=0  vf512 diff=0
+atan   n=3001735 StrictMath=5ffeef01cc8d1cfe  vf256 diff=0  vf512 diff=0
+cosh   n=3002026 StrictMath=fa656a28cfa681ec  vf256 diff=0  vf512 diff=0
+sinh   n=3002215 StrictMath=cabba7a9e5df0802  vf256 diff=0  vf512 diff=0
+exp    n=3002283 StrictMath=8e41f03d7eb9e59b  vf256 diff=0  vf512 diff=0
+expm1  n=3007584 StrictMath=d36e4ac37512962f  vf256 diff=0  vf512 diff=0
+log    n=3002820 StrictMath=5d9feb169ab6fe36  vf256 diff=0  vf512 diff=0
+log10  n=3001886 StrictMath=042bb63d1fc8068e  vf256 diff=0  vf512 diff=0
+log1p  n=3007550 StrictMath=bd2ea1d474139f71  vf256 diff=0  vf512 diff=0
+atan2  n=3020820 StrictMath=2fba64c22f150cbe  vf256 diff=0  vf512 diff=0
+hypot  n=3008720 StrictMath=e0b2228c56aff6de  vf256 diff=0  vf512 diff=0
+pow    n=4005016 StrictMath=51dfe40e5bb17ef2  vf256 diff=0  vf512 diff=0
+
+### JDK 26
+# 26.0.2+10-2-26.04.2-Ubuntu
+acos   n=3001569 StrictMath=5aa9acc6aaabab5c  vf256 diff=0  vf512 diff=0
+asin   n=3001655 StrictMath=8307ab595d9c7699  vf256 diff=0  vf512 diff=0
+atan   n=3001735 StrictMath=5ffeef01cc8d1cfe  vf256 diff=0  vf512 diff=0
+cosh   n=3002026 StrictMath=fa656a28cfa681ec  vf256 diff=0  vf512 diff=0
+sinh   n=3002215 StrictMath=cabba7a9e5df0802  vf256 diff=0  vf512 diff=0
+exp    n=3002283 StrictMath=8e41f03d7eb9e59b  vf256 diff=0  vf512 diff=0
+expm1  n=3007584 StrictMath=d36e4ac37512962f  vf256 diff=0  vf512 diff=0
+log    n=3002820 StrictMath=5d9feb169ab6fe36  vf256 diff=0  vf512 diff=0
+log10  n=3001886 StrictMath=042bb63d1fc8068e  vf256 diff=0  vf512 diff=0
+log1p  n=3007550 StrictMath=bd2ea1d474139f71  vf256 diff=0  vf512 diff=0
+atan2  n=3020820 StrictMath=2fba64c22f150cbe  vf256 diff=0  vf512 diff=0
+hypot  n=3008720 StrictMath=e0b2228c56aff6de  vf256 diff=0  vf512 diff=0
+pow    n=4005016 StrictMath=51dfe40e5bb17ef2  vf256 diff=0  vf512 diff=0
+
+### JDK 27
+# 27.0.1.1+4-22
+acos   n=3001569 StrictMath=5aa9acc6aaabab5c  vf256 diff=0  vf512 diff=0
+asin   n=3001655 StrictMath=8307ab595d9c7699  vf256 diff=0  vf512 diff=0
+atan   n=3001735 StrictMath=5ffeef01cc8d1cfe  vf256 diff=0  vf512 diff=0
+cosh   n=3002026 StrictMath=fa656a28cfa681ec  vf256 diff=0  vf512 diff=0
+sinh   n=3002215 StrictMath=cabba7a9e5df0802  vf256 diff=0  vf512 diff=0
+exp    n=3002283 StrictMath=8e41f03d7eb9e59b  vf256 diff=0  vf512 diff=0
+expm1  n=3007584 StrictMath=d36e4ac37512962f  vf256 diff=0  vf512 diff=0
+log    n=3002820 StrictMath=5d9feb169ab6fe36  vf256 diff=0  vf512 diff=0
+log10  n=3001886 StrictMath=042bb63d1fc8068e  vf256 diff=0  vf512 diff=0
+log1p  n=3007550 StrictMath=bd2ea1d474139f71  vf256 diff=0  vf512 diff=0
+atan2  n=3020820 StrictMath=2fba64c22f150cbe  vf256 diff=0  vf512 diff=0
+hypot  n=3008720 StrictMath=e0b2228c56aff6de  vf256 diff=0  vf512 diff=0
+pow    n=4005016 StrictMath=a49fdd8612c4d863  vf256 diff=0  vf512 diff=0
+
+### JDK 25-nolibm
+# 25.0.5.1+2-1-26.04.1-Ubuntu
+acos   n=3001569 StrictMath=5aa9acc6aaabab5c  vf256 diff=0  vf512 diff=0
+asin   n=3001655 StrictMath=8307ab595d9c7699  vf256 diff=0  vf512 diff=0
+atan   n=3001735 StrictMath=5ffeef01cc8d1cfe  vf256 diff=0  vf512 diff=0
+cosh   n=3002026 StrictMath=fa656a28cfa681ec  vf256 diff=0  vf512 diff=0
+sinh   n=3002215 StrictMath=cabba7a9e5df0802  vf256 diff=0  vf512 diff=0
+exp    n=3002283 StrictMath=8e41f03d7eb9e59b  vf256 diff=0  vf512 diff=0
+expm1  n=3007584 StrictMath=d36e4ac37512962f  vf256 diff=0  vf512 diff=0
+log    n=3002820 StrictMath=5d9feb169ab6fe36  vf256 diff=0  vf512 diff=0
+log10  n=3001886 StrictMath=042bb63d1fc8068e  vf256 diff=0  vf512 diff=0
+log1p  n=3007550 StrictMath=bd2ea1d474139f71  vf256 diff=0  vf512 diff=0
+atan2  n=3020820 StrictMath=2fba64c22f150cbe  vf256 diff=0  vf512 diff=0
+hypot  n=3008720 StrictMath=e0b2228c56aff6de  vf256 diff=0  vf512 diff=0
+pow    n=4005016 StrictMath=51dfe40e5bb17ef2  vf256 diff=0  vf512 diff=0
+
+### JDK 26-nolibm
+# 26.0.2+10-2-26.04.2-Ubuntu
+acos   n=3001569 StrictMath=5aa9acc6aaabab5c  vf256 diff=0  vf512 diff=0
+asin   n=3001655 StrictMath=8307ab595d9c7699  vf256 diff=0  vf512 diff=0
+atan   n=3001735 StrictMath=5ffeef01cc8d1cfe  vf256 diff=0  vf512 diff=0
+cosh   n=3002026 StrictMath=fa656a28cfa681ec  vf256 diff=0  vf512 diff=0
+sinh   n=3002215 StrictMath=cabba7a9e5df0802  vf256 diff=0  vf512 diff=0
+exp    n=3002283 StrictMath=8e41f03d7eb9e59b  vf256 diff=0  vf512 diff=0
+expm1  n=3007584 StrictMath=d36e4ac37512962f  vf256 diff=0  vf512 diff=0
+log    n=3002820 StrictMath=5d9feb169ab6fe36  vf256 diff=0  vf512 diff=0
+log10  n=3001886 StrictMath=042bb63d1fc8068e  vf256 diff=0  vf512 diff=0
+log1p  n=3007550 StrictMath=bd2ea1d474139f71  vf256 diff=0  vf512 diff=0
+atan2  n=3020820 StrictMath=2fba64c22f150cbe  vf256 diff=0  vf512 diff=0
+hypot  n=3008720 StrictMath=e0b2228c56aff6de  vf256 diff=0  vf512 diff=0
+pow    n=4005016 StrictMath=51dfe40e5bb17ef2  vf256 diff=0  vf512 diff=0
+
+## compare.py: StrictMath results that differ, input by input
+
+### JDK 25 vs JDK 26
+acos.bin       3001569 inputs      0 differ
+asin.bin       3001655 inputs      0 differ
+atan.bin       3001735 inputs      0 differ
+cosh.bin       3002026 inputs      0 differ
+sinh.bin       3002215 inputs      0 differ
+exp.bin        3002283 inputs      0 differ
+expm1.bin      3007584 inputs      0 differ
+log.bin        3002820 inputs      0 differ
+log10.bin      3001886 inputs      0 differ
+log1p.bin      3007550 inputs      0 differ
+atan2.bin      3020820 inputs      0 differ
+hypot.bin      3008720 inputs      0 differ
+pow.bin        4005016 inputs      0 differ
+
+### JDK 25 vs JDK 27
+acos.bin       3001569 inputs      0 differ
+asin.bin       3001655 inputs      0 differ
+atan.bin       3001735 inputs      0 differ
+cosh.bin       3002026 inputs      0 differ
+sinh.bin       3002215 inputs      0 differ
+exp.bin        3002283 inputs      0 differ
+expm1.bin      3007584 inputs      0 differ
+log.bin        3002820 inputs      0 differ
+log10.bin      3001886 inputs      0 differ
+log1p.bin      3007550 inputs      0 differ
+atan2.bin      3020820 inputs      0 differ
+hypot.bin      3008720 inputs      0 differ
+pow.bin        4005016 inputs   1258 differ
+
+### Math.pow with the libm intrinsics off, JDK 25 vs JDK 26
+pow-Math.bin   4005016 inputs   1258 differ
+
+### Math.pow with the libm intrinsics on (the default), JDK 25 vs JDK 26, and JDK 25 vs JDK 27
+pow-Math.bin   4005016 inputs      0 differ
+pow-Math.bin   4005016 inputs      0 differ
+
+### StrictMath.pow against Math.pow with the libm intrinsics off (another file of the same inputs)
+(JDK 25 StrictMath.pow vs JDK 25 Math.pow, then JDK 26 Math.pow vs JDK 27 StrictMath.pow)
+pow.bin        4005016 inputs 1477955 differ
+pow-Math.bin   4005016 inputs 1477955 differ
+
+### witness_check.py: on the inputs where StrictMath.pow differs between JDK 25 and 27
+1258 inputs where out-25/pow.bin and out-27/pow.bin differ; out-26-nolibm/pow-Math.bin equals out-27/pow.bin on 1258 of them
+1258 inputs where out-25/pow.bin and out-27/pow.bin differ; out-25-nolibm/pow-Math.bin equals out-25/pow.bin on 1258 of them
+
+The 1,477,955 inputs where StrictMath.pow and Math.pow with the intrinsics off differ all have a
+NaN result on both sides: StrictMath.pow returns 0xfff8000000000000 and Math.pow
+0x7ff8000000000000 (checked input by input after the run; no other result differs).
+
+### aimed.py
+aimed inputs with |x| within 2^-20 of 1: 500262; reaching the branch's arithmetic: 389513
+
+## Reading
+
+- StrictMath gives the same bits on JDK 25, 26 and 27 for 12 of the 13 functions on every input
+  here. StrictMath.pow is the same on 25 and 26 and differs on 27 on 1,258 of 4,005,016 inputs,
+  all in the aimed set (listed in pow-strictmath-jdk25-vs-jdk27.txt as "x y jdk25 jdk27").
+- JDK 26.0.2 changes Math.pow, not StrictMath.pow: with the libm intrinsics off, Math.pow on
+  26 differs from 25 on the same 1,258 inputs and returns there the same bits as StrictMath.pow
+  on 27. Elsewhere that Math.pow equals StrictMath.pow but for the bits of a NaN result, on JDK
+  25 as on 26. With the intrinsics on, as by default on x86, Math.pow does not run that code.
+- vfdlibm 0.3.0 differs from StrictMath on no lane, at 256 and 512 bits, on 25, 26 and 27 (a
+  lane of two NaN arguments checked against the contract's two candidates): its pow finishes the
+  lanes with |y| > 2^31 per lane by StrictMath.pow (Pow.java), and those are the lanes JDK 27
+  changed. 0.3.x supports JDK 25 only; this does not change that.
