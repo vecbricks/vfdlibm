@@ -49,7 +49,8 @@ import org.openjdk.jmh.annotations.Warmup;
  * <p>{@code inputs} picks the data: {@code common} draws {@code x} and {@code y} from {@code
  * [-10, 10)}, Varka's baseline range, where every lane takes the medium path unscaled (both of
  * its forms) and none takes lines 66-70; {@code mixed} replaces one pair in 16 with one
- * that takes another way out of the C: a NaN or an infinity in either argument (lines 66-70), a
+ * that takes another way out of the C: a NaN or an infinity in either argument (line 63's return,
+ * or lines 66-70 for an infinity beside a NaN), a
  * ratio past {@code 2^60}, a zero {@code b}, either scaling by {@code 2^600} and the
  * subnormal {@code b}, so many vectors hold one. Any other value is refused.
  *

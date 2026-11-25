@@ -32,15 +32,18 @@ import jdk.incubator.vector.VectorMask;
  * at each, in bytes per op, an op being one pass over 1024 doubles. The arm that {@code exp},
  * {@code expm1}, {@code log}, {@code log10} and {@code log1p} call is the finish arm, the one
  * {@code atan2} calls is the guarded arm, and the one {@code cosh} calls is the slice arm; {@code
- * hypot} and {@code pow} have one arm, the finish. The host files of {@code hypot} and {@code pow}
- * ({@code hypot-epyc7763-2026-11-24.txt}, {@code hypot-xeon8573c-2026-11-24-2.txt}, {@code
+ * hypot} and {@code pow} have one arm, named the finish ({@code hypot}'s computes its rare lanes in
+ * the vector since #186). The host files of {@code hypot} and {@code pow} ({@code
+ * hypot-epyc7763-2026-11-24.txt}, {@code hypot-xeon8573c-2026-11-24-2.txt}, {@code
  * pow-epyc7763-2026-11-23.txt} and {@code pow-xeon8573c-2026-11-24.txt}) read their vector rows at
  * 256 bits, the preferred species and {@code SPECIES_MAX} at 0.071 bytes per op or less, but {@code
- * pow}'s on mixed data; the list below predates them. On its mixed data {@code StrictMath.pow},
- * which finishes {@code pow}'s rare lanes, allocates on some of them itself, so CI's allocation
- * check reads {@code pow}'s rows against an oracle baseline, which they match within 0.1 bytes per
- * op in both host files, and at the laptop's flags and as an AVX2 host in {@code
- * bench/results/pow-alloc-laptop-2026-11-23.txt} (an allocation reading, no timing).
+ * pow}'s on mixed data ({@code hypot}'s two time 0.3.0's per-lane finish; {@code
+ * hypot-pair-epyc7763-2026-11-25.txt} reads #186's body at 0.020 bytes per op or less); the list
+ * below predates them. On its mixed data {@code StrictMath.pow}, which finishes {@code pow}'s rare
+ * lanes, allocates on some of them itself, so CI's allocation check reads {@code pow}'s rows
+ * against an oracle baseline, which they match within 0.1 bytes per op in both host files, and at
+ * the laptop's flags and as an AVX2 host in {@code bench/results/pow-alloc-laptop-2026-11-23.txt}
+ * (an allocation reading, no timing).
  *
  * <ul>
  *   <li>Covered by {@code bench/alloc-check.py}, which CI runs and which fails a body that

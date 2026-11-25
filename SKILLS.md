@@ -1699,7 +1699,8 @@ mnemonic); the other operations count the same at both widths.
   `finishPreferred`, `finishMax`, common and mixed data); the host files that time the code after
   #174 (`hypot-epyc7763-2026-11-24.txt`, a run of 24 November and its re-run of 25 November, and
   `hypot-xeon8573c-2026-11-24-2.txt`, a run of 24 November and its re-run of 25 November) read every
-  row at 0.040 B/op or less.
+  row at 0.040 B/op or less; they time the per-lane finish of 0.3.0, and #186's blended body is read
+  by `hypot-pair-epyc7763-2026-11-25.txt` at 0.028 B/op or less, the harness's own.
 - **The faults, sized on 2^22 draws each** (a throwaway program over `VFdlibm.hypot` at 256 bits,
   once per fault; counts of pairs that differ from `StrictMath.hypot`; the unplanted port 0 on
   each). `hypot.dropEarlyReturn`: 0 of Varka's range `[-10, 10)`, 1,779,887 of sampled bits,

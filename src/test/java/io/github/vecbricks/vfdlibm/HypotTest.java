@@ -719,7 +719,7 @@ class HypotTest {
 
   /** A line of {@code -XX:+PrintCompilation}'s log: a time stamp, a compile id and a method. */
   static final java.util.regex.Pattern COMPILE_LINE = java.util.regex.Pattern.compile(
-      "^\\s*\\d+\\s+\\d+\\s+[%sbn!]*\\s*\\d?\\s+\\S+::");
+      "^\\s*\\d+\\s+\\d+ [%sbn! ]{5}");
 
   /**
    * How long a child JVM may take: a generous bound that keeps a hung child from stalling the
@@ -893,13 +893,17 @@ class HypotTest {
    * signalling, several payloads, beside NaNs, infinities and finite values) in a JVM per mode, at
    * every width the host has, against {@code StrictMath.hypot} by raw bits but on the lane of two
    * NaNs ({@code MAGNITUDES}). A sum that returned a canonical NaN, or kept a NaN's sign, fails on
-   * the one-NaN lanes. The children run where {@link
-   * #scalarTranscriptionIsStrictMathInEveryJitMode}'s do.
+   * the one-NaN lanes. The children run on every row, those with width options too, where {@link
+   * #scalarTranscriptionIsStrictMathInEveryJitMode}'s skip: the parent's {@code -XX:UseAVX} and
+   * {@code -XX:MaxVectorSize} are passed to them.
    */
   @ParameterizedTest
   @EnumSource(JitMode.class)
   void nanLanesAreStrictMathInEveryJitMode(JitMode mode) throws Exception {
-    assumeNoWidthOption();
+    // The parent's width options go to the children, so that a row run as AVX2 checks AVX2's
+    // lowering of the sum in every mode, where the scalar children skip such rows.
+    List<String> width = ManagementFactory.getRuntimeMXBean().getInputArguments().stream()
+        .filter(a -> a.startsWith("-XX:MaxVectorSize=") || a.startsWith("-XX:UseAVX=")).toList();
     // A JVM per width the host has, so that the compiled body is the one for that width and is
     // not deoptimized by a change of shape. In the compiled modes, 15,000 unchecked calls first
     // and -Xbatch, and the compile log must show Hypot::hypot compiled at the mode's tier, and not
@@ -908,7 +912,7 @@ class HypotTest {
     int preferred = DoubleVector.SPECIES_PREFERRED.vectorBitSize();
     for (int bits = 128; bits <= preferred; bits *= 2) {
       String text = runInJvm(NanLanes.class, "hypot NaN lanes, " + bits + " bits", mode,
-          interpreted ? List.of() : List.of("-Xbatch", "-XX:+PrintCompilation"),
+          concat(width, interpreted ? List.of() : List.of("-Xbatch", "-XX:+PrintCompilation")),
           List.of(Integer.toString(1 << 9), "1", interpreted ? "0" : "15000",
               Integer.toString(bits)));
       assertRanInModeAndPassed(mode, text);
@@ -927,17 +931,25 @@ class HypotTest {
   /**
    * Whether the child's compile log, before its line {@code "checking"}, holds a compile of
    * {@code Hypot::hypot} at {@code level} ({@code ""} for C2 without tiers) that was not made not
-   * entrant before that line: so the checked pass ran that compiled body, unless it was thrown
-   * away during the pass itself, which the log would show after the line.
+   * entrant before that line, and none of those compiles is made not entrant between that line and
+   * the child's result: so the whole checked pass ran a compiled body of that tier.
    */
   static boolean compiledAtCheck(String text, String level) {
     java.util.regex.Pattern compile = java.util.regex.Pattern.compile(
         "^\\s*\\d+\\s+(\\d+)\\s+b\\s+" + (level.isEmpty() ? "" : level + "\\s+")
         + "io\\.github\\.vecbricks\\.vfdlibm\\.Hypot::hypot \\(");
     java.util.Set<String> live = new java.util.HashSet<>();
+    boolean checking = false;
     for (String line : text.lines().toList()) {
       if (line.equals("checking")) {
-        return !live.isEmpty();
+        if (live.isEmpty()) {
+          return false;
+        }
+        checking = true;
+        continue;
+      }
+      if (checking && line.startsWith("result: ")) {
+        return true;
       }
       java.util.regex.Matcher m = compile.matcher(line);
       if (m.find()) {
@@ -945,12 +957,19 @@ class HypotTest {
       } else if (line.contains("vfdlibm.Hypot::hypot") && line.contains("made not entrant")) {
         java.util.regex.Matcher id = java.util.regex.Pattern.compile("^\\s*\\d+\\s+(\\d+)\\s")
             .matcher(line);
-        if (id.find()) {
-          live.remove(id.group(1));
+        if (id.find() && live.remove(id.group(1)) && checking) {
+          return false;
         }
       }
     }
     return false;
+  }
+
+  /** Two lists of JVM options, one after the other. */
+  private static List<String> concat(List<String> a, List<String> b) {
+    List<String> all = new ArrayList<>(a);
+    all.addAll(b);
+    return all;
   }
 
   /** The pairs of {@code p} with an infinity or a NaN in either argument: lines 66-70's lanes. */
@@ -1131,7 +1150,7 @@ class HypotTest {
     return Double.longBitsToDouble(b);
   }
 
-  /** Lines 66-70's pairs: an infinity or a NaN in either argument. */
+  /** An infinity or a NaN in either argument: line 63's return, or lines 66-70's. */
   private static final double[][] RARE_LANES = {
     {Double.NaN, 1.0}, {1.0, Double.NaN}, {Double.POSITIVE_INFINITY, Double.NaN},
     {Double.NaN, Double.NEGATIVE_INFINITY},
@@ -1436,6 +1455,7 @@ class HypotTest {
     assertEquals(0x3c00000, Hypot.RATIO_WORD);
     assertEquals(0x5f300000, Hypot.HA_BIG);
     assertEquals(0x7ff00000, Hypot.HA_INF);
+    assertEquals(Double.doubleToRawLongBits(Double.POSITIVE_INFINITY), Hypot.INF_BITS);
     assertEquals(0x20b00000, Hypot.HB_SMALL);
     assertEquals(0x000fffff, Hypot.HB_SUBNORMAL);
     assertEquals(0x25800000, Hypot.SCALE_WORD);
