@@ -25,6 +25,7 @@ sys.path.insert(0, str(HERE.parent))
 import figures as base  # noqa: E402  (the first post's figures.py, for its drawing)
 
 base.OUT = HERE / "img"
+base.OUT.mkdir(exist_ok=True)
 DATA = HERE / "data"
 Fig, M, IW = base.Fig, base.M, base.IW
 
@@ -45,14 +46,26 @@ def moved():
 
 
 def fig_moved():
-    d = moved()
+    d = {k: v for k, v in moved().items() if v[0] > 0}
     pairs = [("21", "25"), ("25", "26"), ("26", "27")]
+    times = {1: "once", 2: "twice", 3: "three times", 4: "four times"}
+
+    def moves(who):
+        n = sum(1 for (p, w, fn) in d if w == who and p in pairs)
+        return times.get(n, f"{n} times")
+
+    def said(who):
+        parts = []
+        for p in pairs:
+            fns = sorted(fn for (q, w, fn) in d if q == p and w == who)
+            parts.append(f"from JDK {p[0]} to {p[1]}: " +
+                         (", ".join(f"{fn} on {d[(p, who, fn)][0]:,} inputs" for fn in fns) or "none"))
+        return f"{who}, " + "; ".join(parts) + "."
+
     f = Fig("moved", "Whose bits moved with the JDK",
-            "On 20 double functions, about 3 million inputs each: StrictMath moved once in four "
-            "JDKs, Math three times on this x86-64 CPU.",
-            "StrictMath: no change from JDK 21 to 25 or 25 to 26; pow changed on 1,258 inputs "
-            "from 26 to 27, Math none. Math on an AMD Ryzen AI 9 HX PRO 370: cbrt and tanh changed from 21 "
-            "to 25, sinh from 25 to 26.")
+            f"On 20 double functions, about 3 million inputs each: StrictMath moved {moves('StrictMath')} "
+            f"in four JDKs, Math {moves('Math')} on this x86-64 CPU.",
+            said("StrictMath") + " " + said("Math") + " (Math on an AMD Ryzen AI 9 HX PRO 370.)")
     y = f.header() + 8
     col = (IW - 120) / 3
     for i, (a, b) in enumerate(pairs):

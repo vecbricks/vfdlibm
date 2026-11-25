@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Compares two JdkScan or StrictScan output directories input by input.
+"""Compares two JdkScan or StrictScan output directories input by input (StrictScan's with --all).
 
 Prints, per function, how many results differ, and writes each differing pow input with both
 results as "x y before after" in hex to the file given by --witnesses.
@@ -46,7 +46,8 @@ def main():
         ap.error("--witnesses writes one file's differences; use it without --all")
     for name in names:
         b, c = bits(a.before / name), bits(a.after / (a.after_file or name))
-        assert len(b) == len(c), name
+        if len(b) != len(c):
+            ap.error("%s: %d results against %d" % (name, len(b), len(c)))
         diff = [i for i in range(len(b)) if b[i] != c[i]]
         print("%-24s %9d inputs %7d differ" % (name, len(b), len(diff)) if a.all else
               "%-12s %9d inputs %6d differ" % (name, len(b), len(diff)))

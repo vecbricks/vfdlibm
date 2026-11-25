@@ -69,7 +69,7 @@ Those 1,258 inputs were aimed at the branch. Elsewhere the change is hard to rea
 - The 1,258 all have `||x| - 1|` between about 2<sup>-23.5</sup> and 2<sup>-21.6</sup>, and `|y|`
   between 2<sup>31</sup> and about 2<sup>33</sup>, so their results are beyond
   10<sup>±79</sup>.
-- With `|x - 1|` below 2<sup>-24</sup> and `|y|` from 2<sup>31</sup> to 2<sup>33</sup> (results
+- With `|x - 1|` from 2<sup>-34</sup> to 2<sup>-24</sup> and `|y|` from 2<sup>31</sup> to 2<sup>33</sup> (results
   from about e<sup>±0.1</sup> to e<sup>±500</sup>), 17 of 4,000,000 results changed, the query
   above among them, including some with results as large as those of the 1,258. There both JDKs
   are within 1 ulp; JDK 27's result is the nearer on 5 and JDK 25's on 12, too few to call either

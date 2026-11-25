@@ -139,7 +139,7 @@ public class JdkScan {
         }
       }
       sb.append(String.format("  vf%d diff=%d", S.vectorBitSize(), bad));
-      if (firstBad >= 0) { double[] p = in.get((int) firstBad); sb.append(String.format(" first=%016x%s", Double.doubleToRawLongBits(p[0]), two != null ? "," + Long.toHexString(Double.doubleToRawLongBits(p[1])) : "")); }
+      if (firstBad >= 0) { double[] p = in.get((int) firstBad); sb.append(String.format(" first=%016x%s", Double.doubleToRawLongBits(p[0]), two != null ? String.format(",%016x", Double.doubleToRawLongBits(p[1])) : "")); }
     }
     System.out.println(sb);
   }

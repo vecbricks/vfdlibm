@@ -18,7 +18,11 @@ def bits(path):
 
 
 def main():
+    if len(sys.argv) != 5:
+        sys.exit(__doc__)
     frm, to, a, b = (bits(p) for p in sys.argv[1:5])
+    if not len(frm) == len(to) == len(a) == len(b):
+        sys.exit("the four files hold %s results; they must be of the same inputs" % [len(frm), len(to), len(a), len(b)])
     where = [i for i in range(len(frm)) if frm[i] != to[i]]
     same = sum(a[i] == b[i] for i in where)
     print("%d inputs where %s and %s differ; %s equals %s on %d of them"
