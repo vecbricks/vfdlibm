@@ -1180,7 +1180,7 @@ class HypotTest {
   @Test
   void orderPairsDependOnTheOrderInTheCAsWritten() {
     Inputs.Pairs p = orderPairs();
-    assertEquals(152, p.x().length);
+    assertEquals(160, p.x().length);
     for (int i = 0; i < p.x().length; i++) {
       double x = p.x()[i];
       double y = p.y()[i];

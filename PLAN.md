@@ -212,7 +212,7 @@ five are a later, optional set; the large-argument reduction of the trigonometri
   general, so no proof covers them as a rule. A specific use proven equal for every input would
   follow the proof rule above like any other different computation. No `Math.*` call inside a
   vector body except the per-lane `StrictMath` fallback.
-- Java 25 only for 0.2.x, the Vector API module, no preview features. The Vector API is
+- Java 25 only for 0.3.x, the Vector API module, no preview features. The Vector API is
   incubating and C2's lowering of it moves between JDK releases, so no other JDK is measured,
   and bit identity is tested on 25 alone (every workflow pins Zulu 25); there is no CI row
   for a newer JDK (the owner's decision of 21 November 2026, closing #38's step 5).
@@ -238,9 +238,9 @@ five are a later, optional set; the large-argument reduction of the trigonometri
   the code before and after #174 there, the vector rows on mixed data at about 1.45 times the time,
   and `hypot-harness-epyc7763-2026-11-24.txt` reads main's loop, the body inlined into it, on mixed
   data at the old level as a method of its own and slower inlined into JMH's measuring loop;
-  `hypot-xeon8573c-2026-11-24-2.txt` reads it after #174 on the Xeon 8573C, one run, the vector arm
-  lower on common data by 2.13 to 2.16 at 512 bits, 1.38 at 256 bits with no direction until a
-  re-run, and no direction on mixed data), and
+  `hypot-xeon8573c-2026-11-24-2.txt` reads it after #174 on the Xeon 8573C, a run and its re-run,
+  the vector arm lower on common data by 2.13 to 2.16 at the preferred species and `SPECIES_MAX`
+  (512 bits there) and by 1.30 to 1.38 at 256 bits, and no direction on mixed data), and
   `PowBenchmark` one for `pow` (the same; `pow-epyc7763-2026-11-23.txt` and
   `pow-xeon8573c-2026-11-24.txt` read it, one run each, its `rareOracle` row the allocation
   baseline).

@@ -11,6 +11,8 @@ two NaNs with different bits in a function of two arguments (`AGENTS.md`, "Relea
 
 ## [Unreleased]
 
+## [0.3.0]
+
 ### Added
 
 - `VFdlibm.hypot`, in the two forms `hypot(x, y)` and `hypot(x, y, live)`, over `DoubleVector`
@@ -37,6 +39,25 @@ two NaNs with different bits in a function of two arguments (`AGENTS.md`, "Relea
   finish arms, it writes its first eight lanes with constant indices and any past the eighth at a
   variable index, so at `DoubleVector.SPECIES_MAX` it is read as allocation-free up to eight lanes
   only.
+
+### Known issues
+
+- `hypot` is not shown to be faster than `StrictMath.hypot` on an AVX2 host, and there, on
+  `HypotBenchmark`'s mixed data, where about one pair in 16 takes a rare path of fdlibm's C (a NaN
+  or an infinity, a ratio past 2^60, a zero smaller argument, a scaled or subnormal argument), it is
+  slower. On the AMD EPYC 7763, `HypotBenchmark` reads `StrictMath` over `hypot` at the preferred
+  species at 1.25x to 1.29x on common data, under 1.3x, which the project reads as no direction, and
+  0.70x to 0.75x on mixed data (`bench/results/hypot-epyc7763-2026-11-24.txt`). There its vector
+  rows on mixed data take about 1.45 times the time they took before `hypot` was made to order its
+  arguments by magnitude, as `StrictMath` does, with a compare of the whole magnitudes in place of
+  the C's compare of their high words (`bench/results/hypot-order-pair-epyc7763-2026-11-24.txt`). In
+  diagnostic runs the cost needs both that new compare and the loop inlined into the benchmark's
+  measuring loop: the same loop as a method of its own, with the body inlined into it, runs at the
+  old level, and so does the inlined loop with the high-word compare
+  (`bench/results/hypot-harness-epyc7763-2026-11-24.txt`); why is not known. On the Intel Xeon 8573C
+  (AVX-512) `hypot` at the preferred species, 512 bits there, is 2.16x faster than `StrictMath` on
+  common data, with no direction on mixed data (`bench/results/hypot-xeon8573c-2026-11-24-2.txt`).
+  The results are not affected, only the speed; a fix of the speed would be a patch.
 
 ## [0.2.0] - 2026-11-22
 
@@ -96,6 +117,7 @@ two NaNs with different bits in a function of two arguments (`AGENTS.md`, "Relea
   module `io.github.vecbricks.vfdlibm`. A client needs the incubating Vector API module
   (`--add-modules jdk.incubator.vector`) at compile time and at run time.
 
-[Unreleased]: https://github.com/vecbricks/vfdlibm/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/vecbricks/vfdlibm/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/vecbricks/vfdlibm/releases/tag/v0.3.0
 [0.2.0]: https://github.com/vecbricks/vfdlibm/releases/tag/v0.2.0
 [0.1.0]: https://github.com/vecbricks/vfdlibm/releases/tag/v0.1.0

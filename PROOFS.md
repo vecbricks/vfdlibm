@@ -1790,7 +1790,7 @@ at the gaps of line 63; pairs at each scaling's word with the other within line 
 subnormal `b` beside `a` from subnormal up past the ratio; equal high words with either low word
 larger; `a` near `2b`, either side of `w > b`; NaNs beside NaNs, infinities and finite values;
 sampled bit patterns, Varka's baseline range and every exponent; the 8,400 pairs of
-`hard-cases/hypot.txt`; the 152 of `hard-cases/hypot-order.txt` (L21); and every subset of a
+`hard-cases/hypot.txt`; the 160 of `hard-cases/hypot-order.txt` (L21); and every subset of a
 vector's lanes rare beside lanes of every way out of the C. The planted faults are
 `hypot.dropEarlyReturn` (line 63's return dropped), `hypot.refreshedWords` (L16), `hypot.dropT2`
 (line 99's `t2*(a+t1)` dropped), `hypot.dropY2` (line 108's `t1*y2` dropped) and
@@ -1857,7 +1857,7 @@ pairs (sampled bits, words one apart with low words 0, 1 and all ones, equal wor
 bits do swap some pairs of equal words. `HypotTest.orderWitness` asserts issue 173's three results,
 through `cHypot` as written (`Variant.AS_WRITTEN`) and ordered by magnitude (the default,
 `Variant.BY_MAGNITUDE`), and `StrictMath.hypot` in both orders;
-`orderPairsDependOnTheOrderInTheCAsWritten` asserts, on each of the file's 152 pairs, equal high
+`orderPairsDependOnTheOrderInTheCAsWritten` asserts, on each of the file's 160 pairs, equal high
 words, the C as written different by order, and `StrictMath` the same in both orders and equal to
 the C ordered by magnitude. The gate (`scalarTranscriptionIsStrictMath`, in every JIT mode) compares
 the ordered C with `StrictMath` on its inputs, the file's included;

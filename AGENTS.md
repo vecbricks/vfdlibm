@@ -210,7 +210,7 @@ Changed or Fixed; a change to tests, docs or the build alone does not.
 **The promise, while the version is 0.x.** A minor version may break the public API and a patch may
 not. Adding a function is a patch. Changing an arm (how a function reaches its result: the blend,
 the per-lane finish, the order of a branch) is a patch too, because every arm gives the same bits
-(on a two-NaN lane, one of the declared candidates). 0.2.x supports JDK 25 only (`README.md`,
+(on a two-NaN lane, one of the declared candidates). 0.3.x supports JDK 25 only (`README.md`,
 "Supported JDKs"). What no version may change is the contract: **each lane of each function equals
 `StrictMath`'s result on that input, by `Double.doubleToRawLongBits`**, NaN payloads included. One
 exception: a lane of a function of two arguments where both arguments are NaN with different bits is

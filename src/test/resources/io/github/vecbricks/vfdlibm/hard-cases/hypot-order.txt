@@ -12,7 +12,7 @@
 # (run 45355169208): e_hypot.c gives 0x5f26c7304042d062 for it as written and 0x5f26c7304042d063
 # with the arguments the other way, which is StrictMath's in both orders.
 #
-# The other 18 base pairs were found by a scratch C program, not committed: Sun's e_hypot.c from
+# The next 18 base pairs were found by a scratch C program, not committed: Sun's e_hypot.c from
 # reference/fdlibm-5.3, compiled with gcc -O0 -ffp-contract=off -fno-builtin
 # -fno-strict-aliasing -D__LITTLE_ENDIAN and linked with the C library's sqrt, called as
 # __ieee754_hypot(x, y) and __ieee754_hypot(y, x) on pairs of one high word, drawn uniformly
@@ -23,8 +23,14 @@
 # word subnormal (below 0x00100000). They fall in the three ranges of the C's medium path: the
 # 2^-600 scaling above 2^500, the 2^600 scaling below 2^-500 and neither.
 #
+# The last base pair is the one the scheduled nightly fuzz of 24 November 2026 found on the code
+# before #174 (run 45368233919, seed 0x87782f4d5625064a, at 128 bits and SPECIES_MAX): high word
+# 0x20b00004, just above the bound of the 2^600 scaling (line 77's test is false, so lines 78-91
+# are not run), where the C as written gives 0x20b6a0a5293f53f6 with the smaller magnitude first
+# and StrictMath 0x20b6a0a5293f53f5.
+#
 # Each base pair is written in both orders, each with the four combinations of signs: 8 lines a
-# pair, 152 in all. HypotTest checks the claim: equal high words, the C as written differing by
+# pair, 160 in all. HypotTest checks the claim: equal high words, the C as written differing by
 # order, and StrictMath equal in both orders to the C with the larger magnitude first.
 # arity: 2
 0x5f201b45bbc5eac3 0x5f201b45fffffffe
@@ -179,3 +185,11 @@
 0xc9c90e5c9fb45233 0x49c90e5c10be8b79
 0x49c90e5c9fb45233 0xc9c90e5c10be8b79
 0xc9c90e5c9fb45233 0xc9c90e5c10be8b79
+0x20b000048fa68fde 0x20b00004ffffffff
+0xa0b000048fa68fde 0x20b00004ffffffff
+0x20b000048fa68fde 0xa0b00004ffffffff
+0xa0b000048fa68fde 0xa0b00004ffffffff
+0x20b00004ffffffff 0x20b000048fa68fde
+0xa0b00004ffffffff 0x20b000048fa68fde
+0x20b00004ffffffff 0xa0b000048fa68fde
+0xa0b00004ffffffff 0xa0b000048fa68fde
