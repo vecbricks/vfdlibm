@@ -240,7 +240,7 @@ five are a later, optional set; the large-argument reduction of the trigonometri
   data at the old level as a method of its own and slower inlined into JMH's measuring loop;
   `hypot-xeon8573c-2026-11-24-2.txt` reads it after #174 on the Xeon 8573C, a run and its re-run,
   the vector arm lower on common data by 2.13 to 2.16 at the preferred species and `SPECIES_MAX`
-  (512 bits there) and by 1.30 to 1.38 at 256 bits, and no direction on mixed data), and
+  (512 bits there), with no direction at 256 bits (1.38 and 1.30) and none on mixed data), and
   `PowBenchmark` one for `pow` (the same; `pow-epyc7763-2026-11-23.txt` and
   `pow-xeon8573c-2026-11-24.txt` read it, one run each, its `rareOracle` row the allocation
   baseline).
