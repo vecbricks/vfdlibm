@@ -164,10 +164,10 @@ says floating point operations "follow the accuracy and monotonicity specificati
 equivalent Java operation or method", and `EXP` adds "Not guaranteed to be semi-monotonic." That is
 the kind of promise `Math` makes.
 
-I measured both. The operator is faster: on common data, `StrictMath` takes 15.38 times as long as
+I measured its speed, and how often its bits differ from `StrictMath`'s. It is faster: on common data, `StrictMath` takes 15.38 times as long as
 the operator on the Xeon and 6.95 times on the EPYC, and 6.73 and 4.12 times as long as vfdlibm in
-the same runs. On mixed data the operator is still ahead on the EPYC; on the Xeon the two are a
-tie. But it does not keep `StrictMath`'s bits. On my laptop, over the 200,000 random inputs of the
+the same runs. On mixed data the operator is still ahead on the EPYC; on the Xeon the two are too
+close to call. But it does not keep `StrictMath`'s bits. On my laptop, over the 200,000 random inputs of the
 bar chart above, the compiled operator differed from `StrictMath.exp` on 19,439 inputs at 128 and
 256 bits and on 21,255 at 512 bits, each by one ulp. That is one laptop's count, but the answer
 changed with the vector width.
@@ -176,20 +176,23 @@ changed with the vector width.
 
 ## Why not `Math.exp`?
 
-`Math` is faster than `StrictMath` too, and Spark already calls it for `sin` and the rest. But it
-may return the other neighbour, as above: on the same 200,000 inputs, `Math.exp` differed from
-`StrictMath.exp` on 19,452, on my laptop. Is it at least faster than vfdlibm? I timed `exp`, `log`
+In the runs below, `Math` is faster than `StrictMath` for `pow` and for `exp` on common data (not
+shown for `log`), and Spark already calls it for `sin` and the rest. But it may return the other
+neighbour, as above: on the same 200,000 inputs, `Math.exp` differed from `StrictMath.exp` on
+19,452, on my laptop. Is it at least faster than vfdlibm? I timed `exp`, `log`
 and `pow` all three ways, one run on each host. `Math`'s time over vfdlibm's, common / mixed data:
 
 | | Xeon 8573C (AVX-512) | EPYC 7763 (AVX2) |
 |---|---|---|
 | `exp` | 3.61 / 2.69 | 1.89 / 1.28 |
 | `log` | 3.38 / 1.84 | 1.84 / 1.44 |
-| `pow` | 1.63 / 1.12 | `Math` faster: vfdlibm's time over its, 1.30 / 1.43 |
+| `pow` | 1.63 / 1.12 | under 1: see below |
 
-I read a ratio under 1.3 as a tie, so `exp` on the EPYC's mixed data and `pow` on the Xeon's are
-ties, and the EPYC's 1.30 for `pow` needs a re-run. On the EPYC, `Math.pow` beats vfdlibm on mixed
-data. Everywhere else vfdlibm is faster or tied, and it keeps `StrictMath`'s bits.
+The project reads a ratio under 1.3 as too close to call, and one from 1.3 to 1.4 from a single
+run as needing a re-run. So `exp` on the EPYC's mixed data and `pow` on the Xeon's are too close to
+call. On the EPYC, `Math.pow` is faster than vfdlibm: on mixed data vfdlibm takes 1.43 times as
+long, and on common data 1.30 times, which needs a re-run. Everywhere else vfdlibm is faster, and
+it keeps `StrictMath`'s bits.
 
 ## Three surprises
 
