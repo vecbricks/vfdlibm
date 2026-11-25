@@ -34,8 +34,14 @@ import org.openjdk.jmh.annotations.Warmup;
  * 1.3x of the scalar loop at the preferred species, and finishMax about 1.6 times finishPreferred
  * on common data in both runs, the same code at the same width; hypot-xeon8573c-2026-11-24.txt
  * times that code too, one run on the Xeon 8573C. hypot-epyc7763-2026-11-24.txt times it after
- * #174, one run on the EPYC 7763: the scalar loop lower on mixed data by 1.43 to 1.44, which wants
- * a re-run, no direction on common data, and finishMax at the level of the other rows.
+ * #174, a run and its re-run on the EPYC 7763: the scalar loop lower on mixed data by 1.33 to 1.44
+ * in both, no direction on common data, and finishMax at the level of the other rows.
+ * hypot-order-pair-epyc7763-2026-11-24.txt pairs the code before and after #174 there, the vector
+ * rows about 31% slower on mixed data, and hypot-harness-epyc7763-2026-11-24.txt times the same
+ * body as a method of its own at the old level and inlined into this class's loop slower (SKILLS.md,
+ * "What the hypot port taught").
+ * hypot-xeon8573c-2026-11-24-2.txt times it after #174 on the Xeon 8573C, one run: the vector arm
+ * lower on common data by 2.13 to 2.16 at 512 bits, no direction on mixed data.
  *
  * <p>{@code inputs} picks the data: {@code common} draws {@code x} and {@code y} from {@code
  * [-10, 10)}, Varka's baseline range, where every lane takes the medium path unscaled (both of

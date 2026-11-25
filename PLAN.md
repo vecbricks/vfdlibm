@@ -229,11 +229,17 @@ five are a later, optional set; the large-argument reduction of the trigonometri
   has the same three arms for `expm1`, `SinhBenchmark` one for `sinh`, `CoshBenchmark` two for
   `cosh`, `AsinBenchmark` one for `asin`, `AtanBenchmark` one for `atan`, `AcosBenchmark` one for
   `acos`, `Atan2Benchmark` two for `atan2` (the blended and the guarded arm, over two arrays) and
-  `HypotBenchmark` one for `hypot` (over two arrays; `hypot-epyc7763-2026-11-23.txt` reads it
-  before #174 ordered its arguments, a run and its re-run: no direction against the scalar loop at
-  the preferred species, and `finishMax` 1.6x slower than `finishPreferred` on common data in both;
-  `hypot-epyc7763-2026-11-24.txt` reads it after #174, one run, the scalar loop lower on mixed data
-  by 1.43 to 1.44, which wants a re-run, and `finishMax` at the level of the other rows), and
+  `HypotBenchmark` one for `hypot` (over two arrays; `hypot-epyc7763-2026-11-23.txt` reads it before
+  #174 ordered its arguments, a run and its re-run: no direction against the scalar loop at the
+  preferred species, and `finishMax` 1.6x slower than `finishPreferred` on common data in both;
+  `hypot-epyc7763-2026-11-24.txt` reads it after #174, a run and its re-run, the scalar loop lower
+  on mixed data by 1.33 to 1.44 in both and no direction on common data, and `finishMax` at the
+  level of the other rows; `hypot-order-pair-epyc7763-2026-11-24.txt` pairs the code before and
+  after #174 there, the vector rows about 31% slower on mixed data, and
+  `hypot-harness-epyc7763-2026-11-24.txt` reads the same body at the old level as a method of its
+  own and slower inlined into the benchmark's loop;
+  `hypot-xeon8573c-2026-11-24-2.txt` reads it after #174 on the Xeon 8573C, one run, the vector arm
+  lower on common data by 2.13 to 2.16 at 512 bits and no direction on mixed data), and
   `PowBenchmark` one for `pow` (the same; `pow-epyc7763-2026-11-23.txt` and
   `pow-xeon8573c-2026-11-24.txt` read it, one run each, its `rareOracle` row the allocation
   baseline).
