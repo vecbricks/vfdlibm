@@ -167,7 +167,7 @@ bar chart above, the compiled operator differed from `StrictMath.exp` on 19,439 
 256 bits and on 21,255 at 512 bits, each by one ulp. That is one laptop's count, but the answer
 changed with the vector width.
 
-[![StrictMath.exp, VectorOperators.EXP and VFdlibm.exp compared on what each promises, and on speed: on common data on the Xeon 8573C, the operator 15.38× and vfdlibm 6.72× StrictMath's.](img/compare.svg)](img/compare.svg)
+[![StrictMath.exp, VectorOperators.EXP and VFdlibm.exp compared on what each promises, and on speed: on common data on the Xeon 8573C, the operator 15.38× and vfdlibm 6.73× StrictMath's.](img/compare.svg)](img/compare.svg)
 
 ## Why not `Math.exp`?
 
@@ -185,9 +185,9 @@ and `pow` all three ways, one run on each host. `Math`'s time over vfdlibm's, co
 
 The project reads a ratio under 1.3 as too close to call, and one from 1.3 to 1.4 from a single
 run as needing a re-run. So `exp` on the EPYC's mixed data and `pow` on the Xeon's are too close to
-call. On the EPYC, `Math.pow` is faster than vfdlibm: on mixed data vfdlibm takes 1.43 times as
-long, and on common data 1.30 times, which needs a re-run. Everywhere else vfdlibm is faster, and
-it keeps `StrictMath`'s bits.
+call. On the EPYC's mixed data `Math.pow` is faster than vfdlibm, which takes 1.43 times as long;
+on its common data vfdlibm takes 1.30 times as long, which needs a re-run. In the other cells
+vfdlibm is faster, and it keeps `StrictMath`'s bits.
 
 ## Three surprises
 
@@ -307,8 +307,8 @@ points elsewhere.
   loop, vfdlibm's `exp` and `VectorOperators.EXP` at the preferred species, by minimums
   ([`exp-operator-xeon8573c-2026-11-24.txt`](https://github.com/vecbricks/vfdlibm/blob/v0.3.0/bench/results/exp-operator-xeon8573c-2026-11-24.txt),
   [`exp-operator-epyc7763-2026-11-24.txt`](https://github.com/vecbricks/vfdlibm/blob/v0.3.0/bench/results/exp-operator-epyc7763-2026-11-24.txt)).
-  Its 6.73 for vfdlibm is its own run's; the README's 6.72 comes from another file. The comparison
-  figure's 15.38× is the Xeon file's, its 6.72× the README's.
+  Both of the comparison figure's speeds, 15.38× and 6.73×, are that Xeon run's; the README's
+  6.72 for vfdlibm comes from another file.
 - The operator's bits, and `Math.exp`'s: [`OperatorExp.java`](https://github.com/vecbricks/vfdlibm/blob/v0.3.0/docs/blog/strictmath-vs-libm/OperatorExp.java)
   over `Gen.java`'s 200,000 inputs on my laptop (JDK 25.0.5.1, AMD Ryzen AI 9 HX PRO 370), compared
   by raw bits after the JIT has compiled the operator; a laptop's count, not a host's

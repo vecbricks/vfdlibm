@@ -29,6 +29,7 @@ with a hole or a placeholder is not written. Requires the markdown and pygments 
 """
 
 import argparse
+from html import unescape
 import os
 import re
 import shutil
@@ -103,12 +104,28 @@ def highlight_css():
     return light + "\n" + dark + "\n@media (prefers-color-scheme:dark){" + auto + "}"
 
 
-def inline_figures(html):
+def lists_after_lines(text):
+    """Puts a blank line before a list that follows a paragraph line directly, as the post's
+    "**Lead-in**" lines do: kramdown starts a list there, Python-Markdown only after a blank line.
+    Fenced code is left alone."""
+    out, fenced, prev = [], False, ""
+    for line in text.split("\n"):
+        if line.startswith("```"):
+            fenced = not fenced
+        item = re.match(r"(- |\d+\. )", line)
+        if not fenced and item and prev.strip() and not re.match(r"\s*(- |\d+\. )|\s", prev):
+            out.append("")
+        out.append(line)
+        prev = line if not fenced else ""
+    return "\n".join(out)
+
+
+def inline_figures(html, source_dir):
     """Replaces each linked `img/*.svg` image, alone in its paragraph, with the SVG's markup."""
 
     def one(match):
         alt, src = match.group(2), match.group(3)
-        path = os.path.join(HERE, src)
+        path = os.path.join(source_dir, src)
         if not os.path.exists(path):
             raise SystemExit("missing figure %s - run figures.py" % src)
         with open(path) as handle:
@@ -116,7 +133,10 @@ def inline_figures(html):
         svg = re.sub(r"\A<\?xml[^>]*\?>\s*", "", svg)
         # The drawing scales with the column; its intrinsic size would win over the stylesheet.
         svg = re.sub(r'<svg ([^>]*?)width="[\d.]+" height="[\d.]+"', r"<svg \1", svg, count=1)
-        svg = svg.replace("<svg ", '<svg role="img" aria-label="%s" ' % alt, 1)
+        # The post's alt text labels the figure: the SVG's own role and labelling make way for it.
+        head = re.match(r"<svg[^>]*>", svg).group(0)
+        bare = re.sub(r'\s(role|aria-labelledby|aria-label)="[^"]*"', "", head)
+        svg = bare.replace("<svg", '<svg role="img" aria-label="%s"' % alt, 1) + svg[len(head):]
         return '<figure class="fig">%s</figure>' % svg
 
     pattern = (r'<p><a href="(img/[^"]+\.svg)"><img alt="([^"]*)" src="(img/[^"]+\.svg)" ?/?>'
@@ -127,7 +147,7 @@ def inline_figures(html):
 def summarise(html, title):
     """The link card's blurb: the post's opening prose, cut at a sentence end within 220
     characters, or at a word boundary."""
-    plain = " ".join(re.sub(r"<[^>]+>", " ", html).split())
+    plain = " ".join(unescape(re.sub(r"<[^>]+>", " ", html)).split())
     plain = re.sub(r"\s+([,.;:!?)])", r"\1", plain)
     plain = re.sub(r"([(])\s+", r"\1", plain)
     if plain.startswith(title):
@@ -146,9 +166,14 @@ def summarise(html, title):
 def render(source, out_dir, og_image=""):
     import markdown
 
+    source_dir = os.path.dirname(os.path.abspath(source))
     with open(source) as handle:
         text = handle.read()
+    # A note to the owner left in the post means the text is not theirs yet: no page.
+    if re.search(r"<!--\s*owner:", text):
+        raise SystemExit("the post still holds a note for the owner (<!-- owner: ... -->)")
     text = re.sub(r"<!--.*?-->\n?", "", text, flags=re.S)
+    text = lists_after_lines(text)
     head, rest = text.lstrip().split("\n", 1)
     if not head.startswith("# "):
         raise SystemExit("the post's first line must be its title, '# ...'")
@@ -159,7 +184,7 @@ def render(source, out_dir, og_image=""):
         extension_configs={"codehilite": {"guess_lang": False, "css_class": "highlight"}},
     )
     summary = summarise(html, title)
-    html = inline_figures(html)
+    html = inline_figures(html, source_dir)
     left = re.search(r'<img[^>]+src="img/[^"]*"', html)
     if left:
         raise SystemExit("a figure was not inlined: " + left.group(0))
@@ -193,7 +218,7 @@ def render(source, out_dir, og_image=""):
         handle.write(page)
     # The SVGs travel too: a plain link to one points at its copy, and the page can be opened
     # from the output directory alone.
-    shutil.copytree(os.path.join(HERE, "img"), os.path.join(out_dir, "figures"),
+    shutil.copytree(os.path.join(source_dir, "img"), os.path.join(out_dir, "figures"),
                     dirs_exist_ok=True)
     return out, page
 

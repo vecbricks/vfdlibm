@@ -19,10 +19,10 @@ files:
 - ../../bench/results/exp-xeon8573c-2026-11-21.txt: the allocation of exp's finish rows;
 - ../../reference/fdlibm-5.3/e_hypot.c: the lines of the hypot figure, by line number;
 - ../../README.md, its generated speedup table for v0.3.0 (between "<!-- speedup-table: v0.3.0
-  -->" and "<!-- end of speedup-table -->"): the speedup bars, and vfdlibm's figure in the
-  comparison card;
-- ../../bench/results/exp-operator-xeon8573c-2026-11-24.txt: the operator's figure in the
-  comparison card, its scalarStrictMath over operatorPreferred minimum on common data.
+  -->" and "<!-- end of speedup-table -->"): the speedup bars;
+- ../../bench/results/exp-operator-xeon8573c-2026-11-24.txt: both speeds of the comparison card,
+  one run's scalarStrictMath minimum over its operatorPreferred and finishPreferred minimums on
+  common data.
 
 The other figures are diagrams whose text is written here. No figure holds a number that is not
 in a committed file or in the post's sources.
@@ -404,13 +404,14 @@ def speedup_table():
 def fig_compare():
     hosts, rows = speedup_table()
     assert hosts[0][0] == "xeon8573c"
-    e = dict(rows)["exp"][0]
     res = (HERE.parent.parent / "bench" / "results" / "exp-operator-xeon8573c-2026-11-24.txt").read_text()
 
     def mn(row):
         return float(re.search(rf"^# ExpOperatorBench\.{row}\s+common\s+([\d.]+)", res, re.M).group(1))
 
     op = f"{mn('scalarStrictMath') / mn('operatorPreferred'):.2f}"
+    # vfdlibm's figure from the same run as the operator's, so the two cards compare one run.
+    e = f"{mn('scalarStrictMath') / mn('finishPreferred'):.2f}"
     f = Fig("compare", "Three ways to compute exp",
             "What each one promises, from its Javadoc or this project's files.",
             "StrictMath.exp gives fdlibm's bits on every CPU, one double per call. VectorOperators.EXP "
@@ -443,8 +444,7 @@ def fig_compare():
     y += 12
     y = f.caption(y, "Speed: StrictMath's time over each one's, at the preferred species (512 bits). "
                      "Sources: the JDK 25 Javadoc of Math, StrictMath and VectorOperators; for the "
-                     "operator, bench/results/exp-operator-xeon8573c-2026-11-24.txt; for vfdlibm, "
-                     "the README's v0.3.0 speedup table.")
+                     "speeds, one run: bench/results/exp-operator-xeon8573c-2026-11-24.txt.")
     f.write(y)
 
 
@@ -672,16 +672,17 @@ def fig_speedup():
     assert max(vals) <= top, max(vals)
     MIXED = "#f4bf8c"
     short = {"xeon8573c": "the Xeon", "epyc7763": "the EPYC"}
+    # Within 1.3x either way is no direction; slower only past it (StrictMath's time / 1.3).
     weak = [f"{fn}'s {vs[k]}× on {short[hosts[k // 2][0]]}, {('common', 'mixed')[k % 2]} data"
-            for fn, vs in rows for k in range(4) if 1 <= float(vs[k]) < 1.3]
-    slow = [(fn, v) for fn, vs in rows for v in vs if float(v) < 1]
+            for fn, vs in rows for k in range(4) if 1 / 1.3 <= float(vs[k]) < 1.3]
+    slow = [(fn, v) for fn, vs in rows for v in vs if float(v) < 1 / 1.3]
     f = Fig("speedup", "Speedup over StrictMath",
             "StrictMath's time over vfdlibm's, per function: the README's v0.3.0 table.",
             "StrictMath's time over vfdlibm's on common and mixed data. " + " ".join(
                 f"{names[h]} ({isa}): " + ", ".join(f"{fn} {vs[2 * i]} / {vs[2 * i + 1]}"
                                                     for fn, vs in rows) + "."
                 for i, (h, isa) in enumerate(hosts)) +
-            " Under 1 is slower than StrictMath: " + ", ".join(f"{fn} {v}" for fn, v in slow) + ".")
+             " Slower than StrictMath by more than 1.3×: " + ", ".join(f"{fn} {v}" for fn, v in slow) + ".")
     y = f.header()
     f.rect(M, y, 22, 14, ORANGE_S, ORANGE_S, rx=3, sw=0)
     f.text(M + 30, y + 13, "common data", size=15)
@@ -712,8 +713,8 @@ def fig_speedup():
         f.text(one, y + 14, "1×", size=15, weight=700, anchor="middle")
         y += 34
     y += 6
-    y = f.caption(y, "The dashed line is 1×, StrictMath's own speed: a bar short of it is slower. "
-                     "The project reads a ratio under 1.3× as no direction: " + "; ".join(weak) +
+    y = f.caption(y, "The dashed line is 1×, StrictMath's own speed. The project reads a ratio "
+                     "within 1.3× either way as no direction: " + "; ".join(weak) +
                      ". By minimum times, at the host's preferred species: 512 bits on the Xeon, 256 "
                      "on the EPYC. The README's table says how its figures are made.")
     f.write(y)
