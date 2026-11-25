@@ -34,6 +34,8 @@ def main():
         names = sorted(p.name for p in a.before.glob("*.bin") if (a.after / p.name).exists())
     else:
         names = [a.file] if a.file else [f + ".bin" for f in FUNCTIONS]
+    if a.witnesses and a.all:
+        ap.error("--witnesses writes one file's differences; use it without --all")
     for name in names:
         b, c = bits(a.before / name), bits(a.after / (a.after_file or name))
         assert len(b) == len(c), name

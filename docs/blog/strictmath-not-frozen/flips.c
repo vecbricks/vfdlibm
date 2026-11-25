@@ -7,8 +7,8 @@
  *   continuous: amount * exp(rate * years)
  * with Sun's fdlibm 5.3 (__ieee754_pow, __ieee754_exp, which is what java.lang.StrictMath
  * returns, as FlipsCheck.java checks) and with the C library's pow and exp (glibc's on Linux).
- * It counts the rows where the two libraries' doubles differ, and the rows where the amounts,
- * rounded half up to cents from the doubles' exact values, differ. Every step but pow and exp is
+ * It counts the rows where the two libraries' doubles differ, the rows where the amounts (amount
+ * times that double) differ, and the rows where the amounts' cents differ. Every step but pow and exp is
  * the same IEEE operation on both sides, so a difference comes from the library alone. Cents are
  * counted two ways: from the double's exact value, and from its shortest decimal, which is what
  * Spark's round() rounds (round(24471612.324999999D, 2) is 24471612.33 on Spark 4.3.0).
@@ -88,14 +88,15 @@ static inline row make(uint64_t i) {
 
 int main(int argc, char **argv) {
   long long n = atoll(argv[1]);
-  long long dpow = 0, fpow = 0, dexp = 0, fexp = 0, spow = 0, sexp = 0;
-  #pragma omp parallel for reduction(+:dpow,fpow,dexp,fexp,spow,sexp) schedule(static)
+  long long dpow = 0, fpow = 0, dexp = 0, fexp = 0, spow = 0, sexp = 0, apow = 0, aexp = 0;
+  #pragma omp parallel for reduction(+:dpow,fpow,dexp,fexp,spow,sexp,apow,aexp) schedule(static)
   for (long long i = 0; i < n; i++) {
     row r = make((uint64_t) i);
     double base = 1 + r.rate, t = r.rate * r.years;
     double p1 = __ieee754_pow(base, r.years), p2 = pow(base, r.years);
     if (p1 != p2) {
       dpow++;
+      if (r.amount * p1 != r.amount * p2) apow++;
       if (cents(r.amount * p1) != cents(r.amount * p2)) {
         fpow++;
         #pragma omp critical
@@ -113,6 +114,7 @@ int main(int argc, char **argv) {
     double e1 = __ieee754_exp(t), e2 = exp(t);
     if (e1 != e2) {
       dexp++;
+      if (r.amount * e1 != r.amount * e2) aexp++;
       if (cents(r.amount * e1) != cents(r.amount * e2)) {
         fexp++;
         #pragma omp critical
@@ -144,7 +146,7 @@ int main(int argc, char **argv) {
     fclose(f);
   }
   printf("rows %lld, glibc %s\n", n, gnu_get_libc_version());
-  printf("pow: libraries differ on %lld rows; cents differ on %lld from the exact value, on %lld from the shortest decimal\n", dpow, fpow, spow);
-  printf("exp: libraries differ on %lld rows; cents differ on %lld from the exact value, on %lld from the shortest decimal\n", dexp, fexp, sexp);
+  printf("pow: libraries differ on %lld rows, amounts on %lld; cents differ on %lld from the exact value, on %lld from the shortest decimal\n", dpow, apow, fpow, spow);
+  printf("exp: libraries differ on %lld rows, amounts on %lld; cents differ on %lld from the exact value, on %lld from the shortest decimal\n", dexp, aexp, fexp, sexp);
   return 0;
 }

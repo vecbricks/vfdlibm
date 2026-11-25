@@ -48,8 +48,9 @@ returns results outside of a 1 ulp error bound", integrated into the JDK's main 
 It touches one branch of fdlibm's `pow`: `|y|` above 2<sup>31</sup> with `|x|` within about
 2<sup>-20</sup> of 1.
 
-I compared `StrictMath.pow` on JDK 25 and JDK 27 on a million inputs aimed at that branch. The
-results differ on 1,258 of them. On each of the 1,247 with a normal result, JDK 25 was at least
+I compared `StrictMath.pow` on JDK 25 and JDK 27 on a million inputs aimed at that branch,
+500,262 of which fall inside it (the rest sit just outside, as neighbours). The results differ
+on 1,258 of them. On each of the 1,247 with a normal result, JDK 25 was at least
 91 ulps off, and up to 653; JDK 27 is within 0.74 ulp on all of them.
 
 [![StrictMath.pow's error in ulps on the 1,247 inputs JDK 27 changed: JDK 25 from 91 to 653 ulps, JDK 27 at most 0.74 ulp.](img/pow-errors.svg)](img/pow-errors.svg)
@@ -82,12 +83,12 @@ JDK 26 got the same fix in its update 26.0.2
 `StrictMath.pow` on JDK 26 still returns fdlibm 5.3's bits. On my x86-64 laptop even that
 `Math.pow` change is invisible by default, since the JIT uses its own `pow` there; with
 `-XX:-UseLibmIntrinsic` it shows, on the same 1,258 inputs and with JDK 27's bits (elsewhere
-that fallback is not `StrictMath.pow`, and differs from it on many inputs, on JDK 25 as on 26).
+that fallback returns `StrictMath.pow`'s bits, but for the sign of a NaN result).
 
 ## StrictMath moved once; Math moved three times
 
-To see what else moves, I ran the 20 double functions of `StrictMath` whose results could move
-(not `floor`, `ulp` and the like), and `Math`'s counterparts, on JDK 21, 25, 26 and 27, about 3 million inputs each.
+To see what else moves, I ran 20 double functions of `StrictMath`, the transcendental ones and
+their relatives with `sqrt` and `IEEEremainder` as controls, and `Math`'s counterparts, on JDK 21, 25, 26 and 27, about 3 million inputs each.
 
 [![Whose bits moved with the JDK: StrictMath only pow, from JDK 25 to 27, on 1,258 inputs; Math on this x86-64 CPU cbrt and tanh from 21 to 25 and sinh from 25 to 26.](img/moved.svg)](img/moved.svg)
 
@@ -115,12 +116,12 @@ To count them I took money arithmetic: `amount * POWER(1 + rate, years)` and
 up to 20% and 1 to 40 years, computed once with fdlibm (`StrictMath`'s bits) and once with
 glibc 2.43, then rounded to cents.
 
-| rows | doubles that differ | cents that differ, `POWER` | cents that differ, `EXP` |
+| rows | amounts that differ | cents that differ, `POWER` | cents that differ, `EXP` |
 |---|---|---|---|
-| 10<sup>9</sup> | 9.2% (`POWER`), 9.7% (`EXP`) | 30 | 59 |
-| 10<sup>10</sup> | 9.2%, 9.7% | 291 | 417 |
+| 10<sup>9</sup> | 8.2% (`POWER`), 8.8% (`EXP`) | 30 | 59 |
+| 10<sup>10</sup> | 8.2%, 8.8% | 291 | 417 |
 
-About one row in ten gets a different double, so a join, a `GROUP BY` or an equality test
+About one row in twelve (`POWER`) or eleven (`EXP`) gets a different amount, so a join, a `GROUP BY` or an equality test
 on these amounts sees two values for it. Different cents are far rarer, but ten times the rows
 gave seven to ten times as many. Two of them, checked end to end on Spark 4.3.0:
 

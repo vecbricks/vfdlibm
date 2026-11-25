@@ -23,12 +23,12 @@ def main():
     e_before, e_after = [], []
     for line in open(sys.argv[1]):
         x, y, a, b = (f(int(v, 16)) for v in line.split()[-4:])
-        if not (2.3e-308 < abs(a) < math.inf and 2.3e-308 < abs(b) < math.inf):
+        if not (sys.float_info.min <= abs(a) < math.inf and sys.float_info.min <= abs(b) < math.inf):
             continue
         exact = (Decimal(y) * Decimal(abs(x)).ln()).exp()
         if x < 0 and y == int(y) and int(y) % 2:
             exact = -exact
-        u = Decimal(math.ulp(abs(a)))
+        u = Decimal(math.ulp(abs(float(exact))))  # the ulp at the exact value
         e_before.append(abs((Decimal(a) - exact) / u))
         e_after.append(abs((Decimal(b) - exact) / u))
     print("normal results", len(e_before))

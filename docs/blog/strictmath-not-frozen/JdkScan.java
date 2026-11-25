@@ -8,8 +8,9 @@ import java.util.function.*;
 /**
  * For each of vfdlibm's 13 functions, reads the hard cases of vfdlibm's tests and adds 3,000,000
  * random inputs (uniform bits, moderate magnitudes, near 1), and for pow 1,000,000 more aimed at
- * fdlibm's branch for |y| > 2^31 with |x| near 1. Writes StrictMath's raw bits, in input order, to
- * <out>/<fn>.bin, Math.pow's to <out>/pow-Math.bin, and prints per function a digest and the
+ * fdlibm's branch for |y| > 2^31 with |x| near 1 (about half of them reach the part of it JDK 27
+ * changed; see the comment there). Writes StrictMath's raw bits, in input order, to
+ * <out>/<fn>.bin (0 on a lane of two NaN arguments), Math.pow's to <out>/pow-Math.bin, and prints per function a digest and the
  * number of vfdlibm lanes that differ from StrictMath, at 256 bits and at the preferred species (a
  * lane of two NaN arguments is checked against the contract's two candidates instead). The inputs
  * are seeded, so two JDKs' outputs compare input by input (compare.py).
@@ -76,7 +77,9 @@ public class JdkScan {
     for (int i = 0; i < N; i++) { double[] p = new double[arity]; for (int k = 0; k < arity; k++) p[k] = Math.scalb(r.nextDouble() * 2 - 1, r.nextInt(80) - 60); in.add(p); }
     for (int i = 0; i < N; i++) { double[] p = new double[arity]; for (int k = 0; k < arity; k++) p[k] = (r.nextBoolean() ? 1 : -1) * (1 + Math.scalb(r.nextDouble() * 2 - 1, -r.nextInt(53))); in.add(p); }
     if (fn.equals("pow")) {
-      // Aimed at fdlibm's branch for |y| > 2^31 with |x| within about 2^-20 of 1 (e_pow.c line 191).
+      // Aimed at fdlibm's branch for |y| > 2^31 (e_pow.c line 191). Of the four high words of x,
+      // 0x3fefffff and 0x3ff00000 reach the code JDK 27 changed; 0x3feffffe and 0x3ff00001 sit
+      // just outside it and return early, by overflow or underflow, and are kept as neighbours.
       long[] hi = {0x3fefffffL, 0x3ff00000L, 0x3feffffeL, 0x3ff00001L};
       for (int i = 0; i < N; i++) {
         long xb = (hi[r.nextInt(4)] << 32) | (r.nextLong() & 0xffffffffL);
@@ -93,7 +96,15 @@ public class JdkScan {
     int n = in.size(); long digest = 0;
     long[] sm = new long[n];
     try (var w = new DataOutputStream(new BufferedOutputStream(Files.newOutputStream(out.resolve(fn + ".bin"))))) {
-      for (int i = 0; i < n; i++) { sm[i] = Double.doubleToRawLongBits(o.at(in.get(i))); w.writeLong(sm[i]); digest = digest * 31 + sm[i]; }
+      for (int i = 0; i < n; i++) {
+        double[] p = in.get(i);
+        sm[i] = Double.doubleToRawLongBits(o.at(p));
+        // Which NaN StrictMath returns for two NaN arguments depends on the JIT tier, so the file
+        // and the digest hold 0 there, as StrictScan's do; vfdlibm is checked against sm[i].
+        long kept = two != null && Double.isNaN(p[0]) && Double.isNaN(p[1]) ? 0 : sm[i];
+        w.writeLong(kept);
+        digest = digest * 31 + kept;
+      }
     }
     StringBuilder sb = new StringBuilder(String.format("%-6s n=%d StrictMath=%016x", fn, n, digest));
     for (VectorSpecies<Double> S : List.of(DoubleVector.SPECIES_256, DoubleVector.SPECIES_PREFERRED)) {

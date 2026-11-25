@@ -13,17 +13,18 @@ Spark: Apache Spark 4.3.0 (git revision 98bc0212c94), spark-4.3.0-bin-hadoop3.tg
       dlcdn.apache.org, checked against Apache's SHA-512; spark-sql --master 'local[1]' -S -f
       round-check.sql on JDK 21.0.13.1 and on JDK 25.0.5.1, with the same output on both
 Command: OMP_NUM_THREADS=8 ./flips 10000000 2000000 dump.txt; java FlipsCheck.java dump.txt (JDK 25)
+      (all three runs of flips.c at the commit of this file, which counts the amounts too)
       OMP_NUM_THREADS=8 ./flips 1000000000 2> rows-1e9.txt; OMP_NUM_THREADS=8 ./flips 10000000000
 
 ## flips.c
 
 rows 1000000000, glibc 2.43
-pow: libraries differ on 91835075 rows; cents differ on 22 from the exact value, on 30 from the shortest decimal
-exp: libraries differ on 97352211 rows; cents differ on 49 from the exact value, on 59 from the shortest decimal
+pow: libraries differ on 91835075 rows, amounts on 82375631; cents differ on 22 from the exact value, on 30 from the shortest decimal
+exp: libraries differ on 97352211 rows, amounts on 87602048; cents differ on 49 from the exact value, on 59 from the shortest decimal
 
 rows 10000000000, glibc 2.43
-pow: libraries differ on 918324706 rows; cents differ on 253 from the exact value, on 291 from the shortest decimal
-exp: libraries differ on 973504152 rows; cents differ on 439 from the exact value, on 417 from the shortest decimal
+pow: libraries differ on 918324706 rows, amounts on 823746311; cents differ on 253 from the exact value, on 291 from the shortest decimal
+exp: libraries differ on 973504152 rows, amounts on 876038200; cents differ on 439 from the exact value, on 417 from the shortest decimal
 
 ## round-check.sql on Spark 4.3.0 (JDK 21; JDK 25 printed the same)
 ## columns: fn, spark_value, spark_cents, glibc_value, glibc_cents; then round_below,
@@ -35,8 +36,9 @@ pow	6.88535397445E8	6.8853539745E8	6.885353974449999E8	6.8853539744E8
 
 ## Reading
 
-- The two libraries' doubles differ on about 9% of rows (pow 9.2%, exp 9.7%), so a join, a
-  GROUP BY or an equality test on these computed amounts sees a different value on that share.
+- The two libraries' results of pow and exp differ on 9.2% and 9.7% of rows, and the amounts
+  (amount times that result) on 8.2% and 8.8%: a join, a GROUP BY or an equality test on these
+  computed amounts sees a different value on that share.
 - The cents differ far more rarely, since a cent boundary must fall between the two doubles: on
   10^9 rows 30 (pow) and 59 (exp) rows when rounding as Spark does, from the shortest decimal;
   on 10^10 rows 291 and 417. The count grows with the table, about ten times for ten times the

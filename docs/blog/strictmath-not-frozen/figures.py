@@ -46,12 +46,12 @@ def moved():
 
 def fig_moved():
     d = moved()
-    pairs = [("21", "25"), ("25", "26"), ("25", "27")]
+    pairs = [("21", "25"), ("25", "26"), ("26", "27")]
     f = Fig("moved", "Whose bits moved with the JDK",
             "On 20 double functions, about 3 million inputs each: StrictMath moved once in four "
             "JDKs, Math three times on this x86-64 CPU.",
             "StrictMath: no change from JDK 21 to 25 or 25 to 26; pow changed on 1,258 inputs "
-            "from 25 to 27. Math on an AMD Ryzen AI 9 HX PRO 370: cbrt and tanh changed from 21 "
+            "from 26 to 27, Math none. Math on an AMD Ryzen AI 9 HX PRO 370: cbrt and tanh changed from 21 "
             "to 25, sinh from 25 to 26.")
     y = f.header() + 8
     col = (IW - 120) / 3
@@ -89,12 +89,12 @@ def pow_errors():
         if not line:
             continue
         x, y, a, b = (struct.unpack(">d", int(v, 16).to_bytes(8, "big"))[0] for v in line.split())
-        if not (2.3e-308 < abs(a) < math.inf and 2.3e-308 < abs(b) < math.inf):
+        if not (sys.float_info.min <= abs(a) < math.inf and sys.float_info.min <= abs(b) < math.inf):
             continue
         exact = (Decimal(y) * Decimal(abs(x)).ln()).exp()
         if x < 0 and y == int(y) and int(y) % 2:
             exact = -exact
-        u = Decimal(math.ulp(abs(a)))
+        u = Decimal(math.ulp(abs(float(exact))))  # the ulp at the exact value
         rows.append((abs(y * math.log(abs(x))), float(abs((Decimal(a) - exact) / u)),
                      float(abs((Decimal(b) - exact) / u))))
     return rows
@@ -124,8 +124,9 @@ def fig_pow_errors():
 
     f.rect(px, y0, pw, ph, "#ffffff", base.LINE, rx=4)
     for e, label in ((0.01, "0.01"), (0.1, "0.1"), (1, "1 ulp"), (10, "10"), (100, "100"), (1000, "1000")):
-        f.add(f'<path d="M{px:.1f},{Y(e):.1f} H{px + pw:.1f}" stroke="{"#9e9e9e" if e == 1 else "#ececec"}" '
-              f'stroke-width="{2 if e == 1 else 1}"{" stroke-dasharray=\"6 4\"" if e == 1 else ""}/>')
+        style = 'stroke="#9e9e9e" stroke-width="2" stroke-dasharray="6 4"' if e == 1 else \
+            'stroke="#ececec" stroke-width="1"'
+        f.add(f'<path d="M{px:.1f},{Y(e):.1f} H{px + pw:.1f}" {style}/>')
         f.text(px - 8, Y(e) + 5, label, size=13, fill=base.GREY, anchor="end")
     for z in (200, 300, 400, 500, 600, 700):
         f.text(X(z), y0 + ph + 20, str(z), size=13, fill=base.GREY, anchor="middle")

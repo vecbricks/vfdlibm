@@ -4,8 +4,9 @@ import java.util.*;
 import java.util.function.*;
 
 /**
- * StrictMath's and Math's results for the 20 double functions of StrictMath whose results may
- * differ by JDK or by CPU (not floor, ceil, rint, scalb, ulp, nextUp, fma, toRadians and the like), on seeded inputs, written in input order to <out>/<StrictMath|Math>-<fn>.bin so two
+ * StrictMath's and Math's results for 20 double functions of StrictMath: the transcendental ones
+ * and their relatives, with sqrt and IEEEremainder, which are exactly specified, as controls (not
+ * floor, ceil, rint, scalb, ulp, nextUp, fma, toRadians and the like), on seeded inputs, written in input order to <out>/<StrictMath|Math>-<fn>.bin so two
  * JDKs compare input by input (compare.py --all). It needs no vfdlibm and no Vector API, so it
  * runs on JDK 17 and later. The inputs per function: the hard cases of vfdlibm's tests where it
  * has them, then 1,000,000 each of uniform bits, moderate magnitudes and values near 1 (as in

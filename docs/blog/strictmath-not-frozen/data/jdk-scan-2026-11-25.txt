@@ -14,16 +14,23 @@ vfdlibm: io.github.vecbricks:vfdlibm:0.3.0 from Maven Central, sha256
       4a675dbb2c38ade1c266941b9d8dfe7dd7245381ad8367d62059040b420617d3 (equal to Central's .sha256)
 Inputs: JdkScan.java at the commit of this file: vfdlibm's hard cases (src/test/resources/.../
       hard-cases at 0f455af) plus 3,000,000 seeded random inputs per function, and for pow
-      1,000,000 more aimed at fdlibm's branch for |y| > 2^31 with |x| near 1
-Command, per JDK, with and (25, 26) without the libm intrinsics
+      1,000,000 more aimed at fdlibm's branch for |y| > 2^31 with |x| near 1 (500,262 of them
+      inside the part JDK 27 changed). On a lane of two NaN arguments the .bin files and digests
+      hold 0, since StrictMath's NaN there depends on the JIT tier.
+Commands, per JDK, with and (25, 26) without the libm intrinsics
       (-XX:+UnlockDiagnosticVMOptions -XX:-UseLibmIntrinsic):
-      java -Xmx3g --add-modules jdk.incubator.vector -cp .:vfdlibm-0.3.0.jar JdkScan <hard-cases> out-<jdk>
+      javac --add-modules jdk.incubator.vector -cp vfdlibm-0.3.0.jar -d . JdkScan.java   (JDK 25)
+      java -Xmx3g [flags] --add-modules jdk.incubator.vector -cp .:vfdlibm-0.3.0.jar JdkScan <hard-cases> out-<jdk>
+then:
+      python3 compare.py out-25 out-26
       python3 compare.py out-25 out-27 --witnesses data/pow-strictmath-jdk25-vs-jdk27.txt
       python3 compare.py out-25-nolibm out-26-nolibm --file pow-Math.bin
+      python3 compare.py out-25 out-26 --file pow-Math.bin
+      python3 compare.py out-25 out-27 --file pow-Math.bin
       python3 compare.py out-25 out-25-nolibm --file pow.bin --after-file pow-Math.bin
       python3 compare.py out-26-nolibm out-27 --file pow-Math.bin --after-file pow.bin
-      (the last two, and the check on the 1,258 inputs below, were run after the others, on the
-      same output directories)
+      python3 witness_check.py out-25/pow.bin out-27/pow.bin out-26-nolibm/pow-Math.bin out-27/pow.bin
+      python3 witness_check.py out-25/pow.bin out-27/pow.bin out-25-nolibm/pow-Math.bin out-25/pow.bin
 
 ## JdkScan's output: per function, StrictMath's digest and vfdlibm lanes that differ from it
 
@@ -40,7 +47,7 @@ log    n=3002820 StrictMath=5d9feb169ab6fe36  vf256 diff=0  vf512 diff=0
 log10  n=3001886 StrictMath=042bb63d1fc8068e  vf256 diff=0  vf512 diff=0
 log1p  n=3007550 StrictMath=bd2ea1d474139f71  vf256 diff=0  vf512 diff=0
 atan2  n=3020820 StrictMath=2fba64c22f150cbe  vf256 diff=0  vf512 diff=0
-hypot  n=3008720 StrictMath=9c09a26d67f02e4d  vf256 diff=0  vf512 diff=0
+hypot  n=3008720 StrictMath=e0b2228c56aff6de  vf256 diff=0  vf512 diff=0
 pow    n=4005016 StrictMath=51dfe40e5bb17ef2  vf256 diff=0  vf512 diff=0
 
 ### JDK 26
@@ -56,7 +63,7 @@ log    n=3002820 StrictMath=5d9feb169ab6fe36  vf256 diff=0  vf512 diff=0
 log10  n=3001886 StrictMath=042bb63d1fc8068e  vf256 diff=0  vf512 diff=0
 log1p  n=3007550 StrictMath=bd2ea1d474139f71  vf256 diff=0  vf512 diff=0
 atan2  n=3020820 StrictMath=2fba64c22f150cbe  vf256 diff=0  vf512 diff=0
-hypot  n=3008720 StrictMath=9c09a26d67f02e4d  vf256 diff=0  vf512 diff=0
+hypot  n=3008720 StrictMath=e0b2228c56aff6de  vf256 diff=0  vf512 diff=0
 pow    n=4005016 StrictMath=51dfe40e5bb17ef2  vf256 diff=0  vf512 diff=0
 
 ### JDK 27
@@ -72,7 +79,7 @@ log    n=3002820 StrictMath=5d9feb169ab6fe36  vf256 diff=0  vf512 diff=0
 log10  n=3001886 StrictMath=042bb63d1fc8068e  vf256 diff=0  vf512 diff=0
 log1p  n=3007550 StrictMath=bd2ea1d474139f71  vf256 diff=0  vf512 diff=0
 atan2  n=3020820 StrictMath=2fba64c22f150cbe  vf256 diff=0  vf512 diff=0
-hypot  n=3008720 StrictMath=9c09a26d67f02e4d  vf256 diff=0  vf512 diff=0
+hypot  n=3008720 StrictMath=e0b2228c56aff6de  vf256 diff=0  vf512 diff=0
 pow    n=4005016 StrictMath=a49fdd8612c4d863  vf256 diff=0  vf512 diff=0
 
 ### JDK 25-nolibm
@@ -88,7 +95,7 @@ log    n=3002820 StrictMath=5d9feb169ab6fe36  vf256 diff=0  vf512 diff=0
 log10  n=3001886 StrictMath=042bb63d1fc8068e  vf256 diff=0  vf512 diff=0
 log1p  n=3007550 StrictMath=bd2ea1d474139f71  vf256 diff=0  vf512 diff=0
 atan2  n=3020820 StrictMath=2fba64c22f150cbe  vf256 diff=0  vf512 diff=0
-hypot  n=3008720 StrictMath=9c09a26d67f02e4d  vf256 diff=0  vf512 diff=0
+hypot  n=3008720 StrictMath=e0b2228c56aff6de  vf256 diff=0  vf512 diff=0
 pow    n=4005016 StrictMath=51dfe40e5bb17ef2  vf256 diff=0  vf512 diff=0
 
 ### JDK 26-nolibm
@@ -104,7 +111,7 @@ log    n=3002820 StrictMath=5d9feb169ab6fe36  vf256 diff=0  vf512 diff=0
 log10  n=3001886 StrictMath=042bb63d1fc8068e  vf256 diff=0  vf512 diff=0
 log1p  n=3007550 StrictMath=bd2ea1d474139f71  vf256 diff=0  vf512 diff=0
 atan2  n=3020820 StrictMath=2fba64c22f150cbe  vf256 diff=0  vf512 diff=0
-hypot  n=3008720 StrictMath=9c09a26d67f02e4d  vf256 diff=0  vf512 diff=0
+hypot  n=3008720 StrictMath=e0b2228c56aff6de  vf256 diff=0  vf512 diff=0
 pow    n=4005016 StrictMath=51dfe40e5bb17ef2  vf256 diff=0  vf512 diff=0
 
 ## compare.py: StrictMath results that differ, input by input
@@ -147,13 +154,17 @@ pow-Math.bin   4005016 inputs      0 differ
 pow-Math.bin   4005016 inputs      0 differ
 
 ### StrictMath.pow against Math.pow with the libm intrinsics off (another file of the same inputs)
+(JDK 25 StrictMath.pow vs JDK 25 Math.pow, then JDK 26 Math.pow vs JDK 27 StrictMath.pow)
+pow.bin        4005016 inputs 1477955 differ
+pow-Math.bin   4005016 inputs 1477955 differ
 
-pow.bin        4005016 inputs 1477955 differ      (JDK 25 StrictMath.pow vs JDK 25 Math.pow)
-pow-Math.bin   4005016 inputs 1477955 differ      (JDK 26 Math.pow vs JDK 27 StrictMath.pow)
+### witness_check.py: on the inputs where StrictMath.pow differs between JDK 25 and 27
+1258 inputs where out-25/pow.bin and out-27/pow.bin differ; out-26-nolibm/pow-Math.bin equals out-27/pow.bin on 1258 of them
+1258 inputs where out-25/pow.bin and out-27/pow.bin differ; out-25-nolibm/pow-Math.bin equals out-25/pow.bin on 1258 of them
 
-On the 1,258 inputs where StrictMath.pow differs between JDK 25 and 27, input by input: JDK 26's
-Math.pow (intrinsics off) equals JDK 27's StrictMath.pow on all 1,258, and JDK 25's Math.pow
-(intrinsics off) equals JDK 25's StrictMath.pow on all 1,258.
+The 1,477,955 inputs where StrictMath.pow and Math.pow with the intrinsics off differ all have a
+NaN result on both sides: StrictMath.pow returns 0xfff8000000000000 and Math.pow
+0x7ff8000000000000 (checked input by input after the run; no other result differs).
 
 ## Reading
 
@@ -162,13 +173,9 @@ Math.pow (intrinsics off) equals JDK 27's StrictMath.pow on all 1,258, and JDK 2
   all in the aimed set (listed in pow-strictmath-jdk25-vs-jdk27.txt as "x y jdk25 jdk27").
 - JDK 26.0.2 changes Math.pow, not StrictMath.pow: with the libm intrinsics off, Math.pow on
   26 differs from 25 on the same 1,258 inputs and returns there the same bits as StrictMath.pow
-  on 27. Elsewhere that Math.pow is not StrictMath.pow: it differs from it on 1,477,955 of the
-  inputs, on JDK 25 as on 26. With the intrinsics on, as by default on x86, Math.pow does not
-  run that code.
-- vfdlibm 0.3.0 differs from StrictMath on no lane, at 256 and 512 bits, on 25, 26 and 27: its pow
-  finishes the lanes with |y| > 2^31 per lane by StrictMath.pow (Pow.java), and those are the
-  lanes JDK 27 changed. 0.3.x supports JDK 25 only; this does not change that.
-- hypot's digest is equal in the five runs here, but earlier runs of the same inputs that day
-  gave other digests, on 25 as well as on 26: on a lane whose two arguments are NaN with different
-  bits, StrictMath.hypot returns one or the other, depending on the JIT tier ("Releases" in
-  CLAUDE.md). vfdlibm's lanes there are checked against the two candidates, as the contract says.
+  on 27. Elsewhere that Math.pow equals StrictMath.pow but for the bits of a NaN result, on JDK
+  25 as on 26. With the intrinsics on, as by default on x86, Math.pow does not run that code.
+- vfdlibm 0.3.0 differs from StrictMath on no lane, at 256 and 512 bits, on 25, 26 and 27 (a
+  lane of two NaN arguments checked against the contract's two candidates): its pow finishes the
+  lanes with |y| > 2^31 per lane by StrictMath.pow (Pow.java), and those are the lanes JDK 27
+  changed. 0.3.x supports JDK 25 only; this does not change that.

@@ -10,9 +10,11 @@ JDKs: 25.0.5.1+2-1-26.04.1-Ubuntu and 27.0.1.1+4-22 (jdk.java.net)
 Spark: Apache Spark 4.3.0 (git revision 98bc0212c94; see cents-fdlibm-vs-glibc-2026-11-25.txt),
       spark-sql --master 'local[1]' -S -f power-jdk.sql, with JAVA_HOME at each JDK
 Commands:
-      java Moderate.java > mod-<jdk>.txt     (on each JDK; the lines whose result differs are
-                                              pow-moderate-jdk25-vs-jdk27.txt, as "x y jdk25 jdk27")
-      java Compound.java > comp-<jdk>.txt    (on each JDK; compared line by line)
+      java Moderate.java > mod-<jdk>.txt     (on each JDK)
+      paste -d' ' mod-25.txt mod-27.txt | awk '$4 != $8 {print $2, $3, $4, $8}' \
+          > data/pow-moderate-jdk25-vs-jdk27.txt       ("x y jdk25 jdk27", one line per change)
+      java Compound.java > comp-<jdk>.txt    (on each JDK)
+      paste -d' ' comp-25.txt comp-27.txt | awk '$3 != $7' | wc -l
       python3 errors.py data/pow-strictmath-jdk25-vs-jdk27.txt
       python3 errors.py data/pow-moderate-jdk25-vs-jdk27.txt
 
