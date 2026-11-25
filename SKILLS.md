@@ -1753,15 +1753,17 @@ mnemonic); the other operations count the same at both widths.
   (`depth0`), at the old code's level, and inlined into JMH's measuring loop, as HypotBenchmark is,
   1.36 to 1.39 times slower on mixed data; with line 60's compare put back and the rest of the body
   as it is, the inlined loop is at the old level on mixed data too. In the harness, no common-data
-  row moved past 1.3x. So the cost is in how C2 compiles the loop with what surrounds it, not in
-  work the change added, and it flips with small changes: before #174 finishMax ran about 1.6 times
-  finishPreferred on common data, the same body at the same width. Why one compile is slow is not
-  measured. On the Xeon 8573C (AVX-512), one run after #174 against one before, on two draws and not
-  a pair, reads no row slower (`hypot-xeon8573c-2026-11-24-2.txt`). What to take from it: a port's
-  speed is a property of the compiled loop, not of the body alone; before blaming or crediting a
-  change, time the loop as a method of its own as well as inlined into the benchmark's loop, and
-  read a per-row move with the pair and that check together. A caller's own loop method is the
-  `depth0` shape; a caller whose loop is inlined into a larger compiled method may get either.
+  row moved past 1.3x. So the cost is not in the values computed, and it shows only when the loop is
+  compiled together with what surrounds it; the compare's form and that compile both move the row,
+  and the harness does not separate them. Such costs flip with small changes: before #174 finishMax
+  ran about 1.6 times finishPreferred on common data, the same body at the same width. Why one
+  compile is slow is not measured. On the Xeon 8573C (AVX-512), one run after #174 against one
+  before, on two draws and not a pair, reads no row slower (`hypot-xeon8573c-2026-11-24-2.txt`).
+  What to take from it: a port's speed is a property of the compiled loop, not of the body alone;
+  before blaming or crediting a change, time the loop as a method of its own as well as inlined into
+  the benchmark's loop, and read a per-row move with the pair and that check together. A caller's
+  own loop method is the `depth0` shape; a caller whose loop is inlined into a larger compiled
+  method may get either.
 
 ## What the pow port taught
 
