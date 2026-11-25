@@ -1,0 +1,61 @@
+# StrictMath.pow on JDK 27: where it changed, by how much, and what Spark returns
+
+What was run and why: for the post "Even StrictMath is not frozen", how large JDK 27's changes to
+StrictMath.pow are, whether they reach ordinary result sizes and a realistic expression, and
+whether Spark's power() changes with them. A bit comparison, not a timing.
+
+Date: 25 November 2026
+Host: laptop, AMD Ryzen AI 9 HX PRO 370, Linux 7.0.0-44-generic
+JDKs: 25.0.5.1+2-1-26.04.1-Ubuntu and 27.0.1.1+4-22 (jdk.java.net)
+Spark: Apache Spark 4.3.0 (git revision 98bc0212c94; see cents-fdlibm-vs-glibc-2026-11-25.txt),
+      spark-sql --master 'local[1]' -S -f power-jdk.sql, with JAVA_HOME at each JDK
+Commands:
+      java Moderate.java > mod-<jdk>.txt     (on each JDK; the lines whose result differs are
+                                              pow-moderate-jdk25-vs-jdk27.txt, as "x y jdk25 jdk27")
+      java Compound.java > comp-<jdk>.txt    (on each JDK; compared line by line)
+      python3 errors.py data/pow-strictmath-jdk25-vs-jdk27.txt
+      python3 errors.py data/pow-moderate-jdk25-vs-jdk27.txt
+
+## Size of the change on JdkScan's aimed inputs (errors.py, against 80-digit pow)
+
+normal results 1247
+before max error 652.910 ulp, over 1 ulp on 1247
+after  max error 0.740 ulp, over 1 ulp on 0
+after nearer on 1247, before nearer on 0
+(the other 11 of the 1,258 have subnormal, zero or infinite results; |y ln x| is 183 or more on all 1,258)
+
+## Ordinary result sizes (Moderate.java: 4,000,000 inputs, |x - 1| from 2^-34 to 2^-24, |y| from
+## 2^31 to 2^33, so |y ln x| from about 0.1 to 500)
+
+results that differ between JDK 25 and JDK 27: 17 of 4000000, at |y ln x| of: 3.953 16.528 33.101 37.755 38.366 122.687 133.437 140.476 140.658 145.535 151.928 203.564 264.436 292.417 298.979 339.98 361.559 
+normal results 17
+before max error 0.650 ulp, over 1 ulp on 0
+after  max error 0.770 ulp, over 1 ulp on 0
+after nearer on 5, before nearer on 12
+
+## Per-second compounding (Compound.java: (1 + r/n)^(n t), n = 31,536,000, r from 0.01% to 20%
+## in basis points, t from 70 to 300 whole years, so n t > 2^31 and 1 + r/n within 2^-20 of 1)
+
+results that differ between JDK 25 and JDK 27: 0 of 462000
+
+## power-jdk.sql on Spark 4.3.0 (x, y, power(x, y), the JVM's java.runtime.version)
+
+1.0000000005093685	-7.760027956194805E9	0.01920251216909316	25.0.5.1+2-1-26.04.1-Ubuntu
+1.0000000005093685	-7.760027956194805E9	0.019202512169093165	27.0.1.1+4-22
+
+The exact value, to 60 digits, is 0.0192025121690931630338587932684165955300030082583743971795441:
+JDK 25's result is 0.571 ulp from it and JDK 27's 0.429 ulp.
+
+## Reading
+
+- On the inputs where JDK 27 changed StrictMath.pow with a normal result in JdkScan's aimed set,
+  JDK 25's result was more than 1 ulp off on every one, up to 653 ulps, and JDK 27's is within
+  0.74 ulp: the fix of JDK-8326547 does what its title says.
+- At ordinary result sizes the change is rarer, 17 of 4,000,000 inputs here, and both results
+  are within 1 ulp; JDK 27's is the nearer on 5 and JDK 25's on 12. There the change moves bits
+  without an error to fix.
+- Per-second compounding over 70 to 300 years reaches the changed branch but changed none of its
+  462,000 results here.
+- Spark 4.3.0's power() follows the JVM it runs on: the same query returns another double on
+  JDK 27 than on JDK 25. (Spark ran on JDK 27 for this; whether Spark supports JDK 27 is not
+  claimed.)
