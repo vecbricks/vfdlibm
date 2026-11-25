@@ -1694,7 +1694,8 @@ mnemonic); the other operations count the same at both widths.
   `bench/alloc-check.py` covers `HypotBenchmark`'s rows (`finish256`, `finishPreferred`,
   `finishMax`, common and mixed data); the host files that time the code after #174
   (`hypot-epyc7763-2026-11-24.txt`, a run of 24 November and its re-run of 25 November, and
-  `hypot-xeon8573c-2026-11-24-2.txt`) read every row at 0.040 B/op or less.
+  `hypot-xeon8573c-2026-11-24-2.txt`, a run of 24 November and its re-run of 25 November) read
+  every row at 0.040 B/op or less.
 - **The faults, sized on 2^22 draws each** (a throwaway program over `VFdlibm.hypot` at 256 bits,
   once per fault; counts of pairs that differ from `StrictMath.hypot`; the unplanted port 0 on
   each). `hypot.dropEarlyReturn`: 0 of Varka's range `[-10, 10)`, 1,779,887 of sampled bits,
@@ -1760,8 +1761,9 @@ mnemonic); the other operations count the same at both widths.
   together with what surrounds it; the compare's form and that compile both move the row, and the
   harness does not separate them. Such costs flip with small changes: before #174 finishMax ran
   about 1.6 times finishPreferred on common data, the same body at the same width. Why one compile
-  is slow is not measured. On the Xeon 8573C (AVX-512), one run after #174 against one before, on
-  two draws and not a pair, reads no row moved past 1.3x (`hypot-xeon8573c-2026-11-24-2.txt`). What
+  is slow is not measured. On the Xeon 8573C (AVX-512), a run after #174 and its re-run against one
+  before, on other draws and not a pair, read no row moved past 1.3x
+  (`hypot-xeon8573c-2026-11-24-2.txt`). What
   to take from it: a port's speed is a property of the compiled loop, not of the body alone; before
   blaming or crediting a change, time the loop as a method of its own as well as inlined into the
   benchmark's loop, and read a per-row move with the pair and that check together. A caller's own

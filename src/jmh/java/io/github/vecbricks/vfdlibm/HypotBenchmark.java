@@ -40,9 +40,10 @@ import org.openjdk.jmh.annotations.Warmup;
  * rows on mixed data at about 1.45 times the time, and hypot-harness-epyc7763-2026-11-24.txt times
  * main's loop, the body inlined into it, on mixed data as a method of its own at the old level and
  * inlined into JMH's measuring loop, as this class's rows are, slower (SKILLS.md, "What the hypot
- * port taught"). hypot-xeon8573c-2026-11-24-2.txt times it after #174 on the Xeon 8573C, one run:
- * the vector arm lower on common data by 2.13 to 2.16 at 512 bits, 1.38 at 256 bits with no
- * direction until a re-run, and no direction on mixed data.
+ * port taught"). hypot-xeon8573c-2026-11-24-2.txt times it after #174 on the Xeon 8573C, a run
+ * and its re-run: the vector arm lower on common data by 2.13 to 2.16 at the preferred species
+ * and SPECIES_MAX (512 bits there), with no direction at 256 bits (1.38 and 1.30) and none on
+ * mixed data.
  *
  * <p>{@code inputs} picks the data: {@code common} draws {@code x} and {@code y} from {@code
  * [-10, 10)}, Varka's baseline range, where every lane takes the medium path unscaled (both of
