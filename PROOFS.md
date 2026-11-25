@@ -1921,9 +1921,12 @@ returns that one NaN, sign cleared, on every lane of one NaN, in every mode. By 
 signs, six payloads) and infinities beside each other, the zeros, subnormals, finite values each
 side of line 63's ratio and both scalings, in both orders, showed no lane apart from `StrictMath`'s
 (two-NaN lanes by `MAGNITUDES`) at every width, warm, `-Xint`, `-XX:TieredStopAtLevel=1`,
-`-XX:-TieredCompilation`, `-XX:UseAVX=2` and `-XX:MaxVectorSize=16`. On AArch64,
-`nanLanesAreStrictMathInEveryJitMode` runs on CI's Arm row ("build (Arm 128 bits)", 128 bits) in
-every pull request's checks; #187 gives the run in which it first passed in its present form.
+`-XX:-TieredCompilation`, `-XX:UseAVX=2` and `-XX:MaxVectorSize=16`. On AArch64 (GitHub's Arm
+runner, 128 bits), `nanLanesAreStrictMathInEveryJitMode` passed in CI run 45698748725 (job "build
+(Arm 128 bits)", #187's head e775cd2) in all four modes, `Hypot::hypot` compiled at each mode's tier
+before the checked pass (level 1, C2, level 4), as its log shows. On x86 at 128 bits the body boxes
+(C2 lowers no mask at two 64-bit lanes, `SKILLS.md`), so there the sum runs in the Vector API's Java
+fallback, at whatever tier that reaches; the test checks the tier of `Hypot::hypot` only.
 
 **Test.** `HypotTest.nanLanesAreStrictMathInEveryJitMode` runs the vector port on the pairs of
 `specialPairs` with an infinity or a NaN and on `nanPairs` in a JVM per JIT mode (interpreter, C1

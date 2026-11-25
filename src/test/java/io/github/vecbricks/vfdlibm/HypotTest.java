@@ -929,7 +929,7 @@ class HypotTest {
   }
 
   /**
-   * Whether the child's compile log, before its line {@code "checking"}, holds a compile of
+   * Whether the child's compile log, before its line {@code "checking pass"}, holds a compile of
    * {@code Hypot::hypot} at {@code level} ({@code ""} for C2 without tiers) that was not made not
    * entrant before that line, and none of those compiles is made not entrant between that line and
    * the child's result: so the whole checked pass ran a compiled body of that tier.
@@ -941,14 +941,14 @@ class HypotTest {
     java.util.Set<String> live = new java.util.HashSet<>();
     boolean checking = false;
     for (String line : text.lines().toList()) {
-      if (line.equals("checking")) {
+      if (line.contains("checking pass")) {
         if (live.isEmpty()) {
           return false;
         }
         checking = true;
         continue;
       }
-      if (checking && line.startsWith("result: ")) {
+      if (checking && line.contains("result: ")) {
         return true;
       }
       java.util.regex.Matcher m = compile.matcher(line);
@@ -1014,7 +1014,7 @@ class HypotTest {
         }
       }
       System.out.println("warm-up: " + calls + " calls, unchecked");
-      System.out.println("checking");
+      System.out.println("checking pass");
       boolean failed = false;
       for (int pass = 1; pass <= passes; pass++) {
         try {

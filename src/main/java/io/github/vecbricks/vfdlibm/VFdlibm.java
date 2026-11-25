@@ -38,7 +38,7 @@ import jdk.incubator.vector.VectorMask;
  * pow-epyc7763-2026-11-23.txt} and {@code pow-xeon8573c-2026-11-24.txt}) read their vector rows at
  * 256 bits, the preferred species and {@code SPECIES_MAX} at 0.071 bytes per op or less, but {@code
  * pow}'s on mixed data ({@code hypot}'s two time 0.3.0's per-lane finish; {@code
- * hypot-pair-epyc7763-2026-11-25.txt} reads #186's body at 0.020 bytes per op or less); the list
+ * hypot-pair-epyc7763-2026-11-25.txt} reads #186's body at 0.021 bytes per op or less); the list
  * below predates them. On its mixed data {@code StrictMath.pow}, which finishes {@code pow}'s rare
  * lanes, allocates on some of them itself, so CI's allocation check reads {@code pow}'s rows
  * against an oracle baseline, which they match within 0.1 bytes per op in both host files, and at

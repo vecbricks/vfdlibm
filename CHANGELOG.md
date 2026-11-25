@@ -15,7 +15,9 @@ two NaNs with different bits in a function of two arguments (`AGENTS.md`, "Relea
 
 - `hypot` computes the lanes of an infinity or a NaN in either argument in the vector, lines
   66-70 of fdlibm's C as blends, where it called `StrictMath.hypot` per lane; the results are
-  unchanged (#186).
+  unchanged. On the AMD EPYC 7763 (AVX2) its vector rows on `HypotBenchmark`'s mixed data run 1.83
+  to 1.85 times as fast as 0.3.0's, by a pair against `main`
+  (`bench/results/hypot-pair-epyc7763-2026-11-25.txt`) (#186).
 
 ## [0.3.0] - 2026-11-25
 
