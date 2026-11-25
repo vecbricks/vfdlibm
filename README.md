@@ -169,10 +169,11 @@ are unchanged, and each lane still meets the contract below.
 allocates differs. The allocation check (`bench/alloc-check.py`, run by CI) covers 256 bits, the
 preferred species and `SPECIES_MAX` (up to eight lanes) on x86, and the preferred species, 128
 bits, on GitHub's Arm runner. The files under `bench/results/` read as allocating, and the check
-does not cover: `exp` and `log` at 128 bits on x86, and every function but `atan2`, which has no
-512-bit row, at 512 bits on an AVX2 host. `SPECIES_MAX` of today's `exp`, `expm1`, `log`, `log10`
-and `log1p` was read on a laptop (`max-finish-alloc-free-laptop-2026-11-21.txt`), and on a host
-for `exp` and `log10` at 256 bits by the EPYC 7763 pair (`exp-log10-pair-epyc7763-2026-11-21.txt`
+does not cover: `exp` and `log` at 128 bits on x86, and every function but `atan2`, `hypot` and
+`pow`, which have no 512-bit row, at 512 bits on an AVX2 host. `SPECIES_MAX` of today's `exp`,
+`expm1`, `log`, `log10` and `log1p` was read on a laptop
+(`max-finish-alloc-free-laptop-2026-11-21.txt`), and on a host for `exp` and `log10` at 256 bits by
+the EPYC 7763 pair (`exp-log10-pair-epyc7763-2026-11-21.txt`
 and its re-run), and under 0.05 bytes per op for `expm1`, `log`, `log10` and `log1p` at 512 bits
 by the Xeon 8573C's files of 22 November and for `expm1` and `log1p` at 256 bits by the EPYC
 7763's of 23 November; the other host files that have a

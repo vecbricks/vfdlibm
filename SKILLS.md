@@ -1692,9 +1692,9 @@ mnemonic); the other operations count the same at both widths.
   rest on the hardware's NaN propagation for one-NaN lanes and has no timing to justify it, and #30
   sends a tie to the finish. The first run of the vector tests passed on every input. CI's
   `bench/alloc-check.py` covers `HypotBenchmark`'s rows (`finish256`, `finishPreferred`,
-  `finishMax`, common and mixed data); the host files of 24 November
-  (`hypot-epyc7763-2026-11-24.txt`, a run and its re-run, and `hypot-xeon8573c-2026-11-24-2.txt`)
-  read every row at 0.040 B/op or less.
+  `finishMax`, common and mixed data); the host files that time the code after #174
+  (`hypot-epyc7763-2026-11-24.txt`, a run of 24 November and its re-run of 25 November, and
+  `hypot-xeon8573c-2026-11-24-2.txt`) read every row at 0.040 B/op or less.
 - **The faults, sized on 2^22 draws each** (a throwaway program over `VFdlibm.hypot` at 256 bits,
   once per fault; counts of pairs that differ from `StrictMath.hypot`; the unplanted port 0 on
   each). `hypot.dropEarlyReturn`: 0 of Varka's range `[-10, 10)`, 1,779,887 of sampled bits,

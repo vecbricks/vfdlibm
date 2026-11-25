@@ -39,8 +39,8 @@ import jdk.incubator.vector.VectorMask;
  * pow}'s on mixed data; the list below predates them. On its mixed data {@code StrictMath.pow},
  * which finishes {@code pow}'s rare lanes, allocates on some of them itself, so CI's allocation
  * check reads {@code pow}'s rows against an oracle baseline, which they match within 0.1 bytes per
- * op in both host files, at the laptop's flags and as an AVX2 host ({@code
- * bench/results/pow-alloc-laptop-2026-11-23.txt}, an allocation reading, no timing).
+ * op in both host files, and at the laptop's flags and as an AVX2 host in {@code
+ * bench/results/pow-alloc-laptop-2026-11-23.txt} (an allocation reading, no timing).
  *
  * <ul>
  *   <li>Covered by {@code bench/alloc-check.py}, which CI runs and which fails a body that
