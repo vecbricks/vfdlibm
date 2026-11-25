@@ -1,4 +1,11 @@
 #!/usr/bin/env python3
+#
+# Licensed to the vecbricks contributors under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License. You may obtain a copy of the
+# License at http://www.apache.org/licenses/LICENSE-2.0. Software distributed under the License
+# is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either
+# express or implied. See the License for the specific language governing permissions and
+# limitations under the License.
 """Builds the blog post into the standalone page that vecbricks.github.io publishes.
 
     python3 page.py --out <vecbricks.github.io>/strictmath-at-simd-speed \\
@@ -7,7 +14,8 @@
 and, for the link card (social sites show no SVG, so the card is a PNG), with chromium:
 
     python3 page.py --out <dir> --card    # also writes <dir>/card.html, 1200 x 630
-    chromium --headless=new --window-size=1200,630 --screenshot=card.png <dir>/card.html
+    chromium --headless=new --hide-scrollbars --virtual-time-budget=5000 \\
+      --window-size=1200,630 --screenshot=card.png <dir>/card.html
     rm <dir>/card.html                    # it is not published
 
 The post's prose is 2026-11-strictmath-at-simd-speed.md, its figures are img/*.svg, which
@@ -96,7 +104,10 @@ def highlight_css():
     def rules(style, scope):
         css = HtmlFormatter(style=style).get_style_defs(scope + " .highlight")
         # Drop the style's own backgrounds: the <pre> keeps --code, in both themes.
-        return "\n".join(l for l in css.splitlines() if "background" not in l)
+        # Pygments' own pre and line-number rules would override the page's line height.
+        return "\n".join(l for l in css.splitlines()
+                         if "background" not in l and not l.startswith(("pre ", "td.linenos",
+                                                                         "span.linenos")))
 
     light = rules("friendly", "")
     dark = rules("monokai", ':root[data-theme="dark"]')
@@ -188,6 +199,9 @@ def render(source, out_dir, og_image=""):
     left = re.search(r'<img[^>]+src="img/[^"]*"', html)
     if left:
         raise SystemExit("a figure was not inlined: " + left.group(0))
+    for target in re.findall(r'href="(img/[^"]+)"', html):
+        if not os.path.exists(os.path.join(source_dir, target)):
+            raise SystemExit("a link to a missing figure: " + target)
     html = html.replace('href="img/', 'href="figures/')
     if "{{" in html or "{%" in html:
         raise SystemExit("a placeholder or template tag is left in the page")
@@ -218,12 +232,14 @@ def render(source, out_dir, og_image=""):
         handle.write(page)
     # The SVGs travel too: a plain link to one points at its copy, and the page can be opened
     # from the output directory alone.
-    shutil.copytree(os.path.join(source_dir, "img"), os.path.join(out_dir, "figures"),
-                    dirs_exist_ok=True)
+    figures = os.path.join(out_dir, "figures")
+    shutil.rmtree(figures, ignore_errors=True)
+    shutil.copytree(os.path.join(source_dir, "img"), figures)
     return out, page
 
 
-CARD = """<!DOCTYPE html><html><head><meta charset="utf-8"><style>
+CARD = """<!DOCTYPE html><html><head><meta charset="utf-8">
+<link rel="stylesheet" href="%s"><style>
 body{margin:0;width:1200px;height:630px;background:#fbfaf7;display:flex;align-items:center;
 gap:48px;padding:0 56px;box-sizing:border-box;font-family:"Source Sans 3",system-ui,sans-serif}
 h1{font-size:54px;line-height:1.1;color:#1f2328;margin:0;flex:1}
@@ -234,10 +250,11 @@ img{height:560px;flex:none}</style></head><body>
 
 
 def write_card(out_dir, title, figure="aggregate"):
-    """The link card's page: the title beside one figure, for chromium to screenshot."""
+    """The link card's page: the title (already escaped, from the page's <title>) beside one
+    figure, for chromium to screenshot; give it time to load the font (--virtual-time-budget)."""
     path = os.path.join(out_dir, "card.html")
     with open(path, "w") as handle:
-        handle.write(CARD % (title.replace("&", "&amp;"), figure))
+        handle.write(CARD % (FONTS, title, figure))
     return path
 
 

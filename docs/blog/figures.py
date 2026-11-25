@@ -703,18 +703,19 @@ def fig_speedup():
             f.rect(x0, y + 2, max(2, bw * c / top), 10, ORANGE_S, ORANGE_S, rx=2, sw=0)
             f.rect(x0, y + 13, max(2, bw * m / top), 10, MIXED, MIXED, rx=2, sw=0)
             f.text(lab - 72, y + 17, f"{vs[2 * i]}×", size=15, anchor="end",
-                   fill=INK if c >= 1 else ORANGE_T, weight=400 if c >= 1 else 700)
+                   fill=INK if c >= 1 / 1.3 else ORANGE_T, weight=400 if c >= 1 / 1.3 else 700)
             f.text(lab - 62, y + 17, "/", size=15, fill=GREY, anchor="middle")
             f.text(lab, y + 17, f"{vs[2 * i + 1]}×", size=15, anchor="end",
-                   fill=INK if m >= 1 else ORANGE_T, weight=400 if m >= 1 else 700)
+                   fill=INK if m >= 1 / 1.3 else ORANGE_T, weight=400 if m >= 1 / 1.3 else 700)
             y += 30
         f.add(f'<line x1="{one:.1f}" y1="{y_top - 4:.1f}" x2="{one:.1f}" y2="{y - 2:.1f}" '
               f'stroke="{INK}" stroke-width="2" stroke-dasharray="5 4"/>')
         f.text(one, y + 14, "1×", size=15, weight=700, anchor="middle")
         y += 34
     y += 6
-    y = f.caption(y, "The dashed line is 1×, StrictMath's own speed. The project reads a ratio "
-                     "within 1.3× either way as no direction: " + "; ".join(weak) +
+    y = f.caption(y, "The dashed line is 1×, StrictMath's own speed. Slower than StrictMath by more "
+                     "than 1.3×, in bold: " + "; ".join(f"{fn}'s {v}×" for fn, v in slow) + ". The "
+                     "project reads a ratio within 1.3× either way as no direction: " + "; ".join(weak) +
                      ". By minimum times, at the host's preferred species: 512 bits on the Xeon, 256 "
                      "on the EPYC. The README's table says how its figures are made.")
     f.write(y)
