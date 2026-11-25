@@ -1748,22 +1748,24 @@ mnemonic); the other operations count the same at both widths.
   (`bench/results/hypot-order-pair-epyc7763-2026-11-24.txt`) still reads the vector rows on mixed
   data at about 7,350 ns/op before and 10,630 after, about 1.45 times the time (bench/pair.sh prints
   it as -31%, base over head less one). `hypot-harness-epyc7763-2026-11-24.txt` (a diagnostic class
-  on the branch `diag-hypot-variants`, a run and its re-run) times main's loop two ways: as a method
-  of its own, with the body inlined into it and the loop called from JMH's measuring loop
-  (`depth0`), at the old code's level, and inlined into JMH's measuring loop, as HypotBenchmark is,
-  at 1.36 to 1.39 times the time on mixed data; with line 60's compare put back and the rest of the
-  body as it is, the inlined loop is at the old level on mixed data too. In the harness, no
-  common-data row moved past 1.3x. So the cost is not in the values computed, and it shows only when
-  the loop is compiled together with what surrounds it; the compare's form and that compile both
-  move the row, and the harness does not separate them. Such costs flip with small changes: before
-  #174 finishMax ran about 1.6 times finishPreferred on common data, the same body at the same
-  width. Why one compile is slow is not measured. On the Xeon 8573C (AVX-512), one run after #174
-  against one before, on two draws and not a pair, reads no row slower
-  (`hypot-xeon8573c-2026-11-24-2.txt`). What to take from it: a port's speed is a property of the
-  compiled loop, not of the body alone; before blaming or crediting a change, time the loop as a
-  method of its own as well as inlined into the benchmark's loop, and read a per-row move with the
-  pair and that check together. A caller's own loop method is the `depth0` shape; a caller whose
-  loop is inlined into a larger compiled method may get either.
+  on the branch `diag-hypot-variants`, tag `diag/hypot-harness-2026-11-24`, a run and its re-run)
+  times main's loop two ways: as a method of its own, with the body inlined into it and the loop
+  called from JMH's measuring loop (`depth0`), at the old code's level, and inlined into JMH's
+  measuring loop, as HypotBenchmark is, at 1.36 to 1.39 times the time on mixed data; with line 60's
+  compare put back and the rest of the body as it is, the inlined loop is at the old level on mixed
+  data too. In the harness, no common-data row moved past 1.3x. So the cost is not in the values
+  computed, and it shows only when the loop is compiled together with what surrounds it; the
+  compare's form and that compile both move the row, and the harness does not separate them. Such
+  costs flip with small changes: before #174 finishMax ran about 1.6 times finishPreferred on common
+  data, the same body at the same width. Why one compile is slow is not measured. On the Xeon 8573C
+  (AVX-512), one run after #174 against one before, on two draws and not a pair, reads no row moved
+  past 1.3x (`hypot-xeon8573c-2026-11-24-2.txt`). What to take from it: a port's speed is a property
+  of the compiled loop, not of the body alone; before blaming or crediting a change, time the loop
+  as a method of its own as well as inlined into the benchmark's loop, and read a per-row move with
+  the pair and that check together. A caller's own loop method with the body inlined into it (as the
+  benchmarks force with `-XX:CompileCommand=inline,io.github.vecbricks.vfdlibm.*::*`; without it the
+  body is larger than C2 inlines by default and may box) is the `depth0` shape; a caller whose loop
+  is inlined into a larger compiled method may get either.
 
 ## What the pow port taught
 
