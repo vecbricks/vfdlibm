@@ -18,6 +18,13 @@ and, for the link card (social sites show no SVG, so the card is a PNG), with ch
       --window-size=1200,630 --screenshot=card.png <dir>/card.html
     rm <dir>/card.html                    # it is not published
 
+The second post, "Even StrictMath is not frozen", is built the same way from its own directory:
+
+    python3 page.py --source strictmath-not-frozen/2026-11-even-strictmath-is-not-frozen.md \\
+      --out <vecbricks.github.io>/even-strictmath-is-not-frozen \\
+      --og-image https://vecbricks.github.io/even-strictmath-is-not-frozen/card.png \\
+      --card --card-figure pow-errors
+
 The post's prose is 2026-11-strictmath-at-simd-speed.md, its figures are img/*.svg, which
 figures.py writes; this script turns the two into one index.html beside a figures/ copy of the
 SVGs, the way the site's other posts are made. It is adapted from Varka's
@@ -265,6 +272,8 @@ def main():
     parser.add_argument("--out", required=True, help="output directory")
     parser.add_argument("--og-image", default="", help="absolute URL of the link-card image")
     parser.add_argument("--card", action="store_true", help="also write card.html (see above)")
+    parser.add_argument("--card-figure", default="aggregate",
+                        help="the figure beside the title on the card, img/<name>.svg")
     args = parser.parse_args()
     try:
         out, page = render(args.source, args.out, args.og_image)
@@ -273,7 +282,9 @@ def main():
     print("%s  %d bytes  %d figures" % (out, len(page), page.count('<figure class="fig">')))
     if args.card:
         title = re.search(r"<title>(.*?)</title>", page).group(1)
-        print(write_card(args.out, title))
+        if not os.path.exists(os.path.join(args.out, "figures", args.card_figure + ".svg")):
+            sys.exit("no figure %s for the card" % args.card_figure)
+        print(write_card(args.out, title, args.card_figure))
 
 
 if __name__ == "__main__":
