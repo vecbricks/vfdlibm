@@ -21,10 +21,12 @@
 # mainHighWordCompare is main's Hypot run with -Dvfdlibm.fault=hypot.highWordOrder, which puts back
 # line 60's compare and keeps the rest of the body; depth0 is main's loop as a method of its own,
 # with the body inlined into it, that C2 does not inline into JMH's measuring loop (CompilerControl
-# DONT_INLINE). The directive holds under these JMH options, whose CompileCommand inlines every
-# vfdlibm method: -XX:+PrintInlining on the stub, in a JIT log on a laptop (no timing), reads
-# loopMain "failed to inline: disallowed by CompileCommand" at every call. Every row computes the
-# same values on every lane of these arrays. The JMH options include -foe true; every row has a
+# DONT_INLINE). The directive was checked under these JMH options, whose CompileCommand inlines
+# every vfdlibm method, on another machine and JVM build, not on the host: a short local JMH run on
+# a laptop (an AMD Ryzen, OpenJDK 25.0.5.1, -XX:UseAVX=2 -XX:MaxVectorSize=32, with the owner's go;
+# no timing read) with -XX:+PrintInlining on the stub reads loopMain "failed to inline: disallowed
+# by CompileCommand" at every call. The host runs' own output does not show it. Every row computes
+# the same values on every lane of these arrays. The JMH options include -foe true; every row has a
 # Result block, which bench/record.py requires.
 #
 # Host:        epyc7763 (expected CPU 'AMD EPYC 7763 64-Core Processor')

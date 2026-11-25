@@ -37,11 +37,12 @@ import org.openjdk.jmh.annotations.Warmup;
  * #174, a run and its re-run on the EPYC 7763: the scalar loop lower on mixed data by 1.43 to 1.44
  * in run 1 and 1.33 to 1.34 in run 2, no direction on common data, and finishMax at the level of
  * the other rows. hypot-order-pair-epyc7763-2026-11-24.txt pairs the code before and after #174
- * there, the vector rows on mixed data about 1.45 times slower, and
- * hypot-harness-epyc7763-2026-11-24.txt times main's loop, the body inlined into it, as a method of
- * its own at the old level and inlined into JMH's measuring loop, as this class's rows are, slower
- * (SKILLS.md, "What the hypot port taught"). hypot-xeon8573c-2026-11-24-2.txt times it after #174
- * on the Xeon 8573C, one run: the vector arm lower on common data by 2.13 to 2.16 at 512 bits, no
+ * there, the vector rows on mixed data at about 1.45 times the time, and
+ * hypot-harness-epyc7763-2026-11-24.txt times main's loop, the body inlined into it, on mixed data
+ * as a method of its own at the old level and inlined into JMH's measuring loop, as this class's
+ * rows are, slower (SKILLS.md, "What the hypot port taught"). hypot-xeon8573c-2026-11-24-2.txt
+ * times it after #174 on the Xeon 8573C, one run: the vector arm lower on common data by 2.13 to
+ * 2.16 at 512 bits, no
  * direction on mixed data.
  *
  * <p>{@code inputs} picks the data: {@code common} draws {@code x} and {@code y} from {@code
