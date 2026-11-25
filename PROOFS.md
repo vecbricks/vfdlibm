@@ -1731,11 +1731,11 @@ values and nothing else. H4 (select) holds: each blend is a `blend`. What the me
 scalings compute on the lanes of `ha >= 0x7ff00000` is never read: those lanes take lines 66-70's
 blend, or line 63's `a+b` over it.
 
-**The lane of two NaNs** is the vector sum `a+b` of the two sign-cleared NaNs, by line 63 or
-line 68, which is one of them quieted (L22 (c)), a candidate of `MAGNITUDES` (the contract of a
-function of two arguments, above). One NaN beside a finite value is that sum too, the NaN quieted
-with its sign cleared, which `StrictMath.hypot` returns in every JIT mode (L22 (c)); one NaN beside
-an infinity is `+inf` (line 69).
+**The lane of two NaNs** is the vector sum `a+b` of the two sign-cleared NaNs, by line 67 (line 63
+cannot take it: `ha-hb` is at most `0xfffff` there), which is one of them quieted (L22 (c)), a
+candidate of `MAGNITUDES` (the contract of a function of two arguments, above). One NaN beside a
+finite value is that sum too, the NaN quieted with its sign cleared, which `StrictMath.hypot`
+returns in every JIT mode (L22 (c)); one NaN beside an infinity is `+inf` (line 69).
 
 ### L16. The stale words of the 2^1022 scaling cannot be refreshed (a counter-example, not a fold)
 
@@ -1797,7 +1797,8 @@ sampled bit patterns, Varka's baseline range and every exponent; the 8,400 pairs
 vector's lanes rare beside lanes of every way out of the C. The planted faults are
 `hypot.dropEarlyReturn` (line 63's return dropped), `hypot.refreshedWords` (L16), `hypot.dropT2`
 (line 99's `t2*(a+t1)` dropped), `hypot.dropY2` (line 108's `t1*y2` dropped) and
-`hypot.highWordOrder` (line 60 as written, L21).
+`hypot.highWordOrder` (line 60 as written, L21) and `hypot.dropInfinityOverNan` (line 69's blend
+dropped, L22).
 
 ### L21. Line 60 ordered by magnitude: the C with the larger argument first
 
@@ -1912,26 +1913,26 @@ most +infinity's: `b` is finite or +infinity, and `a+b = +inf = a` by (R4). A Na
 infinite `b` is the one lane where line 69 decides: `w` is `b`, +infinity, where the sum is a NaN.
 (c) is observed.
 
-**What is observed, not proven (c).** The vector `add` of `jdk.incubator.vector` on x86-64 (SSE
-and AVX, at 128, 256 and 512 bits, and with `-XX:UseAVX=2`) and on AArch64 (CI's Arm row, 128 bits)
-returns the NaN operand quieted with its payload and sign, and of two NaNs one of them, in the
-interpreter, C1 and C2; `StrictMath.hypot` returns that one NaN, sign cleared, on every lane of one
-NaN, in every mode. By a black-box scan on 25 November 2026 (JDK 25.0.5.1, x86-64 with AVX-512): 924
-pairs of NaNs (quiet and signalling, both signs, six payloads) and infinities beside each other, the
-zeros, subnormals, finite values each side of line 63's ratio and both scalings, in both orders,
-showed no lane apart from `StrictMath`'s (two-NaN lanes by `MAGNITUDES`) at every width, warm,
-`-Xint`, `-XX:TieredStopAtLevel=1`, `-XX:-TieredCompilation`, `-XX:UseAVX=2` and
-`-XX:MaxVectorSize=16`.
+**What is observed, not proven (c).** The vector `add` of `jdk.incubator.vector` on x86-64 with
+AVX-512 (at 128, 256 and 512 bits) and as AVX2 (`-XX:UseAVX=2`) returns the NaN operand quieted with
+its payload and sign, and of two NaNs one of them, in the interpreter, C1 and C2; `StrictMath.hypot`
+returns that one NaN, sign cleared, on every lane of one NaN, in every mode. By a black-box scan on
+25 November 2026 (JDK 25.0.5.1, x86-64 with AVX-512): 924 pairs of NaNs (quiet and signalling, both
+signs, six payloads) and infinities beside each other, the zeros, subnormals, finite values each
+side of line 63's ratio and both scalings, in both orders, showed no lane apart from `StrictMath`'s
+(two-NaN lanes by `MAGNITUDES`) at every width, warm, `-Xint`, `-XX:TieredStopAtLevel=1`,
+`-XX:-TieredCompilation`, `-XX:UseAVX=2` and `-XX:MaxVectorSize=16`.
 
-**Test.** `HypotTest.nanLanesAreStrictMathInEveryJitMode` runs the vector port on `specialPairs` and
-`nanPairs` in a JVM per JIT mode (interpreter, C1 only, C2 only, tiered) at every width the host
-has, against `StrictMath.hypot` by raw bits but on the two-NaN lane; a sum that returned a canonical
-NaN fails it in every mode (tried by hand). `HypotTest.specialValues` and the masked forms check the
-same lanes at every width in the test JVM, and `anInfinityBesideANaNIsPositiveInfinity` pins line 69
-in the C and in `StrictMath`. **Planted fault.** `hypot.dropInfinityOverNan`
-(`Hypot.DROP_INFINITY_OVER_NAN`) drops line 69's blend, so a NaN beside an infinite `b` gives the
-NaN; `HypotTest.faultCatchers` requires the port to fail on the fault run's inputs with it planted,
-at every width. Line 68's blend has no fault: by (b) no lane can tell it is gone.
+**Test.** `HypotTest.nanLanesAreStrictMathInEveryJitMode` runs the vector port on the pairs of
+`specialPairs` with an infinity or a NaN and on `nanPairs` in a JVM per JIT mode (interpreter, C1
+only, C2 only, tiered) at every width the host has, against `StrictMath.hypot` by raw bits but on
+the two-NaN lane; a sum that returned a canonical NaN fails it in every mode (tried by hand).
+`HypotTest.specialValues` and the masked forms check the same lanes at every width in the test JVM,
+and `anInfinityBesideANaNIsPositiveInfinity` pins line 69 in the C and in `StrictMath`. **Planted
+fault.** `hypot.dropInfinityOverNan` (`Hypot.DROP_INFINITY_OVER_NAN`) drops line 69's blend, so a
+NaN beside an infinite `b` gives the NaN; `HypotTest.faultCatchers` requires the port to fail on the
+fault run's inputs with it planted, at every width. Line 68's blend has no fault: by (b) no lane can
+tell it is gone.
 
 **Encoding.** None: (a) and (b) are the C's selection and an order of bits, and (c) is
 observation, so nothing here is machine-checked in `proofs/`.

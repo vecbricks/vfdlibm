@@ -243,7 +243,8 @@ final class Hypot {
     DoubleVector result = root.blend(twoK.mul(root), scaled);
 
     // The returns before the medium path, from the last to the first, so that the first that
-    // matches wins (L13): line 79's a, then line 63's a+b of the unscaled a and b.
+    // matches wins (L13): line 79's a, then lines 66-70's w, then line 63's a+b of the unscaled a
+    // and b.
     result = result.blend(a2, zeroB);
     // Lines 66-70, as blends: where ha >= 0x7ff00000 (an infinity or a NaN in either argument),
     // w = a+b; then w = a where a is an infinity, ((ha&0xfffff)|__LO(a))==0, that is a's
