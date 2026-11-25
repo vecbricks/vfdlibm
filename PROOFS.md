@@ -1921,23 +1921,23 @@ returns that one NaN, sign cleared, on every lane of one NaN, in every mode. By 
 signs, six payloads) and infinities beside each other, the zeros, subnormals, finite values each
 side of line 63's ratio and both scalings, in both orders, showed no lane apart from `StrictMath`'s
 (two-NaN lanes by `MAGNITUDES`) at every width, warm, `-Xint`, `-XX:TieredStopAtLevel=1`,
-`-XX:-TieredCompilation`, `-XX:UseAVX=2` and `-XX:MaxVectorSize=16`. On AArch64 (GitHub's Arm
-runner, 128 bits), `nanLanesAreStrictMathInEveryJitMode` passed in all four JIT modes in CI run
-45640597216 (job "build (Arm 128 bits)"), on #187's head 24f116e.
+`-XX:-TieredCompilation`, `-XX:UseAVX=2` and `-XX:MaxVectorSize=16`. On AArch64,
+`nanLanesAreStrictMathInEveryJitMode` runs on CI's Arm row ("build (Arm 128 bits)", 128 bits) in
+every pull request's checks; #187 gives the run in which it first passed in its present form.
 
 **Test.** `HypotTest.nanLanesAreStrictMathInEveryJitMode` runs the vector port on the pairs of
 `specialPairs` with an infinity or a NaN and on `nanPairs` in a JVM per JIT mode (interpreter, C1
 only, C2 only, tiered) and per width the host has, so that the compiled body is the one for that
-width and is not deoptimized by a change of shape; in the compiled modes after unchecked warm-up
-passes under `-Xbatch`, and the test requires the compile log (`-XX:+PrintCompilation`) to show
-`Hypot::hypot` at the mode's tier (level 1, C2, level 4); against `StrictMath.hypot` by raw bits but
-on the two-NaN lane; a sum that returned a canonical NaN fails it in every mode (tried by hand).
-`HypotTest.specialValues` and the masked forms check the same lanes at every width in the test JVM,
-and `anInfinityBesideANaNIsPositiveInfinity` pins line 69 in the C and in `StrictMath`. **Planted
-fault.** `hypot.dropInfinityOverNan` (`Hypot.DROP_INFINITY_OVER_NAN`) drops line 69's blend, so a
-NaN beside an infinite `b` gives the NaN; `HypotTest.faultCatchers` requires the port to fail on the
-fault run's inputs with it planted, at every width. Line 68's blend has no fault: by (b) no lane can
-tell it is gone.
+width and is not deoptimized by a change of shape; in the compiled modes after 15,000 unchecked
+calls under `-Xbatch`, and the test requires the compile log (`-XX:+PrintCompilation`) to show
+`Hypot::hypot` compiled at the mode's tier (level 1, C2, level 4) and not thrown away before the
+checked pass; against `StrictMath.hypot` by raw bits but on the two-NaN lane; a sum that returned a
+canonical NaN fails it in every mode (tried by hand). `HypotTest.specialValues` and the masked forms
+check the same lanes at every width in the test JVM, and `anInfinityBesideANaNIsPositiveInfinity`
+pins line 69 in the C and in `StrictMath`. **Planted fault.** `hypot.dropInfinityOverNan`
+(`Hypot.DROP_INFINITY_OVER_NAN`) drops line 69's blend, so a NaN beside an infinite `b` gives the
+NaN; `HypotTest.faultCatchers` requires the port to fail on the fault run's inputs with it planted,
+at every width. Line 68's blend has no fault: by (b) no lane can tell it is gone.
 
 **Encoding.** None: (a) and (b) are the C's selection and an order of bits, and (c) is
 observation, so nothing here is machine-checked in `proofs/`.
