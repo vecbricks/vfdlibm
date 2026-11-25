@@ -909,7 +909,8 @@ class HypotTest {
     for (int bits = 128; bits <= preferred; bits *= 2) {
       String text = runInJvm(NanLanes.class, "hypot NaN lanes, " + bits + " bits", mode,
           interpreted ? List.of() : List.of("-Xbatch", "-XX:+PrintCompilation"),
-          List.of(Integer.toString(1 << 9), "1", interpreted ? "0" : "15000", Integer.toString(bits)));
+          List.of(Integer.toString(1 << 9), "1", interpreted ? "0" : "15000",
+              Integer.toString(bits)));
       assertRanInModeAndPassed(mode, text);
       if (!interpreted) {
         String level = switch (mode) {
