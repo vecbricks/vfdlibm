@@ -150,12 +150,13 @@ five are a later, optional set; the large-argument reduction of the trigonometri
   (`bench/results/exp-xeon8573c-2026-11-21.txt`, one run) 1.23 to 1.37 on common data, a ratio that
   straddles 1.3x, and 1.70 to 1.84 on mixed data, at 256 bits, 512 bits and the preferred species.
   The code has changed since both runs (a fault constant and a local in the k conversion, and the
-  finish's first eight lanes written out with constant indices). Of today's `Exp.java`, one run each
-  reads finish over blend too (`exp-epyc7763-2026-11-23.txt` and `exp-epyc7763-2026-11-24.txt`,
-  before and after #174 changed `Hypot.java`, which is under `ExpBenchmark` by `bench/record.py`'s
-  rule, and `exp-xeon8573c-2026-11-24.txt`, before #174): the blend over the finish 1.98 to 2.12 on
-  common data and 1.37 to 1.44 on mixed data on the EPYC, 1.25 to 1.34 and 1.73 to 1.81 on the Xeon,
-  at every vector row of 256 bits or more.
+  finish's first eight lanes written out with constant indices). Of today's `Exp.java`, two runs on
+  each host, one before and one after #174 (which changed `Hypot.java`, under `ExpBenchmark` by
+  `bench/record.py`'s rule), read finish over blend too (`exp-epyc7763-2026-11-23.txt` and
+  `exp-epyc7763-2026-11-24.txt`, `exp-xeon8573c-2026-11-24.txt` and
+  `exp-xeon8573c-2026-11-24-2.txt`): the blend over the finish 1.98 to 2.12 on common data and 1.37
+  to 1.44 on mixed data on the EPYC, 1.25 to 1.42 and 1.70 to 1.81 on the Xeon, at 256 bits, the
+  preferred species and `SPECIES_MAX` and, on the Xeon, at 512 bits (the EPYC's 512-bit rows box).
   Which arm each function keeps follows the two rules issue #30 set on 21 November 2026: a tie
   within 1.3x on every host that has a file goes to the finish arm, except for `cosh`, whose
   per-lane set is not rare, so a host run decides its arm; and where hosts disagree, each species
@@ -228,11 +229,18 @@ five are a later, optional set; the large-argument reduction of the trigonometri
   has the same three arms for `expm1`, `SinhBenchmark` one for `sinh`, `CoshBenchmark` two for
   `cosh`, `AsinBenchmark` one for `asin`, `AtanBenchmark` one for `atan`, `AcosBenchmark` one for
   `acos`, `Atan2Benchmark` two for `atan2` (the blended and the guarded arm, over two arrays) and
-  `HypotBenchmark` one for `hypot` (over two arrays; `hypot-epyc7763-2026-11-23.txt` reads it
-  before #174 ordered its arguments, a run and its re-run: no direction against the scalar loop at
-  the preferred species, and `finishMax` 1.6x slower than `finishPreferred` on common data in both;
-  `hypot-epyc7763-2026-11-24.txt` reads it after #174, one run, the scalar loop lower on mixed data
-  by 1.43 to 1.44, which wants a re-run, and `finishMax` at the level of the other rows), and
+  `HypotBenchmark` one for `hypot` (over two arrays; `hypot-epyc7763-2026-11-23.txt` reads it before
+  #174 ordered its arguments, a run and its re-run: no direction against the scalar loop at the
+  preferred species, and `finishMax` 1.6x slower than `finishPreferred` on common data in both;
+  `hypot-epyc7763-2026-11-24.txt` reads it after #174, a run and its re-run, the scalar loop lower
+  on mixed data by 1.43 to 1.44 in run 1 and 1.33 to 1.34 in run 2, and no direction on common data,
+  and `finishMax` at the level of the other rows; `hypot-order-pair-epyc7763-2026-11-24.txt` pairs
+  the code before and after #174 there, the vector rows on mixed data at about 1.45 times the time,
+  and `hypot-harness-epyc7763-2026-11-24.txt` reads main's loop, the body inlined into it, on mixed
+  data at the old level as a method of its own and slower inlined into JMH's measuring loop;
+  `hypot-xeon8573c-2026-11-24-2.txt` reads it after #174 on the Xeon 8573C, one run, the vector arm
+  lower on common data by 2.13 to 2.16 at 512 bits, 1.38 at 256 bits with no direction until a
+  re-run, and no direction on mixed data), and
   `PowBenchmark` one for `pow` (the same; `pow-epyc7763-2026-11-23.txt` and
   `pow-xeon8573c-2026-11-24.txt` read it, one run each, its `rareOracle` row the allocation
   baseline).

@@ -714,21 +714,22 @@ mnemonic); the other operations count the same at both widths.
   `bench/results/exp-kinds-xeon8573c-2026-11-21.txt` times each kind of rare input apart. Both files
   time `exp` as of a5683c3 and a1db6df, and `Exp.java` has changed since by a fault constant, a
   local and the finish's first eight lanes written out with constant indices (issue #37). Today's
-  `Exp.java` is timed in one run each by `exp-epyc7763-2026-11-23.txt` and
-  `exp-epyc7763-2026-11-24.txt` (before and after #174 changed `Hypot.java`, which is under
-  `ExpBenchmark` by `bench/record.py`'s rule) and `exp-xeon8573c-2026-11-24.txt` (before #174): the
-  blend over the finish reads 1.98 to 2.12 on common data and 1.37 to 1.44 on mixed data on the
-  EPYC, and 1.25 to 1.34 and 1.73 to 1.81 on the Xeon, at every vector row of 256 bits or more.
-  `VFdlibm.exp` keeps the finish arm, which those files read lower than the blend by more than
-  1.3x on mixed data at 256 bits and the preferred species on both hosts and at 512 bits on the
+  `Exp.java` is timed on each host in two runs, one before and one after #174 changed `Hypot.java`,
+  which is under `ExpBenchmark` by `bench/record.py`'s rule: `exp-epyc7763-2026-11-23.txt` and
+  `exp-epyc7763-2026-11-24.txt`, and `exp-xeon8573c-2026-11-24.txt` and
+  `exp-xeon8573c-2026-11-24-2.txt`: the blend over the finish reads 1.98 to 2.12 on common data and
+  1.37 to 1.44 on mixed data on the EPYC, and 1.25 to 1.42 and 1.70 to 1.81 on the Xeon, at 256
+  bits, the preferred species and `SPECIES_MAX` and, on the Xeon, at 512 bits (the EPYC's 512-bit
+  rows box). `VFdlibm.exp` keeps the finish arm, which those files read lower than the blend by more
+  than 1.3x on mixed data at 256 bits and the preferred species on both hosts and at 512 bits on the
   8573C (the `*Max` rows of the files of 21 November and before time the finish that boxed before
-  issue #37 and are left out; those of `exp-epyc7763-2026-11-23.txt`, `exp-epyc7763-2026-11-24.txt`
-  and `exp-xeon8573c-2026-11-24.txt`, which time today's finish, read the blend over it 1.37, 1.38
-  and 1.76 on mixed data), and to which issue #30's rules send a tie; provisionally, until a host
-  run revises it: a second run of today's code on each host, a first of the other AVX-512 hosts or
-  a pair. Each
-  port measures both on common and mixed
-  data, decides per branch, and records the decision in its pull request (`PLAN.md` section 5).
+  issue #37 and are left out; those of `exp-epyc7763-2026-11-23.txt`, `exp-epyc7763-2026-11-24.txt`,
+  `exp-xeon8573c-2026-11-24.txt` and `exp-xeon8573c-2026-11-24-2.txt`, which time today's finish,
+  read the blend over it 1.37, 1.38, 1.76 and 1.77 on mixed data), and to which issue #30's rules
+  send a tie; provisionally, until a host run revises it: a second run of the code after #174 on
+  each host, a first of the other AVX-512 hosts or a pair. Each port measures both on common and
+  mixed data, decides per branch, and records the decision in its pull request (`PLAN.md` section
+  5).
 - **A blended alternative costs its whole form in every lane.** exp computed the C's near form and
   its `k == 0` form for every lane and blended them. Proving that the far form and the general tail
   already give those lanes' results (`PROOFS.md`, L1 and L2) left one form. With native AVX-512 at
@@ -1685,13 +1686,15 @@ mnemonic); the other operations count the same at both widths.
   own, so no exclusivity of the scalings is assumed and no lemma is needed beyond L13; line 110's
   `k != 0` is a blend too, since multiplying every lane by `2^k` would be a departure needing a
   lemma of its own.
-- **One arm, the finish, and it reached every finite lane on the first run.** The rare lanes are
-  an infinity or a NaN in either argument (`ha >= 0x7ff00000`); everything finite, the ratio
-  return, the zero `b` and the three scalings included, is in the vector. A blended non-finite arm
-  would rest on the hardware's NaN propagation for one-NaN lanes and has no timing to justify it,
-  and #30 sends a tie to the finish. The first run of the vector tests passed on every input.
-  CI's `bench/alloc-check.py` covers `HypotBenchmark`'s rows (`finish256`, `finishPreferred`,
-  `finishMax`, common and mixed data); no file under `bench/results/` reads or times them yet.
+- **One arm, the finish, and it reached every finite lane on the first run.** The rare lanes are an
+  infinity or a NaN in either argument (`ha >= 0x7ff00000`); everything finite, the ratio return,
+  the zero `b` and the three scalings included, is in the vector. A blended non-finite arm would
+  rest on the hardware's NaN propagation for one-NaN lanes and has no timing to justify it, and #30
+  sends a tie to the finish. The first run of the vector tests passed on every input. CI's
+  `bench/alloc-check.py` covers `HypotBenchmark`'s rows (`finish256`, `finishPreferred`,
+  `finishMax`, common and mixed data); the host files that time the code after #174
+  (`hypot-epyc7763-2026-11-24.txt`, a run of 24 November and its re-run of 25 November, and
+  `hypot-xeon8573c-2026-11-24-2.txt`) read every row at 0.040 B/op or less.
 - **The faults, sized on 2^22 draws each** (a throwaway program over `VFdlibm.hypot` at 256 bits,
   once per fault; counts of pairs that differ from `StrictMath.hypot`; the unplanted port 0 on
   each). `hypot.dropEarlyReturn`: 0 of Varka's range `[-10, 10)`, 1,779,887 of sampled bits,
@@ -1740,6 +1743,32 @@ mnemonic); the other operations count the same at both widths.
   exactly parsed lines, 265,616 inputs with signs and orders) matched `StrictMath` at every width
   when it was evaluated, so the file is a selection, not a fix. The list is no harder for fdlibm
   than any input: it is hard for correct rounding, and `e_hypot.c` does not round correctly.
+- **A body's speed can depend on the loop around it, and #174 moved hypot's by about 1.45x on mixed
+  data on the EPYC 7763.** #174 replaced line 60's compare of the high words by one of the
+  sign-cleared bits as longs, and on HypotBenchmark's data both order every lane the same way, so
+  the code before and after computes the same values. The pair
+  (`bench/results/hypot-order-pair-epyc7763-2026-11-24.txt`) still reads the vector rows on mixed
+  data at about 7,350 ns/op before and 10,630 after, about 1.45 times the time (bench/pair.sh prints
+  it as -31%, base over head less one). `hypot-harness-epyc7763-2026-11-24.txt` (a diagnostic class
+  on the branch `diag-hypot-variants`, tag `diag/hypot-harness-2026-11-24`, a run and its re-run)
+  times main's loop two ways: as a method of its own, with the body inlined into it and the loop
+  called from JMH's measuring loop (`depth0`), at the old code's level, and inlined into JMH's
+  measuring loop, as HypotBenchmark is, at 1.36 to 1.39 times `depth0`'s time on mixed data (1.45 to
+  1.46 times the old code's); with line 60's compare put back and the rest of the body as it is, the
+  inlined loop is at the old level on mixed data too. In the harness, no common-data row moved past
+  1.3x. So the cost is not in the values computed, and it shows only when the loop is compiled
+  together with what surrounds it; the compare's form and that compile both move the row, and the
+  harness does not separate them. Such costs flip with small changes: before #174 finishMax ran
+  about 1.6 times finishPreferred on common data, the same body at the same width. Why one compile
+  is slow is not measured. On the Xeon 8573C (AVX-512), one run after #174 against one before, on
+  two draws and not a pair, reads no row moved past 1.3x (`hypot-xeon8573c-2026-11-24-2.txt`). What
+  to take from it: a port's speed is a property of the compiled loop, not of the body alone; before
+  blaming or crediting a change, time the loop as a method of its own as well as inlined into the
+  benchmark's loop, and read a per-row move with the pair and that check together. A caller's own
+  loop method with the body inlined into it (as the benchmarks force with
+  `-XX:CompileCommand=inline,io.github.vecbricks.vfdlibm.*::*`; without it the body is larger than
+  C2 inlines by default and may box) is the `depth0` shape; a caller whose loop is inlined into a
+  larger compiled method may get either.
 
 ## What the pow port taught
 
