@@ -68,7 +68,7 @@ A client that depends on the released jar, from Maven Central. Its `pom.xml`:
     <dependency>
       <groupId>io.github.vecbricks</groupId>
       <artifactId>vfdlibm</artifactId>
-      <version>0.2.0</version>
+      <version>0.3.0</version>
     </dependency>
   </dependencies>
 </project>
