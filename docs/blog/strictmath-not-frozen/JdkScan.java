@@ -51,8 +51,16 @@ public class JdkScan {
   }
   static List<double[]> inputs(Path hard, String fn, int arity) throws IOException {
     List<double[]> in = new ArrayList<>();
+    // The function's own file first, then the others by name, descending: the order the
+    // published runs read them in, fixed here so that it does not depend on the filesystem.
+    List<Path> files = new ArrayList<>();
     try (var ds = Files.newDirectoryStream(hard, fn + "*.txt")) {
-      for (Path f : ds) {
+      ds.forEach(files::add);
+    }
+    files.sort(Comparator.comparing((Path f) -> !f.getFileName().toString().equals(fn + ".txt"))
+        .thenComparing(f -> f.getFileName().toString(), Comparator.reverseOrder()));
+    {
+      for (Path f : files) {
         String base = f.getFileName().toString();
         if (!(base.equals(fn + ".txt") || base.startsWith(fn + "-"))) continue;
         for (String l : Files.readAllLines(f)) {

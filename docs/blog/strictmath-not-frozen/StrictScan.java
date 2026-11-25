@@ -4,9 +4,9 @@ import java.util.*;
 import java.util.function.*;
 
 /**
- * StrictMath's and Math's results for every double function of StrictMath that may differ by JDK
- * or by CPU, on seeded inputs, written in input order to <out>/<StrictMath|Math>-<fn>.bin so two
- * JDKs compare input by input (compare.py --prefix). It needs no vfdlibm and no Vector API, so it
+ * StrictMath's and Math's results for the 20 double functions of StrictMath whose results may
+ * differ by JDK or by CPU (not floor, ceil, rint, scalb, ulp, nextUp, fma, toRadians and the like), on seeded inputs, written in input order to <out>/<StrictMath|Math>-<fn>.bin so two
+ * JDKs compare input by input (compare.py --all). It needs no vfdlibm and no Vector API, so it
  * runs on JDK 17 and later. The inputs per function: the hard cases of vfdlibm's tests where it
  * has them, then 1,000,000 each of uniform bits, moderate magnitudes and values near 1 (as in
  * JdkScan, by the same seeds), and for pow 1,000,000 more aimed at fdlibm's branch for
@@ -77,8 +77,16 @@ public class StrictScan {
   /** JdkScan's inputs, by the same seeds; functions vfdlibm has no hard cases for get none. */
   static List<double[]> inputs(Path hard, String fn, int arity) throws IOException {
     List<double[]> in = new ArrayList<>();
+    // The function's own file first, then the others by name, descending: the order the
+    // published runs read them in, fixed here so that it does not depend on the filesystem.
+    List<Path> files = new ArrayList<>();
     try (var ds = Files.newDirectoryStream(hard, fn + "*.txt")) {
-      for (Path f : ds) {
+      ds.forEach(files::add);
+    }
+    files.sort(Comparator.comparing((Path f) -> !f.getFileName().toString().equals(fn + ".txt"))
+        .thenComparing(f -> f.getFileName().toString(), Comparator.reverseOrder()));
+    {
+      for (Path f : files) {
         String base = f.getFileName().toString();
         if (!(base.equals(fn + ".txt") || base.startsWith(fn + "-"))) continue;
         for (String l : Files.readAllLines(f)) {

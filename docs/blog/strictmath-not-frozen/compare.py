@@ -4,7 +4,7 @@
 Prints, per function, how many results differ, and writes each differing pow input with both
 results as "x y before after" in hex to the file given by --witnesses.
 
-    python3 compare.py out-25 out-27 --witnesses data/pow-jdk25-vs-jdk27.txt
+    python3 compare.py out-25 out-27 --witnesses data/pow-strictmath-jdk25-vs-jdk27.txt
     python3 compare.py out-25 out-26 --file pow-Math.bin   # Math.pow, e.g. with the intrinsic off
 """
 import argparse
@@ -25,6 +25,7 @@ def main():
     ap.add_argument("before", type=Path)
     ap.add_argument("after", type=Path)
     ap.add_argument("--file", help="compare this one file only")
+    ap.add_argument("--after-file", help="with --file: the file of the same inputs in AFTER")
     ap.add_argument("--all", action="store_true", help="every .bin file in both directories")
     ap.add_argument("--witnesses", type=Path)
     ap.add_argument("--inputs", type=Path, help="pow-inputs.bin, for --witnesses")
@@ -34,7 +35,7 @@ def main():
     else:
         names = [a.file] if a.file else [f + ".bin" for f in FUNCTIONS]
     for name in names:
-        b, c = bits(a.before / name), bits(a.after / name)
+        b, c = bits(a.before / name), bits(a.after / (a.after_file or name))
         assert len(b) == len(c), name
         diff = [i for i in range(len(b)) if b[i] != c[i]]
         print("%-24s %9d inputs %7d differ" % (name, len(b), len(diff)) if a.all else

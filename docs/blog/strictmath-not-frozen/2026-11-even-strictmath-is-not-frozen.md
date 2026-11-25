@@ -63,10 +63,15 @@ Those 1,258 inputs were aimed at the branch. Elsewhere the change is hard to rea
 
 - On 3,005,016 other inputs (vfdlibm's hard cases for `pow`, uniformly random bits, moderate
   magnitudes and values near 1), no result changed.
-- The 1,258 all have `|y ln x|` of 183 or more, so their results are beyond 10<sup>±79</sup>.
-- Aimed at ordinary result sizes (`|y ln x|` from about 0.1 to 500), 17 of 4,000,000 results
-  changed, the query above among them. There both JDKs are within 1 ulp; JDK 27's result is the
-  nearer on 5 and JDK 25's on 12, too few to call either better.
+- The 1,258 all have `|x - 1|` between about 2<sup>-23.5</sup> and 2<sup>-21.6</sup>, and `|y|`
+  between 2<sup>31</sup> and about 2<sup>33</sup>, so their results are beyond
+  10<sup>±79</sup>.
+- With `|x - 1|` below 2<sup>-24</sup> and `|y|` from 2<sup>31</sup> to 2<sup>33</sup> (results
+  from about e<sup>±0.1</sup> to e<sup>±500</sup>), 17 of 4,000,000 results changed, the query
+  above among them, including some with results as large as those of the 1,258. There both JDKs
+  are within 1 ulp; JDK 27's result is the nearer on 5 and JDK 25's on 12, too few to call either
+  better. So the large errors came with `|x - 1|` near 2<sup>-22</sup>, not with the size of
+  the result.
 - Per-second compounding, `(1 + r/n)^(n·t)` with `n` the seconds in a year, reaches the branch
   once `n·t` passes 2<sup>31</sup>, about 68 years. Over rates from 0.01% to 20% and 70 to 300
   years, none of its 462,000 results changed.
@@ -76,17 +81,18 @@ JDK 26 got the same fix in its update 26.0.2
 [openjdk/jdk26u#210](https://github.com/openjdk/jdk26u/pull/210)), but in `Math.pow` only:
 `StrictMath.pow` on JDK 26 still returns fdlibm 5.3's bits. On my x86-64 laptop even that
 `Math.pow` change is invisible by default, since the JIT uses its own `pow` there; with
-`-XX:-UseLibmIntrinsic` it shows, on the same 1,258 inputs and with JDK 27's bits.
+`-XX:-UseLibmIntrinsic` it shows, on the same 1,258 inputs and with JDK 27's bits (elsewhere
+that fallback is not `StrictMath.pow`, and differs from it on many inputs, on JDK 25 as on 26).
 
 ## StrictMath moved once; Math moved three times
 
-To see what else moves, I ran every double function of `StrictMath` (20 of them), and `Math`'s
-counterparts, on JDK 21, 25, 26 and 27, about 3 million inputs each.
+To see what else moves, I ran the 20 double functions of `StrictMath` whose results could move
+(not `floor`, `ulp` and the like), and `Math`'s counterparts, on JDK 21, 25, 26 and 27, about 3 million inputs each.
 
 [![Whose bits moved with the JDK: StrictMath only pow, from JDK 25 to 27, on 1,258 inputs; Math on this x86-64 CPU cbrt and tanh from 21 to 25 and sinh from 25 to 26.](img/moved.svg)](img/moved.svg)
 
 `StrictMath` changed once in four JDKs, in one function, with a bug record and a Javadoc
-sentence. `Math` changed three times on this CPU without either: `cbrt` and `tanh` from JDK 21 to
+sentence. `Math` changed three times on this CPU, with no change to its Javadoc: `cbrt` and `tanh` from JDK 21 to
 25, `sinh` from 25 to 26, each on 7% to 17% of the inputs. That is allowed, since `Math`
 only promises to be within an ulp or so, and the JIT picks its code per CPU; another CPU may move
 other functions.
@@ -164,7 +170,7 @@ Maven Central; Spark was the official 4.3.0 build, checked against Apache's SHA-
 - `JdkScan.java` and `compare.py`: vfdlibm's 13 functions on JDK 25, 26 and 27, with vfdlibm
   checked against each ([jdk-scan-2026-11-25.txt](https://github.com/vecbricks/vfdlibm/blob/main/docs/blog/strictmath-not-frozen/data/jdk-scan-2026-11-25.txt));
   the 1,258 inputs with both results are in `pow-strictmath-jdk25-vs-jdk27.txt`.
-- `StrictScan.java`: all 20 functions of `StrictMath` and `Math` on JDK 21 to 27
+- `StrictScan.java`: those 20 functions of `StrictMath` and `Math` on JDK 21 to 27
   ([strict-scan-2026-11-25.txt](https://github.com/vecbricks/vfdlibm/blob/main/docs/blog/strictmath-not-frozen/data/strict-scan-2026-11-25.txt)).
 - `errors.py`, `Moderate.java`, `Compound.java` and `power-jdk.sql`: the errors against an
   80-digit `pow`, the ordinary sizes, the compounding and the Spark query

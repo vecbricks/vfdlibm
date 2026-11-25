@@ -20,6 +20,10 @@ Command, per JDK, with and (25, 26) without the libm intrinsics
       java -Xmx3g --add-modules jdk.incubator.vector -cp .:vfdlibm-0.3.0.jar JdkScan <hard-cases> out-<jdk>
       python3 compare.py out-25 out-27 --witnesses data/pow-strictmath-jdk25-vs-jdk27.txt
       python3 compare.py out-25-nolibm out-26-nolibm --file pow-Math.bin
+      python3 compare.py out-25 out-25-nolibm --file pow.bin --after-file pow-Math.bin
+      python3 compare.py out-26-nolibm out-27 --file pow-Math.bin --after-file pow.bin
+      (the last two, and the check on the 1,258 inputs below, were run after the others, on the
+      same output directories)
 
 ## JdkScan's output: per function, StrictMath's digest and vfdlibm lanes that differ from it
 
@@ -142,14 +146,25 @@ pow-Math.bin   4005016 inputs   1258 differ
 pow-Math.bin   4005016 inputs      0 differ
 pow-Math.bin   4005016 inputs      0 differ
 
+### StrictMath.pow against Math.pow with the libm intrinsics off (another file of the same inputs)
+
+pow.bin        4005016 inputs 1477955 differ      (JDK 25 StrictMath.pow vs JDK 25 Math.pow)
+pow-Math.bin   4005016 inputs 1477955 differ      (JDK 26 Math.pow vs JDK 27 StrictMath.pow)
+
+On the 1,258 inputs where StrictMath.pow differs between JDK 25 and 27, input by input: JDK 26's
+Math.pow (intrinsics off) equals JDK 27's StrictMath.pow on all 1,258, and JDK 25's Math.pow
+(intrinsics off) equals JDK 25's StrictMath.pow on all 1,258.
+
 ## Reading
 
 - StrictMath gives the same bits on JDK 25, 26 and 27 for 12 of the 13 functions on every input
   here. StrictMath.pow is the same on 25 and 26 and differs on 27 on 1,258 of 4,005,016 inputs,
   all in the aimed set (listed in pow-strictmath-jdk25-vs-jdk27.txt as "x y jdk25 jdk27").
 - JDK 26.0.2 changes Math.pow, not StrictMath.pow: with the libm intrinsics off, Math.pow on
-  26 differs from 25 on the same 1,258 inputs and returns the same bits as StrictMath.pow on 27.
-  With the intrinsics on, as by default on x86, Math.pow does not run that code.
+  26 differs from 25 on the same 1,258 inputs and returns there the same bits as StrictMath.pow
+  on 27. Elsewhere that Math.pow is not StrictMath.pow: it differs from it on 1,477,955 of the
+  inputs, on JDK 25 as on 26. With the intrinsics on, as by default on x86, Math.pow does not
+  run that code.
 - vfdlibm 0.3.0 differs from StrictMath on no lane, at 256 and 512 bits, on 25, 26 and 27: its pow
   finishes the lanes with |y| > 2^31 per lane by StrictMath.pow (Pow.java), and those are the
   lanes JDK 27 changed. 0.3.x supports JDK 25 only; this does not change that.
