@@ -160,14 +160,13 @@ java --module-path "target/classes:$(cat cp.txt)" -m example/example.Main
 ```
 
 Each function takes a vector of any species of 128 bits or more. Released in 0.3.0: `exp`,
-`expm1`, `log`, `log10`, `log1p`, `sinh`, `cosh`, `asin`, `atan`, `acos`, and `atan2(y, x)`,
-`hypot(x, y)` and `pow(x, y)`, which take two vectors. The system property `vfdlibm.fault` plants a
-fault, for this project's tests only, and works in the shipped jar too: never set it, including
-through `JAVA_TOOL_OPTIONS`; a JVM that has it set prints a warning to `System.err` once. The
-property and the fault names are for this
-project's tests only: they are not part of the public API or of the compatibility promise, and
-any release, a patch included, may rename or remove them. With the property unset, the results
-are unchanged, and each lane still meets the contract below.
+`expm1`, `log`, `log10`, `log1p`, `sinh`, `cosh`, `asin`, `atan` and `acos`, and the three that take
+two vectors, `atan2(y, x)`, `hypot(x, y)` and `pow(x, y)`. The system property `vfdlibm.fault`
+plants a fault, for this project's tests only, and works in the shipped jar too: never set it,
+including through `JAVA_TOOL_OPTIONS`; a JVM that has it set prints a warning to `System.err` once.
+The property and the fault names are for this project's tests only: they are not part of the public
+API or of the compatibility promise, and any release, a patch included, may rename or remove them.
+With the property unset, the results are unchanged, and each lane still meets the contract below.
 
 **Which species to pass.** Every species of 128 bits or more gives the same bits; what the body
 allocates differs. The allocation check (`bench/alloc-check.py`, run by CI) covers 256 bits, the

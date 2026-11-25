@@ -42,8 +42,8 @@ import org.openjdk.jmh.annotations.Warmup;
  * inlined into JMH's measuring loop, as this class's rows are, slower (SKILLS.md, "What the hypot
  * port taught"). hypot-xeon8573c-2026-11-24-2.txt times it after #174 on the Xeon 8573C, a run
  * and its re-run: the vector arm lower on common data by 2.13 to 2.16 at the preferred species
- * and SPECIES_MAX (512 bits there), with no direction at 256 bits (1.38 and 1.30) and none on
- * mixed data.
+ * and SPECIES_MAX (512 bits there) and by 1.30 to 1.38 at 256 bits, and no direction on mixed
+ * data.
  *
  * <p>{@code inputs} picks the data: {@code common} draws {@code x} and {@code y} from {@code
  * [-10, 10)}, Varka's baseline range, where every lane takes the medium path unscaled (both of

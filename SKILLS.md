@@ -1758,19 +1758,18 @@ mnemonic); the other operations count the same at both widths.
   1.46 times the old code's); with line 60's compare put back and the rest of the body as it is, the
   inlined loop is at the old level on mixed data too. In the harness, no common-data row moved past
   1.3x. So the cost is not in the values computed, and it shows only when the loop is compiled
-  together with what surrounds it; the compare's form and that compile both move the row, and the
-  harness does not separate them. Such costs flip with small changes: before #174 finishMax ran
-  about 1.6 times finishPreferred on common data, the same body at the same width. Why one compile
-  is slow is not measured. On the Xeon 8573C (AVX-512), a run after #174 and its re-run against one
-  before, on other draws and not a pair, read no row moved past 1.3x
-  (`hypot-xeon8573c-2026-11-24-2.txt`). What
-  to take from it: a port's speed is a property of the compiled loop, not of the body alone; before
-  blaming or crediting a change, time the loop as a method of its own as well as inlined into the
-  benchmark's loop, and read a per-row move with the pair and that check together. A caller's own
-  loop method with the body inlined into it (as the benchmarks force with
-  `-XX:CompileCommand=inline,io.github.vecbricks.vfdlibm.*::*`; without it the body is larger than
-  C2 inlines by default and may box) is the `depth0` shape; a caller whose loop is inlined into a
-  larger compiled method may get either.
+  together with what surrounds it, and only with the long compare: either alone, the long compare in
+  its own loop method or the old compare inlined, is at the old level. Such costs flip with small
+  changes: before #174 finishMax ran about 1.6 times finishPreferred on common data, the same body
+  at the same width. Why one compile is slow is not measured. On the Xeon 8573C (AVX-512), a run
+  after #174 and its re-run against one before, on other draws and not a pair, read no row moved
+  past 1.3x (`hypot-xeon8573c-2026-11-24-2.txt`). What to take from it: a port's speed is a property
+  of the compiled loop, not of the body alone; before blaming or crediting a change, time the loop
+  as a method of its own as well as inlined into the benchmark's loop, and read a per-row move with
+  the pair and that check together. A caller's own loop method with the body inlined into it (as the
+  benchmarks force with `-XX:CompileCommand=inline,io.github.vecbricks.vfdlibm.*::*`; without it the
+  body is larger than C2 inlines by default and may box) is the `depth0` shape; a caller whose loop
+  is inlined into a larger compiled method may get either.
 
 ## What the pow port taught
 
