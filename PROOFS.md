@@ -1720,16 +1720,16 @@ Where its text is not the C's:
   unscaled `a` and `b`, the first return of the C.
 
 **L13 for hypot.** H1 (selection) holds: every mask but the swap's is the C's compare on the same
-int words (`ha-hb > 0x3c00000`, `ha > 0x5f300000`, `hb < 0x20b00000`, `hb <= 0x000fffff`, `k !=
-0`) or on the same doubles (`w > b`, `b`'s bits zero), nested as the C nests them; the swap's is
-L21's compare of the bits. H2 (operands)
-holds for the operand blends (the swap, the scaled values and words, the radicand), and every
-operation is the C's in its order. H3 (totality) holds: IEEE operations, compares, int lane
-arithmetic and shifts, conversions and blends, with no integer division and no indexed load, so
-the values a discarded lane takes (an infinite `t1*t1` beside a huge `a`, a NaN radicand) are
-values and nothing else. H4 (select) holds: each blend is a `blend`. What the medium path and the
-scalings compute on the lanes of `ha >= 0x7ff00000` is never read: those lanes take lines 66-70's
-blend, or line 63's `a+b` over it.
+int words (`ha-hb > 0x3c00000`, `ha > 0x5f300000`, `hb < 0x20b00000`, `hb <= 0x000fffff`, `k != 0`,
+and line 66's `ha >= 0x7ff00000`) or on the same doubles (`w > b`, `b`'s bits zero), nested as the C
+nests them; the swap's is L21's compare of the bits, and lines 68 and 69's are L22's compares of
+`a`'s and `b`'s bits with +infinity's (L22, H3). H2 (operands) holds for the operand blends (the
+swap, the scaled values and words, the radicand), and every operation is the C's in its order. H3
+(totality) holds: IEEE operations, compares, int lane arithmetic and shifts, conversions and blends,
+with no integer division and no indexed load, so the values a discarded lane takes (an infinite
+`t1*t1` beside a huge `a`, a NaN radicand) are values and nothing else. H4 (select) holds: each
+blend is a `blend`. What the medium path and the scalings compute on the lanes of `ha >= 0x7ff00000`
+is never read: those lanes take lines 66-70's blend, or line 63's `a+b` over it.
 
 **The lane of two NaNs** is the vector sum `a+b` of the two sign-cleared NaNs, by line 67 (line 63
 cannot take it: `ha-hb` is at most `0xfffff` there), which is one of them quieted (L22 (c)), a
@@ -1893,7 +1893,7 @@ is a sum with a NaN operand, the vector `add` returns that NaN quieted, keeping 
 sign (here cleared), and with two NaN operands one of them quieted; and `StrictMath.hypot` returns
 the same bits on every lane of one NaN. IEEE 754 and the JLS leave a NaN result's payload and sign
 open ((R4)'s note), so (c) is the oracle's evidence, as atan2's `x + y` on its NaN lanes is (atan2's
-section; issue 33). Until 0.3.0 these lanes were finished per lane by `StrictMath.hypot`, equal by
+section; issue 33). Through 0.3.0 these lanes were finished per lane by `StrictMath.hypot`, equal by
 construction; the blends take that call out of the loop (issue 186).
 
 **Hypotheses.** H1: the inputs are any two doubles. H2: `a`, `b`, `ha` and `hb` are L21's, so `a`
@@ -1927,8 +1927,11 @@ runner, 128 bits), `nanLanesAreStrictMathInEveryJitMode` passed in all four JIT 
 
 **Test.** `HypotTest.nanLanesAreStrictMathInEveryJitMode` runs the vector port on the pairs of
 `specialPairs` with an infinity or a NaN and on `nanPairs` in a JVM per JIT mode (interpreter, C1
-only, C2 only, tiered) at every width the host has, against `StrictMath.hypot` by raw bits but on
-the two-NaN lane; a sum that returned a canonical NaN fails it in every mode (tried by hand).
+only, C2 only, tiered) and per width the host has, so that the compiled body is the one for that
+width and is not deoptimized by a change of shape; in the compiled modes after unchecked warm-up
+passes under `-Xbatch`, and the test requires the compile log (`-XX:+PrintCompilation`) to show
+`Hypot::hypot` at the mode's tier (level 1, C2, level 4); against `StrictMath.hypot` by raw bits but
+on the two-NaN lane; a sum that returned a canonical NaN fails it in every mode (tried by hand).
 `HypotTest.specialValues` and the masked forms check the same lanes at every width in the test JVM,
 and `anInfinityBesideANaNIsPositiveInfinity` pins line 69 in the C and in `StrictMath`. **Planted
 fault.** `hypot.dropInfinityOverNan` (`Hypot.DROP_INFINITY_OVER_NAN`) drops line 69's blend, so a

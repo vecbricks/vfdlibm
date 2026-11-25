@@ -109,8 +109,9 @@ final class Hypot {
   static final String DROP_Y2 = "hypot.dropY2";
   static final String HIGH_WORD_ORDER = "hypot.highWordOrder";
   static final String DROP_INFINITY_OVER_NAN = "hypot.dropInfinityOverNan";
-  // Read once into constants, so the body holds no call and an unplanted fault folds away. Each
-  // was sized on draws before it was wired (SKILLS.md, "What the hypot port taught").
+  // Read once into constants, so the body holds no call and an unplanted fault folds away. The
+  // first four were sized on draws before they were wired (SKILLS.md, "What the hypot port
+  // taught"); dropInfinityOverNan changes exactly the lanes of a NaN beside an infinite b (L22).
   /** Line 63's return of {@code a+b} dropped. */
   private static final boolean DROPPING_EARLY_RETURN = Faults.is(DROP_EARLY_RETURN);
   /** Lines 80-84 with {@code ha} and {@code hb} read again from the scaled values (L16). */

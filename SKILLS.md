@@ -1690,15 +1690,16 @@ mnemonic); the other operations count the same at both widths.
   a NaN in either argument (`ha >= 0x7ff00000`); everything finite, the ratio return, the zero `b`
   and the three scalings included, was in the vector from the start, and 0.3.0 finished the rare
   lanes per lane. Since #186 lines 66-70 are blends too (L22), resting, as atan2 does, on the NaN a
-  vector sum keeps, which `nanLanesAreStrictMathInEveryJitMode` pins in every JIT mode: #186's
-  diagnostic runs on the EPYC 7763 timed the per-lane call as the code that made the mixed rows
-  sensitive to the benchmark thread's placement. The arm keeps the name `finish` until arms are
-  renamed (it is a blended arm now). The first run of the vector tests passed on every input. CI's
-  `bench/alloc-check.py` covers `HypotBenchmark`'s rows (`finish256`, `finishPreferred`,
-  `finishMax`, common and mixed data); the host files that time the code after #174
-  (`hypot-epyc7763-2026-11-24.txt`, a run of 24 November and its re-run of 25 November, and
-  `hypot-xeon8573c-2026-11-24-2.txt`, a run of 24 November and its re-run of 25 November) read
-  every row at 0.040 B/op or less.
+  vector sum keeps, which `nanLanesAreStrictMathInEveryJitMode` pins in every JIT mode, a JVM per
+  width so that the checked calls run the code compiled for it (a loop over all widths deoptimizes
+  at each change of shape). On the EPYC 7763 the vector rows on mixed data run 1.83 to 1.85 times as
+  fast as with the per-lane call (`hypot-pair-epyc7763-2026-11-25.txt`). The arm keeps the name
+  `finish` until arms are renamed (it is a blended arm now). The first run of the vector tests
+  passed on every input. CI's `bench/alloc-check.py` covers `HypotBenchmark`'s rows (`finish256`,
+  `finishPreferred`, `finishMax`, common and mixed data); the host files that time the code after
+  #174 (`hypot-epyc7763-2026-11-24.txt`, a run of 24 November and its re-run of 25 November, and
+  `hypot-xeon8573c-2026-11-24-2.txt`, a run of 24 November and its re-run of 25 November) read every
+  row at 0.040 B/op or less.
 - **The faults, sized on 2^22 draws each** (a throwaway program over `VFdlibm.hypot` at 256 bits,
   once per fault; counts of pairs that differ from `StrictMath.hypot`; the unplanted port 0 on
   each). `hypot.dropEarlyReturn`: 0 of Varka's range `[-10, 10)`, 1,779,887 of sampled bits,

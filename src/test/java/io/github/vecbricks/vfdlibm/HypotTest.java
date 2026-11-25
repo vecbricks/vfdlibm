@@ -739,14 +739,22 @@ class HypotTest {
    */
   static String runInJvm(Class<?> gate, String label, JitMode mode, int draws, int passes)
       throws IOException, InterruptedException {
+    return runInJvm(gate, label, mode, List.of(), List.of(Integer.toString(draws),
+        Integer.toString(passes)));
+  }
+
+  /** {@link #runInJvm(Class, String, JitMode, int, int)} with JVM options and arguments of its own. */
+  static String runInJvm(Class<?> gate, String label, JitMode mode, List<String> options,
+      List<String> args) throws IOException, InterruptedException {
     List<String> command = new ArrayList<>();
     command.add(java.nio.file.Path.of(System.getProperty("java.home"), "bin", "java").toString());
     if (mode.flag != null) {
       command.add(mode.flag);
     }
+    command.addAll(options);
     command.addAll(List.of("-Xmx256m", "--add-modules", "jdk.incubator.vector", "-cp",
-        System.getProperty("java.class.path"), gate.getName(),
-        Integer.toString(draws), Integer.toString(passes)));
+        System.getProperty("java.class.path"), gate.getName()));
+    command.addAll(args);
     // ByteArrayOutputStream is synchronized, so a timeout can report what was read so far.
     ByteArrayOutputStream bytes = new ByteArrayOutputStream();
     ProcessBuilder builder = new ProcessBuilder(command).redirectErrorStream(true);
@@ -885,9 +893,30 @@ class HypotTest {
   @EnumSource(JitMode.class)
   void nanLanesAreStrictMathInEveryJitMode(JitMode mode) throws Exception {
     assumeNoWidthOption();
-    // One pass interpreted, which has no tiers to warm and runs the vector body slowly.
-    assertRanInModeAndPassed(mode, runInJvm(NanLanes.class, "hypot NaN lanes", mode, 1 << 9,
-        mode == JitMode.INTERPRETER ? 1 : 2));
+    // A JVM per width the host has, so that the compiled body is the one for that width and is
+    // not deoptimized by a change of shape. In the compiled modes, unchecked passes first and
+    // -Xbatch, so that the checked calls run the compiled body, and the compile log must show
+    // Hypot::hypot at the mode's tier; interpreted, one checked pass and no warm-up.
+    boolean interpreted = mode == JitMode.INTERPRETER;
+    int preferred = DoubleVector.SPECIES_PREFERRED.vectorBitSize();
+    for (int bits = 128; bits <= preferred; bits *= 2) {
+      String text = runInJvm(NanLanes.class, "hypot NaN lanes, " + bits + " bits", mode,
+          interpreted ? List.of() : List.of("-Xbatch", "-XX:+PrintCompilation"),
+          List.of(Integer.toString(1 << 9), "1", interpreted ? "0" : "4", Integer.toString(bits)));
+      assertRanInModeAndPassed(mode, text);
+      if (!interpreted) {
+        String level = switch (mode) {
+          case C1_ONLY -> "1";
+          case C2_ONLY -> "";
+          default -> "4";
+        };
+        java.util.regex.Pattern compiled = java.util.regex.Pattern.compile(
+            "(?m)^\\s*\\d+\\s+\\d+\\s+b\\s+" + (level.isEmpty() ? "" : level + "\\s+")
+            + "io\\.github\\.vecbricks\\.vfdlibm\\.Hypot::hypot \\(");
+        assertTrue(compiled.matcher(text).find(),
+            mode + ", " + bits + " bits: Hypot::hypot was not compiled at its tier");
+      }
+    }
   }
 
   /** The pairs of {@code p} with an infinity or a NaN in either argument: lines 66-70's lanes. */
@@ -905,21 +934,36 @@ class HypotTest {
     return new Inputs.Pairs(java.util.Arrays.copyOf(x, n), java.util.Arrays.copyOf(y, n));
   }
 
-  /** The child of {@link #nanLanesAreStrictMathInEveryJitMode}: args are draws and passes. */
+  /**
+   * The child of {@link #nanLanesAreStrictMathInEveryJitMode}: args are draws, checked passes,
+   * the unchecked warm-up passes run before them, and the width in bits.
+   */
   static final class NanLanes {
     private NanLanes() {}
 
     public static void main(String[] args) {
       int draws = Integer.decode(args[0]);
       int passes = Integer.parseInt(args[1]);
+      int warm = Integer.parseInt(args[2]);
+      VectorSpecies<Double> species =
+          VectorSpecies.of(double.class, VectorShape.forBitSize(Integer.parseInt(args[3])));
       System.out.println("jvm: " + ManagementFactory.getRuntimeMXBean().getInputArguments()
           + " | " + System.getProperty("java.vm.info"));
       Inputs.Pairs p = concat(nonFinite(specialPairs()), nanPairs(9100L, draws));
+      int n = species.length();
+      for (int i = 0; i < warm; i++) {
+        for (int j = 0; j + n <= p.x().length; j += n) {
+          VFdlibm.hypot(DoubleVector.fromArray(species, p.x(), j),
+              DoubleVector.fromArray(species, p.y(), j));
+        }
+      }
+      System.out.println("warm-up: " + warm + " passes, unchecked");
       boolean failed = false;
       for (int pass = 1; pass <= passes; pass++) {
         try {
-          forEachWidth(species -> assertHypot(species, p));
-          System.out.println("pass " + pass + ": " + p.x().length + " pairs at every width");
+          assertHypot(species, p);
+          System.out.println("pass " + pass + ": " + p.x().length + " pairs at "
+              + species.vectorBitSize() + " bits");
         } catch (AssertionError e) {
           System.out.println("pass " + pass + ": " + e.getMessage());
           failed = true;
