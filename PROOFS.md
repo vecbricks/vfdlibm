@@ -1921,7 +1921,9 @@ returns that one NaN, sign cleared, on every lane of one NaN, in every mode. By 
 signs, six payloads) and infinities beside each other, the zeros, subnormals, finite values each
 side of line 63's ratio and both scalings, in both orders, showed no lane apart from `StrictMath`'s
 (two-NaN lanes by `MAGNITUDES`) at every width, warm, `-Xint`, `-XX:TieredStopAtLevel=1`,
-`-XX:-TieredCompilation`, `-XX:UseAVX=2` and `-XX:MaxVectorSize=16`.
+`-XX:-TieredCompilation`, `-XX:UseAVX=2` and `-XX:MaxVectorSize=16`. On AArch64 (GitHub's Arm
+runner, 128 bits), `nanLanesAreStrictMathInEveryJitMode` passed in all four JIT modes in CI run
+45640597216 (job "build (Arm 128 bits)"), on #187's head 24f116e.
 
 **Test.** `HypotTest.nanLanesAreStrictMathInEveryJitMode` runs the vector port on the pairs of
 `specialPairs` with an infinity or a NaN and on `nanPairs` in a JVM per JIT mode (interpreter, C1
