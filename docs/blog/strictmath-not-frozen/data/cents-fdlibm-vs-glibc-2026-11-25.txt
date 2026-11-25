@@ -1,0 +1,212 @@
+# Cents that depend on the math library: fdlibm (StrictMath) against glibc 2.43
+
+What was run and why: how often two math libraries, each within an ulp, put a money amount on
+different cents, at table sizes of 10^9 and 10^10 rows (flips.c), and how Spark rounds such
+amounts (round-check.sql). A count of rows, not a timing.
+
+Date: 25 November 2026
+Host: laptop, AMD Ryzen AI 9 HX PRO 370, Linux 7.0.0-44-generic, glibc 2.43, gcc 15.2.0 (Ubuntu 15.2.0-16ubuntu1)
+fdlibm: reference/fdlibm-5.3's e_pow.c and e_exp.c, built as flips.c's header says; on its first
+      2,000,000 rows they equal StrictMath on JDK 25.0.5.1+2-1-26.04.1-Ubuntu (FlipsCheck.java:
+      "2000000 rows, 0 fdlibm results differ from StrictMath")
+Spark: Apache Spark 4.3.0 (git revision 98bc0212c94), spark-4.3.0-bin-hadoop3.tgz from
+      dlcdn.apache.org, checked against Apache's SHA-512; spark-sql --master 'local[1]' -S -f
+      round-check.sql on JDK 21.0.13.1 and on JDK 25.0.5.1, with the same output on both
+Command: OMP_NUM_THREADS=8 ./flips 1000000000 2> rows-1e9.txt; OMP_NUM_THREADS=8 ./flips 10000000000
+
+## flips.c
+
+rows 1000000000, glibc 2.43
+pow: libraries differ on 91835075 rows; cents differ on 22 from the exact value, on 30 from the shortest decimal
+exp: libraries differ on 97352211 rows; cents differ on 49 from the exact value, on 59 from the shortest decimal
+
+rows 10000000000, glibc 2.43
+pow: libraries differ on 918324706 rows; cents differ on 253 from the exact value, on 291 from the shortest decimal
+exp: libraries differ on 973504152 rows; cents differ on 439 from the exact value, on 417 from the shortest decimal
+
+## round-check.sql on Spark 4.3.0 (JDK 21; JDK 25 printed the same)
+## columns: fn, spark_value, spark_cents, glibc_value, glibc_cents; then round_below,
+## round_above, bround_below
+
+exp	1.6393330040499997E8	1.639333004E8	1.63933300405E8	1.6393330041E8
+pow	6.88535397445E8	6.8853539745E8	6.885353974449999E8	6.8853539744E8
+2.447161233E7	2.447161233E7	2.447161232E7
+
+## Reading
+
+- The two libraries' doubles differ on about 9% of rows (pow 9.2%, exp 9.7%), so a join, a
+  GROUP BY or an equality test on these computed amounts sees a different value on that share.
+- The cents differ far more rarely, since a cent boundary must fall between the two doubles: on
+  10^9 rows 30 (pow) and 59 (exp) rows when rounding as Spark does, from the shortest decimal;
+  on 10^10 rows 291 and 417. The count grows with the table, about ten times for ten times the
+  rows. From the exact value, the counts are 22 and 49, then 253 and 439.
+- Spark's round() rounds the shortest decimal of the double: round(24471612.324999999D, 2) is
+  24471612.33, as is round(24471612.325000003D, 2). So a row can differ in its double and still
+  not in its cents; the counts above follow that rule.
+- Two rows checked end to end on Spark: 874,292.44 * exp(0.1342 * 39) gives 163,933,300.40 on
+  Spark and 163,933,300.41 from glibc's double; 857,486.34 * power(1.1820, 40) gives
+  688,535,397.45 on Spark and 688,535,397.44 from glibc's double. Which C library and rounding
+  rule another engine uses is not measured here.
+
+## The rows of the 10^9 run whose cents differ (flips.c's stderr)
+
+exp shortest row 121504098: amount 479859.53 rate 0.1564 years 35: fdlibm 114404239.435, libc 114404239.43499999
+exp shortest row 145243728: amount 925543.31 rate 0.1933 years 34: fdlibm 661708845.16499996, libc 661708845.16499984
+exp shortest row 146580364: amount 779414.66 rate 0.1153 years 40: fdlibm 78475613.704999983, libc 78475613.704999998
+exp shortest row 175233726: amount 961807.72 rate 0.1868 years 38: fdlibm 1163815693.0449998, libc 1163815693.0450001
+exp shortest row 197060395: amount 912583.74 rate 0.1886 years 36: fdlibm 810883644.45500004, libc 810883644.45499992
+exp shortest row 201959936: amount 515751.70 rate 0.1491 years 31: fdlibm 52455761.125, libc 52455761.124999993
+exp shortest row 206818828: amount 522508.63 rate 0.1996 years 36: fdlibm 689858305.02499998, libc 689858305.02499986
+exp shortest row 207662382: amount 676746.62 rate 0.1723 years 39: fdlibm 560731204.89499998, libc 560731204.89499986
+exp shortest row 214096077: amount 951143.19 rate 0.1811 years 33: fdlibm 374731339.06499994, libc 374731339.065
+exp shortest row 215085732: amount 501302.86 rate 0.1926 years 31: fdlibm 196380705.53499997, libc 196380705.535
+exp shortest row 221282134: amount 633843.91 rate 0.1941 years 36: fdlibm 686528298.93499994, libc 686528298.93499982
+exp shortest row 238178239: amount 961989.42 rate 0.1983 years 32: fdlibm 548314031.88499987, libc 548314031.88499999
+exp shortest row 252127218: amount 366751.15 rate 0.1664 years 36: fdlibm 146544373.54499999, libc 146544373.54499996
+exp shortest row 257954631: amount 788167.71 rate 0.1887 years 35: fdlibm 581991369.26499987, libc 581991369.26499999
+exp shortest row 265467949: amount 937944.39 rate 0.1955 years 28: fdlibm 223617137.64500001, libc 223617137.64499998
+exp shortest row 297144964: amount 686750.73 rate 0.0920 years 4: fdlibm 992246.32499999995, libc 992246.32499999984
+exp shortest row 300161414: amount 813672.88 rate 0.1550 years 37: fdlibm 251842310.315, libc 251842310.31499994
+exp shortest row 310684219: amount 758282.94 rate 0.1952 years 35: fdlibm 702960926.21499991, libc 702960926.21500003
+exp shortest row 330710149: amount 152325.05 rate 0.1622 years 40: fdlibm 100109185.50499997, libc 100109185.505
+exp shortest row 338309543: amount 117784.90 rate 0.1701 years 38: fdlibm 75558319.415000007, libc 75558319.414999992
+exp shortest row 346217965: amount 474060.92 rate 0.1518 years 40: fdlibm 205527646.48500001, libc 205527646.48499998
+exp shortest row 347697336: amount 859363.21 rate 0.1941 years 33: fdlibm 519951939.1049999, libc 519951939.10500002
+exp shortest row 385170973: amount 746629.46 rate 0.1961 years 24: fdlibm 82616857.495000005, libc 82616857.49499999
+exp shortest row 393732968: amount 937853.23 rate 0.1833 years 40: fdlibm 1433448253.3649998, libc 1433448253.365
+exp shortest row 402784483: amount 207453.84 rate 0.1171 years 16: fdlibm 1350876.415, libc 1350876.4149999998
+exp shortest row 422340859: amount 772363.46 rate 0.1920 years 34: fdlibm 528318839.08499992, libc 528318839.08499998
+exp shortest row 449673645: amount 754812.40 rate 0.1880 years 39: fdlibm 1153682134.6749997, libc 1153682134.675
+exp shortest row 463640264: amount 878166.64 rate 0.0729 years 34: fdlibm 10471749.335000001, libc 10471749.334999999
+exp shortest row 464295631: amount 603760.94 rate 0.1986 years 33: fdlibm 423783641.66499996, libc 423783641.66500002
+exp shortest row 474975938: amount 768271.52 rate 0.1954 years 35: fdlibm 717223805.42499983, libc 717223805.42499995
+exp shortest row 520791013: amount 927547.11 rate 0.1444 years 39: fdlibm 258886128.48500001, libc 258886128.48499995
+exp shortest row 538012892: amount 892383.96 rate 0.1898 years 36: fdlibm 827940431.70500004, libc 827940431.70499992
+exp shortest row 557583983: amount 914188.70 rate 0.1907 years 34: fdlibm 598293673.55499995, libc 598293673.55499983
+exp shortest row 59796646: amount 242937.93 rate 0.1938 years 38: fdlibm 383542601.09500003, libc 383542601.09499997
+exp shortest row 600223488: amount 784542.77 rate 0.1827 years 35: fdlibm 469583349.21500003, libc 469583349.21499991
+exp shortest row 617066143: amount 420575.61 rate 0.1561 years 34: fdlibm 84882588.855000004, libc 84882588.854999989
+exp shortest row 645482503: amount 885611.08 rate 0.1733 years 39: fdlibm 762972976.80499983, libc 762972976.80499995
+exp shortest row 645525252: amount 973094.77 rate 0.1912 years 20: fdlibm 44555080.964999996, libc 44555080.965000004
+exp shortest row 64720689: amount 791502.78 rate 0.1833 years 24: fdlibm 64417034.734999999, libc 64417034.734999985
+exp shortest row 671025389: amount 724051.13 rate 0.1794 years 33: fdlibm 269699056.67499995, libc 269699056.67500001
+exp shortest row 695396460: amount 261696.18 rate 0.1764 years 40: fdlibm 303514362.89499992, libc 303514362.89499998
+exp shortest row 742996846: amount 940337.78 rate 0.1380 years 34: fdlibm 102563679.81499998, libc 102563679.815
+exp shortest row 750488213: amount 874292.44 rate 0.1342 years 39: fdlibm 163933300.40499997, libc 163933300.405
+exp shortest row 758064502: amount 622339.89 rate 0.0760 years 20: fdlibm 2845478.1250000005, libc 2845478.1249999995
+exp shortest row 77964134: amount 805846.82 rate 0.1589 years 40: fdlibm 464117798.38499993, libc 464117798.38499999
+exp shortest row 828804784: amount 970165.26 rate 0.1917 years 38: fdlibm 1414188502.5550001, libc 1414188502.5549998
+exp shortest row 850993693: amount 836499.00 rate 0.1648 years 39: fdlibm 517324349.3549999, libc 517324349.35500002
+exp shortest row 851325032: amount 986012.50 rate 0.1947 years 37: fdlibm 1325856245.895, libc 1325856245.8949997
+exp shortest row 859008768: amount 810363.42 rate 0.1790 years 40: fdlibm 1042865544.825, libc 1042865544.8249998
+exp shortest row 875489853: amount 869484.97 rate 0.1952 years 38: fdlibm 1447720846.605, libc 1447720846.6049998
+exp shortest row 907691439: amount 516658.91 rate 0.1930 years 31: fdlibm 204921633.255, libc 204921633.25499997
+exp shortest row 929029149: amount 915416.65 rate 0.1589 years 40: fdlibm 527223226.12499988, libc 527223226.125
+exp shortest row 942882508: amount 682296.08 rate 0.1974 years 37: fdlibm 1013848150.0649999, libc 1013848150.0650001
+exp shortest row 949258949: amount 477499.07 rate 0.1647 years 32: fdlibm 92870582.064999998, libc 92870582.064999983
+exp shortest row 965891555: amount 767911.50 rate 0.1384 years 39: fdlibm 169612973.16499996, libc 169612973.16499999
+exp shortest row 976932082: amount 711595.00 rate 0.1934 years 36: fdlibm 751561957.09500003, libc 751561957.09499991
+exp shortest row 980235545: amount 845549.16 rate 0.1875 years 34: fdlibm 496325038.06500006, libc 496325038.06499994
+exp shortest row 986378422: amount 881212.31 rate 0.1694 years 36: fdlibm 392267225.57499993, libc 392267225.57499999
+exp shortest row 990419961: amount 726894.43 rate 0.1816 years 38: fdlibm 721856217.84499991, libc 721856217.84500003
+exp row 59796646: amount 242937.93 rate 0.1938 years 38: fdlibm 383542601.09500003, libc 383542601.09499997
+exp row 121504098: amount 479859.53 rate 0.1564 years 35: fdlibm 114404239.435, libc 114404239.43499999
+exp row 132847926: amount 555096.58 rate 0.1708 years 38: fdlibm 365690313.64500004, libc 365690313.64499998
+exp row 175233726: amount 961807.72 rate 0.1868 years 38: fdlibm 1163815693.0449998, libc 1163815693.0450001
+exp row 197060395: amount 912583.74 rate 0.1886 years 36: fdlibm 810883644.45500004, libc 810883644.45499992
+exp row 201959936: amount 515751.70 rate 0.1491 years 31: fdlibm 52455761.125, libc 52455761.124999993
+exp row 242068164: amount 914019.00 rate 0.1563 years 20: fdlibm 20823789.935000002, libc 20823789.934999999
+exp row 265467949: amount 937944.39 rate 0.1955 years 28: fdlibm 223617137.64500001, libc 223617137.64499998
+exp row 276634374: amount 598013.02 rate 0.1930 years 31: fdlibm 237188989.47500002, libc 237188989.47499999
+exp row 310684219: amount 758282.94 rate 0.1952 years 35: fdlibm 702960926.21499991, libc 702960926.21500003
+exp row 338309543: amount 117784.90 rate 0.1701 years 38: fdlibm 75558319.415000007, libc 75558319.414999992
+exp row 346217965: amount 474060.92 rate 0.1518 years 40: fdlibm 205527646.48500001, libc 205527646.48499998
+exp row 347697336: amount 859363.21 rate 0.1941 years 33: fdlibm 519951939.1049999, libc 519951939.10500002
+exp row 357428868: amount 887226.28 rate 0.1969 years 40: fdlibm 2336349103.7849998, libc 2336349103.7850003
+exp row 364795268: amount 291070.04 rate 0.1805 years 25: fdlibm 26530861.665000007, libc 26530861.664999999
+exp row 376496107: amount 802787.01 rate 0.1407 years 12: fdlibm 4343733.1749999998, libc 4343733.1750000007
+exp row 385170973: amount 746629.46 rate 0.1961 years 24: fdlibm 82616857.495000005, libc 82616857.49499999
+exp row 393732968: amount 937853.23 rate 0.1833 years 40: fdlibm 1433448253.3649998, libc 1433448253.365
+exp row 394144878: amount 932860.77 rate 0.1685 years 39: fdlibm 666473702.30500007, libc 666473702.30499995
+exp row 402784483: amount 207453.84 rate 0.1171 years 16: fdlibm 1350876.415, libc 1350876.4149999998
+exp row 463640264: amount 878166.64 rate 0.0729 years 34: fdlibm 10471749.335000001, libc 10471749.334999999
+exp row 464295631: amount 603760.94 rate 0.1986 years 33: fdlibm 423783641.66499996, libc 423783641.66500002
+exp row 520791013: amount 927547.11 rate 0.1444 years 39: fdlibm 258886128.48500001, libc 258886128.48499995
+exp row 527890548: amount 786024.31 rate 0.1544 years 29: fdlibm 69188346.254999995, libc 69188346.25500001
+exp row 538012892: amount 892383.96 rate 0.1898 years 36: fdlibm 827940431.70500004, libc 827940431.70499992
+exp row 555585231: amount 136404.09 rate 0.1131 years 35: fdlibm 7144668.7649999997, libc 7144668.7650000006
+exp row 593604714: amount 417773.11 rate 0.1924 years 40: fdlibm 918905425.7750001, libc 918905425.77499998
+exp row 600223488: amount 784542.77 rate 0.1827 years 35: fdlibm 469583349.21500003, libc 469583349.21499991
+exp row 617066143: amount 420575.61 rate 0.1561 years 34: fdlibm 84882588.855000004, libc 84882588.854999989
+exp row 645525252: amount 973094.77 rate 0.1912 years 20: fdlibm 44555080.964999996, libc 44555080.965000004
+exp row 671025389: amount 724051.13 rate 0.1794 years 33: fdlibm 269699056.67499995, libc 269699056.67500001
+exp row 731510064: amount 426620.06 rate 0.1921 years 38: fdlibm 631399351.42500007, libc 631399351.42499995
+exp row 735513529: amount 886114.36 rate 0.1998 years 26: fdlibm 159794839.255, libc 159794839.25500003
+exp row 750488213: amount 874292.44 rate 0.1342 years 39: fdlibm 163933300.40499997, libc 163933300.405
+exp row 758064502: amount 622339.89 rate 0.0760 years 20: fdlibm 2845478.1250000005, libc 2845478.1249999995
+exp row 782242385: amount 678541.01 rate 0.1759 years 37: fdlibm 455087469.26500005, libc 455087469.26499999
+exp row 794871091: amount 892765.95 rate 0.1919 years 31: fdlibm 342225259.40500003, libc 342225259.40499997
+exp row 828676811: amount 278765.13 rate 0.0803 years 31: fdlibm 3359910.4449999998, libc 3359910.4450000003
+exp row 828804784: amount 970165.26 rate 0.1917 years 38: fdlibm 1414188502.5550001, libc 1414188502.5549998
+exp row 850993693: amount 836499.00 rate 0.1648 years 39: fdlibm 517324349.3549999, libc 517324349.35500002
+exp row 859008768: amount 810363.42 rate 0.1790 years 40: fdlibm 1042865544.825, libc 1042865544.8249998
+exp row 875489853: amount 869484.97 rate 0.1952 years 38: fdlibm 1447720846.605, libc 1447720846.6049998
+exp row 897648117: amount 771412.48 rate 0.1960 years 34: fdlibm 604540064.55499995, libc 604540064.55500007
+exp row 919052897: amount 964225.36 rate 0.1180 years 29: fdlibm 29534815.805000003, libc 29534815.805
+exp row 929029149: amount 915416.65 rate 0.1589 years 40: fdlibm 527223226.12499988, libc 527223226.125
+exp row 942882508: amount 682296.08 rate 0.1974 years 37: fdlibm 1013848150.0649999, libc 1013848150.0650001
+exp row 976932082: amount 711595.00 rate 0.1934 years 36: fdlibm 751561957.09500003, libc 751561957.09499991
+exp row 980235545: amount 845549.16 rate 0.1875 years 34: fdlibm 496325038.06500006, libc 496325038.06499994
+exp row 990419961: amount 726894.43 rate 0.1816 years 38: fdlibm 721856217.84499991, libc 721856217.84500003
+pow shortest row 107996301: amount 330310.03 rate 0.1365 years 29: fdlibm 13503163.404999997, libc 13503163.404999999
+pow shortest row 15622937: amount 939451.48 rate 0.1757 years 33: fdlibm 196182134.51499999, libc 196182134.51499996
+pow shortest row 247265331: amount 928482.09 rate 0.1533 years 18: fdlibm 12098590.775, libc 12098590.774999999
+pow shortest row 279607885: amount 368060.87 rate 0.1804 years 24: fdlibm 19706997.804999996, libc 19706997.805
+pow shortest row 284137328: amount 597529.10 rate 0.1685 years 34: fdlibm 119051652.84499998, libc 119051652.845
+pow shortest row 383770999: amount 666246.99 rate 0.1972 years 36: fdlibm 434146949.68499988, libc 434146949.685
+pow shortest row 384762903: amount 833208.87 rate 0.1529 years 36: fdlibm 139718172.10499996, libc 139718172.10499999
+pow shortest row 388405296: amount 979267.64 rate 0.1691 years 37: fdlibm 317258190.14499992, libc 317258190.14499998
+pow shortest row 413309273: amount 846031.94 rate 0.1934 years 30: fdlibm 170203216.99499997, libc 170203216.995
+pow shortest row 4141570: amount 587175.52 rate 0.1827 years 35: fdlibm 208630995.07499996, libc 208630995.07499999
+pow shortest row 499908424: amount 429169.20 rate 0.1516 years 31: fdlibm 34117711.225000001, libc 34117711.224999994
+pow shortest row 506179886: amount 857486.34 rate 0.1820 years 40: fdlibm 688535397.44500005, libc 688535397.44499993
+pow shortest row 564713374: amount 915396.93 rate 0.1802 years 39: fdlibm 585973874.31499994, libc 585973874.31500006
+pow shortest row 619681573: amount 401667.18 rate 0.1583 years 36: fdlibm 79693770.644999996, libc 79693770.644999981
+pow shortest row 667919556: amount 606946.19 rate 0.1740 years 37: fdlibm 229546024.31499997, libc 229546024.315
+pow shortest row 706281615: amount 974486.87 rate 0.1360 years 39: fdlibm 140776743.76499996, libc 140776743.76499999
+pow shortest row 707116790: amount 973837.82 rate 0.1978 years 36: fdlibm 646132746.16499996, libc 646132746.16499984
+pow shortest row 731001198: amount 412483.23 rate 0.1227 years 27: fdlibm 9386999.7849999983, libc 9386999.7850000001
+pow shortest row 77093359: amount 660459.52 rate 0.1430 years 32: fdlibm 47569170.375, libc 47569170.374999993
+pow shortest row 776576805: amount 667092.45 rate 0.1900 years 25: fdlibm 51624999.474999994, libc 51624999.475000001
+pow shortest row 79826062: amount 243201.59 rate 0.1904 years 33: fdlibm 76530175.734999985, libc 76530175.734999999
+pow shortest row 860856031: amount 701067.70 rate 0.1932 years 38: fdlibm 576584889.54499996, libc 576584889.54499984
+pow shortest row 934123111: amount 726845.16 rate 0.1994 years 39: fdlibm 873051048.85500014, libc 873051048.8549999
+pow shortest row 952481573: amount 279365.20 rate 0.1854 years 35: fdlibm 107508946.83499999, libc 107508946.83499998
+pow shortest row 956206429: amount 358428.38 rate 0.1768 years 35: fdlibm 106904375.175, libc 106904375.17499998
+pow shortest row 961515190: amount 667756.68 rate 0.1794 years 40: fdlibm 490979296.08499998, libc 490979296.08499992
+pow shortest row 967790181: amount 741558.59 rate 0.1106 years 40: fdlibm 49255216.854999982, libc 49255216.854999997
+pow shortest row 97996188: amount 956004.61 rate 0.1964 years 37: fdlibm 727590379.16499996, libc 727590379.16499984
+pow shortest row 983714496: amount 827427.60 rate 0.1915 years 33: fdlibm 268431540.53500003, libc 268431540.53499997
+pow shortest row 988587951: amount 217933.64 rate 0.1883 years 34: fdlibm 76879681.394999981, libc 76879681.394999996
+pow row 77093359: amount 660459.52 rate 0.1430 years 32: fdlibm 47569170.375, libc 47569170.374999993
+pow row 88377585: amount 320169.89 rate 0.1319 years 35: fdlibm 24471612.324999999, libc 24471612.325000003
+pow row 95306704: amount 625771.95 rate 0.1757 years 39: fdlibm 345128085.13499999, libc 345128085.13500011
+pow row 124848733: amount 458455.32 rate 0.1870 years 36: fdlibm 219544670.56500003, libc 219544670.565
+pow row 247265331: amount 928482.09 rate 0.1533 years 18: fdlibm 12098590.775, libc 12098590.774999999
+pow row 383770999: amount 666246.99 rate 0.1972 years 36: fdlibm 434146949.68499988, libc 434146949.685
+pow row 404096147: amount 778729.22 rate 0.1216 years 40: fdlibm 76719629.314999998, libc 76719629.315000013
+pow row 413309273: amount 846031.94 rate 0.1934 years 30: fdlibm 170203216.99499997, libc 170203216.995
+pow row 422226962: amount 256854.83 rate 0.1946 years 40: fdlibm 315201411.20500004, libc 315201411.20499998
+pow row 499908424: amount 429169.20 rate 0.1516 years 31: fdlibm 34117711.225000001, libc 34117711.224999994
+pow row 506179886: amount 857486.34 rate 0.1820 years 40: fdlibm 688535397.44500005, libc 688535397.44499993
+pow row 564713374: amount 915396.93 rate 0.1802 years 39: fdlibm 585973874.31499994, libc 585973874.31500006
+pow row 586801589: amount 909215.62 rate 0.1544 years 36: fdlibm 159769670.38500002, libc 159769670.38499999
+pow row 731001198: amount 412483.23 rate 0.1227 years 27: fdlibm 9386999.7849999983, libc 9386999.7850000001
+pow row 776576805: amount 667092.45 rate 0.1900 years 25: fdlibm 51624999.474999994, libc 51624999.475000001
+pow row 826383861: amount 487640.83 rate 0.0489 years 39: fdlibm 3138552.4649999999, libc 3138552.4650000003
+pow row 850295498: amount 871423.51 rate 0.1991 years 40: fdlibm 1242926340.175, libc 1242926340.1750002
+pow row 858856765: amount 801649.48 rate 0.1706 years 30: fdlibm 90414921.285000011, libc 90414921.284999996
+pow row 870438964: amount 778481.37 rate 0.1774 years 33: fdlibm 170506626.755, libc 170506626.75500003
+pow row 889121405: amount 165078.01 rate 0.1775 years 28: fdlibm 16017504.965, libc 16017504.965000002
+pow row 934123111: amount 726845.16 rate 0.1994 years 39: fdlibm 873051048.85500014, libc 873051048.8549999
+pow row 983714496: amount 827427.60 rate 0.1915 years 33: fdlibm 268431540.53500003, libc 268431540.53499997
