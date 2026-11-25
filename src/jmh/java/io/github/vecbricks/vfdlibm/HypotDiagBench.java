@@ -63,14 +63,21 @@ public class HypotDiagBench {
       throw new IllegalArgumentException("inputs is common or mixed, not '" + inputs + "'");
     }
     SplittableRandom random = new SplittableRandom(1L);
+    // -Ddiag.spacer=<doubles>: a spacer array between xs and ys and between ys and out, held in
+    // locals only, so the state class keeps 980d723's fields (two added fields flipped old's mode).
+    int spacer = Integer.getInteger("diag.spacer", 0);
     xs = new double[N];
+    double[] spacer1 = spacer > 0 ? new double[spacer] : null;
     ys = new double[N];
+    double[] spacer2 = spacer > 0 ? new double[spacer] : null;
     out = new double[N];
     if (Boolean.getBoolean("diag.addr")) {
       System.out.println("diag.addr xs=" + Addr.of(xs) + " state=" + Addr.of(this)
           + " data mod 32: xs=" + Math.floorMod(Addr.of(xs) + 16, 32) + " ys="
           + Math.floorMod(Addr.of(ys) + 16, 32) + " out=" + Math.floorMod(Addr.of(out) + 16, 32)
-          + " xs data mod 4096=" + Math.floorMod(Addr.of(xs) + 16, 4096));
+          + " xs data mod 4096=" + Math.floorMod(Addr.of(xs) + 16, 4096)
+          + " out-xs mod 4096=" + Math.floorMod(Addr.of(out) - Addr.of(xs), 4096)
+          + " spacers " + (spacer1 == null ? 0 : spacer1.length) + (spacer2 == null ? 0 : spacer2.length));
     }
     for (int i = 0; i < N; i++) {
       xs[i] = random.nextDouble(-10.0, 10.0);
