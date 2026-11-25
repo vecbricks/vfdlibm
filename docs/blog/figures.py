@@ -17,11 +17,14 @@ files:
 - strictmath-vs-libm/data/aggregate-photon-2026-11-24.csv and aggregate-spark-4.3.0-jdk21.tsv
   (aggregate-check.sql's output on each engine): the aggregate card;
 - ../../bench/results/exp-xeon8573c-2026-11-21.txt: the allocation of exp's finish rows;
-- ../../reference/fdlibm-5.3/e_hypot.c: the lines of the hypot figure, by line number.
+- ../../reference/fdlibm-5.3/e_hypot.c: the lines of the hypot figure, by line number;
+- ../../README.md, its generated speedup table for v0.3.0 (between "<!-- speedup-table: v0.3.0
+  -->" and "<!-- end of speedup-table -->"): the speedup bars, and vfdlibm's figure in the
+  comparison card;
+- ../../bench/results/exp-operator-xeon8573c-2026-11-24.txt: the operator's figure in the
+  comparison card, its scalarStrictMath over operatorPreferred minimum on common data.
 
-The other figures are diagrams whose text is written here. The speedup figure and the {{E}} of
-the comparison figure are placeholders until the README's v0.3.0 speedup table exists; at
-release, this script is to read them from that table (not the SVG files edited by hand). No figure holds a number that is not
+The other figures are diagrams whose text is written here. No figure holds a number that is not
 in a committed file or in the post's sources.
 """
 
@@ -377,12 +380,43 @@ def fig_how_often():
     f.write(y)
 
 
+def speedup_table():
+    """The README's generated speedup table for v0.3.0: the hosts, and per function the four
+    figures (common / mixed on each host), as printed. Fails on a cell that is not a plain
+    figure, such as one marked for a re-run."""
+    txt = (HERE.parent.parent / "README.md").read_text()
+    m = re.search(r"<!-- speedup-table: (v[\d.]+) -->\n(.*?)<!-- end of speedup-table -->", txt, re.S)
+    assert m and m.group(1) == "v0.3.0", "the post quotes the v0.3.0 table"
+    lines = [ln for ln in m.group(2).splitlines() if ln.startswith("|")]
+    head = re.fullmatch(r"\| Function \| (\w+) \(([^)]+)\): common / mixed \| (\w+) \(([^)]+)\): "
+                        r"common / mixed \|", lines[0])
+    assert head, lines[0]
+    hosts = [(head.group(1), head.group(2)), (head.group(3), head.group(4))]
+    rows = []
+    for ln in lines[2:]:
+        r = re.fullmatch(r"\| `(\w+)` \| ([\d.]+)x / ([\d.]+)x \| ([\d.]+)x / ([\d.]+)x \|", ln)
+        assert r, f"a cell that is not a plain figure: {ln}"
+        rows.append((r.group(1), [r.group(i) for i in range(2, 6)]))
+    assert len(rows) == 13, len(rows)
+    return hosts, rows
+
+
 def fig_compare():
+    hosts, rows = speedup_table()
+    assert hosts[0][0] == "xeon8573c"
+    e = dict(rows)["exp"][0]
+    res = (HERE.parent.parent / "bench" / "results" / "exp-operator-xeon8573c-2026-11-24.txt").read_text()
+
+    def mn(row):
+        return float(re.search(rf"^# ExpOperatorBench\.{row}\s+common\s+([\d.]+)", res, re.M).group(1))
+
+    op = f"{mn('scalarStrictMath') / mn('operatorPreferred'):.2f}"
     f = Fig("compare", "Three ways to compute exp",
             "What each one promises, from its Javadoc or this project's files.",
             "StrictMath.exp gives fdlibm's bits on every CPU, one double per call. VectorOperators.EXP "
-            "works on a vector and promises an accuracy bound, not StrictMath's bits; its speed is not "
-            "measured here. VFdlibm.exp works on a vector and gives StrictMath's bits in every lane.")
+            "works on a vector and promises an accuracy bound, not StrictMath's bits; on common data on "
+            f"the Xeon 8573C it is {op} times as fast as StrictMath. VFdlibm.exp works on a vector and "
+            f"gives StrictMath's bits in every lane; there it is {e} times as fast.")
     y = f.header()
     red = "#c62828"
     cards = (("StrictMath.exp", BLUE_S, BLUE_F, False,
@@ -390,11 +424,12 @@ def fig_compare():
                ("Per call", "one double", None), ("Speed", "the baseline", None)]),
              ("VectorOperators.EXP", "#8a8a8a", GREY_F, True,
               [("Bits", "not promised: an accuracy bound", red), ("Every CPU", "not promised", red),
-               ("Per call", "a vector of doubles", None), ("Speed", "not measured here", None)]),
+               ("Per call", "a vector of doubles", None),
+               ("Speed", f"{op}× (common data, Xeon 8573C)", None)]),
              ("VFdlibm.exp", ORANGE_S, ORANGE_F, False,
               [("Bits", "StrictMath's, every lane", None), ("Every CPU", "the same bits", None),
                ("Per call", "a vector of doubles", None),
-               ("Speed", "{{E}}× (common data, Xeon 8573C)", None)]))
+               ("Speed", f"{e}× (common data, Xeon 8573C)", None)]))
     for name, pc, fill, dash, lines in cards:
         h = 66 + 28 * len(lines) + 4
         f.rect(M, y, IW, h, fill, pc, dash=dash)
@@ -406,8 +441,10 @@ def fig_compare():
             yy += 28
         y += h + 14
     y += 12
-    y = f.caption(y, "Sources: the JDK 25 Javadoc of Math, StrictMath and VectorOperators; vfdlibm's "
-                     "README. {{E}} is a placeholder until the README's v0.3.0 speedup table exists.")
+    y = f.caption(y, "Speed: StrictMath's time over each one's, at the preferred species (512 bits). "
+                     "Sources: the JDK 25 Javadoc of Math, StrictMath and VectorOperators; for the "
+                     "operator, bench/results/exp-operator-xeon8573c-2026-11-24.txt; for vfdlibm, "
+                     "the README's v0.3.0 speedup table.")
     f.write(y)
 
 
@@ -628,15 +665,57 @@ def fig_aggregate():
 
 
 def fig_speedup():
+    hosts, rows = speedup_table()
+    names = {"xeon8573c": "Intel Xeon Platinum 8573C", "epyc7763": "AMD EPYC 7763"}
+    vals = [float(v) for _, vs in rows for v in vs]
+    top = 12.0
+    assert max(vals) <= top, max(vals)
+    MIXED = "#f4bf8c"
+    short = {"xeon8573c": "the Xeon", "epyc7763": "the EPYC"}
+    weak = [f"{fn}'s {vs[k]}× on {short[hosts[k // 2][0]]}, {('common', 'mixed')[k % 2]} data"
+            for fn, vs in rows for k in range(4) if 1 <= float(vs[k]) < 1.3]
+    slow = [(fn, v) for fn, vs in rows for v in vs if float(v) < 1]
     f = Fig("speedup", "Speedup over StrictMath",
-            "Per function, on the Intel Xeon Platinum 8573C (AVX-512) and the AMD EPYC 7763 (AVX2); "
-            "to be drawn from the README's v0.3.0 speedup table at release.",
-            "A placeholder: the speedup bars are made from the README's v0.3.0 table when it exists.")
+            "StrictMath's time over vfdlibm's, per function: the README's v0.3.0 table.",
+            "StrictMath's time over vfdlibm's on common and mixed data. " + " ".join(
+                f"{names[h]} ({isa}): " + ", ".join(f"{fn} {vs[2 * i]} / {vs[2 * i + 1]}"
+                                                    for fn, vs in rows) + "."
+                for i, (h, isa) in enumerate(hosts)) +
+            " Under 1 is slower than StrictMath: " + ", ".join(f"{fn} {v}" for fn, v in slow) + ".")
     y = f.header()
-    f.rect(M, y, IW, 130, GREY_F, "#9e9e9e", dash=True)
-    f.text(W / 2, y + 60, "{{SPEEDUP_BARS}}", size=18, weight=700, mono=True, anchor="middle", fill=GREY)
-    f.text(W / 2, y + 92, "per function and host, common and mixed data", size=15, anchor="middle", fill=GREY)
-    y += 160
+    f.rect(M, y, 22, 14, ORANGE_S, ORANGE_S, rx=3, sw=0)
+    f.text(M + 30, y + 13, "common data", size=15)
+    f.rect(M + 150, y, 22, 14, MIXED, MIXED, rx=3, sw=0)
+    f.text(M + 180, y + 13, "mixed data (some rare lanes)", size=15)
+    y += 34
+    x0, lab = M + 74, M + IW
+    bw = IW - 74 - 128
+    one = x0 + bw / top
+    for i, (h, isa) in enumerate(hosts):
+        f.rect(M, y, IW, 30, "#ececec", "#ececec", rx=6, sw=0)
+        f.text(M + 10, y + 21, f"{names[h]} ({isa})", size=15, weight=700)
+        y += 40
+        y_top = y
+        for fn, vs in rows:
+            c, m = float(vs[2 * i]), float(vs[2 * i + 1])
+            f.text(M, y + 17, fn, size=15, mono=True)
+            f.rect(x0, y + 2, max(2, bw * c / top), 10, ORANGE_S, ORANGE_S, rx=2, sw=0)
+            f.rect(x0, y + 13, max(2, bw * m / top), 10, MIXED, MIXED, rx=2, sw=0)
+            f.text(lab - 72, y + 17, f"{vs[2 * i]}×", size=15, anchor="end",
+                   fill=INK if c >= 1 else ORANGE_T, weight=400 if c >= 1 else 700)
+            f.text(lab - 62, y + 17, "/", size=15, fill=GREY, anchor="middle")
+            f.text(lab, y + 17, f"{vs[2 * i + 1]}×", size=15, anchor="end",
+                   fill=INK if m >= 1 else ORANGE_T, weight=400 if m >= 1 else 700)
+            y += 30
+        f.add(f'<line x1="{one:.1f}" y1="{y_top - 4:.1f}" x2="{one:.1f}" y2="{y - 2:.1f}" '
+              f'stroke="{INK}" stroke-width="2" stroke-dasharray="5 4"/>')
+        f.text(one, y + 14, "1×", size=15, weight=700, anchor="middle")
+        y += 34
+    y += 6
+    y = f.caption(y, "The dashed line is 1×, StrictMath's own speed: a bar short of it is slower. "
+                     "The project reads a ratio under 1.3× as no direction: " + "; ".join(weak) +
+                     ". By minimum times, at the host's preferred species: 512 bits on the Xeon, 256 "
+                     "on the EPYC. The README's table says how its figures are made.")
     f.write(y)
 
 
