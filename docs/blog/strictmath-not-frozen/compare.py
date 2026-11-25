@@ -25,15 +25,20 @@ def main():
     ap.add_argument("before", type=Path)
     ap.add_argument("after", type=Path)
     ap.add_argument("--file", help="compare this one file only")
+    ap.add_argument("--all", action="store_true", help="every .bin file in both directories")
     ap.add_argument("--witnesses", type=Path)
     ap.add_argument("--inputs", type=Path, help="pow-inputs.bin, for --witnesses")
     a = ap.parse_args()
-    names = [a.file] if a.file else [f + ".bin" for f in FUNCTIONS]
+    if a.all:
+        names = sorted(p.name for p in a.before.glob("*.bin") if (a.after / p.name).exists())
+    else:
+        names = [a.file] if a.file else [f + ".bin" for f in FUNCTIONS]
     for name in names:
         b, c = bits(a.before / name), bits(a.after / name)
         assert len(b) == len(c), name
         diff = [i for i in range(len(b)) if b[i] != c[i]]
-        print("%-12s %9d inputs %6d differ" % (name, len(b), len(diff)))
+        print("%-24s %9d inputs %7d differ" % (name, len(b), len(diff)) if a.all else
+              "%-12s %9d inputs %6d differ" % (name, len(b), len(diff)))
         if a.witnesses and name in ("pow.bin", "pow-Math.bin") and diff:
             xy = bits(a.inputs or a.before / "pow-inputs.bin")
             with a.witnesses.open("w") as w:

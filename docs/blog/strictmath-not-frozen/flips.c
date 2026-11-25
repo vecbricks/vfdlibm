@@ -67,8 +67,8 @@ static __int128 cents_shortest(double v) {
 }
 
 /* Whether a cent boundary lies within 1e-4 of a cent of v: an ulp of these amounts (at most
-   about 2^-22, for amounts below 2^31) is far less, so a pair whose shortest decimals round to
-   different cents always passes. */
+   2^-21, for amounts below 2^32; the largest here is about 3.0e9) is 4.8e-5 of a cent or less,
+   so a pair whose shortest decimals round to different cents always passes. */
 static inline int near_boundary(double v) {
   __float128 c = (__float128) v * 100 + (__float128) 0.5;
   __float128 f = c - (__float128) (__int128) c;

@@ -1,0 +1,213 @@
+# StrictMath and Math on JDK 21, 25, 26 and 27: which functions' bits moved
+
+What was run and why: for the post "Even StrictMath is not frozen", which of StrictMath's double
+functions (and Math's, with the JIT's defaults) return other bits on another JDK. It needs no
+vfdlibm, so it covers JDK 21 too, and all of StrictMath's functions that may differ, not only
+vfdlibm's 13. A bit comparison, not a timing. StrictMath's results do not depend on the CPU;
+Math's do (the JIT's intrinsics are chosen per CPU), so the Math rows are this x86-64 laptop's
+only, and an Arm host or another x86 CPU may give others.
+
+Date: 25 November 2026
+Host: laptop, AMD Ryzen AI 9 HX PRO 370 (flags: avx2 avx512f avx512dq), Linux 7.0.0-44-generic
+JDKs: 21.0.13.1+2-1-26.04.1-Ubuntu, 25.0.5.1+2-1-26.04.1-Ubuntu, 26.0.2+10-2-26.04.2-Ubuntu
+      (Ubuntu 26.04 packages) and 27.0.1.1+4-22 (jdk.java.net), each with its default flags
+Inputs: StrictScan.java, the same inputs as JdkScan.java by the same seeds (its StrictMath.pow
+      file on JDK 25 equals JdkScan's but on the both-NaN lanes, which StrictScan writes as 0),
+      for 20 functions: sin cos tan asin acos atan exp log log10 sqrt cbrt sinh cosh tanh expm1
+      log1p atan2 hypot pow IEEEremainder
+Commands: javac -d . StrictScan.java (JDK 21); java -Xmx3g -cp . StrictScan <hard-cases> out-<jdk>
+      on each JDK; python3 compare.py out-21 out-25 --all, and the same for 25 26 and 25 27
+
+## Results that differ (compare.py --all; every file not listed has 0)
+
+=== 21 vs 25
+Math-cbrt.bin              3000000 inputs  198346 differ
+Math-tanh.bin              3000000 inputs  523661 differ
+=== 25 vs 26
+Math-sinh.bin              3002215 inputs  346969 differ
+=== 25 vs 27
+Math-sinh.bin              3002215 inputs  346969 differ
+StrictMath-pow.bin         4005016 inputs    1258 differ
+
+## StrictScan's digests per JDK
+
+### JDK 21
+# 21.0.13.1+2-1-26.04.1-Ubuntu
+StrictMath sin            n=3000000 digest=7c6ec2b1d7b7088e
+Math       sin            n=3000000 digest=060abe3897901ff1
+StrictMath cos            n=3000000 digest=fbd59a7b2f1c2f1e
+Math       cos            n=3000000 digest=220198eac352b073
+StrictMath tan            n=3000000 digest=1f1bf465a49980e6
+Math       tan            n=3000000 digest=e71d528d5b09c8f0
+StrictMath asin           n=3001655 digest=8307ab595d9c7699
+Math       asin           n=3001655 digest=8307ab595d9c7699
+StrictMath acos           n=3001569 digest=5aa9acc6aaabab5c
+Math       acos           n=3001569 digest=5aa9acc6aaabab5c
+StrictMath atan           n=3001735 digest=5ffeef01cc8d1cfe
+Math       atan           n=3001735 digest=5ffeef01cc8d1cfe
+StrictMath exp            n=3002283 digest=8e41f03d7eb9e59b
+Math       exp            n=3002283 digest=9fed2a0073e4cf15
+StrictMath log            n=3002820 digest=5d9feb169ab6fe36
+Math       log            n=3002820 digest=4a2a0bf5a9b659fc
+StrictMath log10          n=3001886 digest=042bb63d1fc8068e
+Math       log10          n=3001886 digest=98abf24fd5208a81
+StrictMath sqrt           n=3000000 digest=30c9f0b36f92de7a
+Math       sqrt           n=3000000 digest=30c9f0b36f92de7a
+StrictMath cbrt           n=3000000 digest=40bfb359b71f4cec
+Math       cbrt           n=3000000 digest=40bfb359b71f4cec
+StrictMath sinh           n=3002215 digest=cabba7a9e5df0802
+Math       sinh           n=3002215 digest=cabba7a9e5df0802
+StrictMath cosh           n=3002026 digest=fa656a28cfa681ec
+Math       cosh           n=3002026 digest=fa656a28cfa681ec
+StrictMath tanh           n=3000000 digest=3be09288d0257eb1
+Math       tanh           n=3000000 digest=3be09288d0257eb1
+StrictMath expm1          n=3007584 digest=d36e4ac37512962f
+Math       expm1          n=3007584 digest=d36e4ac37512962f
+StrictMath log1p          n=3007550 digest=bd2ea1d474139f71
+Math       log1p          n=3007550 digest=bd2ea1d474139f71
+StrictMath atan2          n=3020820 digest=2fba64c22f150cbe
+Math       atan2          n=3020820 digest=2fba64c22f150cbe
+StrictMath hypot          n=3008720 digest=e0b2228c56aff6de
+Math       hypot          n=3008720 digest=e0b2228c56aff6de
+StrictMath pow            n=4005016 digest=51dfe40e5bb17ef2
+Math       pow            n=4005016 digest=9f1a23c749ce19f6
+StrictMath IEEEremainder  n=3000000 digest=bb8cd49e33a36d70
+Math       IEEEremainder  n=3000000 digest=bb8cd49e33a36d70
+
+### JDK 25
+# 25.0.5.1+2-1-26.04.1-Ubuntu
+StrictMath sin            n=3000000 digest=7c6ec2b1d7b7088e
+Math       sin            n=3000000 digest=060abe3897901ff1
+StrictMath cos            n=3000000 digest=fbd59a7b2f1c2f1e
+Math       cos            n=3000000 digest=220198eac352b073
+StrictMath tan            n=3000000 digest=1f1bf465a49980e6
+Math       tan            n=3000000 digest=e71d528d5b09c8f0
+StrictMath asin           n=3001655 digest=8307ab595d9c7699
+Math       asin           n=3001655 digest=8307ab595d9c7699
+StrictMath acos           n=3001569 digest=5aa9acc6aaabab5c
+Math       acos           n=3001569 digest=5aa9acc6aaabab5c
+StrictMath atan           n=3001735 digest=5ffeef01cc8d1cfe
+Math       atan           n=3001735 digest=5ffeef01cc8d1cfe
+StrictMath exp            n=3002283 digest=8e41f03d7eb9e59b
+Math       exp            n=3002283 digest=9fed2a0073e4cf15
+StrictMath log            n=3002820 digest=5d9feb169ab6fe36
+Math       log            n=3002820 digest=4a2a0bf5a9b659fc
+StrictMath log10          n=3001886 digest=042bb63d1fc8068e
+Math       log10          n=3001886 digest=98abf24fd5208a81
+StrictMath sqrt           n=3000000 digest=30c9f0b36f92de7a
+Math       sqrt           n=3000000 digest=30c9f0b36f92de7a
+StrictMath cbrt           n=3000000 digest=40bfb359b71f4cec
+Math       cbrt           n=3000000 digest=59395d17af230a26
+StrictMath sinh           n=3002215 digest=cabba7a9e5df0802
+Math       sinh           n=3002215 digest=cabba7a9e5df0802
+StrictMath cosh           n=3002026 digest=fa656a28cfa681ec
+Math       cosh           n=3002026 digest=fa656a28cfa681ec
+StrictMath tanh           n=3000000 digest=3be09288d0257eb1
+Math       tanh           n=3000000 digest=296b1c5caaccd2a9
+StrictMath expm1          n=3007584 digest=d36e4ac37512962f
+Math       expm1          n=3007584 digest=d36e4ac37512962f
+StrictMath log1p          n=3007550 digest=bd2ea1d474139f71
+Math       log1p          n=3007550 digest=bd2ea1d474139f71
+StrictMath atan2          n=3020820 digest=2fba64c22f150cbe
+Math       atan2          n=3020820 digest=2fba64c22f150cbe
+StrictMath hypot          n=3008720 digest=e0b2228c56aff6de
+Math       hypot          n=3008720 digest=e0b2228c56aff6de
+StrictMath pow            n=4005016 digest=51dfe40e5bb17ef2
+Math       pow            n=4005016 digest=9f1a23c749ce19f6
+StrictMath IEEEremainder  n=3000000 digest=bb8cd49e33a36d70
+Math       IEEEremainder  n=3000000 digest=bb8cd49e33a36d70
+
+### JDK 26
+# 26.0.2+10-2-26.04.2-Ubuntu
+StrictMath sin            n=3000000 digest=7c6ec2b1d7b7088e
+Math       sin            n=3000000 digest=060abe3897901ff1
+StrictMath cos            n=3000000 digest=fbd59a7b2f1c2f1e
+Math       cos            n=3000000 digest=220198eac352b073
+StrictMath tan            n=3000000 digest=1f1bf465a49980e6
+Math       tan            n=3000000 digest=e71d528d5b09c8f0
+StrictMath asin           n=3001655 digest=8307ab595d9c7699
+Math       asin           n=3001655 digest=8307ab595d9c7699
+StrictMath acos           n=3001569 digest=5aa9acc6aaabab5c
+Math       acos           n=3001569 digest=5aa9acc6aaabab5c
+StrictMath atan           n=3001735 digest=5ffeef01cc8d1cfe
+Math       atan           n=3001735 digest=5ffeef01cc8d1cfe
+StrictMath exp            n=3002283 digest=8e41f03d7eb9e59b
+Math       exp            n=3002283 digest=9fed2a0073e4cf15
+StrictMath log            n=3002820 digest=5d9feb169ab6fe36
+Math       log            n=3002820 digest=4a2a0bf5a9b659fc
+StrictMath log10          n=3001886 digest=042bb63d1fc8068e
+Math       log10          n=3001886 digest=98abf24fd5208a81
+StrictMath sqrt           n=3000000 digest=30c9f0b36f92de7a
+Math       sqrt           n=3000000 digest=30c9f0b36f92de7a
+StrictMath cbrt           n=3000000 digest=40bfb359b71f4cec
+Math       cbrt           n=3000000 digest=59395d17af230a26
+StrictMath sinh           n=3002215 digest=cabba7a9e5df0802
+Math       sinh           n=3002215 digest=4f02a7764e7dc943
+StrictMath cosh           n=3002026 digest=fa656a28cfa681ec
+Math       cosh           n=3002026 digest=fa656a28cfa681ec
+StrictMath tanh           n=3000000 digest=3be09288d0257eb1
+Math       tanh           n=3000000 digest=296b1c5caaccd2a9
+StrictMath expm1          n=3007584 digest=d36e4ac37512962f
+Math       expm1          n=3007584 digest=d36e4ac37512962f
+StrictMath log1p          n=3007550 digest=bd2ea1d474139f71
+Math       log1p          n=3007550 digest=bd2ea1d474139f71
+StrictMath atan2          n=3020820 digest=2fba64c22f150cbe
+Math       atan2          n=3020820 digest=2fba64c22f150cbe
+StrictMath hypot          n=3008720 digest=e0b2228c56aff6de
+Math       hypot          n=3008720 digest=e0b2228c56aff6de
+StrictMath pow            n=4005016 digest=51dfe40e5bb17ef2
+Math       pow            n=4005016 digest=9f1a23c749ce19f6
+StrictMath IEEEremainder  n=3000000 digest=bb8cd49e33a36d70
+Math       IEEEremainder  n=3000000 digest=bb8cd49e33a36d70
+
+### JDK 27
+# 27.0.1.1+4-22
+StrictMath sin            n=3000000 digest=7c6ec2b1d7b7088e
+Math       sin            n=3000000 digest=060abe3897901ff1
+StrictMath cos            n=3000000 digest=fbd59a7b2f1c2f1e
+Math       cos            n=3000000 digest=220198eac352b073
+StrictMath tan            n=3000000 digest=1f1bf465a49980e6
+Math       tan            n=3000000 digest=e71d528d5b09c8f0
+StrictMath asin           n=3001655 digest=8307ab595d9c7699
+Math       asin           n=3001655 digest=8307ab595d9c7699
+StrictMath acos           n=3001569 digest=5aa9acc6aaabab5c
+Math       acos           n=3001569 digest=5aa9acc6aaabab5c
+StrictMath atan           n=3001735 digest=5ffeef01cc8d1cfe
+Math       atan           n=3001735 digest=5ffeef01cc8d1cfe
+StrictMath exp            n=3002283 digest=8e41f03d7eb9e59b
+Math       exp            n=3002283 digest=9fed2a0073e4cf15
+StrictMath log            n=3002820 digest=5d9feb169ab6fe36
+Math       log            n=3002820 digest=4a2a0bf5a9b659fc
+StrictMath log10          n=3001886 digest=042bb63d1fc8068e
+Math       log10          n=3001886 digest=98abf24fd5208a81
+StrictMath sqrt           n=3000000 digest=30c9f0b36f92de7a
+Math       sqrt           n=3000000 digest=30c9f0b36f92de7a
+StrictMath cbrt           n=3000000 digest=40bfb359b71f4cec
+Math       cbrt           n=3000000 digest=59395d17af230a26
+StrictMath sinh           n=3002215 digest=cabba7a9e5df0802
+Math       sinh           n=3002215 digest=4f02a7764e7dc943
+StrictMath cosh           n=3002026 digest=fa656a28cfa681ec
+Math       cosh           n=3002026 digest=fa656a28cfa681ec
+StrictMath tanh           n=3000000 digest=3be09288d0257eb1
+Math       tanh           n=3000000 digest=296b1c5caaccd2a9
+StrictMath expm1          n=3007584 digest=d36e4ac37512962f
+Math       expm1          n=3007584 digest=d36e4ac37512962f
+StrictMath log1p          n=3007550 digest=bd2ea1d474139f71
+Math       log1p          n=3007550 digest=bd2ea1d474139f71
+StrictMath atan2          n=3020820 digest=2fba64c22f150cbe
+Math       atan2          n=3020820 digest=2fba64c22f150cbe
+StrictMath hypot          n=3008720 digest=e0b2228c56aff6de
+Math       hypot          n=3008720 digest=e0b2228c56aff6de
+StrictMath pow            n=4005016 digest=a49fdd8612c4d863
+Math       pow            n=4005016 digest=9f1a23c749ce19f6
+StrictMath IEEEremainder  n=3000000 digest=bb8cd49e33a36d70
+Math       IEEEremainder  n=3000000 digest=bb8cd49e33a36d70
+
+## Reading
+
+- StrictMath returns the same bits on JDK 21, 25 and 26 for all 20 functions on every input here,
+  and on JDK 27 for 19 of them. StrictMath.pow on JDK 27 differs on 1,258 inputs, the same ones
+  as in jdk-scan-2026-11-25.txt, all in the set aimed at |y| > 2^31 with |x| near 1.
+- Math, on this CPU, moved more often: cbrt and tanh from JDK 21 to 25 (on 198,346 and 523,661
+  of 3,000,000 inputs), sinh from 25 to 26 (on 346,969 of 3,002,215), and none from 26 to 27.
+  Math.pow, with its intrinsic, did not move.
