@@ -276,7 +276,6 @@ incubator module. On x86, code on 128-bit vectors calls the Vector API's Java fa
 `io.github.vecbricks:vfdlibm:0.3.0` is on Maven Central, and the source is at
 [github.com/vecbricks/vfdlibm](https://github.com/vecbricks/vfdlibm).
 
-<!-- owner: confirm or replace the Varka paragraph -->
 vfdlibm comes from [Varka](https://github.com/vecbricks/varka), my research fork of Apache Spark
 that compiles eligible SQL projections at runtime into one fused Vector API loop over Arrow
 buffers, and falls back to stock Spark on anything it cannot serve. To fuse `exp`, `log` or `pow`
