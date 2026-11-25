@@ -45,24 +45,9 @@ public class HypotDiagBench {
   @Param({"common", "mixed"})
   public String inputs;
 
-  /**
-   * Doubles of a spacer array allocated between xs, ys and out: 0 keeps the three arrays
-   * back to back in the TLAB, so out sits 2 * 8208 bytes, 32 mod 4096, past xs.
-   */
-  @Param({"0"})
-  public int gap;
-
-  /** Doubles of a spacer array allocated before xs (0: none), which moves all three arrays. */
-  @Param({"0"})
-  public int pre;
-
-  private double[] spacer0;
-
   private double[] xs;
   private double[] ys;
   private double[] out;
-  private double[] spacer1;
-  private double[] spacer2;
 
   private static final double[][] RARE = {
     {Double.NaN, 1.0}, {2.0, Double.NaN}, {Double.POSITIVE_INFINITY, 3.0},
@@ -78,19 +63,14 @@ public class HypotDiagBench {
       throw new IllegalArgumentException("inputs is common or mixed, not '" + inputs + "'");
     }
     SplittableRandom random = new SplittableRandom(1L);
-    spacer0 = pre > 0 ? new double[pre] : null;
     xs = new double[N];
-    spacer1 = gap > 0 ? new double[gap] : null;
     ys = new double[N];
-    spacer2 = gap > 0 ? new double[gap] : null;
     out = new double[N];
     if (Boolean.getBoolean("diag.addr")) {
-      System.out.println("diag.addr xs=" + Addr.of(xs) + " ys=" + Addr.of(ys) + " out=" + Addr.of(out)
-          + " ys-xs mod 4096=" + Math.floorMod(Addr.of(ys) - Addr.of(xs), 4096)
-          + " out-xs mod 4096=" + Math.floorMod(Addr.of(out) - Addr.of(xs), 4096)
-          + " xs mod 4096=" + Math.floorMod(Addr.of(xs), 4096)
+      System.out.println("diag.addr xs=" + Addr.of(xs) + " state=" + Addr.of(this)
           + " data mod 32: xs=" + Math.floorMod(Addr.of(xs) + 16, 32) + " ys="
-          + Math.floorMod(Addr.of(ys) + 16, 32) + " out=" + Math.floorMod(Addr.of(out) + 16, 32));
+          + Math.floorMod(Addr.of(ys) + 16, 32) + " out=" + Math.floorMod(Addr.of(out) + 16, 32)
+          + " xs data mod 4096=" + Math.floorMod(Addr.of(xs) + 16, 4096));
     }
     for (int i = 0; i < N; i++) {
       xs[i] = random.nextDouble(-10.0, 10.0);
@@ -166,6 +146,62 @@ public class HypotDiagBench {
   }
 
 
+
+  /** Candidate A: lines 66-70 as blends, no StrictMath call in the loop (changes computation). */
+  @Benchmark
+  public double[] nanBlend() {
+    for (int i = 0; i < N; i += S256.length()) {
+      HypotNanBlend.hypot(
+              DoubleVector.fromArray(S256, xs, i), DoubleVector.fromArray(S256, ys, i), null)
+          .intoArray(out, i);
+    }
+    return out;
+  }
+
+  /** Candidate B: main's values and calls, every lane read before the first call. */
+  @Benchmark
+  public double[] gatherFirst() {
+    for (int i = 0; i < N; i += S256.length()) {
+      HypotGatherFirst.hypot(
+              DoubleVector.fromArray(S256, xs, i), DoubleVector.fromArray(S256, ys, i), null)
+          .intoArray(out, i);
+    }
+    return out;
+  }
+
+  @CompilerControl(CompilerControl.Mode.DONT_INLINE)
+  double[] loopNanBlend() {
+    return nanBlend();
+  }
+
+  @CompilerControl(CompilerControl.Mode.DONT_INLINE)
+  double[] loopGatherFirst() {
+    return gatherFirst();
+  }
+
+  /** Candidate A's loop as a method of its own, as depth0 is main's. */
+  @Benchmark
+  public double[] depth0NanBlend() {
+    return loopNanBlend();
+  }
+
+  /** Candidate B's loop as a method of its own. */
+  @Benchmark
+  public double[] depth0GatherFirst() {
+    return loopGatherFirst();
+  }
+
+  @Benchmark
+  @BenchmarkMode(Mode.SampleTime)
+  public double[] nanBlendSample() {
+    return nanBlend();
+  }
+
+  @Benchmark
+  @BenchmarkMode(Mode.SampleTime)
+  public double[] gatherFirstSample() {
+    return gatherFirst();
+  }
 
   /** main's loop as a method of its own, never inlined, so the rows below call one compiled loop. */
   @CompilerControl(CompilerControl.Mode.DONT_INLINE)
