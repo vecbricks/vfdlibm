@@ -45,9 +45,24 @@ public class HypotDiagBench {
   @Param({"common", "mixed"})
   public String inputs;
 
+  /**
+   * Doubles of a spacer array allocated between xs, ys and out: 0 keeps the three arrays
+   * back to back in the TLAB, so out sits 2 * 8208 bytes, 32 mod 4096, past xs.
+   */
+  @Param({"0"})
+  public int gap;
+
+  /** Doubles of a spacer array allocated before xs (0: none), which moves all three arrays. */
+  @Param({"0"})
+  public int pre;
+
+  private double[] spacer0;
+
   private double[] xs;
   private double[] ys;
   private double[] out;
+  private double[] spacer1;
+  private double[] spacer2;
 
   private static final double[][] RARE = {
     {Double.NaN, 1.0}, {2.0, Double.NaN}, {Double.POSITIVE_INFINITY, 3.0},
@@ -63,9 +78,20 @@ public class HypotDiagBench {
       throw new IllegalArgumentException("inputs is common or mixed, not '" + inputs + "'");
     }
     SplittableRandom random = new SplittableRandom(1L);
+    spacer0 = pre > 0 ? new double[pre] : null;
     xs = new double[N];
+    spacer1 = gap > 0 ? new double[gap] : null;
     ys = new double[N];
+    spacer2 = gap > 0 ? new double[gap] : null;
     out = new double[N];
+    if (Boolean.getBoolean("diag.addr")) {
+      System.out.println("diag.addr xs=" + Addr.of(xs) + " ys=" + Addr.of(ys) + " out=" + Addr.of(out)
+          + " ys-xs mod 4096=" + Math.floorMod(Addr.of(ys) - Addr.of(xs), 4096)
+          + " out-xs mod 4096=" + Math.floorMod(Addr.of(out) - Addr.of(xs), 4096)
+          + " xs mod 4096=" + Math.floorMod(Addr.of(xs), 4096)
+          + " data mod 32: xs=" + Math.floorMod(Addr.of(xs) + 16, 32) + " ys="
+          + Math.floorMod(Addr.of(ys) + 16, 32) + " out=" + Math.floorMod(Addr.of(out) + 16, 32));
+    }
     for (int i = 0; i < N; i++) {
       xs[i] = random.nextDouble(-10.0, 10.0);
       ys[i] = random.nextDouble(-10.0, 10.0);
