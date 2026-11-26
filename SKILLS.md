@@ -260,7 +260,7 @@ agree.
 
 - **The arms.** Each port's benchmark arms, unmasked and masked, and the cores the benchmarks call:
   exp (finish, blended, core), expm1 (finish, guarded, blended, core), log and log10 (finish,
-  blended), log1p (finish, guarded, blended), sinh, asin, atan, acos and hypot (finish), cosh
+  blended), log1p (finish, guarded, blended), sinh, asin, atan, acos (finish), hypot (blended), cosh
   (slice and finish by name, and `VFdlibm.cosh`, the default, as `default`) and atan2 (guarded,
   blended); the default arm goes through `VFdlibm`, the others through the port's class.
 - **The rules.** Every byte decoded; packed-double arithmetic (`v(add|sub|mul|div|sqrt)pd`)
@@ -1693,10 +1693,11 @@ mnemonic); the other operations count the same at both widths.
   vector sum keeps, which `nanLanesAreStrictMathInEveryJitMode` pins in every JIT mode, a JVM per
   width so that the checked calls run the code compiled for it (a loop over all widths deoptimizes
   at each change of shape). On the EPYC 7763 the vector rows on mixed data run 1.83 to 1.85 times as
-  fast as with the per-lane call (`hypot-pair-epyc7763-2026-11-25.txt`). The arm keeps the name
-  `finish` until arms are renamed (it is a blended arm now). The first run of the vector tests
-  passed on every input. CI's `bench/alloc-check.py` covers `HypotBenchmark`'s rows (`finish256`,
-  `finishPreferred`, `finishMax`, common and mixed data); the host files that time the code after
+  fast as with the per-lane call (`hypot-pair-epyc7763-2026-11-25.txt`). The arm is named
+  `blended` (it was `finish` until it was renamed; the assembly tables above that list hypot's
+  `finish` rows read the older code). The first run of the vector tests
+  passed on every input. CI's `bench/alloc-check.py` covers `HypotBenchmark`'s rows (`blended256`,
+  `blendedPreferred`, `blendedMax`, common and mixed data); the host files that time the code after
   #174 (`hypot-epyc7763-2026-11-24.txt`, a run of 24 November and its re-run of 25 November, and
   `hypot-xeon8573c-2026-11-24-2.txt`, a run of 24 November and its re-run of 25 November) read every
   row at 0.040 B/op or less; they time the per-lane finish of 0.3.0, and #186's blended body is read

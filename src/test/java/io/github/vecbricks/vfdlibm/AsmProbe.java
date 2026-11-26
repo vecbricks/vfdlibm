@@ -452,7 +452,7 @@ final class AsmProbe {
   // ---------------------------------------------------------------------------------------------
   // hypot: HypotBenchmark's arm, x in a and y in b, both on [-10, 10).
 
-  static void hypotFinish(double[] a, double[] b, double[] out, boolean[] live,
+  static void hypotBlended(double[] a, double[] b, double[] out, boolean[] live,
       boolean[] flags) {
     for (int i = 0; i < N; i += S.length()) {
       VFdlibm.hypot(DoubleVector.fromArray(S, a, i), DoubleVector.fromArray(S, b, i))
@@ -460,7 +460,7 @@ final class AsmProbe {
     }
   }
 
-  static void hypotFinishMasked(double[] a, double[] b, double[] out, boolean[] live,
+  static void hypotBlendedMasked(double[] a, double[] b, double[] out, boolean[] live,
       boolean[] flags) {
     for (int i = 0; i < N; i += S.length()) {
       VFdlibm.hypot(DoubleVector.fromArray(S, a, i), DoubleVector.fromArray(S, b, i),

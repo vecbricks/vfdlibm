@@ -229,7 +229,8 @@ five are a later, optional set; the large-argument reduction of the trigonometri
   has the same three arms for `expm1`, `SinhBenchmark` one for `sinh`, `CoshBenchmark` two for
   `cosh`, `AsinBenchmark` one for `asin`, `AtanBenchmark` one for `atan`, `AcosBenchmark` one for
   `acos`, `Atan2Benchmark` two for `atan2` (the blended and the guarded arm, over two arrays) and
-  `HypotBenchmark` one for `hypot` (over two arrays; `hypot-epyc7763-2026-11-23.txt` reads it before
+  `HypotBenchmark` one for `hypot` (over two arrays; its rows are `blended*` now, and the files
+  below name the older code's `finish*` rows; `hypot-epyc7763-2026-11-23.txt` reads it before
   #174 ordered its arguments, a run and its re-run: no direction against the scalar loop at the
   preferred species, and `finishMax` 1.6x slower than `finishPreferred` on common data in both;
   `hypot-epyc7763-2026-11-24.txt` reads it after #174, a run and its re-run, the scalar loop lower
@@ -251,10 +252,9 @@ five are a later, optional set; the large-argument reduction of the trigonometri
   no file reads the earlier finish of `sinh` or `cosh`, whose current rows the host files of 21
   November read (`bench/results/sinh-xeon8573c-2026-11-21.txt` and the like). `asin`, `atan` and
   `acos` were written with the new finish from the start (as `hypot` was, until #186 blended its
-  rare lanes), and `atan2` and, since #186, `hypot` finish no lane per lane; the host files of 22
-  November read their rows
-  (`bench/results/asin-xeon8573c-2026-11-22.txt`
-  and the like). `ExpKindsBench` runs
+  rare lanes and a later change renamed its arm `blended`), and `atan2` and, since #186, `hypot`
+  finish no lane per lane; the host files of 22 November read their rows
+  (`bench/results/asin-xeon8573c-2026-11-22.txt` and the like). `ExpKindsBench` runs
   exp's two arms on one kind of rare input at a time (a NaN, an overflow, an underflow, a subnormal
   result), to find which kind costs an arm its time on mixed data (#41); it is named apart so that
   a run of

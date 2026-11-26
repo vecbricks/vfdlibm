@@ -32,8 +32,8 @@ import jdk.incubator.vector.VectorMask;
  * at each, in bytes per op, an op being one pass over 1024 doubles. The arm that {@code exp},
  * {@code expm1}, {@code log}, {@code log10} and {@code log1p} call is the finish arm, the one
  * {@code atan2} calls is the guarded arm, and the one {@code cosh} calls is the slice arm; {@code
- * hypot} and {@code pow} have one arm, named the finish ({@code hypot}'s computes its rare lanes in
- * the vector since #186). The host files of {@code hypot} and {@code pow} ({@code
+ * pow} has one arm, named the finish, and {@code hypot} one, named blended, which computes its rare
+ * lanes in the vector since #186. The host files of {@code hypot} and {@code pow} ({@code
  * hypot-epyc7763-2026-11-24.txt}, {@code hypot-xeon8573c-2026-11-24-2.txt}, {@code
  * pow-epyc7763-2026-11-23.txt} and {@code pow-xeon8573c-2026-11-24.txt}) read their vector rows at
  * 256 bits, the preferred species and {@code SPECIES_MAX} at 0.071 bytes per op or less, but {@code
