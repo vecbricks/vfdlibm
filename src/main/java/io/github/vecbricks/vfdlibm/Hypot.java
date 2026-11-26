@@ -73,9 +73,9 @@ import jdk.incubator.vector.VectorSpecies;
  * only observed: the NaN that a sum keeps). Every lane is computed in the vector, and the body
  * calls nothing per lane. One arm, named blended since every branch and every special lane
  * is a blend; the benchmark's rows and the assembly probe use that name. The C's {@code int} words
- * are int lanes of half the double vector's size, as in atan2; every call this body makes ({@code Lanes.intSpecies}, and {@code Lanes.hiInt} on
- * the swapped values) comes before the scalings and the medium path, with only the views, one
- * compare and two blends ahead of it, and the high-word writes are written out, since C2 stops
+ * are int lanes of half the double vector's size, as in atan2; every call this body makes ({@code
+ * Lanes.intSpecies}, and {@code Lanes.hiInt} on the swapped values) comes before the scalings and the medium path, with only the views,
+ * one compare and two blends ahead of it, and the high-word writes are written out, since C2 stops
  * inlining once the graph is large (NodeCountInliningCutoff) and a refused call boxes its vectors.
  */
 final class Hypot {
