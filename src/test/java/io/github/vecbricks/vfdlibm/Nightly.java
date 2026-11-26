@@ -298,7 +298,7 @@ final class Nightly {
             new int[] {61 << 20, (61 << 20) - 1, -60 << 20, (-60 << 20) - 1}));
 
     /**
-     * hypot: its one arm (the finish arm {@code VFdlibm} calls), the candidates of a lane of two
+     * hypot: its one arm (the blended arm {@code VFdlibm} calls), the candidates of a lane of two
      * NaNs (the magnitudes: e_hypot.c adds the absolute values), and where its branches are: the
      * high words e_hypot.c tests (the scalings at {@code 2^500}, {@code 2^-500} and the subnormal
      * {@code b}, the ratio word, the infinities) and the differences of the two words at which

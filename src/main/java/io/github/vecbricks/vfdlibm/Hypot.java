@@ -71,8 +71,8 @@ import jdk.incubator.vector.VectorSpecies;
  * {@code a} is an infinity and {@code b} where {@code b} is one, with line 63's {@code a+b} over
  * them, as in the C ({@code PROOFS.md}, hypot: L22, which separates what is proven from what is
  * only observed: the NaN that a sum keeps). Every lane is computed in the vector, and the body
- * calls nothing per lane. One arm, named blended, as atan2's is, by the benchmark's rows and
- * the assembly check. The C's {@code int} words are int lanes of half the double vector's size,
+ * calls nothing per lane. One arm, named blended since every branch and every special lane
+ * is a blend; the benchmark's rows and the assembly probe use that name. The C's {@code int} words are int lanes of half the double vector's size,
  * as in atan2; every call this body makes ({@code Lanes.intSpecies}, and {@code Lanes.hiInt} on
  * the swapped values) comes before the scalings and the medium path, with only the views, one
  * compare and two blends ahead of it, and the high-word writes are written out, since C2 stops

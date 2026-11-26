@@ -30,8 +30,8 @@ import org.openjdk.jmh.annotations.Warmup;
  * #186 every lane is computed in the vector, an infinity or a NaN by lines 66-70 as blends, where
  * the files below time code that finished those lanes per lane, and name its rows finish256,
  * finishPreferred and finishMax, as this class did until the arm was renamed), at 256 bits, at the
- * host's preferred species and at {@code SPECIES_MAX}. 128 bits is left out: on x86 C2 lowers no mask at
- * two 64-bit lanes, so every 128-bit arm boxes (SKILLS.md).
+ * host's preferred species and at {@code SPECIES_MAX}. 128 bits is left out: on x86 C2 lowers no
+ * mask at two 64-bit lanes, so every 128-bit arm boxes (SKILLS.md).
  * bench/results/hypot-epyc7763-2026-11-23.txt times it before #174 ordered hypot's arguments, a run
  * and its re-run on the EPYC 7763: inside 1.3x of the scalar loop at the preferred species, and
  * finishMax about 1.6 times finishPreferred on common data in both runs, the same code at the same
