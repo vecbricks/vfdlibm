@@ -28,8 +28,9 @@ import org.openjdk.jmh.annotations.Warmup;
  * hypot over two arrays of 1024 doubles ({@code x} and {@code y}): the scalar {@code
  * StrictMath.hypot} loop and {@link Hypot#hypot}, the one arm ({@code VFdlibm.hypot} runs it; since
  * #186 every lane is computed in the vector, an infinity or a NaN by lines 66-70 as blends, where
- * the files below time code that finished those lanes per lane), at 256 bits, at the host's
- * preferred species and at {@code SPECIES_MAX}. 128 bits is left out: on x86 C2 lowers no mask at
+ * the files below time code that finished those lanes per lane, and name its rows finish256,
+ * finishPreferred and finishMax, as this class did until the arm was renamed), at 256 bits, at the
+ * host's preferred species and at {@code SPECIES_MAX}. 128 bits is left out: on x86 C2 lowers no mask at
  * two 64-bit lanes, so every 128-bit arm boxes (SKILLS.md).
  * bench/results/hypot-epyc7763-2026-11-23.txt times it before #174 ordered hypot's arguments, a run
  * and its re-run on the EPYC 7763: inside 1.3x of the scalar loop at the preferred species, and
@@ -121,7 +122,7 @@ public class HypotBenchmark {
   }
 
   @Benchmark
-  public double[] finish256() {
+  public double[] blended256() {
     for (int i = 0; i < N; i += S256.length()) {
       Hypot.hypot(DoubleVector.fromArray(S256, xs, i), DoubleVector.fromArray(S256, ys, i), null)
           .intoArray(out, i);
@@ -130,7 +131,7 @@ public class HypotBenchmark {
   }
 
   @Benchmark
-  public double[] finishPreferred() {
+  public double[] blendedPreferred() {
     for (int i = 0; i < N; i += SP.length()) {
       Hypot.hypot(DoubleVector.fromArray(SP, xs, i), DoubleVector.fromArray(SP, ys, i), null)
           .intoArray(out, i);
@@ -139,7 +140,7 @@ public class HypotBenchmark {
   }
 
   @Benchmark
-  public double[] finishMax() {
+  public double[] blendedMax() {
     for (int i = 0; i < N; i += SMAX.length()) {
       Hypot.hypot(DoubleVector.fromArray(SMAX, xs, i), DoubleVector.fromArray(SMAX, ys, i), null)
           .intoArray(out, i);
