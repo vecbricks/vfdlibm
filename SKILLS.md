@@ -1694,8 +1694,8 @@ mnemonic); the other operations count the same at both widths.
   width so that the checked calls run the code compiled for it (a loop over all widths deoptimizes
   at each change of shape). On the EPYC 7763 the vector rows on mixed data run 1.83 to 1.85 times as
   fast as with the per-lane call (`hypot-pair-epyc7763-2026-11-25.txt`). The arm is named
-  `blended` (it was `finish` until it was renamed; the tables below that read hypot's `finish`
-  rows read the older code). The first run of the vector tests
+  `blended` (it was `finish` until it was renamed; the assembly tables above that list hypot's
+  `finish` rows read the older code). The first run of the vector tests
   passed on every input. CI's `bench/alloc-check.py` covers `HypotBenchmark`'s rows (`blended256`,
   `blendedPreferred`, `blendedMax`, common and mixed data); the host files that time the code after
   #174 (`hypot-epyc7763-2026-11-24.txt`, a run of 24 November and its re-run of 25 November, and
