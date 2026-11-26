@@ -66,10 +66,13 @@ import jdk.incubator.vector.VectorSpecies;
  * reassociation; the branches are blends ({@code PROOFS.md}, L13), and the two square roots are
  * one {@code VectorOperators.SQRT} of the radicand each lane's branch computes.
  *
- * <p>The rare path: {@code ha >= 0x7ff00000}, an infinity or a NaN in either argument (lines
- * 66-70, and the lanes of line 63 whose {@code a} is not finite), finished per lane with {@code
- * StrictMath.hypot}, which is the C on those lanes. Every finite lane is computed in the vector.
- * One arm: the finish. The C's {@code int} words are int lanes of half the double vector's size,
+ * <p>The lanes of {@code ha >= 0x7ff00000}, an infinity or a NaN in either argument, take lines
+ * 66-70 as blends in the vector: {@code a+b} of the sign-cleared arguments, then {@code a} where
+ * {@code a} is an infinity and {@code b} where {@code b} is one, with line 63's {@code a+b} over
+ * them, as in the C ({@code PROOFS.md}, hypot: L22, which separates what is proven from what is
+ * only observed: the NaN that a sum keeps). Every lane is computed in the vector, and the body
+ * calls nothing per lane. One arm, still named the finish, as the benchmark's rows and the
+ * assembly check name it. The C's {@code int} words are int lanes of half the double vector's size,
  * as in atan2; every call this body makes ({@code Lanes.intSpecies}, and {@code Lanes.hiInt} on
  * the swapped values) comes before the scalings and the medium path, with only the views, one
  * compare and two blends ahead of it, and the high-word writes are written out, since C2 stops
@@ -81,8 +84,11 @@ final class Hypot {
   static final int RATIO_WORD = 0x3c00000;
   /** Line 65: {@code ha > 0x5f300000}, {@code a > 2^500}. */
   static final int HA_BIG = 0x5f300000;
-  /** Line 66: {@code ha >= 0x7ff00000}, an infinity or a NaN: the lanes finished per lane. */
+  /** Line 66: {@code ha >= 0x7ff00000}, an infinity or a NaN: lines 66-70's lanes (L22). */
   static final int HA_INF = 0x7ff00000;
+
+  /** The bits of +infinity: lines 68 and 69's tests on a sign-cleared argument's two words. */
+  static final long INF_BITS = 0x7ff0000000000000L;
   /** Line 77: {@code hb < 0x20b00000}, {@code b < 2^-500}. */
   static final int HB_SMALL = 0x20b00000;
   /** Line 78: {@code hb <= 0x000fffff}, a subnormal {@code b} or zero. */
@@ -102,8 +108,10 @@ final class Hypot {
   static final String DROP_T2 = "hypot.dropT2";
   static final String DROP_Y2 = "hypot.dropY2";
   static final String HIGH_WORD_ORDER = "hypot.highWordOrder";
-  // Read once into constants, so the body holds no call and an unplanted fault folds away. Each
-  // was sized on draws before it was wired (SKILLS.md, "What the hypot port taught").
+  static final String DROP_INFINITY_OVER_NAN = "hypot.dropInfinityOverNan";
+  // Read once into constants, so the body holds no call and an unplanted fault folds away. The
+  // first four were sized on draws before they were wired (SKILLS.md, "What the hypot port
+  // taught"); dropInfinityOverNan changes exactly the lanes of a NaN beside an infinite b (L22).
   /** Line 63's return of {@code a+b} dropped. */
   private static final boolean DROPPING_EARLY_RETURN = Faults.is(DROP_EARLY_RETURN);
   /** Lines 80-84 with {@code ha} and {@code hb} read again from the scaled values (L16). */
@@ -115,12 +123,14 @@ final class Hypot {
   /** Line 60 as written: the arguments ordered by their high words alone (L21). */
   private static final boolean ORDERING_BY_HIGH_WORDS = Faults.is(HIGH_WORD_ORDER);
 
+  /** Line 69 dropped: a NaN beside an infinite b gives the NaN, not the infinity (L22). */
+  private static final boolean DROPPING_INFINITY_OVER_NAN = Faults.is(DROP_INFINITY_OVER_NAN);
+
   private Hypot() {}
 
   /**
-   * hypot with the rare lanes finished per lane. {@code live} is null for every lane; otherwise
-   * only live lanes are computed, inactive lanes return {@code x}'s lane untouched, and an inactive
-   * lane never takes the per-lane finish.
+   * hypot over the lanes. {@code live} is null for every lane; otherwise inactive lanes return
+   * {@code x}'s lane untouched.
    */
   static DoubleVector hypot(DoubleVector x, DoubleVector y, VectorMask<Double> live) {
     VectorSpecies<Double> species = x.species();
@@ -154,8 +164,8 @@ final class Hypot {
     VectorMask<Double> ratio = ha.sub(hb).compare(VectorOperators.GT, RATIO_WORD).cast(species);
 
     // Lines 65 and 73-75: ha > 0x5f300000 takes both words down by 0x25800000 (2^-600), k = 600.
-    // (Line 66's lanes, ha >= 0x7ff00000, are finished per lane below; what they compute here is
-    // never read.) Each __HI(v) = word is written out: the word widened by I2L, whose sign
+    // (Line 66's lanes, ha >= 0x7ff00000, take lines 66-70's blend below; what they compute here
+    // is never read.) Each __HI(v) = word is written out: the word widened by I2L, whose sign
     // extension the shift drops, over the low word kept.
     VectorMask<Integer> bigI = ha.compare(VectorOperators.GT, HA_BIG);
     IntVector ha2 = ha.blend(ha.sub(SCALE_WORD), bigI);
@@ -234,58 +244,29 @@ final class Hypot {
     DoubleVector result = root.blend(twoK.mul(root), scaled);
 
     // The returns before the medium path, from the last to the first, so that the first that
-    // matches wins (L13): line 79's a, then line 63's a+b of the unscaled a and b.
+    // matches wins (L13): line 79's a, then lines 66-70's w, then line 63's a+b of the unscaled a
+    // and b.
     result = result.blend(a2, zeroB);
+    // Lines 66-70, as blends: where ha >= 0x7ff00000 (an infinity or a NaN in either argument),
+    // w = a+b; then w = a where a is an infinity, ((ha&0xfffff)|__LO(a))==0, that is a's
+    // sign-cleared bits are 0x7ff0000000000000; then w = b where b is one,
+    // ((hb^0x7ff00000)|__LO(b))==0. a and b are the unscaled a1 and b1, since lines 66-70 come
+    // before line 73's scaling (PROOFS.md, hypot: L22). The sum is line 63's too.
+    DoubleVector sum = a1.add(b1);
+    VectorMask<Double> rare = ha.compare(VectorOperators.GE, HA_INF).cast(species);
+    VectorMask<Double> aInf = aBits.compare(VectorOperators.EQ, INF_BITS).cast(species);
+    VectorMask<Double> bInf = bBits.compare(VectorOperators.EQ, INF_BITS).cast(species);
+    DoubleVector special = sum.blend(a1, aInf);
+    if (!DROPPING_INFINITY_OVER_NAN) {
+      special = special.blend(b1, bInf);
+    }
+    result = result.blend(special, rare);
     if (!DROPPING_EARLY_RETURN) {
-      result = result.blend(a1.add(b1), ratio);
+      result = result.blend(sum, ratio);
     }
 
     if (live != null) {
       result = x.blend(result, live);
-    }
-    // ha >= 0x7ff00000, an infinity or a NaN in either argument, is finished per lane, written
-    // out here with no call that takes a vector: lane and withLane are lane extract and insert,
-    // which C2 intrinsifies for the fixed shapes, and the only call is StrictMath.hypot on two
-    // doubles. The first eight lanes have constant indices, as in the other ports' finishes, and
-    // the loop takes the lanes past eight. rare is and-ed with live, so an inactive lane is never
-    // rewritten.
-    VectorMask<Double> rare = ha.compare(VectorOperators.GE, HA_INF).cast(species);
-    if (live != null) {
-      rare = rare.and(live);
-    }
-    if (rare.anyTrue()) {
-      long rareLanes = rare.toLong();
-      int lanes = x.length();
-      if (lanes > 0 && (rareLanes & 1L) != 0) {
-        result = result.withLane(0, StrictMath.hypot(x.lane(0), y.lane(0)));
-      }
-      if (lanes > 1 && (rareLanes & 2L) != 0) {
-        result = result.withLane(1, StrictMath.hypot(x.lane(1), y.lane(1)));
-      }
-      if (lanes > 2 && (rareLanes & 4L) != 0) {
-        result = result.withLane(2, StrictMath.hypot(x.lane(2), y.lane(2)));
-      }
-      if (lanes > 3 && (rareLanes & 8L) != 0) {
-        result = result.withLane(3, StrictMath.hypot(x.lane(3), y.lane(3)));
-      }
-      if (lanes > 4 && (rareLanes & 16L) != 0) {
-        result = result.withLane(4, StrictMath.hypot(x.lane(4), y.lane(4)));
-      }
-      if (lanes > 5 && (rareLanes & 32L) != 0) {
-        result = result.withLane(5, StrictMath.hypot(x.lane(5), y.lane(5)));
-      }
-      if (lanes > 6 && (rareLanes & 64L) != 0) {
-        result = result.withLane(6, StrictMath.hypot(x.lane(6), y.lane(6)));
-      }
-      if (lanes > 7 && (rareLanes & 128L) != 0) {
-        result = result.withLane(7, StrictMath.hypot(x.lane(7), y.lane(7)));
-      }
-      rareLanes &= ~0xffL;
-      while (rareLanes != 0) {
-        int lane = Long.numberOfTrailingZeros(rareLanes);
-        rareLanes &= rareLanes - 1;
-        result = result.withLane(lane, StrictMath.hypot(x.lane(lane), y.lane(lane)));
-      }
     }
     return result;
   }

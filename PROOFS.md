@@ -1683,14 +1683,14 @@ words, `k -= 600` (86-90). With `w = a-b`, `w > b` takes `sqrt(t1*t1-(b*(-b)-t2*
 over `a = a+a`, `b`'s and `a`'s words split the same way (101-108). For `k != 0` the result is
 `t1*w` with `t1 = 1.0` and `k<<20` added to its high word (110-113).
 
-The port computes every finite lane in the vector by the C's operations in the C's order, with
-no fused multiply-add and no reassociation, and finishes the lanes of `ha >= 0x7ff00000` (an
-infinity or a NaN in either argument) per lane with `StrictMath.hypot`, which is the C on those
-lanes. It departs from the C at one line, on purpose: line 60 orders the arguments by their
-magnitudes and not by their high words alone, since `StrictMath.hypot` does (L21 below, issue
-173). Beyond that it needs only L13's blend argument and (R4)'s `sqrt`; L16 below is a
-counter-example, not a fold: it shows that the stale words the C reads are not optional. Where
-its text is not the C's:
+The port computes every finite lane in the vector by the C's operations in the C's order, with no
+fused multiply-add and no reassociation, the lanes of `ha >= 0x7ff00000` (an infinity or a NaN in
+either argument) included: lines 66-70 are blends (L22 below, which separates what is proven from
+what is only observed, the NaN a sum keeps). It departs from the C at one line, on purpose: line 60
+orders the arguments by their magnitudes and not by their high words alone, since `StrictMath.hypot`
+does (L21 below, issue 173). Beyond that it needs only L13's blend argument and (R4)'s `sqrt`; L16
+below is a counter-example, not a fold: it shows that the stale words the C reads are not optional.
+Where its text is not the C's:
 
 - The swap is two blends of the arguments' sign-cleared bits under one signed 64-bit compare,
   `|y|`'s bits greater than `|x|`'s (L21), and `ha` and `hb` are the high words of the swapped
@@ -1716,23 +1716,26 @@ its text is not the C's:
   C's `w > b` and the one `VectorOperators.SQRT` taken of the blend: an operand blend (L13, H2),
   so each lane takes the root of its own form's radicand, by (R4) the C's `sqrt`.
 - The returns before the medium path are blends over it from the last to the first: line 79's
-  `a` (the value at that line), then line 63's `a+b` of the unscaled `a` and `b`; the rare lanes
-  are written last, by the finish.
+  `a` (the value at that line), then lines 66-70's `w` (L22), then line 63's `a+b` of the
+  unscaled `a` and `b`, the first return of the C.
 
 **L13 for hypot.** H1 (selection) holds: every mask but the swap's is the C's compare on the same
-int words (`ha-hb > 0x3c00000`, `ha > 0x5f300000`, `hb < 0x20b00000`, `hb <= 0x000fffff`, `k !=
-0`) or on the same doubles (`w > b`, `b`'s bits zero), nested as the C nests them; the swap's is
-L21's compare of the bits. H2 (operands)
-holds for the operand blends (the swap, the scaled values and words, the radicand), and every
-operation is the C's in its order. H3 (totality) holds: IEEE operations, compares, int lane
-arithmetic and shifts, conversions and blends, with no integer division and no indexed load, so
-the values a discarded lane takes (an infinite `t1*t1` beside a huge `a`, a NaN radicand) are
-values and nothing else. H4 (select) holds: each blend is a `blend`. The lanes the rare mask
-holds are never read: each is overwritten by `StrictMath.hypot` on the lane's own arguments.
+int words (`ha-hb > 0x3c00000`, `ha > 0x5f300000`, `hb < 0x20b00000`, `hb <= 0x000fffff`, `k != 0`,
+and line 66's `ha >= 0x7ff00000`) or on the same doubles (`w > b`, `b`'s bits zero), nested as the C
+nests them; the swap's is L21's compare of the bits, and lines 68 and 69's are L22's compares of
+`a`'s and `b`'s bits with +infinity's (L22, H3). H2 (operands) holds for the operand blends (the
+swap, the scaled values and words, the radicand), and every operation is the C's in its order. H3
+(totality) holds: IEEE operations, compares, int lane arithmetic and shifts, conversions and blends,
+with no integer division and no indexed load, so the values a discarded lane takes (an infinite
+`t1*t1` beside a huge `a`, a NaN radicand) are values and nothing else. H4 (select) holds: each
+blend is a `blend`. What the medium path and the scalings compute on the lanes of `ha >= 0x7ff00000`
+is never read: those lanes take lines 66-70's blend, or line 63's `a+b` over it.
 
-**The lane of two NaNs** is finished per lane, so it is `StrictMath.hypot`'s own result, a
+**The lane of two NaNs** is the vector sum `a+b` of the two sign-cleared NaNs, by line 67 (line 63
+cannot take it: `ha-hb` is at most `0xfffff` there), which is one of them quieted (L22 (c)), a
 candidate of `MAGNITUDES` (the contract of a function of two arguments, above). One NaN beside a
-finite value or an infinity is finished too, so its bits are the oracle's by construction.
+finite value is that sum too, the NaN quieted with its sign cleared, which `StrictMath.hypot`
+returns in every JIT mode (L22 (c)); one NaN beside an infinity is `+inf` (line 69).
 
 ### L16. The stale words of the 2^1022 scaling cannot be refreshed (a counter-example, not a fold)
 
@@ -1779,7 +1782,7 @@ port to fail on the fault run's inputs with it planted, at every width.
 program's, so nothing here is machine-checked in `proofs/`.
 
 **What it rests on.** (R4) for `+ - * /` and `sqrt` (the operator's, tested by `SqrtTest`), L13,
-and the contract of a function of two arguments for the lane of two NaNs, which the finish takes.
+L22 for lines 66-70, and the contract of a function of two arguments for the lane of two NaNs.
 
 **Checks.** `HypotTest.constantsAreTheSourcesBits` (the words and `2^1022`), and `HypotTest`:
 `VFdlibm.hypot` against `StrictMath.hypot` by `PairBits.matches` at every width and
@@ -1794,7 +1797,8 @@ sampled bit patterns, Varka's baseline range and every exponent; the 8,400 pairs
 vector's lanes rare beside lanes of every way out of the C. The planted faults are
 `hypot.dropEarlyReturn` (line 63's return dropped), `hypot.refreshedWords` (L16), `hypot.dropT2`
 (line 99's `t2*(a+t1)` dropped), `hypot.dropY2` (line 108's `t1*y2` dropped) and
-`hypot.highWordOrder` (line 60 as written, L21).
+`hypot.highWordOrder` (line 60 as written, L21) and `hypot.dropInfinityOverNan` (line 69's blend
+dropped, L22).
 
 ### L21. Line 60 ordered by magnitude: the C with the larger argument first
 
@@ -1875,6 +1879,71 @@ it changes about one draw in 5 * 10^8.
 
 **Encoding.** None: (a) is integer arithmetic on two words, checked by the test, and (b) and (c) are
 the C's evaluation and observations, so nothing here is machine-checked in `proofs/`.
+
+### L22. Lines 66-70 as blends: the infinity rule, and the NaN a sum keeps
+
+**Statement.** On a lane of `ha >= 0x7ff00000`, an infinity or a NaN in either argument, that line
+63 does not return, the port's result is lines 66-70's `w`: `a+b`, then `a` where `a` is an
+infinity, then `b` where `b` is one, with `a` and `b` the sign-cleared arguments ordered by L21,
+unscaled. (a) Proven: the blends select, lane by lane, the value the C's branches return, in the C's
+order, and line 63's `a+b` is blended over them as the C returns it first. (b) Proven: under L21's
+order an infinite `a` means `b` is not a NaN, so `a+b` is `a` already and line 68's blend changes no
+lane; only line 69's, a NaN `a` beside an infinite `b`, does. (c) Observed and not proven: where `w`
+is a sum with a NaN operand, the vector `add` returns that NaN quieted, keeping its payload and its
+sign (here cleared), and with two NaN operands one of them quieted; and `StrictMath.hypot` returns
+the same bits on every lane of one NaN. IEEE 754 and the JLS leave a NaN result's payload and sign
+open ((R4)'s note), so (c) is the oracle's evidence, as atan2's `x + y` on its NaN lanes is (atan2's
+section; issue 33). Through 0.3.0 these lanes were finished per lane by `StrictMath.hypot`, equal by
+construction; the blends take that call out of the loop (issue 186).
+
+**Hypotheses.** H1: the inputs are any two doubles. H2: `a`, `b`, `ha` and `hb` are L21's, so `a`
+and `b` have bit 63 clear and `a`'s bits, as a signed 64-bit integer, are at least `b`'s. H3: line
+68's `((ha&0xfffff)|__LO(a))==0` on a lane of `ha >= 0x7ff00000` is `a`'s bits equal to
+`0x7ff0000000000000`, and line 69's `((hb^0x7ff00000)|__LO(b))==0` is the same of `b`: with bit 63
+clear, the high word `0x7ff00000` and a zero low word are exactly +infinity.
+
+**Proof.** (a) The C, on `ha >= 0x7ff00000` past line 63: `w = a+b` (67), `w = a` if `a` is an
+infinity (68), `w = b` if `b` is one (69), return `w` (70). The port blends `sum = a+b`, then `a`
+under the mask of `a`'s bits equal to +infinity, then `b` under `b`'s, the later blend winning as
+the later assignment does (L13 H1, H4), and puts the result on the lanes of `ha >= 0x7ff00000`;
+line 63's mask is blended last with the same `sum`, so a lane both masks hold returns line 63's
+`a+b`, as the C returns there before line 65. (b) A NaN's sign-cleared bits are above
+`0x7ff0000000000000` and an infinity's are equal to it, so by H2 an infinite `a` has `b`'s bits at
+most +infinity's: `b` is finite or +infinity, and `a+b = +inf = a` by (R4). A NaN `a` beside an
+infinite `b` is the one lane where line 69 decides: `w` is `b`, +infinity, where the sum is a NaN.
+(c) is observed.
+
+**What is observed, not proven (c).** The vector `add` of `jdk.incubator.vector` on x86-64 with
+AVX-512 (at 128, 256 and 512 bits) and as AVX2 (`-XX:UseAVX=2`) returns the NaN operand quieted with
+its payload and sign, and of two NaNs one of them, in the interpreter, C1 and C2; `StrictMath.hypot`
+returns that one NaN, sign cleared, on every lane of one NaN, in every mode. By a black-box scan on
+25 November 2026 (JDK 25.0.5.1, x86-64 with AVX-512): 924 pairs of NaNs (quiet and signalling, both
+signs, six payloads) and infinities beside each other, the zeros, subnormals, finite values each
+side of line 63's ratio and both scalings, in both orders, showed no lane apart from `StrictMath`'s
+(two-NaN lanes by `MAGNITUDES`) at every width, warm, `-Xint`, `-XX:TieredStopAtLevel=1`,
+`-XX:-TieredCompilation`, `-XX:UseAVX=2` and `-XX:MaxVectorSize=16`. On AArch64 (GitHub's Arm
+runner, 128 bits), `nanLanesAreStrictMathInEveryJitMode` passed in CI run 45698748725 (job "build
+(Arm 128 bits)", #187's head e775cd2) in all four modes, `Hypot::hypot` compiled at each mode's tier
+before the checked pass (level 1, C2, level 4), as its log shows. On x86 at 128 bits the body boxes
+(C2 lowers no mask at two 64-bit lanes, `SKILLS.md`), so there the sum runs in the Vector API's Java
+fallback, at whatever tier that reaches; the test checks the tier of `Hypot::hypot` only.
+
+**Test.** `HypotTest.nanLanesAreStrictMathInEveryJitMode` runs the vector port on the pairs of
+`specialPairs` with an infinity or a NaN and on `nanPairs` in a JVM per JIT mode (interpreter, C1
+only, C2 only, tiered) and per width the host has, so that the compiled body is the one for that
+width and is not deoptimized by a change of shape; in the compiled modes after 15,000 unchecked
+calls under `-Xbatch`, and the test requires the compile log (`-XX:+PrintCompilation`) to show
+`Hypot::hypot` compiled at the mode's tier (level 1, C2, level 4) and not thrown away before the
+checked pass; against `StrictMath.hypot` by raw bits but on the two-NaN lane; a sum that returned a
+canonical NaN fails it in every mode (tried by hand). `HypotTest.specialValues` and the masked forms
+check the same lanes at every width in the test JVM, and `anInfinityBesideANaNIsPositiveInfinity`
+pins line 69 in the C and in `StrictMath`. **Planted fault.** `hypot.dropInfinityOverNan`
+(`Hypot.DROP_INFINITY_OVER_NAN`) drops line 69's blend, so a NaN beside an infinite `b` gives the
+NaN; `HypotTest.faultCatchers` requires the port to fail on the fault run's inputs with it planted,
+at every width. Line 68's blend has no fault: by (b) no lane can tell it is gone.
+
+**Encoding.** None: (a) and (b) are the C's selection and an order of bits, and (c) is
+observation, so nothing here is machine-checked in `proofs/`.
 
 ## pow (`Pow.java`, from `e_pow.c`)
 

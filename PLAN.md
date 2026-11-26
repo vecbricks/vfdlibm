@@ -250,8 +250,9 @@ five are a later, optional set; the large-argument reduction of the trigonometri
   `bench/results/max-finish-alloc-free-laptop-2026-11-21.txt`, a laptop reading of allocation only);
   no file reads the earlier finish of `sinh` or `cosh`, whose current rows the host files of 21
   November read (`bench/results/sinh-xeon8573c-2026-11-21.txt` and the like). `asin`, `atan` and
-  `acos` were written with the new finish from the start (as `hypot` was since), and `atan2`
-  finishes no lane per lane; the host files of 22 November read their rows
+  `acos` were written with the new finish from the start (as `hypot` was, until #186 blended its
+  rare lanes), and `atan2` and, since #186, `hypot` finish no lane per lane; the host files of 22
+  November read their rows
   (`bench/results/asin-xeon8573c-2026-11-22.txt`
   and the like). `ExpKindsBench` runs
   exp's two arms on one kind of rare input at a time (a NaN, an overflow, an underflow, a subnormal

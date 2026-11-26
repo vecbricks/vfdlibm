@@ -1686,16 +1686,21 @@ mnemonic); the other operations count the same at both widths.
   own, so no exclusivity of the scalings is assumed and no lemma is needed beyond L13; line 110's
   `k != 0` is a blend too, since multiplying every lane by `2^k` would be a departure needing a
   lemma of its own.
-- **One arm, the finish, and it reached every finite lane on the first run.** The rare lanes are an
-  infinity or a NaN in either argument (`ha >= 0x7ff00000`); everything finite, the ratio return,
-  the zero `b` and the three scalings included, is in the vector. A blended non-finite arm would
-  rest on the hardware's NaN propagation for one-NaN lanes and has no timing to justify it, and #30
-  sends a tie to the finish. The first run of the vector tests passed on every input. CI's
-  `bench/alloc-check.py` covers `HypotBenchmark`'s rows (`finish256`, `finishPreferred`,
-  `finishMax`, common and mixed data); the host files that time the code after #174
-  (`hypot-epyc7763-2026-11-24.txt`, a run of 24 November and its re-run of 25 November, and
-  `hypot-xeon8573c-2026-11-24-2.txt`, a run of 24 November and its re-run of 25 November) read
-  every row at 0.040 B/op or less.
+- **One arm, and it reached every finite lane on the first run.** The rare lanes are an infinity or
+  a NaN in either argument (`ha >= 0x7ff00000`); everything finite, the ratio return, the zero `b`
+  and the three scalings included, was in the vector from the start, and 0.3.0 finished the rare
+  lanes per lane. Since #186 lines 66-70 are blends too (L22), resting, as atan2 does, on the NaN a
+  vector sum keeps, which `nanLanesAreStrictMathInEveryJitMode` pins in every JIT mode, a JVM per
+  width so that the checked calls run the code compiled for it (a loop over all widths deoptimizes
+  at each change of shape). On the EPYC 7763 the vector rows on mixed data run 1.83 to 1.85 times as
+  fast as with the per-lane call (`hypot-pair-epyc7763-2026-11-25.txt`). The arm keeps the name
+  `finish` until arms are renamed (it is a blended arm now). The first run of the vector tests
+  passed on every input. CI's `bench/alloc-check.py` covers `HypotBenchmark`'s rows (`finish256`,
+  `finishPreferred`, `finishMax`, common and mixed data); the host files that time the code after
+  #174 (`hypot-epyc7763-2026-11-24.txt`, a run of 24 November and its re-run of 25 November, and
+  `hypot-xeon8573c-2026-11-24-2.txt`, a run of 24 November and its re-run of 25 November) read every
+  row at 0.040 B/op or less; they time the per-lane finish of 0.3.0, and #186's blended body is read
+  by `hypot-pair-epyc7763-2026-11-25.txt` at 0.021 B/op or less on its vector rows.
 - **The faults, sized on 2^22 draws each** (a throwaway program over `VFdlibm.hypot` at 256 bits,
   once per fault; counts of pairs that differ from `StrictMath.hypot`; the unplanted port 0 on
   each). `hypot.dropEarlyReturn`: 0 of Varka's range `[-10, 10)`, 1,779,887 of sampled bits,

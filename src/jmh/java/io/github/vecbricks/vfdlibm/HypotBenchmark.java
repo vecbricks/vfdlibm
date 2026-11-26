@@ -26,30 +26,32 @@ import org.openjdk.jmh.annotations.Warmup;
 
 /**
  * hypot over two arrays of 1024 doubles ({@code x} and {@code y}): the scalar {@code
- * StrictMath.hypot} loop and {@link Hypot#hypot}, the one arm ({@code VFdlibm.hypot} runs it, with
- * every lane of an infinity or a NaN finished per lane), at 256 bits, at the host's preferred
- * species and at {@code SPECIES_MAX}. 128 bits is left out: on x86 C2 lowers no mask at two 64-bit
- * lanes, so every 128-bit arm boxes (SKILLS.md). bench/results/hypot-epyc7763-2026-11-23.txt times
- * it before #174 ordered hypot's arguments, a run and its re-run on the EPYC 7763: inside 1.3x of
- * the scalar loop at the preferred species, and finishMax about 1.6 times finishPreferred on common
- * data in both runs, the same code at the same width; hypot-xeon8573c-2026-11-24.txt times that
- * code too, one run on the Xeon 8573C. hypot-epyc7763-2026-11-24.txt times it after #174, a run and
- * its re-run on the EPYC 7763: the scalar loop lower on mixed data by 1.43 to 1.44 in run 1 and
- * 1.33 to 1.34 in run 2, no direction on common data, and finishMax at the level of the other rows.
+ * StrictMath.hypot} loop and {@link Hypot#hypot}, the one arm ({@code VFdlibm.hypot} runs it; since
+ * #186 every lane is computed in the vector, an infinity or a NaN by lines 66-70 as blends, where
+ * the files below time code that finished those lanes per lane), at 256 bits, at the host's
+ * preferred species and at {@code SPECIES_MAX}. 128 bits is left out: on x86 C2 lowers no mask at
+ * two 64-bit lanes, so every 128-bit arm boxes (SKILLS.md).
+ * bench/results/hypot-epyc7763-2026-11-23.txt times it before #174 ordered hypot's arguments, a run
+ * and its re-run on the EPYC 7763: inside 1.3x of the scalar loop at the preferred species, and
+ * finishMax about 1.6 times finishPreferred on common data in both runs, the same code at the same
+ * width; hypot-xeon8573c-2026-11-24.txt times that code too, one run on the Xeon 8573C.
+ * hypot-epyc7763-2026-11-24.txt times it after #174, a run and its re-run on the EPYC 7763: the
+ * scalar loop lower on mixed data by 1.43 to 1.44 in run 1 and 1.33 to 1.34 in run 2, no direction
+ * on common data, and finishMax at the level of the other rows.
  * hypot-order-pair-epyc7763-2026-11-24.txt pairs the code before and after #174 there, the vector
  * rows on mixed data at about 1.45 times the time, and hypot-harness-epyc7763-2026-11-24.txt times
  * main's loop, the body inlined into it, on mixed data as a method of its own at the old level and
  * inlined into JMH's measuring loop, as this class's rows are, slower (SKILLS.md, "What the hypot
- * port taught"). hypot-xeon8573c-2026-11-24-2.txt times it after #174 on the Xeon 8573C, a run
- * and its re-run: the vector arm lower on common data by 2.13 to 2.16 at the preferred species
- * and SPECIES_MAX (512 bits there) and by 1.30 to 1.38 at 256 bits, and no direction on mixed
- * data.
+ * port taught"). hypot-xeon8573c-2026-11-24-2.txt times it after #174 on the Xeon 8573C, a run and
+ * its re-run: the vector arm lower on common data by 2.13 to 2.16 at the preferred species and
+ * SPECIES_MAX (512 bits there) and by 1.30 to 1.38 at 256 bits, and no direction on mixed data.
  *
  * <p>{@code inputs} picks the data: {@code common} draws {@code x} and {@code y} from {@code
  * [-10, 10)}, Varka's baseline range, where every lane takes the medium path unscaled (both of
- * its forms) and none takes the per-lane finish; {@code mixed} replaces one pair in 16 with one
- * that takes another way out of the C: a NaN or an infinity in either argument (the per-lane
- * finish), a ratio past {@code 2^60}, a zero {@code b}, either scaling by {@code 2^600} and the
+ * its forms) and none takes lines 66-70; {@code mixed} replaces one pair in 16 with one
+ * that takes another way out of the C: a NaN or an infinity in either argument (line 63's return,
+ * or lines 66-70 for an infinity beside a NaN), a
+ * ratio past {@code 2^60}, a zero {@code b}, either scaling by {@code 2^600} and the
  * subnormal {@code b}, so many vectors hold one. Any other value is refused.
  *
  * <p>The vector form is larger than C2 inlines by default ({@code FreqInlineSize}), so a call
@@ -59,8 +61,7 @@ import org.openjdk.jmh.annotations.Warmup;
  * <p>{@code bench/alloc-check.py} runs the vector benchmarks named {@code *256}, {@code
  * *Preferred} and {@code *Max} on {@code common} and {@code mixed} inputs and fails if any
  * allocates, which means the body boxed. The {@code *Max} row is at {@code
- * DoubleVector.SPECIES_MAX}; {@link Hypot#hypot}'s finish writes out its first eight lanes with
- * constant indices, as the other ports' do. hypot has one arm, so there is no comparison to make
+ * DoubleVector.SPECIES_MAX}. hypot has one arm, so there is no comparison to make
  * between arms.
  */
 @State(Scope.Thread)

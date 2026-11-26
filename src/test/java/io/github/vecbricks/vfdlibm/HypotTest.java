@@ -717,6 +717,10 @@ class HypotTest {
     }
   }
 
+  /** A line of {@code -XX:+PrintCompilation}'s log: a time stamp, a compile id and a method. */
+  static final java.util.regex.Pattern COMPILE_LINE = java.util.regex.Pattern.compile(
+      "^\\s*\\d+\\s+\\d+ [%sbn! ]{5}");
+
   /**
    * How long a child JVM may take: a generous bound that keeps a hung child from stalling the
    * suite.
@@ -739,14 +743,22 @@ class HypotTest {
    */
   static String runInJvm(Class<?> gate, String label, JitMode mode, int draws, int passes)
       throws IOException, InterruptedException {
+    return runInJvm(gate, label, mode, List.of(), List.of(Integer.toString(draws),
+        Integer.toString(passes)));
+  }
+
+  /** {@link #runInJvm(Class, String, JitMode, int, int)} with its own JVM options and arguments. */
+  static String runInJvm(Class<?> gate, String label, JitMode mode, List<String> options,
+      List<String> args) throws IOException, InterruptedException {
     List<String> command = new ArrayList<>();
     command.add(java.nio.file.Path.of(System.getProperty("java.home"), "bin", "java").toString());
     if (mode.flag != null) {
       command.add(mode.flag);
     }
+    command.addAll(options);
     command.addAll(List.of("-Xmx256m", "--add-modules", "jdk.incubator.vector", "-cp",
-        System.getProperty("java.class.path"), gate.getName(),
-        Integer.toString(draws), Integer.toString(passes)));
+        System.getProperty("java.class.path"), gate.getName()));
+    command.addAll(args);
     // ByteArrayOutputStream is synchronized, so a timeout can report what was read so far.
     ByteArrayOutputStream bytes = new ByteArrayOutputStream();
     ProcessBuilder builder = new ProcessBuilder(command).redirectErrorStream(true);
@@ -771,8 +783,11 @@ class HypotTest {
       process.destroyForcibly();
     }
     String text = bytes.toString(StandardCharsets.UTF_8);
-    System.out.println(label + ", " + mode + ":\n" + text);
-    assertEquals(0, process.exitValue(), label + ", " + mode + ":\n" + text);
+    // A child's compile log (-XX:+PrintCompilation) is printed only for hypot's own methods.
+    String shown = text.lines().filter(l -> !COMPILE_LINE.matcher(l).find()
+        || l.contains("vfdlibm.Hypot::")).collect(java.util.stream.Collectors.joining("\n"));
+    System.out.println(label + ", " + mode + ":\n" + shown);
+    assertEquals(0, process.exitValue(), label + ", " + mode + ":\n" + shown);
     return text;
   }
 
@@ -869,6 +884,152 @@ class HypotTest {
   // ---------------------------------------------------------------------------------------------
   // The vector port
   // ---------------------------------------------------------------------------------------------
+
+  /**
+   * L22's observed hinge in every JIT mode: lines 66-70 are blends whose NaN results are the vector
+   * sum {@code a+b}, and which NaN a sum keeps is fixed by neither IEEE 754 nor the JLS. So the
+   * vector port runs on the pairs of {@link #specialPairs} with an infinity or a NaN, and on {@link
+   * #nanPairs} (NaNs of both signs, quiet and
+   * signalling, several payloads, beside NaNs, infinities and finite values) in a JVM per mode, at
+   * every width the host has, against {@code StrictMath.hypot} by raw bits but on the lane of two
+   * NaNs ({@code MAGNITUDES}). A sum that returned a canonical NaN, or kept a NaN's sign, fails on
+   * the one-NaN lanes. The children run on every row, those with width options too, where {@link
+   * #scalarTranscriptionIsStrictMathInEveryJitMode}'s skip: the parent's {@code -XX:UseAVX} and
+   * {@code -XX:MaxVectorSize} are passed to them.
+   */
+  @ParameterizedTest
+  @EnumSource(JitMode.class)
+  void nanLanesAreStrictMathInEveryJitMode(JitMode mode) throws Exception {
+    // The parent's width options go to the children, so that a row run as AVX2 checks AVX2's
+    // lowering of the sum in every mode, where the scalar children skip such rows.
+    List<String> width = ManagementFactory.getRuntimeMXBean().getInputArguments().stream()
+        .filter(a -> a.startsWith("-XX:MaxVectorSize=") || a.startsWith("-XX:UseAVX=")).toList();
+    // A JVM per width the host has, so that the compiled body is the one for that width and is
+    // not deoptimized by a change of shape. In the compiled modes, 15,000 unchecked calls first
+    // and -Xbatch, and the compile log must show Hypot::hypot compiled at the mode's tier, and not
+    // thrown away, before the checked pass; interpreted, one checked pass and no warm-up.
+    boolean interpreted = mode == JitMode.INTERPRETER;
+    int preferred = DoubleVector.SPECIES_PREFERRED.vectorBitSize();
+    for (int bits = 128; bits <= preferred; bits *= 2) {
+      String text = runInJvm(NanLanes.class, "hypot NaN lanes, " + bits + " bits", mode,
+          concat(width, interpreted ? List.of() : List.of("-Xbatch", "-XX:+PrintCompilation")),
+          List.of(Integer.toString(1 << 9), "1", interpreted ? "0" : "15000",
+              Integer.toString(bits)));
+      assertRanInModeAndPassed(mode, text);
+      if (!interpreted) {
+        String level = switch (mode) {
+          case C1_ONLY -> "1";
+          case C2_ONLY -> "";
+          default -> "4";
+        };
+        assertTrue(compiledAtCheck(text, level),
+            mode + ", " + bits + " bits: Hypot::hypot was not compiled at its tier when checked");
+      }
+    }
+  }
+
+  /**
+   * Whether the child's compile log, before its line {@code "checking pass"}, holds a compile of
+   * {@code Hypot::hypot} at {@code level} ({@code ""} for C2 without tiers) that was not made not
+   * entrant before that line, and none of those compiles is made not entrant between that line and
+   * the child's result: so the whole checked pass ran a compiled body of that tier.
+   */
+  static boolean compiledAtCheck(String text, String level) {
+    java.util.regex.Pattern compile = java.util.regex.Pattern.compile(
+        "^\\s*\\d+\\s+(\\d+)\\s+b\\s+" + (level.isEmpty() ? "" : level + "\\s+")
+        + "io\\.github\\.vecbricks\\.vfdlibm\\.Hypot::hypot \\(");
+    java.util.Set<String> live = new java.util.HashSet<>();
+    boolean checking = false;
+    for (String line : text.lines().toList()) {
+      if (line.contains("checking pass")) {
+        if (live.isEmpty()) {
+          return false;
+        }
+        checking = true;
+        continue;
+      }
+      if (checking && line.contains("result: ")) {
+        return true;
+      }
+      java.util.regex.Matcher m = compile.matcher(line);
+      if (m.find()) {
+        live.add(m.group(1));
+      } else if (line.contains("vfdlibm.Hypot::hypot") && line.contains("made not entrant")) {
+        java.util.regex.Matcher id = java.util.regex.Pattern.compile("^\\s*\\d+\\s+(\\d+)\\s")
+            .matcher(line);
+        if (id.find() && live.remove(id.group(1)) && checking) {
+          return false;
+        }
+      }
+    }
+    return false;
+  }
+
+  /** Two lists of JVM options, one after the other. */
+  private static List<String> concat(List<String> a, List<String> b) {
+    List<String> all = new ArrayList<>(a);
+    all.addAll(b);
+    return all;
+  }
+
+  /** The pairs of {@code p} with an infinity or a NaN in either argument: lines 66-70's lanes. */
+  static Inputs.Pairs nonFinite(Inputs.Pairs p) {
+    int n = 0;
+    double[] x = new double[p.x().length];
+    double[] y = new double[p.x().length];
+    for (int i = 0; i < p.x().length; i++) {
+      if (!Double.isFinite(p.x()[i]) || !Double.isFinite(p.y()[i])) {
+        x[n] = p.x()[i];
+        y[n] = p.y()[i];
+        n++;
+      }
+    }
+    return new Inputs.Pairs(java.util.Arrays.copyOf(x, n), java.util.Arrays.copyOf(y, n));
+  }
+
+  /**
+   * The child of {@link #nanLanesAreStrictMathInEveryJitMode}: args are draws, checked passes,
+   * the unchecked warm-up calls made before them, and the width in bits.
+   */
+  static final class NanLanes {
+    private NanLanes() {}
+
+    public static void main(String[] args) {
+      int draws = Integer.decode(args[0]);
+      int passes = Integer.parseInt(args[1]);
+      int warmCalls = Integer.parseInt(args[2]);
+      VectorSpecies<Double> species =
+          VectorSpecies.of(double.class, VectorShape.forBitSize(Integer.parseInt(args[3])));
+      System.out.println("jvm: " + ManagementFactory.getRuntimeMXBean().getInputArguments()
+          + " | " + System.getProperty("java.vm.info"));
+      Inputs.Pairs p = concat(nonFinite(specialPairs()), nanPairs(9100L, draws));
+      int n = species.length();
+      // Calls, not passes: C2 without tiers compiles after 10,000 (CompileThreshold), and a pass is
+      // fewer calls the wider the vector.
+      int calls = 0;
+      while (calls < warmCalls) {
+        for (int j = 0; j + n <= p.x().length && calls < warmCalls; j += n, calls++) {
+          VFdlibm.hypot(DoubleVector.fromArray(species, p.x(), j),
+              DoubleVector.fromArray(species, p.y(), j));
+        }
+      }
+      System.out.println("warm-up: " + calls + " calls, unchecked");
+      System.out.println("checking pass");
+      boolean failed = false;
+      for (int pass = 1; pass <= passes; pass++) {
+        try {
+          assertHypot(species, p);
+          System.out.println("pass " + pass + ": " + p.x().length + " pairs at "
+              + species.vectorBitSize() + " bits");
+        } catch (AssertionError e) {
+          System.out.println("pass " + pass + ": " + e.getMessage());
+          failed = true;
+        }
+      }
+      System.out.println(failed ? "result: FAILED" : "result: ok");
+      System.exit(failed ? 1 : 0);
+    }
+  }
 
   /** {@link VFdlibm#hypot} unmasked at {@code species} over the pairs {@code p}. */
   private static void assertHypot(VectorSpecies<Double> species, Inputs.Pairs p) {
@@ -989,7 +1150,7 @@ class HypotTest {
     return Double.longBitsToDouble(b);
   }
 
-  /** Pairs the per-lane finish takes: an infinity or a NaN in either argument. */
+  /** An infinity or a NaN in either argument: line 63's return, or lines 66-70's. */
   private static final double[][] RARE_LANES = {
     {Double.NaN, 1.0}, {1.0, Double.NaN}, {Double.POSITIVE_INFINITY, Double.NaN},
     {Double.NaN, Double.NEGATIVE_INFINITY},
@@ -1294,6 +1455,7 @@ class HypotTest {
     assertEquals(0x3c00000, Hypot.RATIO_WORD);
     assertEquals(0x5f300000, Hypot.HA_BIG);
     assertEquals(0x7ff00000, Hypot.HA_INF);
+    assertEquals(Double.doubleToRawLongBits(Double.POSITIVE_INFINITY), Hypot.INF_BITS);
     assertEquals(0x20b00000, Hypot.HB_SMALL);
     assertEquals(0x000fffff, Hypot.HB_SUBNORMAL);
     assertEquals(0x25800000, Hypot.SCALE_WORD);
@@ -1311,13 +1473,16 @@ class HypotTest {
    * Each of hypot's faults, with a check that must fail while it is planted: the vector form over
    * {@link #faultRunInputs()} at every width the host has, and for {@code hypot.highWordOrder}
    * the order pairs in every lane ({@link #orderPairLanes}), since random equal-word draws show
-   * it about twice in 10^8 (L21). Each was sized on draws before it was wired; the sizes are in
-   * {@code SKILLS.md}, "What the hypot port taught".
+   * it about twice in 10^8 (L21). The first four were sized on draws before they were wired; the
+   * sizes are in {@code SKILLS.md}, "What the hypot port taught". {@code hypot.dropInfinityOverNan}
+   * changes exactly the lanes of a NaN beside an infinite {@code b} (L22), which {@link
+   * #specialPairs} holds.
    */
   static Map<String, Executable> faultCatchers() {
     Map<String, Executable> catchers = new LinkedHashMap<>();
     for (String fault : new String[] {
-        Hypot.DROP_EARLY_RETURN, Hypot.REFRESHED_WORDS, Hypot.DROP_T2, Hypot.DROP_Y2}) {
+        Hypot.DROP_EARLY_RETURN, Hypot.REFRESHED_WORDS, Hypot.DROP_T2, Hypot.DROP_Y2,
+        Hypot.DROP_INFINITY_OVER_NAN}) {
       catchers.put(fault, () -> forEachWidth(species ->
           PlantedFaultTest.assertCaught(fault, () -> assertHypot(species, faultRunInputs()))));
     }
