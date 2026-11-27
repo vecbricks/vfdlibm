@@ -46,6 +46,8 @@ import org.openjdk.jmh.annotations.Warmup;
  * port taught"). hypot-xeon8573c-2026-11-24-2.txt times it after #174 on the Xeon 8573C, a run and
  * its re-run: the vector arm lower on common data by 2.13 to 2.16 at the preferred species and
  * SPECIES_MAX (512 bits there) and by 1.30 to 1.38 at 256 bits, and no direction on mixed data.
+ * hypot-epyc7763-2026-11-26.txt times the code of a1e6509, the blended* rows (#187 and #188), a run
+ * and its re-run on the EPYC 7763.
  *
  * <p>{@code inputs} picks the data: {@code common} draws {@code x} and {@code y} from {@code
  * [-10, 10)}, Varka's baseline range, where every lane takes the medium path unscaled (both of
