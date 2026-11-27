@@ -18,32 +18,32 @@ files:
 
 <!-- speedup-table: v0.3.1 -->
 
-| Function | xeon8573c (AVX-512): common / mixed | epyc9v45 (AVX-512): common / mixed | epyc7763 (AVX2): common / mixed |
-|---|---|---|---|
-| `exp` | 6.67x / 3.46x | 7.96x / 4.30x | older code |
-| `expm1` | 4.03x / 3.03x | not measured | 1.90x / 1.74x |
-| `log` | 4.12x / 2.38x | not measured | 2.44x / 1.97x |
-| `log10` | 4.41x / 2.76x | not measured | 2.30x / 1.86x |
-| `log1p` | 3.39x / 2.81x | not measured | 1.95x / 1.56x |
-| `sinh` | 3.53x / 2.74x | not measured | 2.12x / 1.68x |
-| `cosh` | 3.49x / 1.84x | not measured | 2.20x / 1.71x |
-| `asin` | 2.31x / 2.08x | not measured | 2.07x / 1.52x |
-| `atan` | 3.48x / 2.30x | not measured | 1.77x / 1.51x |
-| `acos` | 2.21x / 1.90x | not measured | 1.99x / 1.36x |
-| `atan2` | 2.72x / 2.08x | not measured | 1.72x / 1.55x |
-| `hypot` | 2.04x / 1.27x | 2.55x / 2.10x | 1.33x / 1.38x |
-| `pow` | 11.79x / 7.43x | not measured | 4.88x / 4.28x |
+| Function | xeon8573c (AVX-512): common / mixed | xeon6973p (AVX-512): common / mixed | epyc9v45 (AVX-512): common / mixed | epyc7763 (AVX2): common / mixed |
+|---|---|---|---|---|
+| `exp` | 6.67x / 3.46x | 6.22x / 3.46x | 7.96x / 4.30x | older code |
+| `expm1` | 4.03x / 3.03x | not measured | not measured | 1.90x / 1.74x |
+| `log` | 4.12x / 2.38x | not measured | not measured | 2.44x / 1.97x |
+| `log10` | 4.41x / 2.76x | not measured | not measured | 2.30x / 1.86x |
+| `log1p` | 3.39x / 2.81x | not measured | not measured | 1.95x / 1.56x |
+| `sinh` | 3.53x / 2.74x | not measured | not measured | 2.12x / 1.68x |
+| `cosh` | 3.49x / 1.84x | not measured | not measured | 2.20x / 1.71x |
+| `asin` | 2.31x / 2.08x | not measured | not measured | 2.07x / 1.52x |
+| `atan` | 3.48x / 2.30x | not measured | not measured | 1.77x / 1.51x |
+| `acos` | 2.21x / 1.90x | not measured | not measured | 1.99x / 1.36x |
+| `atan2` | 2.72x / 2.08x | not measured | not measured | 1.72x / 1.55x |
+| `hypot` | 2.04x / 1.27x | 1.93x / re-run needed | 2.55x / 2.10x | 1.33x / 1.38x |
+| `pow` | 11.79x / 7.43x | not measured | not measured | 4.88x / 4.28x |
 
 For vfdlibm 0.3.1 (tag v0.3.1). Each figure is `StrictMath` called once per lane (the
 `scalarStrictMath` row) over the function's default arm at the host's preferred species (its
 `<arm>Preferred` row), by minimum ns/op within one run; where a file holds several runs, the lowest
 of their ratios is shown; from one run, a ratio under 1.4x is marked, and one under 1.3x says
 "re-run needed". `common`: no lane takes a rare path; `mixed`: rare lanes run. The preferred species
-is 512 bits on xeon8573c, 512 bits on epyc9v45, 256 bits on epyc7763. "older code" and "newer code":
-the files of that function and host time code older or newer than the release's; "not measured":
-there is no file. The figures come from the newest file per function and host under
-[`bench/results/`](bench/results/) that times the release's code; `bench/readme-table.py --write`
-makes this table, and CI checks it.
+is 512 bits on xeon8573c, 512 bits on xeon6973p, 512 bits on epyc9v45, 256 bits on epyc7763. "older
+code" and "newer code": the files of that function and host time code older or newer than the
+release's; "not measured": there is no file. The figures come from the newest file per function and
+host under [`bench/results/`](bench/results/) that times the release's code; `bench/readme-table.py
+--write` makes this table, and CI checks it.
 
 <!-- end of speedup-table -->
 

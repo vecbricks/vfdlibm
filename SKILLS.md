@@ -241,10 +241,10 @@ belongs here too, since it stops the next port re-trying a settled question.
   its reading in the results header.
 - **Hosts measured in Varka.** 512:256 in lanes per nanosecond: AMD EPYC 7763 (Zen 3, AVX2, no
   AVX-512) 1.00; EPYC 9V74 (Zen 4, no AVX-512 exposed) 0.91 to 1.00; Intel Xeon Platinum 8573C
-  and Xeon 6973P-C (full AVX-512) 1.33 to 1.36, from issuing 512-bit operations on two ports
-  against 256-bit ones on three; EPYC 9V45 (Zen 5) 1.99, and 2.00 in vfdlibm's
-  first files of it. GitHub's x86 runners draw from all of
-  these. `HARDWARE.md` holds the table, with sources, and vfdlibm's runs extend it.
+  and Xeon 6973P-C (full AVX-512) 1.33 to 1.36 (1.34 in vfdlibm's first files of the 6973P-C), from
+  issuing 512-bit operations on two ports against 256-bit ones on three; EPYC 9V45 (Zen 5) 1.99, and
+  2.00 in vfdlibm's first files of it. GitHub's x86 runners draw from all of these.
+  `HARDWARE.md` holds the table, with sources, and vfdlibm's runs extend it.
 
 ## The assembly check
 
