@@ -35,9 +35,9 @@ be the whole string ("The Arm host" below).
 
 | machine | host key and CPU string | vector flags | JVM | lane-ops/ns at 128 / 256 / 512 | control | 512:256 | source |
 |---|---|---|---|---|---|---|---|
-| Intel Xeon Platinum 8573C | `xeon8573c`, `INTEL(R) XEON(R) PLATINUM 8573C` | full `avx512` set | `UseAVX=3`, `MaxVectorSize=64` | two readings: 34.5-35.9 / 68.8-71.7 / 93.7-96.8 (thirty files, dated 3 to 25 November 2026, from runs up to 25 November); 41.5 / 82.7 / 113.0 (one file, 3 November) | 1.98 to 2.00 in the files; 2.00 to 2.03 in Varka's runs | 1.34 to 1.37 in the files; 1.34 to 1.36 in Varka's runs | Varka, `VARKA-62.md` 11.9, 4 runs (the control and 512:256 ranges of Varka's runs); the files named under "The 8573C's two readings" below; the string from vecbricks/varka's fork runs 41465323581, 41255932044 and 41241977271 (the owner's fork of apache/spark) |
+| Intel Xeon Platinum 8573C | `xeon8573c`, `INTEL(R) XEON(R) PLATINUM 8573C` | full `avx512` set | `UseAVX=3`, `MaxVectorSize=64` | two readings: 34.5-35.9 / 68.8-71.7 / 93.7-96.8 (thirty files, dated 3 to 25 November 2026, and the first run in the two files of 27 November); 41.5 / 82.7 / 113.0 (one file, 3 November) and 40.7 / 80.9 / 109.9 (the second run in the two files of 27 November) | 1.98 to 2.00 in the files; 2.00 to 2.03 in Varka's runs | 1.34 to 1.37 in the files; 1.34 to 1.36 in Varka's runs | Varka, `VARKA-62.md` 11.9, 4 runs (the control and 512:256 ranges of Varka's runs); the files named under "The 8573C's two readings" below; the string from vecbricks/varka's fork runs 41465323581, 41255932044 and 41241977271 (the owner's fork of apache/spark) |
 | Intel Xeon 6973P-C (Granite Rapids) | `xeon6973p`, `Intel(R) Xeon(R) 6973P-C` | full `avx512` set | `UseAVX=3`, `MaxVectorSize=64` | see source | 2.00 to 2.01 | 1.33 to 1.35 | Varka, `VARKA-62.md` 11.9, 2 runs; the string from vfdlibm run 41442062308 |
-| AMD EPYC 9V45 (Zen 5) | `epyc9v45`, `AMD EPYC 9V45 96-Core Processor` | full `avx512` set | `UseAVX=3`, `MaxVectorSize=64` | see source | 2.04 | 1.99 | Varka, `VARKA-62.md` 11.9, 1 run; the string from Varka's fork runs 41486339971, 41446843041 and 41329377429 |
+| AMD EPYC 9V45 (Zen 5) | `epyc9v45`, `AMD EPYC 9V45 96-Core Processor` | full `avx512` set | `UseAVX=3`, `MaxVectorSize=64` | 60.0 / 120.1 / 240.1 (run 45983425231, the two files of 27 November 2026) | 2.00 in the files; 2.04 in Varka's run | 2.00 in the files; 1.99 in Varka's run | `exp-epyc9v45-2026-11-27.txt` and `hypot-epyc9v45-2026-11-27.txt`; Varka, `VARKA-62.md` 11.9, 1 run; the string from Varka's fork runs 41486339971, 41446843041 and 41329377429 |
 | AMD EPYC 7763 (Zen 3) | `epyc7763`, `AMD EPYC 7763 64-Core Processor` | `avx2`, no `avx512` | `UseAVX=2`, `MaxVectorSize=32` | 45.0-46.5 / 90.0-92.6 / 90.0-92.6 | 1.99 to 2.01 | 1.00 | Varka, `VARKA-62.md` 11.9, 8 runs; the lane rates, a range, from 16 Varka fork runs, 31 October to 2 November 2026 (41236071283 to 41460150392); the string from `bench/results/exp-epyc7763-2026-11-02.txt` and `log-epyc7763-2026-11-02.txt`; `exp-epyc7763-2026-11-20.txt` reads 46.2 / 92.2 / 92.5 (control 2.00, 512:256 1.00) in its first run and 46.3 / 92.4 / 92.4 in its second, inside the range |
 | Arm Neoverse N2 (GitHub's `ubuntu-24.04-arm` runner, 4 cores) | `neoversen2`, `implementer 0x41 part 0xd49`, with `sve` and `sve2` | `asimd`, `sve`, `sve2`; no x86 flags | `MaxVectorSize=16`, `UseSVE=2` | 26.9 at 128 bits in the probe (26.6 to 26.9 in the census), and the same at 256 and 512, where the species is 128 bits too | unusable: 1.00, there are no 256-bit vectors to double | 1.00, which is no datapath reading | runs 44925264619, 44925367461 and 44925370498 of 21 November 2026 (the fields, three draws); the lane rate and ratios from the census below (332 jobs, `bench/pool/nightly-2026-11-03-to-2026-11-19.tsv`) and the datapath line of `bench/results/alloc-arm-2026-11-20.txt` (an allocation reading, no timing); no timing result exists |
 | AMD EPYC 9V74 (Zen 4) | none: not a benchmark host | `avx512f`, `avx512dq` on 98 of the pool's 104 draws below; neither on 6, nor on Varka's 3 | `UseAVX=3`, `MaxVectorSize=64` with the flags; `UseAVX=2`, `MaxVectorSize=32` without | 54.1-57.6 / 105.0-115.2 / 95.7-103.7 with the flags; 40.6-40.7 / 81.5-81.7 / 81.5-81.6 without | 1.94 to 2.02 | 0.90 to 0.91 with the flags; 1.00 without | "What the pool gives" below, 104 draws, 3 to 19 November 2026; Varka, `VARKA-62.md` 11.9, 3 runs (2.00, and 0.91 to 1.00), after which it was dropped as a host on 2 November 2026, as exposing no AVX-512 |
@@ -74,8 +74,9 @@ it, none is claimed, and whether the ports' arms should differ on Arm waits for 
 
 ### The 8573C's two readings
 
-Thirty of the thirty-one files of this host read 34.5 to 35.9 lane-ops/ns at 128 bits, 68.8 to
-71.7 at 256 and 93.7 to 96.8 at 512: `exp-onediv-xeon8573c-2026-11-03.txt` (34.7 / 68.8 / 94.1,
+Thirty of the thirty-one files of this host dated 3 to 25 November read 34.5 to 35.9 lane-ops/ns at
+128 bits, 68.8 to 71.7 at 256 and 93.7 to 96.8 at 512 (the two files of 27 November hold one run of
+each reading, below): `exp-onediv-xeon8573c-2026-11-03.txt` (34.7 / 68.8 / 94.1,
 control 1.98, 512:256 1.37), `expm1-xeon8573c-2026-11-04.txt` (34.8 / 69.2 / 94.1, 1.99, 1.36), the
 nine files of 21 November, from two runs: `exp-xeon8573c-2026-11-21.txt` and its five siblings (34.5
 / 69.1 / 93.7, 2.00, 1.36) and `sinh-`, `cosh-` and `cosh-kinds-xeon8573c-2026-11-21.txt` (34.9 /
@@ -91,12 +92,14 @@ run 45475061665 of 24 November (35.8 / 71.6 / 96.8, 2.00, 1.35), the three files
 `exp-xeon8573c-2026-11-24-2.txt`, `hypot-xeon8573c-2026-11-24-2.txt` and
 `exp-operator-xeon8573c-2026-11-24.txt`; and run 45522629369 of 25 November (35.9 / 71.7 / 96.4,
 2.00, 1.34), the second run in `hypot-xeon8573c-2026-11-24-2.txt` and the one run in
-`math-compare-xeon8573c-2026-11-25.txt`.
+`math-compare-xeon8573c-2026-11-25.txt`; and run 45983242424 of 27 November (35.8 / 71.5 / 96.4,
+2.00, 1.35), the first run in `exp-` and `hypot-xeon8573c-2026-11-27.txt`.
 `log1p-xeon8573c-2026-11-03.txt`, of the same day as the pair, reads 41.5 / 82.7 / 113.0 (1.99,
-1.37), and its scalar `StrictMath` loop reads 7,358 ns on common data where the `log1p` file of 21
-November reads 8,846. Each file's header says which it ran on; no cause for the difference is
-claimed here. The 25 nightly draws of this CPU in "What the pool gives" below read 34.5 to 41.7,
-68.9 to 83.2 and 93.6 to 113.0 at the three widths.
+1.37), as does run 45983301876 of 27 November, the second run in those two files (40.7 / 80.9 /
+109.9, 1.99, 1.36); the `log1p` file's scalar `StrictMath` loop reads 7,358 ns on common data where
+the `log1p` file of 21 November reads 8,846. Each file's header says which it ran on; no cause for
+the difference is claimed here. The 25 nightly draws of this CPU in "What the pool gives" below read
+34.5 to 41.7, 68.9 to 83.2 and 93.6 to 113.0 at the three widths.
 
 The two Xeons are the AVX-512 hosts results wait for and are read first; their 512:256 of about
 1.35 means a 512-bit arm can win there, but not by the factor of two its lane count suggests.
