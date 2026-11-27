@@ -20,7 +20,7 @@ files:
 
 | Function | xeon8573c (AVX-512): common / mixed | xeon6973p (AVX-512): common / mixed | epyc9v45 (AVX-512): common / mixed | epyc7763 (AVX2): common / mixed |
 |---|---|---|---|---|
-| `exp` | 6.67x / 3.46x | 6.22x / 3.46x | 7.96x / 4.30x | older code |
+| `exp` | 6.67x / 3.46x | 6.22x / 3.46x | 7.96x / 4.30x | 4.49x / 2.62x |
 | `expm1` | 4.03x / 3.03x | not measured | not measured | 1.90x / 1.74x |
 | `log` | 4.12x / 2.38x | not measured | not measured | 2.44x / 1.97x |
 | `log10` | 4.41x / 2.76x | not measured | not measured | 2.30x / 1.86x |
