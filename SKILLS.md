@@ -242,7 +242,8 @@ belongs here too, since it stops the next port re-trying a settled question.
 - **Hosts measured in Varka.** 512:256 in lanes per nanosecond: AMD EPYC 7763 (Zen 3, AVX2, no
   AVX-512) 1.00; EPYC 9V74 (Zen 4, no AVX-512 exposed) 0.91 to 1.00; Intel Xeon Platinum 8573C
   and Xeon 6973P-C (full AVX-512) 1.33 to 1.36, from issuing 512-bit operations on two ports
-  against 256-bit ones on three; EPYC 9V45 (Zen 5) 1.99. GitHub's x86 runners draw from all of
+  against 256-bit ones on three; EPYC 9V45 (Zen 5) 1.99, and 2.00 in vfdlibm's
+  first files of it. GitHub's x86 runners draw from all of
   these. `HARDWARE.md` holds the table, with sources, and vfdlibm's runs extend it.
 
 ## The assembly check
@@ -632,7 +633,8 @@ mnemonic); the other operations count the same at both widths.
   0.90 to 0.91 of the 256-bit rate (`HARDWARE.md`, "What the pool gives"). Whether that makes it
   a host again is the owner's decision.
 - **The EPYC 9V45 is recorded whenever drawn, and nobody waits for it.** It is the one
-  full-width 512-bit datapath in the pool (512:256 of 1.99), and a scarce draw: one in eighteen
+  full-width 512-bit datapath in the pool (512:256 of 1.99 in Varka's run, 2.00 in vfdlibm's
+  `exp-epyc9v45-2026-11-27.txt` and `hypot-epyc9v45-2026-11-27.txt`), and a scarce draw: one in eighteen
   in Varka's survey of 11 September 2026, though 7 of Varka's last 30 benchmark dispatches (31
   October to 2 November) and 15 of 109 option-matrix jobs on 28 October drew it. So
   `bench/dispatch-bench.sh --host epyc9v45` stops after 18 dispatches, an hourly try for about a
@@ -640,7 +642,7 @@ mnemonic); the other operations count the same at both widths.
   surely), with exit status 3 if none drew it (1 if the last try failed before the CPU check);
   `--attempts 1` is a single opportunistic try. The CPU check comes first in the job,
   after only the fetch of its script and that script's own test; what a miss costs on the
-  current workflow has not been measured. No decision waits on a 9V45 file; when
+  current workflow has not been measured. No decision waits on a 9V45 file; where
   one exists, it is read with the other AVX-512 hosts.
 - **The benchmark fails on any other CPU, and is retried, never relaxed.**
   `.github/workflows/benchmark.yml` takes a `host` input with exactly five choices (four x86
