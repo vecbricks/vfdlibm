@@ -4,22 +4,23 @@ fdlibm on the Java Vector API: math functions over `DoubleVector` lanes whose ev
 bit-identical to `java.lang.StrictMath`, but for a two-NaN lane of `atan2`, `hypot` or `pow`.
 
 **Status: 0.x.** All thirteen functions of the plan's set (`PLAN.md` section 3) are ported and
-released in 0.3.0, as `io.github.vecbricks:vfdlibm`: `exp`, `expm1`, `log`, `log1p` and `log10`
-since 0.1.0, `sinh`, `cosh`, `asin`, `atan`, `acos` and `atan2` since 0.2.0, and `hypot` and `pow`
-in 0.3.0, `pow` with its common path in the vector and its other lanes finished per lane. Functions
-are added one at a time, as [Varka](https://github.com/vecbricks/varka) needs them. A minor version
-may break the API and a patch may not; adding a function is a patch. Bit identity with `StrictMath`
-is the contract, and no version changes it (`CHANGELOG.md`); the one lane it excepts is a lane of
-two NaNs with different bits in `atan2`, `hypot` or `pow`.
+released as `io.github.vecbricks:vfdlibm`: `exp`, `expm1`, `log`, `log1p` and `log10` since 0.1.0,
+`sinh`, `cosh`, `asin`, `atan`, `acos` and `atan2` since 0.2.0, and `hypot` and `pow` since 0.3.0;
+0.3.1 computes all of `hypot`'s lanes in the vector, where `pow` has its common path in the vector
+and its other lanes finished per lane. Functions are added one at a time, as
+[Varka](https://github.com/vecbricks/varka) needs them. A minor version may break the API and a
+patch may not; adding a function is a patch. Bit identity with `StrictMath` is the contract, and no
+version changes it (`CHANGELOG.md`); the one lane it excepts is a lane of two NaNs with different
+bits in `atan2`, `hypot` or `pow`.
 
 **Speedup over `StrictMath`** of the latest release, per host, from the committed results
 files:
 
-<!-- speedup-table: v0.3.0 -->
+<!-- speedup-table: v0.3.1 -->
 
 | Function | xeon8573c (AVX-512): common / mixed | epyc7763 (AVX2): common / mixed |
 |---|---|---|
-| `exp` | 6.72x / 3.49x | 4.29x / 2.62x |
+| `exp` | older code | older code |
 | `expm1` | 4.03x / 3.03x | 1.90x / 1.74x |
 | `log` | 4.12x / 2.38x | 2.44x / 1.97x |
 | `log10` | 4.41x / 2.76x | 2.30x / 1.86x |
@@ -30,10 +31,10 @@ files:
 | `atan` | 3.48x / 2.30x | 1.77x / 1.51x |
 | `acos` | 2.21x / 1.90x | 1.99x / 1.36x |
 | `atan2` | 2.72x / 2.08x | 1.72x / 1.55x |
-| `hypot` | 2.16x / 1.18x | 1.25x / 0.70x |
+| `hypot` | older code | 1.33x / 1.38x |
 | `pow` | 11.79x / 7.43x | 4.88x / 4.28x |
 
-For vfdlibm 0.3.0 (tag v0.3.0). Each figure is `StrictMath` called once per lane (the
+For vfdlibm 0.3.1 (tag v0.3.1). Each figure is `StrictMath` called once per lane (the
 `scalarStrictMath` row) over the function's default arm at the host's preferred species (its
 `<arm>Preferred` row), by minimum ns/op within one run; where a file holds several runs, the lowest
 of their ratios is shown; from one run, a ratio under 1.4x is marked, and one under 1.3x says
@@ -44,10 +45,6 @@ figures come from the newest file per function and host under [`bench/results/`]
 that times the release's code; `bench/readme-table.py --write` makes this table, and CI checks it.
 
 <!-- end of speedup-table -->
-
-`hypot` on AVX2 is a known issue of 0.3.0: on the EPYC 7763 it is not shown to be faster than
-`StrictMath`, and on `HypotBenchmark`'s mixed data, where about one pair in 16 takes a rare path of
-fdlibm's C, it is slower, with the same results (`CHANGELOG.md`, "Known issues").
 
 ## Use
 
@@ -159,7 +156,7 @@ mvn -q clean compile org.apache.maven.plugins:maven-dependency-plugin:3.7.0:buil
 java --module-path "target/classes:$(cat cp.txt)" -m example/example.Main
 ```
 
-Each function takes a vector of any species of 128 bits or more. Released in 0.3.0: `exp`,
+Each function takes a vector of any species of 128 bits or more. Released in 0.3.1: `exp`,
 `expm1`, `log`, `log10`, `log1p`, `sinh`, `cosh`, `asin`, `atan` and `acos`, and the three that take
 two vectors, `atan2(y, x)`, `hypot(x, y)` and `pow(x, y)`. The system property `vfdlibm.fault`
 plants a fault, for this project's tests only, and works in the shipped jar too: never set it,
