@@ -11,6 +11,8 @@ two NaNs with different bits in a function of two arguments (`AGENTS.md`, "Relea
 
 ## [Unreleased]
 
+## [0.3.1] - 2026-11-27
+
 ### Changed
 
 - `hypot` computes the lanes of an infinity or a NaN in either argument in the vector, lines
@@ -20,6 +22,16 @@ two NaNs with different bits in a function of two arguments (`AGENTS.md`, "Relea
   (`bench/results/hypot-pair-epyc7763-2026-11-25.txt`). On the Intel Xeon Platinum 8573C
   (AVX-512) a pair finds no row 10% faster or slower; its common-data vector rows read 2.5% to 6.9%
   slower, under that threshold (`bench/results/hypot-pair-xeon8573c-2026-11-26.txt`) (#186).
+
+### Fixed
+
+- The known issue of 0.3.0, `hypot` not shown to be faster than `StrictMath.hypot` on an AVX2 host
+  and slower on mixed data, is gone. On the AMD EPYC 7763 (AVX2), `HypotBenchmark` reads
+  `StrictMath` over `hypot`, by minimum, at 1.33x to 1.45x on common data and 1.38x to 1.41x on
+  mixed data, at 256 bits, at the preferred species and at `SPECIES_MAX`, in a run and its re-run
+  (`bench/results/hypot-epyc7763-2026-11-26.txt`); 0.3.0 read 0.70x to 0.75x on mixed data. No
+  plain run of this code exists on an AVX-512 host: the Xeon 8573C has the pair above, and its
+  0.3.0 figures time older code. The results are unchanged (#186).
 
 ## [0.3.0] - 2026-11-25
 
@@ -127,7 +139,8 @@ two NaNs with different bits in a function of two arguments (`AGENTS.md`, "Relea
   module `io.github.vecbricks.vfdlibm`. A client needs the incubating Vector API module
   (`--add-modules jdk.incubator.vector`) at compile time and at run time.
 
-[Unreleased]: https://github.com/vecbricks/vfdlibm/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/vecbricks/vfdlibm/compare/v0.3.1...HEAD
+[0.3.1]: https://github.com/vecbricks/vfdlibm/releases/tag/v0.3.1
 [0.3.0]: https://github.com/vecbricks/vfdlibm/releases/tag/v0.3.0
 [0.2.0]: https://github.com/vecbricks/vfdlibm/releases/tag/v0.2.0
 [0.1.0]: https://github.com/vecbricks/vfdlibm/releases/tag/v0.1.0
