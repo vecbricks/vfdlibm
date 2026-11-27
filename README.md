@@ -47,6 +47,10 @@ makes this table, and CI checks it.
 
 <!-- end of speedup-table -->
 
+A file's runs can differ: the same host has read two datapath states (`HARDWARE.md`, "The 8573C's
+two readings"), and the table shows the lowest of a file's ratios, so a figure can sit under what
+its re-run read (`hypot` on the xeon8573c, mixed data: 1.27x here, 1.32x in the re-run).
+
 ## Use
 
 A client that depends on the released jar, from Maven Central. Its `pom.xml`:
