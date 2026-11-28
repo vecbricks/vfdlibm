@@ -1183,7 +1183,7 @@ argument, checked at its boundaries and on samples, not over every word. Informa
 kernel is `log1pBlended`'s operations with these compares and long words, which only Varka's
 vector tie checks.
 
-## Blends (the argument sinh and cosh share)
+## Blends (the argument sinh, cosh and tanh share)
 
 ### L13. A blend of branches computes the C's branch on each lane
 
@@ -1373,6 +1373,91 @@ with s_expm1.c's lines in scalar Java, is `StrictMath.cosh`.
 **Encoding.** No file of its own. The files of exp's lemmas check their steps for cosh as they
 stand, `expCore` being the same body. Informal here: that the port's blends take each branch on
 exactly the C's lanes, and that it computes these steps, the code's text.
+
+## tanh (`Tanh.java`, from `s_tanh.c`)
+
+s_tanh.c returns `one/x+one` or `one/x-one` for a non-finite `x` (lines 61-63); for `|x| < 22`
+(`ix < 0x40360000`, line 67) it returns `x*(one+x)` below `2^-55` (68-69), and otherwise takes
+`z = one - two/(t+two)` with `t = expm1(two*fabs(x))` from `|x| = 1` on (70-72) and `z =
+-t/(t+two)` with `t = expm1(-two*fabs(x))` below it (74-75); from 22 up `z = one - tiny` (79); and
+it returns `z` for `jx >= 0` and `-z` otherwise (81). Line numbers in this section are
+`reference/fdlibm-5.3/s_tanh.c`'s. The port computes every finite lane in the vector in the C's
+order, with no fused multiply-add and no reassociation, and **needs no lemma of its own** beyond
+L13's blend argument. Where its text is not the C's:
+
+- The two `expm1` calls are one, `Expm1.expm1Core` of an argument picked per lane by line 70's
+  test: `two*|x|` (`|x|` as the vector's `ABS`, which is `fabs` on every non-`NaN` double) where
+  `ix >= 0x3ff00000` and `(-two)*|x|` below it. That is an operand blend (L13, H2): each lane's
+  `expm1` gets the C's argument, computed by the C's product, the C's `-two*fabs(x)` being
+  `(-two)*fabs(x)` by C's precedence.
+- The two forms share one division, a transcription and no departure, as in sinh's section: the
+  numerator is `two` where `ix >= 0x3ff00000` and `-t` below it (the negation exact), the
+  denominator `t+two` in both, and the lanes from 1 on then take `one - q`. Each operation is one
+  IEEE operation on the C's operands (R4); the other form's value in a lane is never kept.
+- Line 79's `one - tiny` is a constant, `Tanh.SATURATED`, the same IEEE subtraction evaluated once
+  by the compiler (a constant expression of `double`s, JLS 15.29, rounded as at run time); it is
+  `1.0`, which `TanhTest.constantsAreTheSourcesBits` pins.
+- The sign of line 81 is the vector's `NEG` of `z` under the mask `jx < 0`, an exact negation on
+  every lane it keeps (none is a `NaN`), and the tiny lanes' `x*(one+x)` is blended over it, since
+  the C returns them before line 81.
+- The lanes of `ix >= 0x7ff00000`, the infinities and the NaNs (lines 61-63), are finished per lane
+  by `StrictMath.tanh`, which is the C, as sinh finishes its own: no computation of the port is in
+  them, and so no kept lane is a `NaN` made in the vector, and L13's exception for a `NaN`'s
+  payload does not arise.
+
+**L13 for tanh.** H1 (selection) holds: every mask is the C's compare on the same `ix` (`ix <
+0x40360000`, `ix < 0x3c800000`, `ix >= 0x3ff00000`, `ix >= 0x7ff00000`) or on `jx` (`jx < 0`),
+nested as the C nests them (the tiny return and the non-finite lanes blended or finished last).
+H2 (operands) holds for the two operand blends above, and every other operation is the C's in its
+order. H3 (totality) holds: IEEE operations on doubles, compares, int lane bit operations,
+reinterpretations and blends, no integer division and no indexed load, so the values a discarded
+lane takes (`expm1Core` of a tiny or a huge argument, a quotient of a non-finite lane) are values
+and nothing else. H4 (select) holds: each blend is a `blend`.
+
+**What it rests on.** `Expm1.expm1Core` is `StrictMath.expm1` on every lane `Expm1.expm1Rare`
+leaves clear (the expm1 section; `Expm1Test.coreAndRareMaskAreTheFinishArm`), so L10 and L11
+cover its kept lanes as they stand, with exp's L1, L2 and L5 through L10. The one hinge of this
+port is that **no lane whose `t` is kept has an argument `expm1Rare` sets**. Its conditions, each
+with its range:
+
+- (T1) Not tiny. A kept lane has `ix >= 0x3c800000`, so `|x| >= 2^-55`, a normal double below
+  22, whose exact double `2|x|` is a double (its significand is `|x|`'s, its exponent one more), so
+  the product is exact (R4: a representable result rounds to itself). Its high word is `ix +
+  0x00100000 >= 0x3c900000`, expm1's tiny word, so `|arg| >= 2^-54`. The
+  words hold that exactly: `Tanh.HX_TINY + 0x00100000 == Expm1.HX_TINY`. A tiny word one lower
+  would admit `|x|` just below `2^-55`, whose argument is tiny for expm1.
+- (T2) Not below `-56 ln2`. A negative argument is `(-two)*|x|` with `|x| < 1` (line 70's test),
+  so it lies in `(-2, -2^-54]`, above `-56 ln2` (about `-38.8`). The split would have to move
+  above `28 ln2` (about 19.4) for a kept lane's argument to fall below it.
+- (T3) Not above `o_threshold`, and finite. A positive argument is `two*|x|` with `1 <= |x| < 22`
+  (lines 67 and 70), so it lies in `[2, 44)`, below `o_threshold` (about 709.78). The limit would
+  have to move above `o_threshold/2` (about 354.9) for a kept lane's argument to pass it.
+
+So every kept argument is in `(-2, -2^-54] U [2, 44)`, none of expm1's early returns (lines 146-158
+and 177 of `s_expm1.c`): its `k` is between `-3` and `63`, and L10's statement holds for each.
+
+**Hinge tests.** `TanhTest.noKeptLaneHasARareExpm1Argument` runs `Expm1.expm1Rare` on the argument
+the port picks for every input of the thresholds, 4096 doubles each side of `+-2^-55`, `+-1` and
+`+-22`, `2^16` draws over the binades `2^-60` to `2^10` and `2^16` of `(-400, 400)`, at every
+width, and requires no kept lane among them to be rare, and checks T1's words.
+`TanhTest.falseHingesAreCaught` requires the same check to find a kept lane with a rare argument
+when each condition is false: the tiny word one lower (T1), the split at 32 and not 1 (T2), and the
+limit at 368 and not 22 (T3). `TanhTest.coreIsStrictMathOnTheKeptArguments` is the vector tie of
+the hinge: `expm1Core` against `StrictMath.expm1` on the kept arguments at the hinge's edges. The
+vector tie of the port is `TanhTest`: `VFdlibm.tanh` against `StrictMath.tanh` at every width and
+`SPECIES_MAX`, unmasked and masked, on the thresholds of lines 61, 67, 68 and 70 and their
+neighbours, the words of `|x|` at which `+-2|x|` crosses expm1's own words, the double from which
+tanh rounds to 1 (about 19.06), sampled bit patterns, dense draws of `(-30, 30)`, `[0.5, 2]` and
+`[18, 24]`, the magnitudes from `2^-60` to `2^10` and over every binade, the subnormals, and every
+subset of a vector's lanes rare (`everySubsetOfLanesRare`); `scalarTranscriptionIsStrictMath`
+checks that `cTanh`, s_tanh.c in scalar Java, is `StrictMath.tanh`, in the test JVM and, by
+`scalarTranscriptionIsStrictMathInEveryJitMode`, in a JVM per JIT mode. No hard-case file is
+tanh's.
+
+**Encoding.** No file of its own: T1 to T3 are comparisons of a few constants, checked by the
+tests above. The files of L10 and L11 and of exp's lemmas check their steps for tanh's `expm1` as
+they stand, `expm1Core` being the same body. Informal here: that the port's blends take each form
+on exactly the C's lanes, and that it computes these steps, the code's text.
 
 ## asin (`Asin.java`, from `e_asin.c`)
 

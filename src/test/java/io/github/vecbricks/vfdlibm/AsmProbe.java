@@ -320,6 +320,23 @@ final class AsmProbe {
   }
 
   // ---------------------------------------------------------------------------------------------
+  // tanh: TanhBenchmark's arm, (-25, 25).
+
+  static void tanhFinish(double[] a, double[] b, double[] out, boolean[] live, boolean[] flags) {
+    for (int i = 0; i < N; i += S.length()) {
+      VFdlibm.tanh(DoubleVector.fromArray(S, a, i)).intoArray(out, i);
+    }
+  }
+
+  static void tanhFinishMasked(double[] a, double[] b, double[] out, boolean[] live,
+      boolean[] flags) {
+    for (int i = 0; i < N; i += S.length()) {
+      VFdlibm.tanh(DoubleVector.fromArray(S, a, i), VectorMask.fromArray(S, live, i))
+          .intoArray(out, i);
+    }
+  }
+
+  // ---------------------------------------------------------------------------------------------
   // cosh: CoshBenchmark's arms, each by name, and VFdlibm.cosh, the public default, whichever arm
   // it calls; on 0.35 <= |x| < 60.
 
@@ -503,6 +520,7 @@ final class AsmProbe {
         }
         case "log1p" -> a[i] = random.nextDouble(-0.9, 20.0);
         case "sinh" -> a[i] = random.nextDouble(-21.5, 21.5);
+        case "tanh" -> a[i] = random.nextDouble(-25.0, 25.0);
         case "cosh" -> a[i] = (random.nextBoolean() ? 1 : -1) * random.nextDouble(0.35, 60.0);
         case "asin", "acos" -> {
           // as their benchmarks: one lane in 64 below 2^-27, a common lane of their own

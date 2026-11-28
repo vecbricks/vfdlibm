@@ -91,9 +91,10 @@ import jdk.incubator.vector.VectorSpecies;
  *
  * <p>{@link #expm1Core} and {@link #expm1Rare} split the finish arm into its branch-free part and
  * its rare-lane mask, as {@code Exp.expCore} and {@code Exp.expRare} do, so that a port that
- * computes through expm1's common path ({@code Sinh}, over {@code |x|}) can nest it as {@code
- * Log10} nests {@code Log.logCore}. The core is the same body in a fourth mode, so its lanes
- * outside the rare set are the arms' bits, and no new departure from the C.
+ * computes through expm1's common path ({@code Sinh}, over {@code |x|}, and {@code Tanh}, over
+ * {@code +-2|x|}) can nest it as {@code Log10} nests {@code Log.logCore}. The core is the same
+ * body in a fourth mode, so its lanes outside the rare set are the arms' bits, and no new
+ * departure from the C.
  */
 final class Expm1 {
 

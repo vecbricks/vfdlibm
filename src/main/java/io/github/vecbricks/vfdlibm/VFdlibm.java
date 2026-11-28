@@ -21,11 +21,10 @@ import jdk.incubator.vector.VectorMask;
  * specified).
  *
  * <p>Every method works on a vector of any species of 128 bits or more (exp, expm1, log, log10,
- * log1p, sinh, cosh, asin, atan, acos, atan2, hypot and pow hold fdlibm's {@code int} words in int
- * lanes of half the vector's size). Each comes in two forms: one computes every lane, and a masked
- * form
- * computes only the lanes set in {@code live} and returns every other lane of its argument
- * untouched, raw bits and all. An inactive lane never sends the vector down a slow path.
+ * log1p, sinh, cosh, tanh, asin, atan, acos, atan2, hypot and pow hold fdlibm's {@code int} words
+ * in int lanes of half the vector's size). Each comes in two forms: one computes every lane, and a
+ * masked form computes only the lanes set in {@code live} and returns every other lane of its
+ * argument untouched, raw bits and all. An inactive lane never sends the vector down a slow path.
  *
  * <p>Which species to pass. Every species of 128 bits or more gives the same bits. The files under
  * {@code bench/results/}, in the source repository and not in the jar, read what the body allocates
@@ -102,7 +101,8 @@ import jdk.incubator.vector.VectorMask;
  *   <li>Not measured: any port's speed at 512 bits against 256 on the EPYC 9V74 draws that have
  *       AVX-512 ({@code HARDWARE.md} has only a datapath reading for them, and lists {@code
  *       MaxVectorSize=64}), any port's speed on Arm, and allocation on an Arm host with vectors
- *       wider than 128 bits.
+ *       wider than 128 bits. No file under {@code bench/results/} reads {@code tanh} yet: what it
+ *       allocates is read only by CI's allocation check, and its speed by nothing.
  * </ul>
  *
  * <p>Each function is ported from fdlibm 5.3's C source, kept in {@code reference/fdlibm-5.3/};
@@ -274,6 +274,31 @@ public final class VFdlibm {
    */
   public static DoubleVector cosh(DoubleVector x, VectorMask<Double> live) {
     return Cosh.cosh(x, Objects.requireNonNull(live, "live"));
+  }
+
+  /**
+   * {@code StrictMath.tanh} in every lane. Ported from fdlibm 5.3's {@code s_tanh.c}.
+   *
+   * <p>This is {@code StrictMath.tanh}, which is fdlibm on every host. {@code Math.tanh} may be a
+   * HotSpot stub instead, and is not guaranteed to give these bits.
+   *
+   * @param x the arguments
+   * @return the hyperbolic tangent of each lane of {@code x}
+   */
+  public static DoubleVector tanh(DoubleVector x) {
+    return Tanh.tanh(x, null);
+  }
+
+  /**
+   * {@code StrictMath.tanh} in the lanes set in {@code live}; every other lane is {@code x}'s,
+   * untouched.
+   *
+   * @param x the arguments
+   * @param live the lanes to compute, of {@code x}'s species
+   * @return the hyperbolic tangent of each live lane of {@code x}, and {@code x} in the others
+   */
+  public static DoubleVector tanh(DoubleVector x, VectorMask<Double> live) {
+    return Tanh.tanh(x, Objects.requireNonNull(live, "live"));
   }
 
   /**

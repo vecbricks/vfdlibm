@@ -208,6 +208,23 @@ final class Fuzz {
       coshPoints());
 
   /**
+   * tanh: s_tanh.c's high-word tests (the tiny return below 2^-55, the split at 1, 22 and the
+   * non-finite words), the doubles at those edges, 2 (where {@code tanh.splitMoved} moves the
+   * split), 2^-28 (where {@code tanh.tinyMoved} moves the tiny test) and 16 (where {@code
+   * tanh.thresholdMoved} moves the 22), and the edges of the expm1 core on {@code +-2|x|}: the
+   * words of {@code |x|} whose double is at expm1's tiny word, 0.5 ln2 and 1.5 ln2, and the {@code
+   * |x|} where its k steps, {@code (k + 1/2) ln2 / 2}.
+   */
+  static final Edges TANH = new Edges(
+      new int[] {
+        Tanh.HX_TINY, Tanh.HX_ONE, Tanh.HX_LIMIT, Tanh.HX_NON_FINITE, 0x40000000, 0x3e300000,
+        0x40300000, Expm1.HX_HALF_LN2 - 0x00100000, Expm1.HX_THREE_HALVES_LN2 - 0x00100000, 0
+      },
+      new int[0],
+      false,
+      tanhPoints());
+
+  /**
    * asin: e_asin.c's high-word tests (the tiny return below 2^-27, the first form below 0.5, the
    * root form above 0.975, the per-lane finish from 1 and the non-finite words) and the doubles
    * at them: the three constants' words are one test each, so a split moved by one word shows
@@ -268,6 +285,32 @@ final class Fuzz {
     return points.stream().mapToDouble(Double::doubleValue).toArray();
   }
 
+  /**
+   * tanh's own edges, the double from which it rounds to 1 (about 19.06), and {@code (k + 1/2)
+   * ln2 / 2} for the k of expm1's core on {@code 2|x|} below 22.
+   */
+  private static double[] tanhPoints() {
+    double ln2 = StrictMath.log(2.0);
+    // The least positive double whose tanh is 1, by bisection on StrictMath.tanh, which is
+    // monotone there (TanhTest.firstSaturated finds the same double on the C).
+    long lo = Double.doubleToRawLongBits(1.0);
+    long hi = Double.doubleToRawLongBits(22.0);
+    while (hi - lo > 1) {
+      long mid = (lo + hi) >>> 1;
+      if (StrictMath.tanh(Double.longBitsToDouble(mid)) == 1.0) {
+        hi = mid;
+      } else {
+        lo = mid;
+      }
+    }
+    List<Double> points = new ArrayList<>(List.of(0x1p-55, 0x1p-28, 1.0, 2.0, 16.0, 22.0,
+        Double.longBitsToDouble(hi), 0.25 * ln2, 0.75 * ln2));
+    for (int k = 0; k <= 64; k++) {
+      points.add((k + 0.5) * ln2 / 2.0);
+    }
+    return points.stream().mapToDouble(Double::doubleValue).toArray();
+  }
+
   /** exp's limits, 0.5 ln2 and 1.5 ln2, and {@code (k + 1/2) ln2} for every k a result has. */
   private static double[] expPoints() {
     List<Double> points = new ArrayList<>(List.of(
@@ -298,6 +341,7 @@ final class Fuzz {
       case LOG1P -> LOG1P;
       case SINH -> SINH;
       case COSH -> COSH;
+      case TANH -> TANH;
       case ASIN -> ASIN;
       case ATAN -> ATAN;
       case ACOS -> ACOS;
