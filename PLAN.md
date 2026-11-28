@@ -116,13 +116,16 @@ and every finite lane in the vector, the infinities and NaNs finished per lane. 
   -XX:MaxVectorSize=32`, 128 and 256 bits on every draw), on x86 with `-XX:MaxVectorSize=16`
   (all of it at 128 bits) and on Arm (128 bits).
 - **Nightly:** `.github/workflows/nightly.yml` sweeps every high word of exp, expm1, log, log10,
-  log1p, sinh, cosh, tanh, atan, asin, acos, atan2, hypot and pow (atan2, hypot and pow, of two
-  arguments, one argument at a time) with three low words each (every branch fdlibm decides on the
-  high word) at every width but 128 bits on x86, where a rotating 1/32 slice a night covers it in 32
-  nights, and at 128 bits on Arm every night; it fuzzes from a fresh seed at every width, and runs
-  every proof under both solvers; a failure opens an issue labelled `nightly-failure` with the
-  mismatching inputs, ready for a `hard-cases` file (`SKILLS.md`), and a dispatch that plants a
-  fault, to test that alert, opens one labelled `nightly-fault-test`.
+  log1p, sinh, cosh, atan, asin, acos, atan2, hypot and pow (atan2, hypot and pow, of two arguments,
+  one argument at a time) with three low words each (every branch fdlibm decides on the high word)
+  at every width but 128 bits on x86, where a rotating 1/32 slice a night covers it in 32 nights,
+  and at 128 bits on Arm every night; it fuzzes from a fresh seed at every width, and runs every
+  proof under both solvers; a failure opens an issue labelled `nightly-failure` with the mismatching
+  inputs, ready for a `hard-cases` file (`SKILLS.md`), and a dispatch that plants a fault, to test
+  that alert, opens one labelled `nightly-fault-test`. `tanh` is not in the night yet: `Sweep` and
+  `Fuzz` take it by hand, and a later pull request adds it to `nightly.yml`'s `all` once the night's
+  budget and the matrices' 256-job cap are re-read for a fourteenth function (`SKILLS.md`, "What the
+  tanh port taught").
 - **Masked forms:** a masked form is checked under seeded random masks, all-true and all-false;
   active lanes must equal `StrictMath` and inactive lanes must keep the input's raw bits (for a
   two-argument function, the first argument's).
@@ -252,9 +255,9 @@ and every finite lane in the vector, the infinities and NaNs finished per lane. 
   `PowBenchmark` one for `pow` (the same; `pow-epyc7763-2026-11-23.txt` and
   `pow-xeon8573c-2026-11-24.txt` read it, one run each, its `rareOracle` row the allocation
   baseline).
-  Each of the thirteen, and `tanh`, has rows at `SPECIES_MAX` (`*Max`), which the allocation check
-  covers: the
-  finish of `exp`, `expm1`, `log`, `log10` and `log1p` boxed there on mixed data until its first
+  Each of the thirteen, and `tanh`, has rows at `SPECIES_MAX` (`*Max`), which the allocation
+  check covers: the finish of `exp`, `expm1`, `log`, `log10` and `log1p` boxed there on mixed data
+  until its first
   eight lanes were written out (`bench/results/max-finish-laptop-2026-11-20.txt`, then
   `bench/results/max-finish-alloc-free-laptop-2026-11-21.txt`, a laptop reading of allocation only);
   no file reads the earlier finish of `sinh` or `cosh`, whose current rows the host files of 21

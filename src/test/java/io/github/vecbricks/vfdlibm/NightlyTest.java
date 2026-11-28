@@ -102,7 +102,9 @@ class NightlyTest {
    * (expm1.dropKForcing) and 16,384 (log.thresholdMoved); the second thread's seed 0x5eee finds
    * those four at 24,576, 159,744, 110,592 and 4,096. Atan's three faults (atan.dropLo,
    * atan.splitMoved, atan.hiOneUlpOff), measured the same way with one thread, no draw bound
-   * and a stop at the first mismatch, are found at 4,096 by both seeds. Not measured: asin's
+   * and a stop at the first mismatch, are found at 4,096 by both seeds, and so are tanh's four
+   * (tanh.splitMoved, tanh.tinyMoved, tanh.thresholdMoved, tanh.twoOneUlpOff), measured with one
+   * thread and a stop at the first mismatch at 512 bits on 28 November 2026. Not measured: asin's
    * three faults and cosh's five, nor the faults of the functions of two arguments (atan2, hypot,
    * pow), whose draws ({@code Fuzz.drawPair}) gained the pairs of one high word for issue 173
    * while those of one argument ({@code Fuzz.draw}), measured here, did not change; CI's fault

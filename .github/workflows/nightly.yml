@@ -1,8 +1,8 @@
 name: Nightly
 
 # The nightly correctness run (SKILLS.md, "The nightly sweep and fuzz"): every arm of exp,
-# expm1, log, log10, log1p, sinh, cosh, tanh, atan, asin, acos, atan2, hypot and pow, unmasked
-# and masked, compared with StrictMath by raw bits (a lane of two NaNs of atan2, hypot or pow by
+# expm1, log, log10, log1p, sinh, cosh, atan, asin, acos, atan2, hypot and pow, unmasked and
+# masked, compared with StrictMath by raw bits (a lane of two NaNs of atan2, hypot or pow by
 # PairBits).
 #
 # - sweep (x86): every one of the 2^32 high words with three low words each (Sweep.java) at
@@ -140,7 +140,7 @@ jobs:
         run: |
           # Every function of the night: each matrix and each check below reads this list, so a
           # new port is added here (and in `reach`, if it computes through another port).
-          all='exp expm1 log log10 log1p sinh cosh tanh atan asin acos atan2 hypot pow'
+          all='exp expm1 log log10 log1p sinh cosh atan asin acos atan2 hypot pow'
           # The functions of `all` that take two arguments: atan2, hypot and pow. A port of another
           # is added here as well as to `all`, and each sweep matrix then has an entry for each
           # argument the night sweeps (PAIR_PASSES); one rotation serves them all.
@@ -188,10 +188,7 @@ jobs:
           # function and every function that computes through it, by fault: log10 computes
           # through Log.logCore, where log's faults are, and sinh through Expm1.expm1Core, whose
           # faults reach it but expm1.thresholdMoved (sinh's k stops at 32, below the k = 56 it
-          # moves) and expm1.guardMissesFilter (the guarded arm's own); tanh through the same
-          # core, reached by the same three (TanhTest, run by hand under each of the five, failed
-          # under those three and passed under the other two: its k reaches 56 only from |x| of
-          # about 19.2 up, where its result is 1 in either form); cosh through Exp.expCore,
+          # moves) and expm1.guardMissesFilter (the guarded arm's own); cosh through Exp.expCore,
           # whose dropCorrection and constantOffByOneUlp reach it, but not thresholdMoved (the
           # subnormal scale-back, which expCore leaves out) or dropKForcing (the word of 0.5 ln2,
           # which is cosh's small range, computed from expm1's lines and not from exp); atan2
@@ -205,7 +202,7 @@ jobs:
               atan.*) echo 'atan atan2' ;;
               log.*) echo 'log log10' ;;
               expm1.dropCorrection | expm1.constantOffByOneUlp | expm1.dropKForcing)
-                echo 'expm1 sinh tanh' ;;
+                echo 'expm1 sinh' ;;
               exp.dropCorrection | exp.constantOffByOneUlp) echo 'exp cosh' ;;
               *) echo "${1%%.*}" ;;
             esac

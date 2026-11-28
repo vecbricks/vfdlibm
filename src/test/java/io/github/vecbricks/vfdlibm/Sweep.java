@@ -26,10 +26,9 @@ import jdk.incubator.vector.VectorSpecies;
  * and 22; cosh's tiny, 0.5 ln2 and 22; tanh's tiny, 1 and 22; atan's tiny, 7/16, 11/16, 19/16,
  * 39/16 and 2^66; asin's 2^-27, 0.5, 0.975 and 1; acos's constant return at 2^-57's word, 0.5 and
  * 1), so every such decision of a function of one argument is taken by some input here. A
- * function of two
- * arguments is swept one argument at a time, each swept value with a partner drawn for the
- * other; what that takes of its branches on both arguments at once is not claimed (SKILLS.md,
- * "The nightly sweep and fuzz"). The low word of the third input is {@code
+ * function of two arguments is swept one argument at a time, each swept value with a partner
+ * drawn for the other; what that takes of its branches on both arguments at once is not claimed
+ * (SKILLS.md, "The nightly sweep and fuzz"). The low word of the third input is {@code
  * mix(seed + hi * 0x9e3779b97f4a7c15L)}, so any input of any part is reproducible from the seed
  * alone, whatever the parts and threads.
  * Taking every high-word branch is not detecting every moved split: a split one step off on the

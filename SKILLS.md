@@ -1519,8 +1519,8 @@ mnemonic); the other operations count the same at both widths.
   from 22 up is a constant, `one - tiny`, and the sign, so it is blended rather than finished.
   The infinities and NaNs, the C's first branch (`one/x+-one`), are finished by `StrictMath.tanh`:
   computing them in the vector would make a kept `NaN` in the vector, whose payload IEEE leaves
-  open, and need an observation like hypot's L22. `bench/alloc-check.py` reads the rows under
-  0.14 B/op at the laptop's flags and as an AVX2 host (local runs, no results file).
+  open, and need an observation like hypot's L22. CI's `bench/alloc-check.py` holds
+  `TanhBenchmark`'s rows; no results file reads them yet.
 - **The 22 is not tight, and the split's word barely matters.** From about 19.06 (the double
   `TanhTest.firstSaturated` finds) the second form rounds to 1, so moving line 67's 22 to 20
   changed none of 2^22 draws of `[16, 22)`; moved to 16 it changed 2141980, which is
@@ -1534,7 +1534,14 @@ mnemonic); the other operations count the same at both widths.
   of about 0.17). `expm1.thresholdMoved` moves the form of `k = 56`, which tanh's argument takes
   only from `|x|` of about 19.2 up, where its result is 1 in either form, and `guardMissesFilter`
   belongs to the guarded arm. `TanhTest` failed under the first three and passed under the other
-  two, run by hand as sinh's was.
+  two, run by hand as sinh's was; when tanh joins the night, `nightly.yml`'s `reach` sends those
+  three to it.
+- **Not in the night yet.** `Nightly`, `Sweep` and `Fuzz` take `tanh`, but `nightly.yml`'s `all`
+  does not list it. A fourteenth function there makes 16 shards with `pair-passes` `both` 272
+  jobs, past a matrix's 256, which that file and "The nightly sweep and fuzz" above say is exactly
+  the cap with thirteen, and it adds to the night's 66 to 75 minute estimate against the budget of
+  90. A later pull request adds it with both re-read, as pow joined the night after its port
+  (#164).
 - **No hard-case file.** Lefevre's list was not searched for tanh lines and CORE-MATH's lists
   were not read for it; the port follows the C operation by operation, so a hard case would only
   pin what the draws already check.

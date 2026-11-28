@@ -33,11 +33,13 @@ import org.openjdk.jmh.annotations.Warmup;
  * useful.
  *
  * <p>{@code inputs} picks the data: {@code common} draws from {@code (-25, 25)}, which holds both
- * forms of s_tanh.c ({@code |x| < 1} and from it on), the saturated lanes from 22 up, which are
- * computed in the vector too, and every {@code k} of the expm1 core up to 63, and where no lane
- * takes the per-lane finish (nor, but by a chance of about 2^-60, the tiny return below {@code
- * 2^-55}, whose operations every vector computes anyway); {@code mixed} replaces one input in 16 with a rare one ({@code +inf}, {@code -inf} or a
- * NaN, quiet or signalling: the C's first branch, the one rare path), so many vectors hold one.
+ * forms of s_tanh.c ({@code |x| < 1} and from it on), with every {@code k} of the expm1 core up to
+ * 63 on the lanes whose {@code t} is kept, and the saturated lanes from 22 up, which are computed
+ * in the vector too (their core runs on {@code 2|x|} up to 50, {@code k} up to 72, and is
+ * discarded); no lane takes the per-lane finish, and but by a chance of about 2^-60 none the tiny
+ * return below {@code 2^-55}, whose operations every vector computes anyway. {@code mixed}
+ * replaces one input in 16 with a rare one ({@code +inf}, {@code -inf} or a NaN, quiet or
+ * signalling: the C's first branch, the one rare path), so many vectors hold one.
  *
  * <p>The vector form is larger than C2 inlines by default ({@code FreqInlineSize}), so a call
  * from the loop may pass boxed vectors. Varka emits the sequence inline instead; to measure that,
