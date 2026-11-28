@@ -63,10 +63,16 @@ and every other lane finished per lane, by the owner's decisions of 23 November 
 reduction is exp's).
 
 `tan`, `tanh` and `cbrt` are fdlibm on aarch64 but Intel LIBM stubs on x86, so a port of them
-matches the JVM only on Arm. `sin` and `cos` are HotSpot's own stubs on both architectures, so
-`Math.sin` and `Math.cos` are not fdlibm anywhere; a port of them matches `StrictMath` only. These
-five are a later, optional set; the large-argument reduction of the trigonometric ones
-(`__ieee754_rem_pio2`, `__kernel_rem_pio2`) stays a per-lane `StrictMath` call.
+matches the JVM's `Math` only on Arm. `sin` and `cos` are HotSpot's own stubs on both
+architectures, so `Math.sin` and `Math.cos` are not fdlibm anywhere; a port of them matches
+`StrictMath` only. These five are a later, optional set (issue #162); the large-argument reduction
+of the trigonometric ones (`__ieee754_rem_pio2`, `__kernel_rem_pio2`) stays a per-lane
+`StrictMath` call. `tanh` is the first of them, by the owner's decision of 28 November 2026, for
+Varka's row 357b, which brings the vectorized `sinh`, `cosh` and `tanh` back with this library as
+their reference and test oracle: `VFdlibm.tanh`, from `s_tanh.c` (fetched from netlib then,
+`reference/fdlibm-5.3/SOURCES.md`), computing through `expm1`'s common path on `+-2|x|` below 22
+and every finite lane in the vector, the infinities and NaNs finished per lane. It matches
+`StrictMath.tanh`, which is the contract, and not `Math.tanh` on x86.
 
 ## 4. Testing
 
@@ -110,13 +116,13 @@ five are a later, optional set; the large-argument reduction of the trigonometri
   -XX:MaxVectorSize=32`, 128 and 256 bits on every draw), on x86 with `-XX:MaxVectorSize=16`
   (all of it at 128 bits) and on Arm (128 bits).
 - **Nightly:** `.github/workflows/nightly.yml` sweeps every high word of exp, expm1, log, log10,
-  log1p, sinh, cosh, atan, asin, acos, atan2, hypot and pow (atan2, hypot and pow, of two arguments,
-  one argument at a time) with three low words each (every branch fdlibm decides on the high word)
-  at every width but 128 bits on x86, where a rotating 1/32 slice a night covers it in 32 nights,
-  and at 128 bits on Arm every night; it fuzzes from a fresh seed at every width, and runs every
-  proof under both solvers; a failure opens an issue labelled `nightly-failure` with the mismatching
-  inputs, ready for a `hard-cases` file (`SKILLS.md`), and a dispatch that plants a fault, to test
-  that alert, opens one labelled `nightly-fault-test`.
+  log1p, sinh, cosh, tanh, atan, asin, acos, atan2, hypot and pow (atan2, hypot and pow, of two
+  arguments, one argument at a time) with three low words each (every branch fdlibm decides on the
+  high word) at every width but 128 bits on x86, where a rotating 1/32 slice a night covers it in 32
+  nights, and at 128 bits on Arm every night; it fuzzes from a fresh seed at every width, and runs
+  every proof under both solvers; a failure opens an issue labelled `nightly-failure` with the
+  mismatching inputs, ready for a `hard-cases` file (`SKILLS.md`), and a dispatch that plants a
+  fault, to test that alert, opens one labelled `nightly-fault-test`.
 - **Masked forms:** a masked form is checked under seeded random masks, all-true and all-false;
   active lanes must equal `StrictMath` and inactive lanes must keep the input's raw bits (for a
   two-argument function, the first argument's).
@@ -228,9 +234,10 @@ five are a later, optional set; the large-argument reduction of the trigonometri
   with a third arm that blends the rare paths only when a vector holds a rare lane; `Expm1Benchmark`
   has the same three arms for `expm1`, `SinhBenchmark` one for `sinh`, `CoshBenchmark` two for
   `cosh`, `AsinBenchmark` one for `asin`, `AtanBenchmark` one for `atan`, `AcosBenchmark` one for
-  `acos`, `Atan2Benchmark` two for `atan2` (the blended and the guarded arm, over two arrays) and
-  `HypotBenchmark` one for `hypot` (over two arrays; its rows are `blended*` now, and the files
-  below name the older code's `finish*` rows; `hypot-epyc7763-2026-11-23.txt` reads it before
+  `acos`, `TanhBenchmark` one for `tanh` (no results file reads it yet), `Atan2Benchmark` two for
+  `atan2` (the blended and the guarded arm, over two arrays) and `HypotBenchmark` one for `hypot`
+  (over two arrays; its rows are `blended*` now, and the files below name the older code's
+  `finish*` rows; `hypot-epyc7763-2026-11-23.txt` reads it before
   #174 ordered its arguments, a run and its re-run: no direction against the scalar loop at the
   preferred species, and `finishMax` 1.6x slower than `finishPreferred` on common data in both;
   `hypot-epyc7763-2026-11-24.txt` reads it after #174, a run and its re-run, the scalar loop lower
@@ -245,7 +252,8 @@ five are a later, optional set; the large-argument reduction of the trigonometri
   `PowBenchmark` one for `pow` (the same; `pow-epyc7763-2026-11-23.txt` and
   `pow-xeon8573c-2026-11-24.txt` read it, one run each, its `rareOracle` row the allocation
   baseline).
-  Each of the thirteen has rows at `SPECIES_MAX` (`*Max`), which the allocation check covers: the
+  Each of the thirteen, and `tanh`, has rows at `SPECIES_MAX` (`*Max`), which the allocation check
+  covers: the
   finish of `exp`, `expm1`, `log`, `log10` and `log1p` boxed there on mixed data until its first
   eight lanes were written out (`bench/results/max-finish-laptop-2026-11-20.txt`, then
   `bench/results/max-finish-alloc-free-laptop-2026-11-21.txt`, a laptop reading of allocation only);

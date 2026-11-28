@@ -1,14 +1,16 @@
 # fdlibm 5.3: the reference sources
 
-These are Sun's fdlibm 5.3 C sources for the thirteen functions in `PLAN.md` section 3, with the
-header they share and netlib's `readme`. They are reference only: never compiled, never part of
-the build or the jar, and kept byte for byte as netlib serves them. They are the only source a
-port in this repository may be translated from, and a port cites the file here that it follows.
+These are Sun's fdlibm 5.3 C sources for the thirteen functions in `PLAN.md` section 3 and for
+`tanh`, of the later set there, with the header they share and netlib's `readme`. They are
+reference only: never compiled, never part of the build or the jar, and kept byte for byte as
+netlib serves them. They are the only source a port in this repository may be translated from, and
+a port cites the file here that it follows.
 
 ## Where they come from
 
 Each file was fetched from netlib's fdlibm directory, `https://netlib.org/fdlibm/<name>`, on
-2 November 2026 (`https://www.netlib.org/fdlibm/` redirects there). The version is netlib's own:
+2 November 2026 (`https://www.netlib.org/fdlibm/` redirects there), and `s_tanh.c` on 28 November
+2026. The version is netlib's own:
 its `readme` opens with "Announcing FDLIBM Version 5.3". The `@(#)` column is the SCCS stamp in
 each file's first lines.
 
@@ -28,6 +30,7 @@ each file's first lines.
 | `e_acos.c` | e_acos.c 1.3 95/01/18 |
 | `e_hypot.c` | e_hypot.c 1.3 95/01/18 |
 | `e_pow.c` | e_pow.c 1.5 04/04/22 SMI |
+| `s_tanh.c` | s_tanh.c 1.3 95/01/18 |
 | `readme` | none |
 
 Their SHA-256 hashes, in `sha256sum` format:
@@ -46,6 +49,7 @@ Their SHA-256 hashes, in `sha256sum` format:
     bc9fbb24c214030604c0df4c811370f37d511e0c72580767d8c81bd68b0c3a5a  e_acos.c
     87425adcaeabfebcf9f78ba774f4b29d2a158c1f948e2b3129e74b5d6e9cc2ff  e_hypot.c
     763b86baa63eb3518b43f7f3e44e5ed10992b62650f4a45c3a2ea6015e6d5122  e_pow.c
+    fcf39a7e30393ac4cae5c631c60b4fb4273f4461f3fce3af03713a2b1469f286  s_tanh.c
     c6f96d4eea94d45a47d5852ac96d3ec55fc1a04cff25d909c4264c7a8c5c11b9  readme
 
 To check the copies here, run `sha256sum -c` over those lines in this directory; to check them
@@ -54,8 +58,8 @@ against netlib, fetch each URL with `curl -sSL` and `cmp` it with the file here.
 ## Sun's notice
 
 The files carry one of two forms of Sun's notice. The 1993 form is in `e_acos.c`, `e_asin.c`,
-`e_atan2.c`, `e_cosh.c`, `e_hypot.c`, `e_log.c`, `e_log10.c`, `e_sinh.c`, `s_atan.c` and
-`s_log1p.c`:
+`e_atan2.c`, `e_cosh.c`, `e_hypot.c`, `e_log.c`, `e_log10.c`, `e_sinh.c`, `s_atan.c`,
+`s_log1p.c` and `s_tanh.c`:
 
     Copyright (C) 1993 by Sun Microsystems, Inc. All rights reserved.
 

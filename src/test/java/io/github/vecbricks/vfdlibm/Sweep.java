@@ -23,9 +23,10 @@ import jdk.incubator.vector.VectorSpecies;
  * function at one species by {@link Nightly.BlockCheck}, every arm unmasked and masked. fdlibm
  * decides its branches on the high word (exp's and expm1's filters, reductions and tiny tests;
  * log's subnormal, non-finite and significand tests, which log10 shares; log1p's; sinh's tiny, 1
- * and 22; cosh's tiny, 0.5 ln2 and 22; atan's tiny, 7/16, 11/16, 19/16, 39/16 and 2^66;
- * asin's 2^-27, 0.5, 0.975 and 1; acos's constant return at 2^-57's word, 0.5 and 1), so every
- * such decision of a function of one argument is taken by some input here. A function of two
+ * and 22; cosh's tiny, 0.5 ln2 and 22; tanh's tiny, 1 and 22; atan's tiny, 7/16, 11/16, 19/16,
+ * 39/16 and 2^66; asin's 2^-27, 0.5, 0.975 and 1; acos's constant return at 2^-57's word, 0.5 and
+ * 1), so every such decision of a function of one argument is taken by some input here. A
+ * function of two
  * arguments is swept one argument at a time, each swept value with a partner drawn for the
  * other; what that takes of its branches on both arguments at once is not claimed (SKILLS.md,
  * "The nightly sweep and fuzz"). The low word of the third input is {@code

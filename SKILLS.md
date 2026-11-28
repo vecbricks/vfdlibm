@@ -3,9 +3,9 @@
 Lessons about benchmarking, the JIT and the Vector API that every port follows. Most were learned in
 Varka (github.com/vecbricks/varka, its `sql/varka/skills/`) and are rewritten here for a vector math
 library; the last sections are what the `exp`, `log`, `log1p`, `log10`, `expm1`, `sinh`, `cosh`,
-`asin`, `atan`, `acos`, `atan2`, `hypot` and `pow` ports taught. Each entry says where its numbers
-come from. A new lesson goes in the section it belongs to, as a short entry; a negative result
-belongs here too, since it stops the next port re-trying a settled question.
+`tanh`, `asin`, `atan`, `acos`, `atan2`, `hypot` and `pow` ports taught. Each entry says where
+its numbers come from. A new lesson goes in the section it belongs to, as a short entry; a negative
+result belongs here too, since it stops the next port re-trying a settled question.
 
 ## Benchmarking with JMH
 
@@ -1506,6 +1506,38 @@ mnemonic); the other operations count the same at both widths.
 - **Lefevre's list has 2026 `ch` lines,** positive inputs only, rechecked and written by
   `dev/testlibm-extract.py` as sinh's were, each with 46 or more bits after the round bit
   pointing at the midpoint.
+
+## What the tanh port taught
+
+- **One expm1 call on a blended argument.** s_tanh.c calls `expm1` on `two*|x|` from `|x| = 1`
+  on and on `-two*|x|` below it. The port picks the argument per lane by the same test and nests
+  one `Expm1.expm1Core`, as sinh does, so the body is one port body with the `Lanes` calls first.
+  The kept arguments lie in `(-2, -2^-54]` and `[2, 44)`, none of expm1's early returns; that is
+  the port's one hinge (`PROOFS.md`, tanh), and `TanhTest.falseHingesAreCaught` shows the check
+  failing for a tiny word one lower, a split at 32 and a limit at 368.
+- **Every finite lane in the vector; only the non-finite ones per lane.** The saturated range
+  from 22 up is a constant, `one - tiny`, and the sign, so it is blended rather than finished.
+  The infinities and NaNs, the C's first branch (`one/x+-one`), are finished by `StrictMath.tanh`:
+  computing them in the vector would make a kept `NaN` in the vector, whose payload IEEE leaves
+  open, and need an observation like hypot's L22. `bench/alloc-check.py` reads the rows under
+  0.14 B/op at the laptop's flags and as an AVX2 host (local runs, no results file).
+- **The 22 is not tight, and the split's word barely matters.** From about 19.06 (the double
+  `TanhTest.firstSaturated` finds) the second form rounds to 1, so moving line 67's 22 to 20
+  changed none of 2^22 draws of `[16, 22)`; moved to 16 it changed 2141980, which is
+  `tanh.thresholdMoved`. The split at 1 moved by one word changed 1 of 2^22 draws of `[1, 2)`;
+  moved to 2, 2476159 (`tanh.splitMoved`). The tiny word moved one down changed none of 2^22
+  draws over the binades `2^-60` to `2^-21`; moved to `2^-28`, 2694129 (`tanh.tinyMoved`). Line
+  72's numerator `two` one ulp up changed 35443 of 2^22 draws of `(-30, 30)`
+  (`tanh.twoOneUlpOff`). The sizing was a throwaway program over the C in scalar Java.
+- **Which expm1 faults reach tanh.** The same three as sinh's: `dropCorrection`,
+  `constantOffByOneUlp` and `dropKForcing` (the word of `0.5 ln2` is reached by `-2|x|` at `|x|`
+  of about 0.17). `expm1.thresholdMoved` moves the form of `k = 56`, which tanh's argument takes
+  only from `|x|` of about 19.2 up, where its result is 1 in either form, and `guardMissesFilter`
+  belongs to the guarded arm. `TanhTest` failed under the first three and passed under the other
+  two, run by hand as sinh's was.
+- **No hard-case file.** Lefevre's list was not searched for tanh lines and CORE-MATH's lists
+  were not read for it; the port follows the C operation by operation, so a hard case would only
+  pin what the draws already check.
 
 ## What the atan port taught
 

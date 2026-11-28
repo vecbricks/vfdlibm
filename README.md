@@ -7,7 +7,9 @@ bit-identical to `java.lang.StrictMath`, but for a two-NaN lane of `atan2`, `hyp
 released as `io.github.vecbricks:vfdlibm`: `exp`, `expm1`, `log`, `log1p` and `log10` since 0.1.0,
 `sinh`, `cosh`, `asin`, `atan`, `acos` and `atan2` since 0.2.0, and `hypot` and `pow` since 0.3.0;
 0.3.1 computes all of `hypot`'s lanes in the vector, where `pow` has its common path in the vector
-and its other lanes finished per lane. Functions are added one at a time, as
+and its other lanes finished per lane. On `main`, unreleased: `tanh`, the first of the plan's later
+set, which matches `StrictMath.tanh` (and not `Math.tanh`, a HotSpot stub on x86). Functions are
+added one at a time, as
 [Varka](https://github.com/vecbricks/varka) needs them. A minor version may break the API and a
 patch may not; adding a function is a patch. Bit identity with `StrictMath` is the contract, and no
 version changes it (`CHANGELOG.md`); the one lane it excepts is a lane of two NaNs with different

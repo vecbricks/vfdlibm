@@ -134,9 +134,10 @@ final class Nightly {
         new Arm("VFdlibm.expm1", VFdlibm::expm1, VFdlibm::expm1),
         new Arm("Expm1.expm1Blended", x -> Expm1.expm1Blended(x, null), Expm1::expm1Blended),
         new Arm("Expm1.expm1Guarded", x -> Expm1.expm1Guarded(x, null), Expm1::expm1Guarded),
-        // The core entry sinh nests, as Exp's above: the core in every lane, the rare mask's
-        // lanes finished per lane here, no masked form. It catches expm1Rare missing a lane the
-        // core gets wrong, never expm1Rare marking too many: an extra lane matches by StrictMath.
+        // The core entry sinh and tanh nest, as Exp's above: the core in every lane, the rare
+        // mask's lanes finished per lane here, no masked form. It catches expm1Rare missing a lane
+        // the core gets wrong, never expm1Rare marking too many: an extra lane matches by
+        // StrictMath.
         new Arm("Expm1.expm1Core+expm1Rare", Nightly::expm1CoreAndRare, null))),
     LOG("log", StrictMath::log, List.of(
         new Arm("VFdlibm.log", VFdlibm::log, VFdlibm::log),
@@ -158,6 +159,8 @@ final class Nightly {
         // it too.
         new Arm("Cosh.coshSlice", x -> Cosh.coshSlice(x, null), Cosh::coshSlice),
         new Arm("Cosh.coshFinish", x -> Cosh.coshFinish(x, null), Cosh::coshFinish))),
+    TANH("tanh", StrictMath::tanh, List.of(
+        new Arm("VFdlibm.tanh", VFdlibm::tanh, VFdlibm::tanh))),
     ASIN("asin", StrictMath::asin, List.of(
         new Arm("VFdlibm.asin", VFdlibm::asin, VFdlibm::asin))),
     ATAN("atan", StrictMath::atan, List.of(

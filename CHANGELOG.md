@@ -11,6 +11,13 @@ two NaNs with different bits in a function of two arguments (`AGENTS.md`, "Relea
 
 ## [Unreleased]
 
+### Added
+
+- `tanh`, ported from fdlibm's `s_tanh.c`, in the forms `tanh(x)` and `tanh(x, live)`: each lane
+  equals `StrictMath.tanh` (not `Math.tanh`, which HotSpot may replace with a stub). Every finite
+  lane is computed in the vector, through `expm1`'s common path below 22; the infinities and NaNs
+  are finished per lane.
+
 ## [0.3.1] - 2026-11-27
 
 ### Changed

@@ -567,6 +567,7 @@ public final class Consumer {
     check("log1p", StrictMath::log1p);
     check("sinh", StrictMath::sinh);
     check("cosh", StrictMath::cosh);
+    check("tanh", StrictMath::tanh);
     check("asin", StrictMath::asin);
     check("atan", StrictMath::atan);
     check("acos", StrictMath::acos);

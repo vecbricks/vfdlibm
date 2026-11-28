@@ -71,6 +71,7 @@ class AsmTest {
     arms.put("log1p", List.of("blended", "blendedMasked", "finish", "finishMasked", "guarded",
         "guardedMasked"));
     arms.put("sinh", List.of("finish", "finishMasked"));
+    arms.put("tanh", List.of("finish", "finishMasked"));
     arms.put("cosh", List.of("default", "defaultMasked", "finish", "finishMasked", "slice",
         "sliceMasked"));
     arms.put("asin", List.of("finish", "finishMasked"));
